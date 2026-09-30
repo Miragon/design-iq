@@ -15,6 +15,7 @@
     "create-app": "node src/tools/create-app.ts"
   },
   "dependencies": {
+    "@designiq/bpmn-edit": "workspace:*",
     "@designiq/cell-protocol": "workspace:*",
     "@designiq/contracts": "workspace:*",
     "@designiq/decisions": "workspace:*",
