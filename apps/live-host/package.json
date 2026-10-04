@@ -25,9 +25,9 @@
     "@designiq/notations": "workspace:*",
     "@miragon/design-iq-validator": "workspace:*",
     "@hocuspocus/server": "4.7.0",
-    "@modelcontextprotocol/client": "2.1.0",
+    "@modelcontextprotocol/client": "2.2.0",
     "@modelcontextprotocol/ext-apps": "2.0.3",
-    "@modelcontextprotocol/server": "2.1.0",
+    "@modelcontextprotocol/server": "2.2.0",
     "jose": "6.2.12",
     "yaml": "2.9.1",
     "y-protocols": "1.0.7",
@@ -35,7 +35,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@types/ws": "8.18.1",
+    "@types/ws": "8.18.2",
     "ws": "8.22.0"
   }
 }

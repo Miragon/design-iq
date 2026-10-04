@@ -24,7 +24,7 @@
     "test": "node --test test/*.test.ts"
   },
   "dependencies": {
-    "fast-xml-parser": "5.11.1",
+    "fast-xml-parser": "5.11.2",
     "yaml": "2.9.1"
   },
   "devDependencies": {
