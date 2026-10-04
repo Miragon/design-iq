@@ -1,4 +1,4 @@
-# designIQ — _Model together. Decide with AI._
+# designIQ — _Model together. AI at the table._
 
 [![CI](https://github.com/Miragon/design-iq/actions/workflows/validate.yml/badge.svg)](https://github.com/Miragon/design-iq/actions/workflows/validate.yml)
 [![GHCR](https://img.shields.io/badge/ghcr.io-miragon%2Fdesigniq--live--host-2496ed)](https://github.com/Miragon/design-iq/pkgs/container/designiq-live-host)
