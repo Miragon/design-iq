@@ -35,7 +35,7 @@ client (Claude Code, other IDEs, agent frameworks) can query the models **live f
 content repo is a root `designiq.yml` naming its models folder (`models:`, legacy alias
 `processes:`; the legacy file name `bpmiq.yml` is still read), a model IS a file with a
 registered notation extension there (a process its `.bpmn`, a decision its `.dmn`, a Wardley
-map its `.owm`, …), and its view is **derived from the model** at call time
+Map its `.owm`, …), and its view is **derived from the model** at call time
 (`@designiq/notations/derive`; the process view from the BPMN). No build step; the tool
 definitions live in `packages/mcp/tools.ts`, shared by two entry points:
 
@@ -57,7 +57,9 @@ definitions live in `packages/mcp/tools.ts`, shared by two entry points:
 | `which_models_use(id)`       | Impact, across EVERY notation       | the repo-wide reference index (typed cross-model refs: calls, decides, …) — incl. dangling references                                                               |
 | `list_todos(process?)`       | What work is open (opt-in)?         | the content repo's issue tracker (label `todo` + `process:<id>`), anchors parsed from issue bodies                                                                  |
 
-All tools carry `readOnlyHint` annotations, so clients may auto-approve them. The content repo
+All tools carry `readOnlyHint` annotations, so clients may auto-approve them, and a short display
+`title` ("List models", "Get BPMN process view") that clients show people instead of the tool
+name (`test/tools.test.ts` pins that every tool has one and no two share it). The content repo
 is configurable: `node server.ts --root /path/to/repo` or the `DESIGNIQ_CONTENT_ROOT` env var —
 the bundled `process-documentation/` is only the default. Outside this monorepo the published
 package runs the same server: `npx @miragon/design-iq-mcp --root /path/to/repo` (bin
@@ -166,6 +168,11 @@ call is gated by the caller's per-repo permission.
 | `create_todo`                 | write | File a todo, anchored to the process and (optionally) concrete BPMN elements.            |
 | `close_todo`                  | write | Complete a todo in the tracker (`todoId` from `list_todos`).                             |
 | `release_process`             | write | Open the release PR — merge rights stay at the git provider.                             |
+
+Every tool also carries a short display `title` in sentence case, verb first, naming the notation
+where the tool is notation-specific (`get_bpmn_xml` "Get BPMN XML", `open_decision_modeler` "Open DMN
+modeler", `release_process` "Release changes as pull request") — clients show it to people instead of
+the tool name. `test/mcp.test.ts` pins that every registered tool has one and no two share it.
 
 ### Any notation: the generic model tools
 

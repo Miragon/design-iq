@@ -1,7 +1,7 @@
 /**
  * The Miragon renderer spec — the ONE object per notation whose editor is a
  * Miragon modeler (the diagram-js renderers built from the modeler template:
- * wardley maps, team topologies, event storming, context maps). Everything
+ * Wardley Maps, Team Topologies, Event Storming, Context Maps). Everything
  * the platform needs to host such a renderer derives from it:
  *
  *   ./plugin.ts               → the web editor plugin (WebNotationPlugin)

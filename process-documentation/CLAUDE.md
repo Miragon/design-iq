@@ -14,9 +14,9 @@ answer in them.**
   still read.
 - Every file with a notation extension under it is a **model**; its id is the
   file name without the extension. `.bpmn` is a process, `.dmn` a decision; the
-  folder can also hold Wardley maps (`.owm`, `.wmap`), team topologies (`.tt`,
-  `.ttm.json`), event-storming boards (`.storm`), context maps (`.cm.json`),
-  value chains (`.vc.json`) and Markdown documents (`.md`).
+  folder can also hold Wardley Maps (`.owm`, `.wmap`), Team Topologies (`.tt`,
+  `.ttm.json`), Event Storming boards (`.storm`), Context Maps (`.cm.json`),
+  Value Chains (`.vc.json`) and Markdown documents (`.md`).
 - There is NO `process.yaml` — the process view (name, roles from lanes, steps,
   flow, sub-process calls) is derived from the BPMN.
 - Sub-processes are separate `.bpmn` files, called via `callActivity`

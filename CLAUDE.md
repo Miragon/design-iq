@@ -1,8 +1,8 @@
 # designIQ — agent guide
 
 **designIQ** is collaborative modeling and architecture with AI: a Git-native workspace where
-teams model processes (BPMN), decisions (DMN), Wardley maps, team topologies, event-storming
-boards, context maps, value chains and Markdown together, live. Every model is a file in a
+teams model processes (BPMN), decisions (DMN), Wardley Maps, Team Topologies, Event Storming
+boards, Context Maps, Value Chains and Markdown together, live. Every model is a file in a
 content repo, a release is a pull request, and AI clients read, check and edit the same live
 models through MCP. It is a **pnpm monorepo**. For any question about a model, the
 model files are the source of truth (here: the example content under `process-documentation/`)
@@ -44,7 +44,7 @@ simulation and tests, todos anchored to BPMN elements) and the BPMN/DMN hard rul
 | `packages/api-client/`                  | `ApiError` + `api<T>()` + TanStack Query defaults for the SPAs (`@designiq/api-client`).                                                                                                                                                                                                                                                                     |
 | `packages/live-client/`                 | The ONE live-session implementation (`@designiq/live-client`): `openLiveSession()`, minimal-diff Y.Text writer, the canvas sync bridges (bpmn-sync, dmn-sync, miragon-sync). Consumers: web, vscode, guest-test, live-host (the minimal-diff writer via `@designiq/live-client/text`) — nothing else.                                                        |
 | `packages/validator/`                   | Platform validator (`@miragon/design-iq-validator`, bin `designiq-validate`): designiq.yml discovery (legacy bpmiq.yml still read) + BPMN/DMN structure, BPMNDI+DMNDI coverage, cross-model reference integrity (callActivity, decisions), a parse check for every other notation. Runs against any checkout via `--root`; never executes content-repo code. |
-| `process-documentation/`                | Example content repo (`designiq.yml` + BPMN/DMN example models and an event-storming board + the AI skills in `.claude/skills`) — the MCP/validator example AND the content-repo contract mirrored to `Miragon/process-documentation-starter`. The Live Host serves any repo with a root `designiq.yml` (legacy `bpmiq.yml` still read), nothing else.       |
+| `process-documentation/`                | Example content repo (`designiq.yml` + BPMN/DMN example models and an Event Storming board + the AI skills in `.claude/skills`) — the MCP/validator example AND the content-repo contract mirrored to `Miragon/process-documentation-starter`. The Live Host serves any repo with a root `designiq.yml` (legacy `bpmiq.yml` still read), nothing else.       |
 | `docs/`                                 | Platform docs: `platform-concept.md`, `multi-repo-architecture.md`, `mcp-integration.md`, `on-prem/` (self-hosting), `extending/` (connectors, SSO), `adr/`, `upgrading-to-5.md` (the rename release).                                                                                                                                                       |
 | `process-documentation/.claude/skills/` | The AI-first toolset (travels with the content repo).                                                                                                                                                                                                                                                                                                        |
 
@@ -63,7 +63,7 @@ its `.dmn`. There is NO `process.yaml`, landscape, glossary or portal — the pr
 | `processes/*.bpmn`       | One process per file; `subprocesses/*.bpmn` linked via callActivity                    |
 | `processes/*.dmn`        | One decision per file; called from a `businessRuleTask` via `calledDecision`           |
 | `processes/*.tests.yaml` | The decision's test cases, next to it (`pnpm validate` runs them)                      |
-| `processes/*.storm`      | An event-storming board (`order-to-cash.storm`)                                        |
+| `processes/*.storm`      | An Event Storming board (`order-to-cash.storm`)                                        |
 | `.claude/skills/`        | The AI toolset (below)                                                                 |
 
 ## Skills — prefer them over ad-hoc approaches

@@ -190,6 +190,9 @@ interface WidgetSpec {
    *  mcpAppToolName (@designiq/contracts/mcp-app — the SPA's assist prompt
    *  derives the same name) */
   tool: string;
+  /** the display title hosts show instead of the tool name — the pinned twins
+   *  spell their notation, the generated rows derive it from the label */
+  title: string;
   description: string;
   /** processRef / decisionRef(+scenario) for the pinned twins (unchanged
    *  wire), a noun-worded {repo, id?, path?} when generated */
@@ -202,6 +205,7 @@ const BPMN_WIDGET: WidgetSpec = {
   file: "mcp-app.html",
   name: "modeler",
   tool: "open_modeler",
+  title: "Open BPMN modeler",
   description:
     "Open the interactive BPMN modeler widget for a process (BPMN only; DMN and the other canvas " +
     "notations have their own modeler tools). Renders an embedded diagram " +
@@ -217,6 +221,7 @@ const DMN_WIDGET: WidgetSpec = {
   file: "mcp-app-dmn.html",
   name: "decision-modeler",
   tool: "open_decision_modeler",
+  title: "Open DMN modeler",
   description:
     "Open the interactive DMN decision modeler widget: the decision table plus a SIMULATOR — " +
     "enter values, see which rules match. Pass `scenario` (variable → value, like " +
@@ -249,6 +254,7 @@ const generatedWidget = (id: string): WidgetSpec => {
     file: `mcp-app-${n.id}.html`,
     name: `${n.id}-modeler`,
     tool: mcpAppToolName(n.id),
+    title: `Open ${n.label} modeler`,
     description:
       `Open the interactive ${n.label} modeler widget for a ${noun} (${n.extensions.join("/")}). Renders the ` +
       "canvas inline in MCP-Apps-capable clients (claude.ai, Claude Desktop): edits save through the same " +
@@ -367,7 +373,9 @@ const PROVIDED = "<provided xml>";
  *
  * Contributions run regardless of LIVE_MCP_READONLY — a contribution that
  * registers WRITE tools must gate them on deps.mcpReadOnly itself, exactly
- * like the core registration does.
+ * like the core registration does. Like every core tool, a contributed one
+ * carries a short, unique `title` (sentence case, verb first) — the name
+ * hosts show people instead of the snake_case tool name.
  */
 export type LiveToolContribution = (server: McpServer, deps: McpDeps, session: Session) => void;
 
@@ -539,6 +547,7 @@ export function createLiveMcpServer(
 
   const registerGetContentTool = (cfg: {
     name: string;
+    title: string;
     description: string;
     ref: typeof processRef | typeof modelRef;
     resolve: (r: ConnectedRepo, a: RefArgs) => Promise<string>;
@@ -548,7 +557,7 @@ export function createLiveMcpServer(
   }): void => {
     server.registerTool(
       cfg.name,
-      { description: cfg.description, inputSchema: z.object(cfg.ref), annotations: READ },
+      { title: cfg.title, description: cfg.description, inputSchema: z.object(cfg.ref), annotations: READ },
       safe(async ({ repo, ...ref }: { repo: string } & RefArgs) => {
         const r = await requireRepo(repo);
         const { xml: _legacy, ...content } = await readContent(r, await cfg.resolve(r, ref));
@@ -559,6 +568,7 @@ export function createLiveMcpServer(
 
   const registerCreateTool = <T>(cfg: {
     name: string;
+    title: string;
     /** wire key of the created row AND the audit-log noun */
     what: "process" | "decision";
     description: string;
@@ -568,6 +578,7 @@ export function createLiveMcpServer(
     server.registerTool(
       cfg.name,
       {
+        title: cfg.title,
         description: cfg.description,
         inputSchema: z.object({
           repo: repoArg,
@@ -588,6 +599,7 @@ export function createLiveMcpServer(
 
   const registerSaveTool = (cfg: {
     name: string;
+    title: string;
     description: string;
     ref: typeof processRef | typeof modelRef;
     /** the payload argument: `xml` on the wire-pinned bpmn/dmn twins, `content`
@@ -602,6 +614,7 @@ export function createLiveMcpServer(
     server.registerTool(
       cfg.name,
       {
+        title: cfg.title,
         description: cfg.description,
         inputSchema: z.object({
           ...cfg.ref,
@@ -637,6 +650,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "list_repos",
     {
+      title: "List repositories",
       description:
         "List the repositories you can access on this Live Host, with your permission, the live session count and " +
         "the number of BPMN processes and DMN decisions (null until the repository has been opened on this host). " +
@@ -650,6 +664,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "list_processes",
     {
+      title: "List BPMN processes",
       description:
         "List the BPMN processes in a repository (id, name, path, dirty flag, live session count). " +
         "list_models lists the models of every notation.",
@@ -666,6 +681,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "list_models",
     {
+      title: "List models",
       description:
         `List EVERY model of the repository, grouped by notation (${NOTATION_IDS}) — the starting ` +
         "point for any repository. Each row: id (file stem), path, notation, dirty flag (changed, not " +
@@ -686,6 +702,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "get_process",
     {
+      title: "Get BPMN process view",
       description:
         "BPMN only: the derived process view (name, roles from lanes, steps, flow, sub-process calls) from the " +
         "LIVE BPMN — the same shape the read-only content-repo MCP server derives. get_view covers every notation.",
@@ -705,6 +722,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "get_view",
     {
+      title: "Get model view",
       description:
         "The derived view of ANY live model — its own name, a one-line summary, stats, and the " +
         "rich notation payload in `detail` where one exists (the process view for BPMN, the decision " +
@@ -735,6 +753,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "get_presence",
     {
+      title: "Show who is in a model",
       description:
         "Who is in a model's live room RIGHT NOW: every person with the model open — name, the " +
         "element ids they have selected, their pointer in model coordinates — and the AI clients " +
@@ -754,6 +773,7 @@ export function createLiveMcpServer(
 
   registerGetContentTool({
     name: "get_bpmn_xml",
+    title: "Get BPMN XML",
     description:
       "BPMN only: the current LIVE XML of a process plus the baseVersion token save_bpmn_xml requires " +
       "for conflict-safe writes — the same content get_model_content returns for any notation.",
@@ -765,6 +785,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "validate_bpmn",
     {
+      title: "Validate BPMN XML",
       description:
         "BPMN only: dry-run the platform validator on BPMN XML WITHOUT writing anything — structure, BPMNDI " +
         "coverage, callActivity links (against the repo's processes when `repo` is given). " +
@@ -792,6 +813,7 @@ export function createLiveMcpServer(
 
   registerGetContentTool({
     name: "get_model_content",
+    title: "Get model content",
     description:
       `The current LIVE source text of a model of ANY notation (${NOTATION_IDS}) plus the baseVersion token ` +
       "save_model_content requires for conflict-safe writes. For BPMN and DMN this is the same XML " +
@@ -804,6 +826,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "validate_model",
     {
+      title: "Validate a model",
       description:
         "Dry-run the platform validator on the text of a model of ANY notation WITHOUT writing anything — " +
         "the same check every save and the designiq-validate CLI run (structure + DI coverage for the XML " +
@@ -854,6 +877,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "list_decisions",
     {
+      title: "List DMN decisions",
       description: "List the DMN decisions in a repository (id, name, path, dirty flag, live session count).",
       inputSchema: z.object({ repo: repoArg }),
       annotations: READ,
@@ -868,6 +892,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "get_decision",
     {
+      title: "Get DMN decision view",
       description:
         "Derived decision view from the LIVE DMN: every decision with its hit policy, input/output columns " +
         "and rules (FEEL source text, `when`/`then` aligned to the columns), plus the DRD wiring " +
@@ -894,6 +919,7 @@ export function createLiveMcpServer(
 
   registerGetContentTool({
     name: "get_dmn_xml",
+    title: "Get DMN XML",
     description:
       "The current LIVE DMN XML of a decision plus the baseVersion token save_dmn_xml requires " +
       "for conflict-safe writes.",
@@ -905,6 +931,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "simulate_decision",
     {
+      title: "Simulate a DMN decision",
       description:
         "Run one scenario through a decision and report WHICH RULES FIRED. `given` is keyed by variable " +
         "name (from get_decision/analyze_decision — the input expressions, not the column labels). " +
@@ -946,6 +973,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "analyze_decision",
     {
+      title: "Analyze a DMN decision",
       description:
         "Static analysis of a decision — everything wrong with it that needs NO test data: FEEL that " +
         "does not parse (the engine treats it as 'did not match', so it is otherwise invisible), rules " +
@@ -969,6 +997,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "run_decision_tests",
     {
+      title: "Run DMN decision tests",
       description:
         "Run a decision's test cases — the versioned suite in '<decision>.tests.yaml' next to the model, " +
         "or the `cases` you pass in (a trial run that saves nothing). Reports per case pass/fail/pending " +
@@ -1010,6 +1039,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "get_decision_tests",
     {
+      title: "Get DMN decision tests",
       description:
         "The stored test suite of a decision (raw YAML + the baseVersion save_decision_tests needs). " +
         "Returns exists:false when the decision has no suite yet — then save without a baseVersion.",
@@ -1028,6 +1058,7 @@ export function createLiveMcpServer(
   server.registerTool(
     "list_changes",
     {
+      title: "List unreleased changes",
       description:
         "Files that differ from origin in a repository — the live edits of any notation not yet released, " +
         "i.e. what release_process can pick from.",
@@ -1044,6 +1075,7 @@ export function createLiveMcpServer(
   if (!opts.mcpReadOnly) {
     registerCreateTool({
       name: "create_process",
+      title: "Create a BPMN process",
       what: "process",
       description:
         "Create a new BPMN process from the validator-clean blank template. Returns its ProcessInfo " +
@@ -1054,6 +1086,7 @@ export function createLiveMcpServer(
 
     registerSaveTool({
       name: "save_bpmn_xml",
+      title: "Save BPMN XML",
       description:
         "Validate and save complete BPMN XML into the LIVE document (co-editors see it immediately). " +
         "baseVersion (from get_bpmn_xml) is REQUIRED; a stale one returns {conflict:true, currentContent} " +
@@ -1068,6 +1101,7 @@ export function createLiveMcpServer(
 
     registerCreateTool({
       name: "create_decision",
+      title: "Create a DMN decision",
       what: "decision",
       description:
         "Create a new DMN decision from the blank template (one empty decision table). Returns its " +
@@ -1078,6 +1112,7 @@ export function createLiveMcpServer(
 
     registerSaveTool({
       name: "save_dmn_xml",
+      title: "Save DMN XML",
       description:
         "Validate and save complete DMN XML into the LIVE document (co-editors see it immediately). " +
         "baseVersion (from get_dmn_xml) is REQUIRED; a stale one returns {conflict:true, currentContent} " +
@@ -1095,6 +1130,7 @@ export function createLiveMcpServer(
     server.registerTool(
       "create_model",
       {
+        title: "Create a model",
         description:
           `Create a new model of ANY template-capable notation (${CREATABLE_IDS}) from its blank template. ` +
           "Returns its ModelInfo incl. the path for get_model_content/save_model_content. A notation without " +
@@ -1123,6 +1159,7 @@ export function createLiveMcpServer(
 
     registerSaveTool({
       name: "save_model_content",
+      title: "Save model content",
       description:
         "Validate and save the complete text of a model of ANY notation into the LIVE document " +
         "(co-editors see it immediately). The same platform check as validate_model gates it (structure + " +
@@ -1140,6 +1177,7 @@ export function createLiveMcpServer(
     server.registerTool(
       "save_decision_tests",
       {
+        title: "Save DMN decision tests",
         description:
           "Write a decision's test suite to '<decision>.tests.yaml' next to the model — a normal repo " +
           "file that reviews and ships in the release PR. The FIRST save needs no baseVersion (the file " +
@@ -1192,6 +1230,7 @@ export function createLiveMcpServer(
     server.registerTool(
       "release_process",
       {
+        title: "Release changes as pull request",
         description:
           "Open a pull request that releases live changes to git: either an explicit selection of changed " +
           "files of any notation (`files`, from list_changes) or one BPMN process (`processId`). Merge rights " +
@@ -1246,6 +1285,7 @@ export function createLiveMcpServer(
     server.registerTool(
       "list_todos",
       {
+        title: "List open todos",
         description:
           "OPEN todos anchored to BPMN processes — work items filed from the live model into the " +
           "repo's issue tracker. Pass `id`/`path` to narrow to ONE process, omit both for the whole repo. " +
@@ -1268,6 +1308,7 @@ export function createLiveMcpServer(
       server.registerTool(
         "create_todo",
         {
+          title: "Create a todo on a BPMN process",
           description:
             "File a todo on a BPMN process into the repository's issue tracker. Anchor it to concrete BPMN " +
             "elements via `elements` (ids from get_bpmn_xml/get_process) — the modeler then shows a badge " +
@@ -1323,6 +1364,7 @@ export function createLiveMcpServer(
       server.registerTool(
         "close_todo",
         {
+          title: "Close a todo",
           description:
             "Close (complete) a todo in the repository's tracker. `todoId` is the tracker-native id from " +
             "list_todos — NOT a process id. The close is bot-authored with an attribution comment naming you.",
@@ -1449,6 +1491,7 @@ export function createLiveMcpServer(
       server,
       spec.tool,
       {
+        title: spec.title,
         description: spec.description,
         inputSchema: z.object(spec.inputSchema),
         annotations: READ,
@@ -1486,6 +1529,7 @@ export function createLiveMcpServer(
       server,
       "mint_ws_ticket",
       {
+        title: "Mint a live-editing ticket",
         description:
           "Mint a short-lived, single-use WebSocket ticket for the modeler widgets' live " +
           "co-editing connection (Hocuspocus/Yjs) to a model of ANY notation. Internal to the " +
