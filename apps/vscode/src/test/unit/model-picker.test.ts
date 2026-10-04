@@ -31,10 +31,10 @@ const model = (over: Partial<ModelInfo>): ModelInfo => ({
   ...over,
 });
 
-test("repoItems: writable, non-suspended repos by name, with their counts", () => {
+test("repoItems: writable, non-suspended repos by name", () => {
   const items = repoItems([
     repo({ fullName: "zeta/models" }),
-    repo({ fullName: "acme/models", liveSessions: 2 }),
+    repo({ fullName: "acme/models" }),
     repo({ fullName: "acme/readonly", permission: "none" }),
     repo({ fullName: "acme/suspended", suspended: true }),
     repo({ fullName: "acme/uncloned", processCount: null, decisionCount: null }),
@@ -44,8 +44,39 @@ test("repoItems: writable, non-suspended repos by name, with their counts", () =
     ["acme/models", "acme/uncloned", "zeta/models"],
   );
   assert.equal(items[0]?.label, "$(repo) acme/models");
-  assert.equal(items[0]?.description, "3 processes · 1 decisions · 2 live");
-  assert.equal(items[1]?.description, "", "no counts before the workspace exists");
+});
+
+test("repoItems: a current host — the models of every notation, the per-notation breakdown as the detail", () => {
+  const [models, single, empty, uncloned] = repoItems([
+    repo({
+      fullName: "a/models",
+      liveSessions: 2,
+      modelCount: 4,
+      modelCounts: { bpmn: 2, dmn: 1, "event-storming": 1 },
+    }),
+    repo({ fullName: "b/single", processCount: 0, decisionCount: 0, modelCount: 1, modelCounts: { markdown: 1 } }),
+    repo({ fullName: "c/empty", processCount: 0, decisionCount: 0, modelCount: 0, modelCounts: {} }),
+    repo({ fullName: "d/uncloned", processCount: null, decisionCount: null, modelCount: null, modelCounts: null }),
+  ]);
+  assert.equal(models?.description, "4 models · 2 live");
+  assert.equal(models?.detail, "2 BPMN processes · 1 DMN decision · 1 Event Storming board");
+  assert.equal(single?.description, "1 model");
+  assert.equal(single?.detail, "1 Markdown document");
+  assert.equal(empty?.description, "0 models");
+  assert.equal(empty?.detail, undefined, "no breakdown when there is nothing to break down");
+  assert.equal(uncloned?.description, "not loaded yet", "no counts before the workspace exists");
+  assert.equal(uncloned?.detail, undefined);
+});
+
+test("repoItems: an older host without modelCount — the process/decision line, pluralized", () => {
+  const [both, oneProcess] = repoItems([
+    repo({ fullName: "a/both", liveSessions: 2 }),
+    repo({ fullName: "b/one", processCount: 1, decisionCount: 0 }),
+  ]);
+  assert.equal(both?.description, "3 processes · 1 decision · 2 live");
+  assert.equal(both?.detail, undefined);
+  assert.equal(oneProcess?.description, "1 process");
+  assert.equal(oneProcess?.detail, undefined);
 });
 
 test("modelItems: folder then name; description carries notation, folder, live peers, dirty", () => {

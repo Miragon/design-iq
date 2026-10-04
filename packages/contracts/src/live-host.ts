@@ -301,7 +301,10 @@ export interface RepoInfo {
   /** modelCount per notation registry id (@designiq/notations) in registry
    *  order, notations without a model omitted — null exactly when modelCount is */
   modelCounts?: Record<string, number> | null;
-  /** models (processes AND decisions) differing from origin/<default> */
+  /** models of EVERY registered notation differing from origin/<default> —
+   *  the modelCount population, so no sidecar like <stem>.tests.yaml; null
+   *  exactly when processCount is (3.4–5.0 servers count processes and
+   *  decisions only, older ones processes only) */
   dirtyCount: number | null;
   liveSessions: number;
 }
