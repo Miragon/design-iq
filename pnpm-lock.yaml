@@ -120,6 +120,9 @@ importers:
       '@designiq/live-client':
         specifier: workspace:*
         version: link:../../packages/live-client
+      '@designiq/notations':
+        specifier: workspace:*
+        version: link:../../packages/notations
       '@hocuspocus/provider':
         specifier: 4.7.0
         version: 4.7.0(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)

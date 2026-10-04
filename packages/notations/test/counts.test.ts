@@ -1,15 +1,14 @@
 /**
- * The overview card's count line (src/lib/repo-counts.ts): the models of
- * every notation with a per-notation breakdown for the hover title, named
- * with the registry nouns — and the process/decision line of an older host
- * that does not send modelCount yet.
+ * A repo's count line (counts.ts) — the web overview's repo cards and the
+ * VS Code repo picker: the models of every notation with a per-notation
+ * breakdown, named with the registry nouns — and the process/decision line
+ * of an older host that does not send modelCount yet.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { NOTATIONS } from "@designiq/notations";
-
-import { modelBreakdown, notationCount, repoCountsLine } from "../src/lib/repo-counts.ts";
+import { modelBreakdown, notationCount, repoCountsLine } from "../counts.ts";
+import { NOTATIONS } from "../index.ts";
 
 test("notationCount: the registry noun, counted and qualified by its notation", () => {
   assert.equal(notationCount("bpmn", 2), "2 BPMN processes", "the label's version is dropped");

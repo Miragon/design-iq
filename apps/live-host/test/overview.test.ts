@@ -218,6 +218,61 @@ test("listRepos: a repo whose ONLY change is a decision shows a dirty badge (the
   assert.equal(repos[0]?.decisionCount, 1);
 });
 
+test("listRepos: a repo whose ONLY change is a non-BPMN/DMN model shows a dirty badge too", async () => {
+  // the #95 bug again, one notation further: dirtyCount summed processes and
+  // decisions only, so a lone changed wardley map or storm board read as clean
+  const base = setup();
+  writeFileSync(join(base.ws, "processes", "order-to-cash.storm"), "");
+  for (const only of ["processes/strategy.owm", "processes/order-to-cash.storm"]) {
+    const deps = {
+      ...base.deps,
+      workspaces: { dir: () => base.ws, changedPaths: async () => [only], changedFiles: async () => [] },
+    };
+    const repos = await listRepos(deps, session("s1"));
+    assert.equal(repos[0]?.dirtyCount, 1, `${only} is a model with live changes`);
+  }
+});
+
+test("listRepos: dirtyCount counts dirty MODELS of every notation — never a sidecar or non-model file", async () => {
+  const base = setup();
+  writeFileSync(join(base.ws, "processes", "order-to-cash.storm"), "");
+  writeFileSync(join(base.ws, "processes", "data.json"), "{}");
+  const deps: OverviewDeps = {
+    ...base.deps,
+    workspaces: {
+      dir: () => base.ws,
+      changedPaths: async () => [
+        "processes/order.bpmn",
+        "processes/rabatt.dmn",
+        "processes/order-to-cash.storm",
+        "processes/notes.md",
+        "processes/cases.tests.yaml", // the decision's test cases — a sidecar, not a model
+        "processes/data.json", // no registered extension
+      ],
+      changedFiles: async () => [],
+    },
+  };
+  const [r] = await listRepos(deps, session("s1"));
+  assert.ok(r);
+  assert.equal(r.dirtyCount, 4, "bpmn + dmn + storm + markdown; the sidecar and the .json do not count");
+  const dirtyRows = (await listAllModels(deps, REPO, base.ws)).filter((m) => m.dirty);
+  assert.equal(r.dirtyCount, dirtyRows.length, "the card's count is the dirty rows list_models shows");
+});
+
+test("listRepos: a changed non-model file alone leaves dirtyCount at 0, not null", async () => {
+  const base = setup();
+  const deps = {
+    ...base.deps,
+    workspaces: {
+      dir: () => base.ws,
+      changedPaths: async () => ["processes/cases.tests.yaml"],
+      changedFiles: async () => [],
+    },
+  };
+  const [r] = await listRepos(deps, session("s1"));
+  assert.equal(r?.dirtyCount, 0, "a content repo with no dirty model — null stays reserved for 'not opened here'");
+});
+
 // ── listRepos ───────────────────────────────────────────────────────────────
 
 test("listRepos: a session with write access sees every repo with write permission + counts", async () => {
@@ -235,7 +290,11 @@ test("listRepos: a session with write access sees every repo with write permissi
   assert.equal(r.decisionCount, 1, "the .dmn twin of processCount");
   assert.equal(r.modelCount, 5, "every notation counts — the wardley map and the markdown note too");
   assert.deepEqual(r.modelCounts, { bpmn: 2, dmn: 1, wardley: 1, markdown: 1 });
-  assert.equal(r.dirtyCount, 1, "only the order process differs from origin (dirty DECISIONS would count too)");
+  assert.equal(
+    r.dirtyCount,
+    1,
+    "only the order process differs from origin (a dirty model of ANY notation would count)",
+  );
   assert.equal(r.liveSessions, 3, "every live room of the repo counts, foreign repos never");
 });
 

@@ -1,3 +1,4 @@
+import { repoCountsLine } from "@designiq/notations/counts";
 import { Badge } from "@designiq/ui-kit/components/badge";
 import { Button } from "@designiq/ui-kit/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@designiq/ui-kit/components/card";
@@ -11,7 +12,6 @@ import { toast } from "sonner";
 import { ApiError, fetchRepos, type RepoInfo } from "@/lib/api";
 import { openInstallPicker } from "@/lib/install-picker";
 import { useConfig, useRepos } from "@/lib/queries";
-import { repoCountsLine } from "@/lib/repo-counts";
 
 export function Overview() {
   const qc = useQueryClient();

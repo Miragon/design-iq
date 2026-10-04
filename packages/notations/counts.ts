@@ -1,12 +1,15 @@
 /**
- * The repo card's count line on the overview: "4 models", with the
- * per-notation breakdown ("2 BPMN processes · 1 DMN decision · 1 Event
- * Storming board") for the hover title. A host that predates modelCount
- * (5.0 and older) only sends the process and decision counts — the line falls
- * back to those; a repo not opened on the host yet has no counts at all.
+ * How a repo's model counts read: "4 models", with the per-notation
+ * breakdown "2 BPMN processes · 1 DMN decision · 1 Event Storming board" —
+ * the ONE wording of the web overview's repo cards and the VS Code repo
+ * picker. A host that predates modelCount (5.0 and older) only sends the
+ * process and decision counts — the line falls back to those; a repo not
+ * opened on the host yet has no counts at all.
+ *
+ * Pure string assembly over the registry, zero-dep and browser-safe like the
+ * package index (the web SPA imports it eagerly).
  */
-import type { RepoInfo } from "@designiq/contracts/live-host";
-import { byId, type NotationDescriptor, NOTATIONS } from "@designiq/notations";
+import { byId, type NotationDescriptor, NOTATIONS } from "./index.ts";
 
 /** the registry label without a version ("BPMN 2.0" → "BPMN") */
 const qualifier = (n: NotationDescriptor): string =>
@@ -48,19 +51,31 @@ export function modelBreakdown(counts: Record<string, number>): string {
     .join(" · ");
 }
 
+/** the count fields of a repo as the Live Host sends them (RepoInfo in
+ *  @designiq/contracts/live-host) — structural, so this package stays
+ *  free of the wire contracts */
+export interface RepoCounts {
+  /** null: the repo is not opened on the host yet */
+  processCount: number | null;
+  /** null exactly when processCount is (a pre-3.4 host omits it — the
+   *  fallback line then names the processes alone) */
+  decisionCount: number | null;
+  /** absent from 5.0 and older hosts, null when not opened yet */
+  modelCount?: number | null;
+  modelCounts?: Record<string, number> | null;
+}
+
 export interface RepoCountsLine {
-  /** what the card shows after the branch */
+  /** the short line: "4 models", or an older host's "2 processes · 1 decision" */
   summary: string;
-  /** the per-notation breakdown for the hover title — absent when there is none */
+  /** the per-notation breakdown — absent when there is none */
   breakdown?: string;
 }
 
 const plural = (count: number, singular: string, pluralForm: string): string =>
   `${count} ${count === 1 ? singular : pluralForm}`;
 
-export function repoCountsLine(
-  r: Pick<RepoInfo, "processCount" | "decisionCount" | "modelCount" | "modelCounts">,
-): RepoCountsLine {
+export function repoCountsLine(r: RepoCounts): RepoCountsLine {
   // != null: null is "not opened on this host yet", undefined an older host
   if (r.modelCount != null) {
     const breakdown = r.modelCounts ? modelBreakdown(r.modelCounts) : "";

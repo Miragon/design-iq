@@ -56,6 +56,7 @@
   "dependencies": {
     "@designiq/contracts": "workspace:*",
     "@designiq/live-client": "workspace:*",
+    "@designiq/notations": "workspace:*",
     "@hocuspocus/provider": "4.7.0",
     "ws": "8.22.0",
     "yjs": "13.6.33"

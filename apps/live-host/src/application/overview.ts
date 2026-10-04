@@ -277,9 +277,13 @@ export async function listRepos(opts: OverviewDeps, session: Session): Promise<R
         // notation — processes and decisions are filtered out of it — and
         // dirty from ONE changedPaths call per repo: the per-row git
         // subprocesses the list endpoints used to pay never belonged on the
-        // overview. dirtyCount deliberately includes dirty DECISIONS: a repo
-        // whose only change is a decision used to show no "live changes"
-        // badge at all.
+        // overview. dirtyCount counts dirty models of EVERY notation: a repo
+        // whose only change was a decision (#95), and later a board or a map,
+        // showed no "live changes" badge at all. And it counts MODELS only —
+        // the dirty rows list_models shows, a subset of modelCount — so a
+        // changed sidecar (<stem>.tests.yaml) or other non-model file in the
+        // folder never inflates it; the release dialog (listChanges) is where
+        // every changed file appears.
         const [models, changedList] = await Promise.all([
           discoverModels(ws, cfg),
           opts.workspaces.changedPaths(repo, cfg.processes),
@@ -291,7 +295,7 @@ export async function listRepos(opts: OverviewDeps, session: Session): Promise<R
         decisionCount = decs.length;
         modelCount = models.length;
         modelCounts = countByNotation(models);
-        dirtyCount = [...procs, ...decs].filter((m) => changed.has(m.path)).length;
+        dirtyCount = models.filter((m) => changed.has(m.path)).length;
       } catch (e) {
         console.log(`overview: listing ${repo.fullName} failed (${(e as Error).message.split("\n")[0]})`);
       }

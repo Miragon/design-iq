@@ -10,6 +10,7 @@
  *   - ./derive     ModelGraph → derived views (deriveView + the rich per-
  *                  notation views deriveProcess/deriveDecision)
  *   - ./templates  blank-model file content (templateFor)
+ *   - ./counts     a repo's model-count line (repoCountsLine) — web cards + VS Code picker
  *   - ./content    content-repo discovery over any checkout (Node-only)
  *   - @miragon/design-iq-validator  checkModel — the platform check per notation (the
  *                  checkers stay OUT of this package: the published

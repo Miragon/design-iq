@@ -6,6 +6,7 @@
  */
 import { roomName } from "@designiq/contracts/live";
 import type { ModelInfo, RepoInfo } from "@designiq/contracts/live-host";
+import { repoCountsLine } from "@designiq/notations/counts";
 
 import { SCHEME } from "./scheme.ts";
 
@@ -23,15 +24,17 @@ export function repoItems(repos: RepoInfo[]): PickItem<RepoInfo>[] {
   return repos
     .filter((r) => r.permission === "write" && !r.suspended)
     .sort((a, b) => a.fullName.localeCompare(b.fullName))
-    .map((r) => ({ label: `$(repo) ${r.fullName}`, description: describeRepo(r), value: r }));
+    .map((r) => ({ label: `$(repo) ${r.fullName}`, ...describeRepo(r), value: r }));
 }
 
-function describeRepo(r: RepoInfo): string {
-  const parts: string[] = [];
-  if (r.processCount !== null) parts.push(`${r.processCount} processes`);
-  if (r.decisionCount !== null) parts.push(`${r.decisionCount} decisions`);
-  if (r.liveSessions > 0) parts.push(`${r.liveSessions} live`);
-  return parts.join(" · ");
+/** the counts read like the web overview's repo cards
+ *  (@designiq/notations/counts): "4 models" (+ live peers) as the
+ *  description, the per-notation breakdown as the detail line — an older
+ *  host without modelCount gets its process/decision line */
+function describeRepo(r: RepoInfo): Pick<PickItem<RepoInfo>, "description" | "detail"> {
+  const counts = repoCountsLine(r);
+  const live = r.liveSessions > 0 ? ` · ${r.liveSessions} live` : "";
+  return { description: `${counts.summary}${live}`, ...(counts.breakdown ? { detail: counts.breakdown } : {}) };
 }
 
 /** models by folder, then name; the description says what it is and who is

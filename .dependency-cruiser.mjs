@@ -133,12 +133,13 @@ export default {
       name: "notations-index-and-derive-stay-browser-safe",
       severity: "error",
       comment:
-        "@designiq/notations' index.ts, derive.ts and templates.ts are imported by " +
-        "apps/web (the SPA value-imports processIdFromName, derive types and " +
-        "hasTemplate for the New menu) — no fs, no yaml, no fast-xml-parser " +
+        "@designiq/notations' index.ts, derive.ts, templates.ts and counts.ts are imported by " +
+        "apps/web (the SPA value-imports processIdFromName, derive types, " +
+        "hasTemplate for the New menu and repoCountsLine for the repo cards) and " +
+        "apps/vscode (repoCountsLine in the repo picker) — no fs, no yaml, no fast-xml-parser " +
         "there; those live behind ./content and ./extract. " +
         "This was an unenforced header comment in both files until it mattered.",
-      from: { path: "^packages/notations/(index|derive|templates)\\.ts$" },
+      from: { path: "^packages/notations/(index|derive|templates|counts)\\.ts$" },
       to: {
         dependencyTypesNot: ["type-only"],
         path: ["^(node:)?(fs|fs/promises|path|child_process)$", "(^|/)node_modules/(yaml|fast-xml-parser)/"],

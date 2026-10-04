@@ -15,6 +15,7 @@
     "./refs": "./refs.ts",
     "./retarget": "./retarget.ts",
     "./templates": "./templates.ts",
+    "./counts": "./counts.ts",
     "./content": "./content.ts",
     "./cli": "./cli.ts",
     "./codecs": "./codecs.ts"
