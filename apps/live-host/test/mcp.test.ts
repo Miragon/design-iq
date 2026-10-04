@@ -314,6 +314,46 @@ test("registration: the todo tools appear only WITH a tracker; read-only keeps t
   );
 });
 
+test("titles: every tool carries a short, unique display title — in every mode", async () => {
+  // the tracker modes register the superset (todo tools on top of the core)
+  const modes: Array<[string, McpDeps]> = [
+    ["full, tracker", deps({ issues: fakeIssues() })],
+    ["read-only, tracker", deps({ issues: fakeIssues(), mcpReadOnly: true })],
+  ];
+  for (const [mode, d] of modes) {
+    const { client } = await connect(d);
+    const tools = (await client.listTools()).tools;
+    // hosts show the title to people instead of the snake_case name — a tool
+    // without one falls back to the name, so a forgotten title is drift
+    assert.deepEqual(
+      tools.filter((t) => !t.title?.trim()).map((t) => t.name),
+      [],
+      `${mode}: tools without a title`,
+    );
+    const byTitle = new Map<string, string>();
+    for (const t of tools) {
+      const title = t.title ?? "";
+      assert.equal(byTitle.get(title), undefined, `${mode}: ${t.name} reuses the title of ${byTitle.get(title)}`);
+      byTitle.set(title, t.name);
+      // sentence case, verb first, no trailing period, short
+      assert.match(title, /^[A-Z][a-z]+ /, `${mode}: ${t.name} title "${title}" starts with a capitalised verb`);
+      assert.ok(!title.endsWith("."), `${mode}: ${t.name} title "${title}" ends without a period`);
+      assert.ok(title.length <= 40, `${mode}: ${t.name} title "${title}" is short`);
+    }
+  }
+  // the owner-chosen wording of the anchors, and the label-derived widget rows
+  const { client } = await connect(deps());
+  const titleOf = new Map((await client.listTools()).tools.map((t) => [t.name, t.title]));
+  assert.equal(titleOf.get("list_models"), "List models");
+  assert.equal(titleOf.get("get_bpmn_xml"), "Get BPMN XML");
+  assert.equal(titleOf.get("validate_model"), "Validate a model");
+  assert.equal(titleOf.get("release_process"), "Release changes as pull request");
+  assert.equal(titleOf.get("open_modeler"), "Open BPMN modeler");
+  assert.equal(titleOf.get("open_decision_modeler"), "Open DMN modeler");
+  assert.equal(titleOf.get("open_wardley_modeler"), "Open Wardley Map modeler");
+  assert.equal(titleOf.get("open_event_storming_modeler"), "Open Event Storming modeler");
+});
+
 test("instructions: present with a title, and every tool they name is registered — in every mode", async () => {
   const modes: Array<[string, McpDeps]> = [
     ["full", deps()],

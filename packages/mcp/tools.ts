@@ -204,7 +204,8 @@ function readOnlyInstructions(on: { todos: boolean }): string {
 /** A per-capability tool contribution for the read-only server — the same
  *  composition hook the Live Host exposes (LiveToolContribution), applied
  *  AFTER the core registration. Contributions must stay read-only like every
- *  tool here. */
+ *  tool here, and carry a short, unique `title` (sentence case, verb first)
+ *  like the core tools — the name hosts show people instead of the tool name. */
 export type McpToolContribution = (server: McpServer, root: string) => void;
 
 /** Build a fully configured, read-only MCP server over the repo at `root`. */
@@ -260,13 +261,14 @@ export function createMcpServer(
     fail(`Unknown process '${id}'. Available: ${(await processes()).map((p) => p.id).join(", ") || "(none)"}.`);
 
   const server = new McpServer(
-    { name: "designiq-mcp", title: "designIQ content repo (read-only)", version: "0.2.0" },
+    { name: "designiq-mcp", title: "designIQ model repository (read-only)", version: "0.2.0" },
     { instructions: readOnlyInstructions({ todos: todos !== undefined }) },
   );
 
   server.registerTool(
     "list_models",
     {
+      title: "List models",
       description:
         `List EVERY model file of the repository, grouped by notation (${NOTATIONS.map((n) => n.id).join(", ")}) ` +
         "— the starting point for any question. Each row: id " +
@@ -308,6 +310,7 @@ export function createMcpServer(
   server.registerTool(
     "list_processes",
     {
+      title: "List BPMN processes",
       description:
         "BPMN only: list the processes — every .bpmn file under the repo's designiq.yml " +
         "models folder. Each row: id (file name without extension), derived name, the file " +
@@ -334,6 +337,7 @@ export function createMcpServer(
   server.registerTool(
     "get_process",
     {
+      title: "Get BPMN process view",
       description:
         "BPMN only: get one process in full — the process view DERIVED from its BPMN: name, roles (BPMN " +
         "lanes = owning teams), steps (activities with their role), events, gateways, the " +
@@ -357,6 +361,7 @@ export function createMcpServer(
   server.registerTool(
     "get_model",
     {
+      title: "Get model graph",
       description:
         "Parse ANY model file into its generic graph: nodes (id, type, name), edges and meta — " +
         "BPMN flows and lanes, DMN requirements, Wardley components/dependencies, … " +
@@ -379,6 +384,7 @@ export function createMcpServer(
   server.registerTool(
     "get_view",
     {
+      title: "Get model view",
       description:
         "The derived view of ANY model — its own name, a one-line summary, stats, and the rich " +
         "notation payload in `detail` where one exists (the process view for BPMN, the decision " +
@@ -408,6 +414,7 @@ export function createMcpServer(
   server.registerTool(
     "enumerate_paths",
     {
+      title: "Enumerate flow paths",
       description:
         "Enumerate the possible start→end paths through a model's flow (cycle-safe, capped) — " +
         "BPMN sequence flows, Wardley dependencies, … per the notation's graph hints. Each path " +
@@ -446,6 +453,7 @@ export function createMcpServer(
   server.registerTool(
     "find_cycles",
     {
+      title: "Find flow cycles",
       description:
         "Detect cycles (loops) in a model's flow — BPMN rework/retry loops, circular Wardley " +
         "dependencies, circular DMN requirements — per the notation's graph hints. Returns each " +
@@ -473,6 +481,7 @@ export function createMcpServer(
   server.registerTool(
     "who_owns",
     {
+      title: "Find who owns a BPMN process",
       description:
         "BPMN only: resolve ownership of a process from its lanes — the roles/teams that own its steps " +
         "(each lane, with the steps it contains) plus the pools (participants). Use for 'who owns " +
@@ -503,6 +512,7 @@ export function createMcpServer(
   server.registerTool(
     "which_processes_use",
     {
+      title: "Search BPMN processes",
       description:
         "BPMN only: find processes whose id, derived name, role/lane " +
         "names, step names, or sub-process calls (calledElement) match a query — case-insensitive " +
@@ -545,6 +555,7 @@ export function createMcpServer(
   server.registerTool(
     "which_models_use",
     {
+      title: "Find models that reference a model",
       description:
         "Reference-level impact analysis across EVERY notation: all models whose typed " +
         "cross-model references (callActivity calls, businessRuleTask decides, …) point at the " +
@@ -587,6 +598,7 @@ export function createMcpServer(
     server.registerTool(
       "list_todos",
       {
+        title: "List open todos",
         description:
           "List the OPEN model-anchored todos of this content repo — work items filed from the " +
           "live model into the repo's issue tracker (label 'todo'). Each row carries the tracker " +

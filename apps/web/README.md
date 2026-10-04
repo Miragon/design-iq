@@ -65,7 +65,7 @@ deliberately absent here. Never bundle two engines (or bpmn-js next to a Miragon
 sheet) into one widget.
 
 **Read-only hosts** (`LIVE_MCP_READONLY=1` on the Live Host) mount each engine's
-`NavigatedViewer`; for the DSL-lane renderers (wardley, event storming) with an
+`NavigatedViewer`; for the DSL-lane renderers (Wardley Map, Event Storming) with an
 inert `commandStack` value module (`engines/diagram-js.ts` — their import clears
 a stack only the Modeler registers).
 
