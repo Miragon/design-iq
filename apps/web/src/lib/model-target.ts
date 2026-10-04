@@ -36,7 +36,7 @@ export function modelTarget(path: string, row: { folder: string; liveSessions: n
   };
 }
 
-/** "process", "decision", "wardley map" … */
+/** "process", "decision", "Wardley Map" … */
 export const nounOf = (notation: string): string => byId(notation)?.noun.singular ?? "model";
 
 /** the path the model gets under `id` — same folder, same extension (the

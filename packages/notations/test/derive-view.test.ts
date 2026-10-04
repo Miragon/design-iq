@@ -54,7 +54,7 @@ test("deriveView(dmn): name from definitions, rules counted, detail = deriveDeci
 test("deriveView(wardley/tt/vc): node/edge stats from the shipped fixtures", () => {
   const wardley = deriveView(extractModelGraph("maps/tea.owm", fixture("tea.owm")) as ModelGraph);
   assert.deepEqual(wardley?.stats, { components: 7, dependencies: 8 });
-  assert.equal(wardley?.summary, "Wardley map with 7 components, 8 dependencies");
+  assert.equal(wardley?.summary, "Wardley Map with 7 components, 8 dependencies");
 
   const tt = deriveView(extractModelGraph("teams/sample.tt", fixture("sample.tt")) as ModelGraph);
   assert.deepEqual(tt?.stats, { teams: 5, interactions: 0 });
@@ -78,7 +78,7 @@ test("deriveView(wardley/tt/vc): node/edge stats from the shipped fixtures", () 
   });
   assert.equal(
     es?.summary,
-    "Event storming board with 2 events, 2 commands, 1 actor, 2 aggregates, 1 policy, 1 readmodel, 1 external, 1 hotspot, 1 note, 9 arrows",
+    "Event Storming board with 2 events, 2 commands, 1 actor, 2 aggregates, 1 policy, 1 readmodel, 1 external, 1 hotspot, 1 note, 9 arrows",
   );
   // the timeline reads the board left to right — the facilitator's story
   assert.deepEqual(
@@ -101,12 +101,12 @@ test("deriveView(wardley/tt/vc): node/edge stats from the shipped fixtures", () 
   assert.equal(
     deriveView({ notation: "event-storming", nodes: [], edges: [], meta: { title: "Blank", level: "process" } })
       ?.summary,
-    "Event storming board with no elements",
+    "Event Storming board with no elements",
   );
 
   const vc = deriveView(extractModelGraph("chains/supply.vc.json", fixture("supply.vc.json")) as ModelGraph);
   assert.deepEqual(vc?.stats, { elements: 3, connections: 2 });
-  assert.equal(vc?.summary, "Value chain with 3 elements, 2 connections");
+  assert.equal(vc?.summary, "Value Chain with 3 elements, 2 connections");
 });
 
 test("deriveView(context-map): title as name, per-subdomain + per-pattern stats, contexts + relationships in detail", () => {
@@ -126,7 +126,7 @@ test("deriveView(context-map): title as name, per-subdomain + per-pattern stats,
   });
   assert.equal(
     cm?.summary,
-    "Context map with 6 contexts (2 core, 2 supporting, 2 generic), " +
+    "Context Map with 6 contexts (2 core, 2 supporting, 2 generic), " +
       "6 relationships (1 shared-kernel, 1 customer-supplier, 4 upstream-downstream)",
   );
   const detail = cm?.detail as {
@@ -176,7 +176,7 @@ test("deriveView(context-map): title as name, per-subdomain + per-pattern stats,
   });
   // an empty map reads without a breakdown
   const blank = deriveView({ notation: "context-map", nodes: [], edges: [], meta: { title: "Blank" } });
-  assert.equal(blank?.summary, "Context map with 0 contexts, 0 relationships");
+  assert.equal(blank?.summary, "Context Map with 0 contexts, 0 relationships");
   assert.equal(blank?.name, "Blank");
 });
 

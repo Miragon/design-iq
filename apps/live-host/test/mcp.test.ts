@@ -1382,7 +1382,7 @@ test("widgets: a generated open tool forces its notation — shared stems, forei
   assert.equal(bpmn.opened.path, PATH);
   // a path of another notation fails in the tool, never inside the iframe
   const foreign = await call("open_wardley_modeler", { repo: REPO.fullName, path: PATH });
-  assert.ok(foreign.isError && /not a wardley map/.test(foreign.text), foreign.text);
+  assert.ok(foreign.isError && /not a Wardley Map/.test(foreign.text), foreign.text);
   const unknown = await call("open_wardley_modeler", { repo: REPO.fullName, id: "nope" });
   assert.ok(unknown.isError && /list_models/.test(unknown.text), unknown.text);
 });

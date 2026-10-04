@@ -374,11 +374,11 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
   },
   wardley: (graph) => {
     const stats = { components: graph.nodes.length, dependencies: graph.edges.length };
-    return { notation: "wardley", name: null, summary: `Wardley map with ${counted(stats)}`, stats };
+    return { notation: "wardley", name: null, summary: `Wardley Map with ${counted(stats)}`, stats };
   },
   "team-topology": (graph) => {
     const stats = { teams: graph.nodes.length, interactions: graph.edges.length };
-    return { notation: "team-topology", name: null, summary: `Team topology with ${counted(stats)}`, stats };
+    return { notation: "team-topology", name: null, summary: `Team Topology with ${counted(stats)}`, stats };
   },
   "event-storming": (graph) => {
     const count = (type: string): number => graph.nodes.filter((n) => n.type === type).length;
@@ -401,7 +401,7 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
     return {
       notation: "event-storming",
       name: typeof title === "string" ? title : null,
-      summary: `Event storming board with ${Object.keys(present).length > 0 ? counted(present) : "no elements"}`,
+      summary: `Event Storming board with ${Object.keys(present).length > 0 ? counted(present) : "no elements"}`,
       stats,
       detail: { level: graph.meta?.level ?? null, timeline: stormTimeline(graph) },
     };
@@ -422,7 +422,7 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
       notation: "context-map",
       name: typeof title === "string" ? title : null,
       summary:
-        `Context map with ${counted({ contexts: stats.contexts! })}${breakdown(CM_SUBDOMAIN_TYPES)}, ` +
+        `Context Map with ${counted({ contexts: stats.contexts! })}${breakdown(CM_SUBDOMAIN_TYPES)}, ` +
         `${counted({ relationships: stats.relationships! })}${breakdown(CM_RELATIONSHIP_PATTERNS)}`,
       stats,
       detail: {
@@ -448,7 +448,7 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
   },
   "value-chain": (graph) => {
     const stats = { elements: graph.nodes.length, connections: graph.edges.length };
-    return { notation: "value-chain", name: null, summary: `Value chain with ${counted(stats)}`, stats };
+    return { notation: "value-chain", name: null, summary: `Value Chain with ${counted(stats)}`, stats };
   },
 };
 
