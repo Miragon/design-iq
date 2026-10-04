@@ -1,4 +1,4 @@
-# ADR 0008 — BPMN is edited through bpmn-moddle: a platform-free design core, optional implement adapters
+# ADR 0009 — BPMN is edited through bpmn-moddle: a platform-free design core, optional implement adapters
 
 - **Status:** proposed (2026-09-30)
 - **Implementation:** `packages/bpmn-edit` (`@designiq/bpmn-edit`), the opt-in `/mcp` tools in `apps/live-host`

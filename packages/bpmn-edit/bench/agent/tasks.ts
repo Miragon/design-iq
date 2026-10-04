@@ -1,5 +1,5 @@
 /**
- * The task catalogue of the A/B benchmark (ADR 0008 gate): 9 edit templates instantiated on an S, M and L model and 3
+ * The task catalogue of the A/B benchmark (ADR 0009 gate): 9 edit templates instantiated on an S, M and L model and 3
  * scaffold tasks — 30 tasks. Every task carries a prompt in the words of a process owner (names, never ids), an
  * automatic oracle over the final model, and the ids it may change, so every other difference counts as collateral.
  *

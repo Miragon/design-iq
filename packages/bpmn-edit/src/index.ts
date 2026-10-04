@@ -1,7 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference -- the ambient bpmn-moddle types must reach consumers' typecheck (bpmn-moddle ships none; an ambient `declare module` file cannot be imported)
 /// <reference path="./types/bpmn-moddle.d.ts" />
 /**
- * @designiq/bpmn-edit — BPMN editing through bpmn-moddle (ADR 0008). Browser-safe: everything exported here runs in
+ * @designiq/bpmn-edit — BPMN editing through bpmn-moddle (ADR 0009). Browser-safe: everything exported here runs in
  * Node and in the browser; src/main.ts (the CLI) is the only Node entry and is not exported.
  *
  * - outline:          the semantics without DI (lanes, links, the platform's implementation details), optionally

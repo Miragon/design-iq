@@ -88,7 +88,7 @@ export default {
       name: "bpmn-edit-stays-isomorphic",
       severity: "error",
       comment:
-        "@designiq/bpmn-edit runs in the live host AND in the browser (ADR 0008). " +
+        "@designiq/bpmn-edit runs in the live host AND in the browser (ADR 0009). " +
         "src/main.ts (the CLI) and the benchmark are its only Node entries — " +
         "nothing the package exports may touch an I/O builtin.",
       from: {

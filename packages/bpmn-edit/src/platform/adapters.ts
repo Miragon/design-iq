@@ -1,5 +1,5 @@
 /**
- * Design core vs implement adapters (ADR 0008). The core reads every spelling of a link and writes the one of the
+ * Design core vs implement adapters (ADR 0009). The core reads every spelling of a link and writes the one of the
  * file's platform; implementation details (mappings, headers, templates, job types, forms) are typed only through the
  * adapter of the file's platform, and a design model has none: the core never writes a platform extension.
  */
@@ -118,7 +118,7 @@ function requireKind(node: ModdleElement, type: string, what: string): void {
 function unsupported(platform: string, what: string): never {
   throw new BpmnEditError(
     `${what} is an implementation detail; this file is ${platform}. ` +
-      "Implementation details are written only in a Camunda 7 or Camunda 8 model (ADR 0008).",
+      "Implementation details are written only in a Camunda 7 or Camunda 8 model (ADR 0009).",
   );
 }
 

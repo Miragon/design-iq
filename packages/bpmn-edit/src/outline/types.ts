@@ -1,6 +1,6 @@
 /**
  * The outline: semantics of a BPMN document without DI, every element with its XML line — the design core (lanes,
- * links) plus the implementation details of the file's platform (ADR 0008).
+ * links) plus the implementation details of the file's platform (ADR 0009).
  */
 import type { Rect } from "../geometry/geometry.ts";
 import type { PlatformId } from "../platform/detect.ts";

@@ -1,6 +1,6 @@
 # @designiq/bpmn-edit
 
-BPMN editing through `bpmn-moddle`, the object model of bpmn-js ([ADR 0008](../../docs/adr/0008-bpmn-editing-through-moddle.md)).
+BPMN editing through `bpmn-moddle`, the object model of bpmn-js ([ADR 0009](../../docs/adr/0009-bpmn-editing-through-moddle.md)).
 Built for agents working on large models: read a compact outline instead of the XML, change the model through a small
 set of semantic operations, let the package compute the geometry. **Isomorphic**: everything exported runs in Node and
 in the browser; `src/main.ts` (the CLI) is the only Node entry (`pnpm arch`, rule `bpmn-edit-stays-isomorphic`).
@@ -17,7 +17,7 @@ write the file unless `--dry-run` is given; both print what changed and the metr
 after. After a model edit run `pnpm validate` (hard rule 1).
 
 On live documents the same functions sit behind three MCP tools of the live host — `get_process_outline`,
-`edit_process`, `layout_process` — registered only with `LIVE_MCP_BPMN_EDIT=1` until the A/B gate of ADR 0008 is
+`edit_process`, `layout_process` — registered only with `LIVE_MCP_BPMN_EDIT=1` until the A/B gate of ADR 0009 is
 passed (see Benchmark below). `edit_process` saves through the ordinary content save (validation, CAS, minimal-diff
 write) and re-applies its operations when a co-editor changed the document in between.
 
@@ -300,7 +300,7 @@ content repo, the fixtures, a seeded S/M/L corpus (`bench/generate.ts`) and ever
 BPMN_BENCH_CORPUS=<dir>[:<dir>...] node packages/bpmn-edit/bench/tool-bench.ts [--seeds 5] [--json <file>]
 ```
 
-**A/B benchmark** (`bench/agent/`, the gate of ADR 0008): 30 tasks (9 edit templates on an S, M and L model, 3
+**A/B benchmark** (`bench/agent/`, the gate of ADR 0009): 30 tasks (9 edit templates on an S, M and L model, 3
 scaffolds), each with a prompt in the words of a process owner, an automatic oracle, a list of what it may change
 (everything else counts as collateral) and a reference solution. Arm A gets today's XML tools, arm B the semantic
 tools (XML as a recorded fallback), same model, same prompt.
@@ -314,7 +314,7 @@ node packages/bpmn-edit/bench/agent/report.ts runs.jsonl --md report.md
 
 The report gives success rates with Wilson 95 % intervals, paired per-task changes of tokens, cost, time and turns
 (median, bootstrap 95 % interval, Wilcoxon p), collateral changes, first-save validity and hard layout defects per
-size, and the go/no-go verdict of the gate criteria fixed in ADR 0008.
+size, and the go/no-go verdict of the gate criteria fixed in ADR 0009.
 
 ## Development
 

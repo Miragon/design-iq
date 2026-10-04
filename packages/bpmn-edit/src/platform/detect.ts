@@ -1,5 +1,5 @@
 /**
- * Which platform a BPMN file is written for (ADR 0008): detected from the file, never imposed. The root element
+ * Which platform a BPMN file is written for (ADR 0009): detected from the file, never imposed. The root element
  * decides — `modeler:executionPlatform` when present, otherwise which engine namespace the file actually uses. A file
  * that names no platform, or uses both engine namespaces, is a design model: only the platform-free core applies.
  */
@@ -16,7 +16,7 @@ const EXECUTION_PLATFORM = /\s[\w.-]+:executionPlatform\s*=\s*["']([^"']*)["']/;
 /**
  * Execution platform names the Camunda Modeler writes, by the platform they mean. Forks that keep the `camunda:`
  * namespace are recognised by that namespace; a fork with a namespace of its own (whether Operaton has one is open,
- * ADR 0008) stays a design model until an adapter for it exists.
+ * ADR 0009) stays a design model until an adapter for it exists.
  */
 const PLATFORM_NAMES: Readonly<Record<string, PlatformId>> = {
   "camunda cloud": "c8",

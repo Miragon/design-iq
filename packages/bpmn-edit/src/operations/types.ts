@@ -1,7 +1,7 @@
 /**
  * The operations an agent applies to a BPMN document; a batch runs in order and is applied all or nothing. The design
  * operations work on every BPMN file; setInput, setOutput, setHeader and an element template are implementation
- * details that only the adapter of a Camunda 7 or Camunda 8 file writes (ADR 0008).
+ * details that only the adapter of a Camunda 7 or Camunda 8 file writes (ADR 0009).
  */
 
 export const NEW_ELEMENT_TYPES = [

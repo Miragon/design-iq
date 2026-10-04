@@ -1,5 +1,5 @@
 /**
- * Tool benchmark of ADR 0008 — what the tool itself does, deterministic and offline (the agent-level A/B lives in
+ * Tool benchmark of ADR 0009 — what the tool itself does, deterministic and offline (the agent-level A/B lives in
  * bench/agent/). Per model: context size (XML vs outline vs neighbourhood window), roundtrip fidelity, runtime, the
  * layout metrics before/after `tidy` and `layout`, and a probe edit (insert a task) checked by the platform validator.
  *

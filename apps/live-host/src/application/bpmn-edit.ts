@@ -1,5 +1,5 @@
 /**
- * Semantic BPMN editing on LIVE documents (ADR 0008): an agent sends operations or a layout request instead of the
+ * Semantic BPMN editing on LIVE documents (ADR 0009): an agent sends operations or a layout request instead of the
  * whole XML; @designiq/bpmn-edit computes the new XML, geometry included, and the ordinary content save (validation +
  * CAS + minimal-diff write) stores it. Because the change is semantic, a document that moved on between the read and
  * the write is no reason to give up: the change is re-applied to the current text, up to MAX_ATTEMPTS times.

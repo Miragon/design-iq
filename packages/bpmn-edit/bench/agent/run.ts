@@ -1,5 +1,5 @@
 /**
- * The A/B benchmark of ADR 0008: the same tasks on the same models, solved by an agent with today's XML tools (arm A)
+ * The A/B benchmark of ADR 0009: the same tasks on the same models, solved by an agent with today's XML tools (arm A)
  * or with the semantic tools (arm B), against a local live host's /mcp. One JSONL record per run: oracle verdict,
  * validator result, tokens and cost, wall time, tool calls, failed saves, collateral changes, layout defects.
  *
@@ -25,7 +25,7 @@ import { collateral, editTasks, processOf, scaffoldTasks, type Task } from "./ta
 const ARM_TOOLS: Readonly<Record<"A" | "B", readonly string[]>> = {
   // today: read and write the whole XML
   A: ["list_processes", "get_process", "get_bpmn_xml", "save_bpmn_xml", "validate_bpmn", "create_process"],
-  // ADR 0008: semantic operations; the XML tools stay as a fallback and their use is recorded
+  // ADR 0009: semantic operations; the XML tools stay as a fallback and their use is recorded
   B: [
     "list_processes",
     "get_process",

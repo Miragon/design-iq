@@ -1,7 +1,7 @@
 /**
  * The evaluation of an A/B run (bench/agent/run.ts): success rates with Wilson 95 % intervals, paired per-task
  * differences of tokens, cost and time (median with a bootstrap 95 % interval, Wilcoxon signed-rank p), collateral
- * changes, first-save validity, hard layout defects — per size — and the go/no-go gate of ADR 0008, fixed before the
+ * changes, first-save validity, hard layout defects — per size — and the go/no-go gate of ADR 0009, fixed before the
  * run:
  *
  *   success overall      B >= A (B's interval not below A's point estimate)
@@ -118,7 +118,7 @@ function pairedChanges(runs: readonly Run[], metric: (run: Run) => number): numb
 }
 
 export function report(runs: readonly Run[]): { lines: string[]; gate: boolean } {
-  const lines = ["# ADR 0008 — A/B benchmark", ""];
+  const lines = ["# ADR 0009 — A/B benchmark", ""];
   const arms = ["A", "B"] as const;
   lines.push(
     `${runs.length} runs, ${new Set(runs.map((run) => run.task)).size} tasks, ${Math.max(...runs.map((run) => run.rep))} repetitions.`,
@@ -214,7 +214,7 @@ export function report(runs: readonly Run[]): { lines: string[]; gate: boolean }
       `${bRuns.reduce((t, r) => t + r.hardDefects, 0)}`,
     ],
   ];
-  lines.push("", "## Gate (ADR 0008)", "", "| criterion | result | measured |", "|---|---|---|");
+  lines.push("", "## Gate (ADR 0009)", "", "| criterion | result | measured |", "|---|---|---|");
   for (const [name, ok, measured] of checks) lines.push(`| ${name} | ${ok ? "pass" : "FAIL"} | ${measured} |`);
   const gate = checks.every(([, ok]) => ok);
   lines.push("", `**Gate: ${gate ? "GO" : "NO-GO"}**`);

@@ -88,7 +88,7 @@ export type McpDeps = OverviewDeps &
      *  listed with its own — absent without a tracker */
     todoJobs?: { sourcesOf(repo: string, process: string): string[] };
     mcpReadOnly?: boolean;
-    /** LIVE_MCP_BPMN_EDIT=1: register the semantic BPMN tools of ADR 0008
+    /** LIVE_MCP_BPMN_EDIT=1: register the semantic BPMN tools of ADR 0009
      *  (get_process_outline, edit_process, layout_process) — off by default
      *  until the A/B benchmark gate is passed */
     bpmnEdit?: boolean;
@@ -640,7 +640,7 @@ export function createLiveMcpServer(
     );
   };
 
-  // ── semantic BPMN editing (ADR 0008), behind LIVE_MCP_BPMN_EDIT=1: the agent
+  // ── semantic BPMN editing (ADR 0009), behind LIVE_MCP_BPMN_EDIT=1: the agent
   // names WHAT changes, @designiq/bpmn-edit computes the XML and the geometry, the
   // ordinary content save validates and writes it ─────────────────────────────
   if (opts.bpmnEdit) {

@@ -33,7 +33,7 @@ export interface EditOutcome {
   readonly before: readonly PlaneMetrics[];
   readonly after: readonly PlaneMetrics[];
   readonly diagnostics: readonly string[];
-  /** the platform the file was detected as (ADR 0008) */
+  /** the platform the file was detected as (ADR 0009) */
   readonly platform: PlatformId;
 }
 

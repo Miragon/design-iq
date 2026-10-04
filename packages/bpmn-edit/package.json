@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "BPMN editing through bpmn-moddle (ADR 0008): a compact outline, semantic edit operations, automatic layout and layout metrics \u2014 a platform-free design core plus optional Camunda 7 / Camunda 8 implement adapters. ISOMORPHIC: the same operations run in the live host and in the browser.",
+  "description": "BPMN editing through bpmn-moddle (ADR 0009): a compact outline, semantic edit operations, automatic layout and layout metrics \u2014 a platform-free design core plus optional Camunda 7 / Camunda 8 implement adapters. ISOMORPHIC: the same operations run in the live host and in the browser.",
   "engines": {
     "node": ">=23.6"
   },

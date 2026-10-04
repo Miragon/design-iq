@@ -1,5 +1,5 @@
 /**
- * A seeded generator of benchmark models (ADR 0008 gate): processes of a given size in the style of the example
+ * A seeded generator of benchmark models (ADR 0009 gate): processes of a given size in the style of the example
  * content repo — one pool, 2-4 lanes (roles), sequences, exclusive and parallel blocks, loops, call activities,
  * business rule tasks with a decision link and error paths. The same seed always yields the same model, so the
  * S/M/L corpus is reproducible without committing customer material.

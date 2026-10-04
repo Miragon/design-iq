@@ -1,4 +1,4 @@
-// ADR 0008: a platform-free design core, optional Camunda 7 / Camunda 8 adapters. The core reads every spelling,
+// ADR 0009: a platform-free design core, optional Camunda 7 / Camunda 8 adapters. The core reads every spelling,
 // writes the file's own, never writes a platform extension into a design model and never drops a foreign one.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -82,7 +82,7 @@ test("design: an implementation detail is refused with the platform and the ADR 
       element: { type: "serviceTask", id: "Task_x", name: "X", template: { id: "T", version: 1 } },
     },
   ] satisfies Operation[]) {
-    await assert.rejects(applyOperations(DESIGN, [op], "order-to-cash.bpmn"), /design model.*ADR 0008/);
+    await assert.rejects(applyOperations(DESIGN, [op], "order-to-cash.bpmn"), /design model.*ADR 0009/);
   }
 });
 

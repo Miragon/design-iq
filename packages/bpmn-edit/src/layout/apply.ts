@@ -1,6 +1,6 @@
 /**
  * Writes a layout result into the DI of a parsed document: bounds, waypoints and label bounds. designIQ stickies carry
- * their coordinates on the extension element instead of in the DI (ADR 0008); each one follows the flow node nearest
+ * their coordinates on the extension element instead of in the DI (ADR 0009); each one follows the flow node nearest
  * to it, so a workshop note stays next to the step it annotates.
  */
 import type { ModdleElement } from "bpmn-moddle";
