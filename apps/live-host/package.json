@@ -1,6 +1,6 @@
 {
   "name": "@designiq/live-host",
-  "version": "4.3.1",
+  "version": "5.0.0",
   "private": true,
   "type": "module",
   "description": "Live collaboration host: Hocuspocus sync + REST API + web app on one port. Multi-repo, per-(user,repo) authz, release-as-PR.",

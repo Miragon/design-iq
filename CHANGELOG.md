@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.0](https://github.com/Miragon/design-iq/compare/v4.3.1...v5.0.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* the container image is published as ghcr.io/miragon/designiq-live-host only; the npm packages move to @miragon/design-iq-validator and @miragon/design-iq-mcp; session cookies and the Keycloak quickstart ids are renamed (everyone signs in once). See docs/upgrading-to-5.md.
+
+### Features
+
+* rename the product to designIQ ([#226](https://github.com/Miragon/design-iq/issues/226)) ([9dc09cf](https://github.com/Miragon/design-iq/commit/9dc09cf8ca4170d5a3ca178a64c63b76689005d3))
+
 ## [4.3.1](https://github.com/Miragon/design-iq/compare/v4.3.0...v4.3.1) (2026-10-03)
 
 
