@@ -70,7 +70,7 @@ declare module "bpmn-moddle" {
     decisionId?: string;
     propagateAllChildVariables?: boolean;
     calledElement?: string;
-    // bpmiq stickies (on the extension elements of a process)
+    // designIQ stickies (on the extension elements of a process)
     x?: number;
     y?: number;
     width?: number;

@@ -73,7 +73,7 @@ after(async () => {
 function deps(over: Partial<McpDeps> = {}): McpDeps {
   const ws = mkdtempSync(join(tmpdir(), "bpm-edit-"));
   mkdirSync(join(ws, "processes", "subprocesses"), { recursive: true });
-  writeFileSync(join(ws, "bpmiq.yml"), "processes: processes\n");
+  writeFileSync(join(ws, "designiq.yml"), "processes: processes\n");
   writeFileSync(join(ws, PATH), EXAMPLE);
   writeFileSync(join(ws, "processes", "subprocesses", "invoice-handling.bpmn"), SUB);
   const registry = { get: (n: string) => (n.toLowerCase() === REPO.fullName ? REPO : undefined), list: () => [REPO] };

@@ -1,5 +1,5 @@
 /**
- * Writes a layout result into the DI of a parsed document: bounds, waypoints and label bounds. bpmiq stickies carry
+ * Writes a layout result into the DI of a parsed document: bounds, waypoints and label bounds. designIQ stickies carry
  * their coordinates on the extension element instead of in the DI (ADR 0008); each one follows the flow node nearest
  * to it, so a workshop note stays next to the step it annotates.
  */
@@ -16,7 +16,7 @@ function diById(document: BpmnDocument): Map<string, ModdleElement> {
   return new Map(entries);
 }
 
-const STICKY = "bpmiq:Sticky";
+const STICKY = "bpmiq:Sticky"; // legacy-name-ok: the sticky prefix is frozen (the rename ADR)
 /** DI shapes a sticky never anchors to: frames, not steps. */
 const FRAME_TYPES: ReadonlySet<string> = new Set([
   "bpmn:Participant",
@@ -57,7 +57,7 @@ function followStickies(document: BpmnDocument, result: LayoutResult): void {
     (di) => di.$type === "bpmndi:BPMNShape" && di.bounds && di.bpmnElement && !FRAME_TYPES.has(di.bpmnElement.$type),
   );
   for (const sticky of stickies) {
-    // untyped (no bpmiq descriptor is loaded, so the web modeler's spelling passes through): attributes are strings
+    // untyped (no designIQ descriptor is loaded, so the web modeler's spelling passes through): attributes are strings
     const [x, y, width, height] = [sticky.x, sticky.y, sticky.width ?? 0, sticky.height ?? 0].map(Number);
     if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) {
       continue;

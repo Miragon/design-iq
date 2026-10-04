@@ -1,5 +1,5 @@
 /**
- * Lanes are roles: bpmiq derives a process's roles from them, so every flow node of a process with lanes belongs to
+ * Lanes are roles: designIQ derives a process's roles from them, so every flow node of a process with lanes belongs to
  * one (`flowNodeRef`). A new node joins the lane of its anchor unless another is named, a removed node leaves its lane,
  * and moveToLane changes the role of a node together with its boundary events.
  */

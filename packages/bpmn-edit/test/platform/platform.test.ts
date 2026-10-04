@@ -173,7 +173,7 @@ test("an edit of the example model changes nothing but the edit: root tag, decis
   assert.match(outcome.xml, / name="Check credit limit" calledDecision="credit-limit-check">/);
   // the file links decisions unprefixed, so the new link does too
   assert.match(outcome.xml, / name="Score risk" calledDecision="risk-score">/);
-  assert.doesNotMatch(outcome.xml, /bpmiq:|camunda:decisionRef|zeebe/);
+  assert.doesNotMatch(outcome.xml, /bpmiq:|camunda:decisionRef|zeebe/); // legacy-name-ok: the frozen sticky prefix
   assert.equal(element(await processOf(outcome.xml), "Task_ship_goods").lane, "Lane_order_management");
 });
 
@@ -229,6 +229,7 @@ test("foreign extensions pass through an edit untouched", async () => {
 });
 
 test("a sticky follows the flow node nearest to it when the layout moves that node", async () => {
+  // the sticky namespace and its bpmiq: prefix are frozen, persisted in .bpmn files (legacy-name-ok)
   const sticky = DESIGN.replace(
     'xmlns:di="http://www.omg.org/spec/DD/20100524/DI"',
     'xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bpmiq="https://bpmiq.io/schema/1.0/bpmiq"',

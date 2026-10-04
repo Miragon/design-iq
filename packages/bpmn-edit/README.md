@@ -32,13 +32,14 @@ The platform of a file is **detected, never imposed** (`src/platform/detect.ts`)
 | `c7` adapter (`camunda-bpmn-moddle`) | `camunda:inputOutput`, `camunda:decisionRef`, `camunda:modelerTemplate`                                                          |
 | `c8` adapter (`zeebe-bpmn-moddle`)   | `zeebe:ioMapping`, `zeebe:taskHeaders`, `zeebe:calledDecision`, `zeebe:calledElement`, `zeebe:userTask`, `zeebe:modelerTemplate` |
 
-The core never writes a platform extension and never drops a foreign one: whatever no loaded descriptor knows (bpmiq
+The core never writes a platform extension and never drops a foreign one: whatever no loaded descriptor knows (designIQ
 stickies, vendor extensions, the unprefixed `calledDecision`) passes through untouched, and namespace declarations of
 the root survive a write even when nothing uses them. Edits follow the file: a new decision link uses the spelling the
 file already uses (else the platform's: `calledDecision` in design models), new nodes join their anchor's lane, flow
 ids follow the file's style (`Flow_<hash>` beside modeler ids, `flow_xToY`, else `<Prefix>_<source>_to_<target>`), DI
 ids too (`Shape_<id>` / `<id>_di`), and `<bpmn:incoming>`/`<bpmn:outgoing>` lists are kept only where the file keeps
-them (`sourceRef`/`targetRef` are the truth). bpmiq stickies follow the flow node nearest to them when a layout moves it.
+them (`sourceRef`/`targetRef` are the truth). designIQ stickies follow the flow node nearest to them when a layout
+moves it.
 
 ## Outline
 

@@ -21,7 +21,7 @@ Findings that shape the decision:
    drops a declared but unused namespace on write.
 2. **Writing platform extensions is the real risk.** A first prototype wrote `<zeebe:userTask/>` into a C7 file, gave
    new tasks no lane (no role in the derived view) and a flow id style foreign to the file.
-3. **bpmiq's decision link is off-schema.** Design models link decisions with an unprefixed `calledDecision`
+3. **designIQ's decision link is off-schema.** Design models link decisions with an unprefixed `calledDecision`
    (hard rule 5). BPMN has no task→decision link; engines use `camunda:decisionRef` (C7) or
    `<zeebe:calledDecision decisionId>` (C8). Readers accept every spelling; an editor must pick one to write.
 4. **Readability is a layout requirement.** Diagrams read like a book — left to right, else top to bottom. An editor
@@ -56,7 +56,7 @@ Findings that shape the decision:
      models). Existing content is not migrated.
    - New nodes join their anchor's lane; flow and DI ids follow the file's style (modeler hash, numbered,
      `flow_xToY`, descriptive); `<bpmn:incoming>/<bpmn:outgoing>` lists are kept only where the file keeps them.
-   - No bpmiq descriptor is loaded: stickies pass through untyped and follow the flow node nearest to them when a
+   - No designIQ descriptor is loaded: stickies pass through untyped and follow the flow node nearest to them when a
      layout moves it.
 
 5. **Geometry keeps the reading order, locally.** An insertion into a flow makes room like the space tool: the rest
@@ -86,7 +86,7 @@ Findings that shape the decision:
 
 ## Consequences
 
-- bpmiq stays **design-first**: the core serves every BPMN file, executable or not; adapters grow on demand.
+- designIQ stays **design-first**: the core serves every BPMN file, executable or not; adapters grow on demand.
 - **Gate:** the `/mcp` tools stay opt-in until the A/B benchmark (`bench/agent/`: 30 tasks with automatic oracles and
   reference solutions, today's XML tools vs. the semantic tools, 5 repetitions) shows no loss in task success, at
   least 20 pp more success on L models, half the tokens on M/L models, no additional collateral change and zero hard

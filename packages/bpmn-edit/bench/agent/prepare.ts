@@ -1,6 +1,6 @@
 /**
- * Writes the content repo the A/B benchmark runs against: a root bpmiq.yml and the seeded S, M and L models. Serve it
- * with a local live host (no login, the semantic tools on):
+ * Writes the content repo the A/B benchmark runs against: a root designiq.yml and the seeded S, M and L models. Serve
+ * it with a local live host (no login, the semantic tools on):
  *
  *   node packages/bpmn-edit/bench/agent/prepare.ts <dir>
  *   LIVE_AUTH=none LIVE_MCP_BPMN_EDIT=1 LIVE_HOST_CONTENT_DIR=<dir> GITHUB_REPO=bench/models \
@@ -19,7 +19,7 @@ export const BENCH_MODELS = [
 
 export async function prepare(directory: string): Promise<string[]> {
   mkdirSync(join(directory, "processes"), { recursive: true });
-  writeFileSync(join(directory, "bpmiq.yml"), "models: processes\n");
+  writeFileSync(join(directory, "designiq.yml"), "models: processes\n");
   const ids: string[] = [];
   for (const { size, seed } of BENCH_MODELS) {
     const { id, xml } = await generateModel(size, seed);

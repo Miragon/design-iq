@@ -1,9 +1,9 @@
 /**
  * Parsing and serialization of a BPMN document through bpmn-moddle, the object model and serializer of the modeler
  * (ADR 0008). The platform is detected from the file; a Camunda 7 or Camunda 8 descriptor is loaded only for a file of
- * that platform, so its implementation details are typed. Whatever no loaded descriptor knows (bpmiq stickies, vendor
- * extensions, the unprefixed `calledDecision`) passes through untouched. A document saved by the modeler serializes
- * back byte for byte; XML comments and hand formatting are not preserved.
+ * that platform, so its implementation details are typed. Whatever no loaded descriptor knows (designIQ stickies,
+ * vendor extensions, the unprefixed `calledDecision`) passes through untouched. A document saved by the modeler
+ * serializes back byte for byte; XML comments and hand formatting are not preserved.
  */
 import { BpmnModdle, type ModdleElement } from "bpmn-moddle";
 import camunda from "camunda-bpmn-moddle/resources/camunda.json" with { type: "json" };

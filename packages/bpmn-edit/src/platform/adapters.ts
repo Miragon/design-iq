@@ -44,7 +44,7 @@ export interface PlatformAdapter {
   details(node: ModdleElement, shorten: Shorten): Partial<ElementOutline>;
 }
 
-/** The decision link in every spelling bpmiq reads (`decisionRefOf` in @designiq/notations/extract). */
+/** The decision link in every spelling designIQ reads (`decisionRefOf` in @designiq/notations/extract). */
 export function calledDecisionOf(node: ModdleElement): string | undefined {
   const extension = findExtension(node, "zeebe:CalledDecision");
   const value =
@@ -55,7 +55,7 @@ export function calledDecisionOf(node: ModdleElement): string | undefined {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
 
-/** The call link in every spelling bpmiq reads (`calledElementOf` in @designiq/notations/extract). */
+/** The call link in every spelling designIQ reads (`calledElementOf` in @designiq/notations/extract). */
 export function calledElementOf(node: ModdleElement): string | undefined {
   const value = node.calledElement ?? findExtension(node, "zeebe:CalledElement")?.processId;
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
@@ -74,7 +74,9 @@ function clearDecisionLinks(node: ModdleElement, keep: string): void {
   }
 }
 
-/** bpmiq's existing design spelling (CLAUDE.md hard rule 5): the unprefixed attribute every bpmiq reader follows. */
+/**
+ * designIQ's existing design spelling (CLAUDE.md hard rule 5): the unprefixed attribute every designIQ reader follows.
+ */
 function setUnprefixedDecision(node: ModdleElement, decision: string | null): string[] {
   requireKind(node, "bpmn:BusinessRuleTask", "a decision link");
   clearDecisionLinks(node, "calledDecision");
