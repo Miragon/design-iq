@@ -1,6 +1,6 @@
 ---
 name: export-process-skill
-description: Exports a business process — its BPMN model, any sub-processes it calls, and the derived process view — as a self-contained, portable agent skill under dist/skills/. Use when the user wants a process "as a skill", wants processes to be usable by other agents or projects, or says "let this process talk".
+description: Exports a business process — its BPMN model, any sub-processes it calls, and the derived process view — as a self-contained, portable agent skill under dist/skills/. Use when the user wants a process "as a skill", wants processes to be usable by other agents or projects, or wants a process to answer questions outside this repository. One of the BPMN process skills (`.bpmn` models only).
 ---
 
 # Export Process as Skill

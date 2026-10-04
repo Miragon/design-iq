@@ -1,5 +1,5 @@
-import { Button } from "@bpmiq/ui-kit/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@bpmiq/ui-kit/components/card";
+import { Button } from "@designiq/ui-kit/components/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@designiq/ui-kit/components/card";
 
 import { useConfig } from "@/lib/queries";
 import { stashReturnTo } from "@/lib/return-to";
@@ -11,8 +11,10 @@ export function Login() {
     <div className="mx-auto flex max-w-md flex-col px-6 py-20">
       <Card>
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">bpmiq Live</CardTitle>
-          <CardDescription>Model together, release via pull request — then talk to your processes.</CardDescription>
+          <CardTitle className="text-2xl">designIQ</CardTitle>
+          <CardDescription>
+            Collaborative modeling and architecture with AI — live, Git-native, with every model a file in your repo.
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {providers.length === 0 ? (
@@ -22,7 +24,7 @@ export function Login() {
               variables —{" "}
               <a
                 className="underline"
-                href="https://github.com/Miragon/bpm-iq/blob/main/docs/on-prem/configuration.md"
+                href="https://github.com/Miragon/design-iq/blob/main/docs/on-prem/configuration.md"
                 target="_blank"
                 rel="noreferrer"
               >

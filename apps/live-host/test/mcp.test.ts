@@ -17,8 +17,9 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
 
-import { presenceColor } from "@bpmiq/contracts/live";
-import { toolText } from "@bpmiq/mcp-kit/testing";
+import { presenceColor } from "@designiq/contracts/live";
+import { toolNamesIn, toolText } from "@designiq/mcp-kit/testing";
+import { NOTATIONS } from "@designiq/notations";
 import { Server as HocuspocusServer } from "@hocuspocus/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
@@ -115,17 +116,17 @@ after(async () => {
  *  test can tell the bundles apart. loadWidget memoises per (dist, file,
  *  boot): every deps() gets its own tmp dist, so a test may omit files freely. */
 const widgetStub = (file: string): string =>
-  `<html><head><script>window.BPMIQ_BOOT = "__BPMIQ_BOOT__";</script></head><body>${file}</body></html>`;
+  `<html><head><script>window.DESIGNIQ_BOOT = "__DESIGNIQ_BOOT__";</script></head><body>${file}</body></html>`;
 
 function deps(over: Partial<McpDeps> = {}, widgets: readonly string[] = WIDGET_FILES): McpDeps {
-  const ws = mkdtempSync(join(tmpdir(), "bpm-mcp-"));
+  const ws = mkdtempSync(join(tmpdir(), "designiq-mcp-"));
   mkdirSync(join(ws, "processes"), { recursive: true });
-  writeFileSync(join(ws, "bpmiq.yml"), "processes: processes\n");
+  writeFileSync(join(ws, "designiq.yml"), "processes: processes\n");
   writeFileSync(join(ws, PATH), VALID);
   writeFileSync(join(ws, DMN_PATH), DMN);
   writeFileSync(join(ws, USER_PATH), USER_BPMN);
   writeFileSync(join(ws, OWM_PATH), OWM);
-  const webDist = mkdtempSync(join(tmpdir(), "bpm-webdist-"));
+  const webDist = mkdtempSync(join(tmpdir(), "designiq-webdist-"));
   for (const file of widgets) writeFileSync(join(webDist, file), widgetStub(file));
   const registry = { get: (n: string) => (n.toLowerCase() === REPO.fullName ? REPO : undefined), list: () => [REPO] };
   const workspaces = {
@@ -313,6 +314,41 @@ test("registration: the todo tools appear only WITH a tracker; read-only keeps t
   );
 });
 
+test("instructions: present with a title, and every tool they name is registered — in every mode", async () => {
+  const modes: Array<[string, McpDeps]> = [
+    ["full", deps()],
+    ["read-only", deps({ mcpReadOnly: true })],
+    ["tracker", deps({ issues: fakeIssues() })],
+    ["tracker, read-only", deps({ issues: fakeIssues(), mcpReadOnly: true })],
+    ["no widgets", deps({}, [])],
+    ["wardley widget only", deps({}, ["mcp-app-wardley.html"])],
+  ];
+  for (const [mode, d] of modes) {
+    const { client } = await connect(d);
+    assert.equal(client.getServerVersion()?.title, "designIQ Live Host", mode);
+    const instructions = client.getInstructions() ?? "";
+    assert.match(instructions, /^designIQ is /, `${mode}: the instructions open with the product`);
+    const registered = new Set((await client.listTools()).tools.map((t) => t.name));
+    const mentioned = toolNamesIn(instructions);
+    // the drift guard: prose may never name a tool this server lacks
+    assert.deepEqual(
+      mentioned.filter((name) => !registered.has(name)),
+      [],
+      `${mode}: instructions name unregistered tools`,
+    );
+    // the start order and the notation-neutral core are always named
+    for (const name of ["list_repos", "list_models", "get_view", "get_model_content", "validate_model"]) {
+      assert.ok(mentioned.includes(name), `${mode}: instructions name ${name}`);
+    }
+    // every registered notation is listed with its extensions
+    for (const n of NOTATIONS) assert.ok(instructions.includes(n.label), `${mode}: names ${n.label}`);
+    // …and every served modeler widget is offered for showing models to people
+    for (const name of registered) {
+      if (/^open_.*modeler$/.test(name)) assert.ok(mentioned.includes(name), `${mode}: instructions name ${name}`);
+    }
+  }
+});
+
 test("todos: create anchors to the open process, list filters by it, close completes it", async () => {
   const issues = fakeIssues();
   const { call, callJson } = await connect(deps({ issues }));
@@ -396,7 +432,7 @@ test("MCP App: open_modeler carries the ui resource link; the resource serves th
     "openai/outputTemplate"?: string;
   };
   const uri = meta?.ui?.resourceUri;
-  assert.ok(uri?.startsWith("ui://bpmiq/modeler-"), `ui resourceUri: ${uri}`);
+  assert.ok(uri?.startsWith("ui://designiq/modeler-"), `ui resourceUri: ${uri}`);
   assert.equal(meta?.["ui/resourceUri"], uri);
   // ChatGPT's compatibility alias — older builds read only this key
   assert.equal(meta?.["openai/outputTemplate"], uri);
@@ -405,7 +441,7 @@ test("MCP App: open_modeler carries the ui resource link; the resource serves th
   const res = await client.readResource({ uri: uri! });
   const doc = res.contents[0] as { mimeType?: string; text?: string };
   assert.equal(doc.mimeType, "text/html;profile=mcp-app");
-  assert.ok(!doc.text!.includes("__BPMIQ_BOOT__"), "marker replaced");
+  assert.ok(!doc.text!.includes("__DESIGNIQ_BOOT__"), "marker replaced");
   assert.ok(doc.text!.includes('\\"readonly\\":false'), "boot config injected");
   // the deep-link base rides in the boot payload — the sandboxed iframe has
   // no other way to learn the instance origin
@@ -435,7 +471,7 @@ test("MCP App: open_decision_modeler serves the DMN widget and takes a scenario"
   const tool = (await client.listTools()).tools.find((t) => t.name === "open_decision_modeler");
   assert.ok(tool, "open_decision_modeler registered");
   const uri = (tool._meta as { ui?: { resourceUri?: string } })?.ui?.resourceUri;
-  assert.ok(uri?.startsWith("ui://bpmiq/decision-modeler-"), `ui resourceUri: ${uri}`);
+  assert.ok(uri?.startsWith("ui://designiq/decision-modeler-"), `ui resourceUri: ${uri}`);
   assert.equal((tool._meta as { "openai/outputTemplate"?: string })?.["openai/outputTemplate"], uri);
   // its own resource — never the BPMN widget's
   const other = (await client.listTools()).tools.find((t) => t.name === "open_modeler");
@@ -961,7 +997,7 @@ test("release_process demands a target; save demands baseVersion by schema", asy
 
 function apiOpts(d: McpDeps, sessions = new SessionStore(new DatabaseSync(":memory:"))): ApiOptions {
   return {
-    webDist: mkdtempSync(join(tmpdir(), "bpm-webdist-")),
+    webDist: mkdtempSync(join(tmpdir(), "designiq-webdist-")),
     publicUrl: "http://live.test",
     github: d.github,
     sessions,
@@ -1009,8 +1045,13 @@ test("/mcp over HTTP: stateless JSON, 405 on GET, 401 + RFC-9728 challenge, -327
   });
   assert.equal(init.status, 200);
   assert.match(init.headers.get("content-type") ?? "", /application\/json/);
-  const body = (await init.json()) as { result: { serverInfo: { name: string } } };
-  assert.equal(body.result.serverInfo.name, "bpmiq-live");
+  const body = (await init.json()) as {
+    result: { serverInfo: { name: string; title?: string }; instructions?: string };
+  };
+  assert.equal(body.result.serverInfo.name, "designiq-live");
+  // the title and the instructions travel in the initialize result over HTTP too
+  assert.equal(body.result.serverInfo.title, "designIQ Live Host");
+  assert.match(body.result.instructions ?? "", /^designIQ is /);
 
   const get = await fetch(`${base}/mcp`, { headers });
   assert.equal(get.status, 405);
@@ -1249,14 +1290,14 @@ test("widgets: the generated open_<notation>_modeler tools serve their own bundl
     assert.ok(tool, `${c.tool} registered`);
     const meta = tool._meta as { "ui/resourceUri"?: string; "openai/outputTemplate"?: string };
     const uri = uiMeta(tool)?.resourceUri;
-    assert.ok(uri?.startsWith(`ui://bpmiq/${c.notation}-modeler-`), `${c.tool} uri: ${uri}`);
+    assert.ok(uri?.startsWith(`ui://designiq/${c.notation}-modeler-`), `${c.tool} uri: ${uri}`);
     assert.equal(meta["ui/resourceUri"], uri);
     assert.equal(meta["openai/outputTemplate"], uri);
     uris.add(uri!);
     // its own bundle, boot marker replaced, viewer flag + deep-link base injected
     const doc = (await client.readResource({ uri: uri! })).contents[0] as { mimeType?: string; text?: string };
     assert.equal(doc.mimeType, "text/html;profile=mcp-app");
-    assert.ok(!doc.text!.includes("__BPMIQ_BOOT__"), "marker replaced");
+    assert.ok(!doc.text!.includes("__DESIGNIQ_BOOT__"), "marker replaced");
     assert.ok(doc.text!.includes('\\"readonly\\":false'), "boot config injected");
     assert.ok(doc.text!.includes('\\"publicUrl\\":\\"http://live.test\\"'), "publicUrl injected");
     assert.match(doc.text!, new RegExp(`<body>mcp-app-${c.notation}\\.html</body>`));

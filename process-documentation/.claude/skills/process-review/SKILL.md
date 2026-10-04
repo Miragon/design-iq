@@ -1,20 +1,20 @@
 ---
 name: process-review
-description: Quality gate for process models — runs the deterministic validator (BPMN structure + BPMNDI coverage + callActivity link integrity), then checks BPMN modeling conventions and diagram clarity by judgment. Use when the user asks to review, validate, lint, or check a process, before merging model changes, or for a portfolio health report.
+description: Quality gate for process models — runs the deterministic validator (BPMN structure + BPMNDI coverage + callActivity link integrity), then checks BPMN modeling conventions and diagram clarity by judgment. Use when the user asks to review, validate, lint, or check a process, before merging model changes, or for a portfolio health report. One of the BPMN process skills (`.bpmn` models only).
 ---
 
 # Process Review
 
-Review one process (a `.bpmn` file) or the whole repository. Report findings;
-only fix them when the user asks.
+Review one process (a `.bpmn` file) or every process in the repository. Report
+findings; only fix them when the user asks.
 
 ## Step 0 — Run the deterministic validator first
 
 ```
-node packages/validator/src/cli.ts --root . [<process-id>]
+npx @miragon/design-iq-validator --root . [<process-id>]
 ```
 
-(from the monorepo root; `--root <checkout>` for another repo). It covers the
+(from the repo root; `--root <checkout>` for another repo). It covers the
 mechanical invariants: XML well-formedness, namespace declarations, flow
 structure (one start event, no unreachable nodes or dead ends, valid
 sequenceFlow/message-flow references, boundary attachments), **BPMNDI coverage**

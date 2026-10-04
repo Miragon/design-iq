@@ -1,7 +1,7 @@
 {
-  "name": "@bpmiq/mcp",
+  "name": "@miragon/design-iq-mcp",
   "version": "4.3.1",
-  "description": "Read-only MCP server exposing a BPM content repo's processes — discovered from bpmiq.yml, derived from the BPMN — to any MCP client.",
+  "description": "Read-only MCP server exposing a designIQ content repo's models — BPMN processes, DMN decisions, Wardley maps, team topologies, event-storming boards, context maps and more — to any MCP client. Discovered from designiq.yml, views derived from the models.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -10,9 +10,15 @@
     "directory": "packages/mcp"
   },
   "keywords": [
+    "modeling",
+    "architecture",
     "bpm",
     "bpmn",
     "dmn",
+    "wardley-maps",
+    "team-topologies",
+    "event-storming",
+    "context-maps",
     "mcp",
     "model-context-protocol",
     "process-documentation"
@@ -21,7 +27,7 @@
     "node": ">=22"
   },
   "bin": {
-    "bpmiq-mcp": "server.ts"
+    "designiq-mcp-server": "server.ts"
   },
   "exports": {
     ".": "./server.ts",
@@ -37,7 +43,7 @@
       "./http": "./dist/http.js"
     },
     "bin": {
-      "bpmiq-mcp": "dist/server.js"
+      "designiq-mcp-server": "dist/server.js"
     }
   },
   "scripts": {
@@ -54,11 +60,11 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@bpmiq/contracts": "workspace:*",
-    "@bpmiq/github-app": "workspace:*",
-    "@bpmiq/http-kit": "workspace:*",
-    "@bpmiq/mcp-kit": "workspace:*",
-    "@bpmiq/notations": "workspace:*",
+    "@designiq/contracts": "workspace:*",
+    "@designiq/github-app": "workspace:*",
+    "@designiq/http-kit": "workspace:*",
+    "@designiq/mcp-kit": "workspace:*",
+    "@designiq/notations": "workspace:*",
     "@modelcontextprotocol/client": "2.1.0",
     "tsdown": "0.23.0"
   }

@@ -12,7 +12,7 @@ body:
         - VS Code extension
         - MCP server
         - Validator
-        - Content repo / portal / skills
+        - Notations / content repo / skills
         - Docs
         - Other
     validations:

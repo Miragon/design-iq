@@ -1,7 +1,7 @@
-import { Badge } from "@bpmiq/ui-kit/components/badge";
-import { Button } from "@bpmiq/ui-kit/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@bpmiq/ui-kit/components/card";
-import { Skeleton } from "@bpmiq/ui-kit/components/skeleton";
+import { Badge } from "@designiq/ui-kit/components/badge";
+import { Button } from "@designiq/ui-kit/components/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@designiq/ui-kit/components/card";
+import { Skeleton } from "@designiq/ui-kit/components/skeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Copy, Loader2, Plus, RefreshCw } from "lucide-react";
@@ -116,7 +116,7 @@ export function Overview() {
         </div>
       </div>
       <p className="text-muted-foreground mb-6 text-sm">
-        Connected process repositories — access follows your GitHub permissions.
+        Connected repositories — access follows your GitHub permissions.
       </p>
 
       {repos.isLoading ? (
@@ -128,7 +128,7 @@ export function Overview() {
       ) : list.length === 0 ? (
         <p className="text-muted-foreground max-w-prose text-sm">
           No repositories for your account yet. Use <strong>Add repository</strong> to install the app on one or more
-          process repositories
+          repositories that hold your models
           {installUrl ? "" : " (install URL not configured)"} — then <strong>Refresh</strong>.
         </p>
       ) : (

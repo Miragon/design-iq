@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
-# bpmiq Live Host — collaborative editing platform (Hocuspocus sync + REST API +
-# web app on ONE port). Multi-repo: connected repos are cloned on demand, so the
+# designIQ Live Host — the collaborative modeling server (Hocuspocus sync + REST API +
+# web app + /mcp on ONE port). Multi-repo: connected repos are cloned on demand, so the
 # runtime needs git. Build context = the monorepo root (pnpm workspace).
 #
-# Published as ghcr.io/miragon/bpmiq-live-host by .github/workflows/release.yml —
+# Published as ghcr.io/miragon/designiq-live-host by .github/workflows/release.yml —
 # the same image serves on-prem installs and Miragon's hosted cells (ADR 0004).
 
 FROM node:26-slim AS build
@@ -33,12 +33,12 @@ COPY packages/mcp/package.json ./packages/mcp/
 RUN pnpm install --frozen-lockfile
 # source + build the web app the live host serves
 COPY . .
-RUN pnpm --filter @bpmiq/web build
+RUN pnpm --filter @designiq/web build
 
 FROM node:26-slim
-LABEL org.opencontainers.image.title="bpmiq live-host" \
-  org.opencontainers.image.description="Collaborative BPM platform server: live model sync + REST API + web app on one port; releases become pull requests" \
-  org.opencontainers.image.source="https://github.com/Miragon/bpm-iq" \
+LABEL org.opencontainers.image.title="designIQ Live Host" \
+  org.opencontainers.image.description="Collaborative modeling and architecture with AI — live, Git-native, with every model a file in your repo." \
+  org.opencontainers.image.source="https://github.com/Miragon/design-iq" \
   org.opencontainers.image.licenses="MIT"
 ENV NODE_ENV=production PORT=8080 LIVE_DATA_DIR=/data
 WORKDIR /app

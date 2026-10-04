@@ -1,34 +1,34 @@
 /**
- * bpm-mcp-server — tool definitions, shared by both transports:
+ * designiq-mcp-server — tool definitions, shared by both transports:
  *   server.ts  → stdio (local: Claude Code picks it up via .mcp.json)
  *   http.ts    → Streamable HTTP (remote: fly.io, any MCP client via URL)
  *
  * Read-only by construction: only readFileSync + the content-repo discovery,
  * no write path. All tools carry readOnlyHint so clients may auto-approve them.
  * The one opt-in exception to "repo-local" is list_todos (registered ONLY when
- * BPM_TODOS_REPO + BPM_TODOS_TOKEN are set — also read as DESIGNIQ_TODOS_REPO + // legacy-name-ok
- * DESIGNIQ_TODOS_TOKEN, which win): a read-only GET against the content
+ * DESIGNIQ_TODOS_REPO + DESIGNIQ_TODOS_TOKEN are set — also read under the
+ * legacy BPM_TODOS_* names): a read-only GET against the content // legacy-name-ok
  * repo's issue tracker — the zero-auth default stays untouched.
  *
- * The content contract is minimal (@bpmiq/notations/content): a repo is a BPM
- * content repo iff it has a root bpmiq.yml naming its BPMN processes folder; a
- * process IS a .bpmn file there. There is NO hand-written process.yaml — the
- * process view (name, roles, steps, flow, sub-process calls) is DERIVED from the
- * BPMN on the fly (@bpmiq/notations/derive). A new notation with an extractor is
- * automatically analyzable here.
+ * The content contract is minimal (@designiq/notations/content): a repo is a
+ * content repo iff it has a root designiq.yml (legacy name: bpmiq.yml) naming // legacy-name-ok
+ * its models folder; a process IS a .bpmn file there. There is NO hand-written
+ * process.yaml — the process view (name, roles, steps, flow, sub-process calls)
+ * is DERIVED from the BPMN on the fly (@designiq/notations/derive). A new
+ * notation with an extractor is automatically analyzable here.
  *
- * Content root: pass --root <dir> (server.ts) or BPM_CONTENT_ROOT (also read as // legacy-name-ok
- * DESIGNIQ_CONTENT_ROOT, which wins) — any content repo works, the bundled
+ * Content root: pass --root <dir> (server.ts) or DESIGNIQ_CONTENT_ROOT (the
+ * legacy BPM_CONTENT_ROOT is still read) — any content repo works, the bundled // legacy-name-ok
  * process-documentation is only the default.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseAnchor } from "@bpmiq/contracts/todo-anchor";
-import { type GitHubIssueRow, isPullRequestRow, todoLabelQuery } from "@bpmiq/github-app/todos";
-import { fail, ok, READ, safe as kitSafe, type ToolResult } from "@bpmiq/mcp-kit";
-import { byId, NOTATIONS } from "@bpmiq/notations";
+import { parseAnchor } from "@designiq/contracts/todo-anchor";
+import { type GitHubIssueRow, isPullRequestRow, todoLabelQuery } from "@designiq/github-app/todos";
+import { fail, ok, READ, safe as kitSafe, type ToolResult } from "@designiq/mcp-kit";
+import { byId, NOTATIONS } from "@designiq/notations";
 import {
   buildRepoIndex,
   type ContentConfig,
@@ -37,9 +37,9 @@ import {
   discoverModels,
   discoverProcesses,
   loadContentConfig,
-} from "@bpmiq/notations/content";
-import { deriveProcess, deriveView, hasDeriver } from "@bpmiq/notations/derive";
-import { extractModelGraph, type ModelGraph } from "@bpmiq/notations/extract";
+} from "@designiq/notations/content";
+import { deriveProcess, deriveView, hasDeriver } from "@designiq/notations/derive";
+import { extractModelGraph, type ModelGraph } from "@designiq/notations/extract";
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
@@ -66,7 +66,7 @@ const readText = (path: string): string | null => {
   }
 };
 
-// ── Tool result codec: @bpmiq/mcp-kit — this zero-auth server prefixes every
+// ── Tool result codec: @designiq/mcp-kit — this zero-auth server prefixes every
 // unexpected throw, unlike the Live Host whose AppErrors speak for themselves
 const safe = (fn: Parameters<typeof kitSafe>[0]) => kitSafe(fn, { prefix: "Unexpected error: " });
 /** every tool here is read-only and repo-local */
@@ -158,19 +158,47 @@ export interface TodosConfig {
 
 /** The list_todos gate, used by BOTH entry points (server.ts, http.ts — the
  * composition roots read env, this module doesn't): undefined unless BOTH a
- * tracker repo (BPM_TODOS_REPO) and a token (BPM_TODOS_TOKEN) are set — the // legacy-name-ok
- * server stays zero-auth by default, the tool simply does not exist without
- * the opt-in.
+ * tracker repo (DESIGNIQ_TODOS_REPO) and a token (DESIGNIQ_TODOS_TOKEN) are
+ * set — the server stays zero-auth by default, the tool simply does not exist
+ * without the opt-in.
  *
- * Each of the two is also read as DESIGNIQ_TODOS_*, which wins, and resolved on
- * its own: a half-migrated environment (repo under one name, token under the
- * other) still opts in rather than silently losing the tool. Empty counts as
- * unset (compose passes "" for an unset variable), so an empty new name never
- * shadows a set old one. */
+ * Each of the two is also read under its legacy BPM_TODOS_* name (the new name // legacy-name-ok
+ * wins) and resolved on its own: a half-migrated environment (repo under one
+ * name, token under the other) still opts in rather than silently losing the
+ * tool. Empty counts as unset (compose passes "" for an unset variable), so an
+ * empty new name never shadows a set old one. */
 export function todosConfigFromEnv(env: Record<string, string | undefined>): TodosConfig | undefined {
   const repo = env.DESIGNIQ_TODOS_REPO || env.BPM_TODOS_REPO; // legacy-name-ok: env fallback
   const token = env.DESIGNIQ_TODOS_TOKEN || env.BPM_TODOS_TOKEN; // legacy-name-ok: env fallback
   return repo && token ? { repo, token, apiUrl: env.GITHUB_API_URL } : undefined;
+}
+
+// ── server instructions: what an assistant reads at initialize, before any
+// tool. Composed from the same switch the registration runs on (the opt-in
+// list_todos); test/tools.test.ts pins every tool name they mention against
+// tools/list. ───────────────────────────────────────────────────────────────
+
+/** "a, b and c" */
+const andList = (items: readonly string[]): string =>
+  items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+/** every registered notation with its file extensions */
+const NOTATION_FILES = andList(NOTATIONS.map((n) => `${n.label} (${n.extensions.join("/")})`));
+
+function readOnlyInstructions(on: { todos: boolean }): string {
+  return [
+    "designIQ is a Git-native workspace where teams model their business and their architecture together, live; " +
+      "this server reads one checkout of such a repository and never writes.",
+    "The repository keeps its models as files under the folder its designiq.yml names, one model per file with " +
+      `the file stem as its id, in these notations: ${NOTATION_FILES}.`,
+    "Start with `list_models` to see which models it holds.",
+    "These tools are notation-neutral: `get_view` (the derived structure), `get_model` (the raw graph of " +
+      "nodes and edges), `enumerate_paths` and `find_cycles` (flow analysis where the notation has flow " +
+      "semantics) and `which_models_use` (which models reference a given one).",
+    "BPMN has deeper tooling: `list_processes`, `get_process` (the derived process view: roles, steps, flow, " +
+      "sub-process calls), `who_owns` (ownership from lanes) and `which_processes_use`" +
+      (on.todos ? "; `list_todos` lists the open todos anchored to processes." : "."),
+    "Live editing, the modeler widgets and release as a pull request are on the designIQ Live Host, not here.",
+  ].join(" ");
 }
 
 /** A per-capability tool contribution for the read-only server — the same
@@ -224,22 +252,27 @@ export function createMcpServer(
   const pluralOf = (notation: string): string => byId(notation)?.noun.plural ?? notation;
   const notAContentRepo = () =>
     fail(
-      `No bpmiq.yml at the content root — not a BPM content repo. Expected a root bpmiq.yml naming a processes folder.`,
+      // both names are read (the legacy one forever): the owner of an older
+      // repo must recognise their file here, not go hunting for a new one
+      `No usable designiq.yml (or legacy bpmiq.yml) at the content root — not a content repo. Expected a root designiq.yml naming the models folder.`, // legacy-name-ok
     );
   const unknownProcess = async (id: string) =>
     fail(`Unknown process '${id}'. Available: ${(await processes()).map((p) => p.id).join(", ") || "(none)"}.`);
 
-  const server = new McpServer({ name: "bpm-architecture", version: "0.2.0" });
+  const server = new McpServer(
+    { name: "designiq-mcp", title: "designIQ content repo (read-only)", version: "0.2.0" },
+    { instructions: readOnlyInstructions({ todos: todos !== undefined }) },
+  );
 
   server.registerTool(
     "list_models",
     {
       description:
-        "List EVERY model file of the repository, grouped by notation (bpmn, dmn, wardley, " +
-        "team-topology, …) — the registry-wide superset of list_processes. Each row: id " +
+        `List EVERY model file of the repository, grouped by notation (${NOTATIONS.map((n) => n.id).join(", ")}) ` +
+        "— the starting point for any question. Each row: id " +
         "(file stem), path, and — for notations with a registered deriver — the model's own " +
         "name, summary and stats. Use to see which notations a repo contains before reaching " +
-        "for the notation-specific tools.",
+        "for the notation-specific tools; list_processes is the BPMN-only listing.",
       annotations: READ_ONLY,
     },
     safe(async () => {
@@ -276,10 +309,11 @@ export function createMcpServer(
     "list_processes",
     {
       description:
-        "List all modeled business processes — every .bpmn file under the repo's bpmiq.yml " +
-        "processes folder. Each row: id (file name without extension), derived name, the file " +
-        "path, and a count of steps/events/gateways/roles. Use to get a portfolio overview or " +
-        "to find a process id before calling get_process, get_model, who_owns or enumerate_paths.",
+        "BPMN only: list the processes — every .bpmn file under the repo's designiq.yml " +
+        "models folder. Each row: id (file name without extension), derived name, the file " +
+        "path, and a count of steps/events/gateways/roles. Use for a process overview or " +
+        "to find a process id before calling get_process, get_model, who_owns or enumerate_paths; " +
+        "list_models covers every notation.",
       annotations: READ_ONLY,
     },
     safe(async () => {
@@ -301,10 +335,10 @@ export function createMcpServer(
     "get_process",
     {
       description:
-        "Get one process in full: the process view DERIVED from its BPMN — name, roles (BPMN " +
+        "BPMN only: get one process in full — the process view DERIVED from its BPMN: name, roles (BPMN " +
         "lanes = owning teams), steps (activities with their role), events, gateways, the " +
         "sequence/message flow, and the sub-processes it calls (callActivity → calledElement). " +
-        "Use for walkthroughs and any deep question about a single process.",
+        "Use for walkthroughs and any deep question about a single process; get_view covers every notation.",
       inputSchema: z.object({
         id: z.string().describe("Process id = the .bpmn file name without extension, e.g. order-to-cash"),
       }),
@@ -347,8 +381,8 @@ export function createMcpServer(
     {
       description:
         "The derived view of ANY model — its own name, a one-line summary, stats, and the rich " +
-        "notation payload in `detail` where one exists (process view, decision tables, …). The " +
-        "notation-agnostic sibling of get_process: works for every notation with extract+derive " +
+        "notation payload in `detail` where one exists (the process view for BPMN, the decision " +
+        "tables for DMN). Works for every notation with extract+derive " +
         `capabilities (${NOTATIONS.filter((n) => hasDeriver(n.id))
           .map((n) => n.id)
           .join(", ")}).`,
@@ -440,7 +474,7 @@ export function createMcpServer(
     "who_owns",
     {
       description:
-        "Resolve ownership of a process from its BPMN lanes — the roles/teams that own its steps " +
+        "BPMN only: resolve ownership of a process from its lanes — the roles/teams that own its steps " +
         "(each lane, with the steps it contains) plus the pools (participants). Use for 'who owns " +
         "X', 'who does what in X', or handoff questions. Note: on the slim contract ownership is " +
         "whatever the model's lanes say; a process with no lanes has no modeled owner.",
@@ -470,10 +504,10 @@ export function createMcpServer(
     "which_processes_use",
     {
       description:
-        "Impact analysis across the portfolio: find processes whose id, derived name, role/lane " +
+        "BPMN only: find processes whose id, derived name, role/lane " +
         "names, step names, or sub-process calls (calledElement) match a query — case-insensitive " +
         "substring. Use for 'what calls invoice-handling', 'which processes have a Billing lane', " +
-        "'what touches the credit check'.",
+        "'what touches the credit check'. which_models_use follows references across every notation.",
       inputSchema: z.object({
         query: z.string().describe("Case-insensitive substring, e.g. 'invoice-handling', 'Billing', 'credit'"),
       }),
@@ -515,8 +549,7 @@ export function createMcpServer(
         "Reference-level impact analysis across EVERY notation: all models whose typed " +
         "cross-model references (callActivity calls, businessRuleTask decides, …) point at the " +
         "given model id (file stem, exact match) — the repo-wide reference index behind it also " +
-        "flags dangling references. The registry-wide sibling of which_processes_use; use for " +
-        "'what breaks if I change or delete this model?'.",
+        "flags dangling references. Use for 'what breaks if I change or delete this model?'.",
       inputSchema: z.object({
         id: z.string().describe("Target model id = file stem (from list_models), e.g. 'credit-check'"),
       }),
@@ -546,8 +579,8 @@ export function createMcpServer(
   // Model-anchored todos live as issues in the content repo's OWN tracker (see
   // apps/live-host). Listing them needs a credential, which this read-only
   // zero-auth server must never require — the tool only EXISTS when the entry
-  // point passed a TodosConfig (todosConfigFromEnv: BPM_TODOS_REPO + BPM_TODOS_TOKEN, // legacy-name-ok
-  // or the same two as DESIGNIQ_TODOS_*).
+  // point passed a TodosConfig (todosConfigFromEnv: DESIGNIQ_TODOS_REPO +
+  // DESIGNIQ_TODOS_TOKEN, or the same two under the legacy BPM_TODOS_* names). // legacy-name-ok
   if (todos) {
     const { repo: todosRepo, token: todosToken } = todos;
     const api = (todos.apiUrl ?? "https://api.github.com").replace(/\/$/, "");
@@ -573,7 +606,7 @@ export function createMcpServer(
             headers: {
               accept: "application/vnd.github+json",
               authorization: `Bearer ${todosToken}`,
-              "user-agent": "bpmiq-mcp",
+              "user-agent": "designiq-mcp",
             },
           },
         );

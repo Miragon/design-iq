@@ -1,8 +1,8 @@
 # On-premise installation
 
-Self-host the bpmiq platform with Docker: one container runs the Live Host — Hocuspocus
-document sync (WebSocket), the REST API, the collaborative web app, and the MCP endpoint
-for AI clients on **one port**.
+Self-host designIQ, collaborative modeling and architecture with AI, with Docker. One
+container runs the Live Host: Hocuspocus document sync (WebSocket), the REST API, the
+collaborative web app, and the MCP endpoint for AI clients, all on **one port**.
 Releases become pull requests in your own GitHub organization; review + merge stays where it
 is today. The platform never executes code from a content repository.
 
@@ -21,7 +21,8 @@ Companion documents:
 
 ## Prerequisites
 
-- A GitHub organization (or GitHub Enterprise) holding your BPM content repositories.
+- A GitHub organization (or GitHub Enterprise) holding your content repositories — each a
+  root `designiq.yml` naming the folder its models live in.
 - An OIDC identity provider — the one login ([ADR 0007](../adr/0007-idp-only-login-and-no-auth-mode.md)).
   None yet? The compose file ships a Keycloak with a ready realm
   ([idp-quickstart.md](idp-quickstart.md)); evaluating without any login is `LIVE_AUTH=none`.
@@ -34,7 +35,7 @@ Companion documents:
 
 ## The image
 
-`ghcr.io/miragon/bpmiq-live-host` — multi-arch (linux/amd64 + linux/arm64), built from
+`ghcr.io/miragon/designiq-live-host` — multi-arch (linux/amd64 + linux/arm64), built from
 [`apps/live-host/Dockerfile`](../../apps/live-host/Dockerfile) by the release workflow
 (see [ADR 0004](../adr/0004-open-source-split.md) for the artifact flow — the same image
 serves on-prem installs and Miragon's hosted cells).
@@ -45,6 +46,8 @@ serves on-prem installs and Miragon's hosted cells).
 | `vX.Y.Z`         | a specific release                             |
 | `edge`           | latest `main` build                            |
 | `sha-<full-sha>` | exact commit build (full sha, for pin-mapping) |
+
+The compose file takes the tag from `DESIGNIQ_VERSION` in `.env` (default `latest`).
 
 Container facts: listens on `PORT=8080`, state under `LIVE_DATA_DIR=/data` (mount a
 volume there), ships `git` + CA certificates for cloning connected repos. The container
@@ -81,8 +84,8 @@ policy requires a non-root user, run with `user:` and make `/data` writable for 
 Plain `docker run` works too:
 
 ```bash
-docker run -d --name bpmiq -p 8080:8080 -v bpmiq-data:/data \
-  --env-file .env --stop-timeout 30 ghcr.io/miragon/bpmiq-live-host:latest
+docker run -d --name designiq -p 8080:8080 -v designiq-data:/data \
+  --env-file .env --stop-timeout 30 ghcr.io/miragon/designiq-live-host:latest
 ```
 
 ## Operating modes
@@ -106,7 +109,7 @@ The same container serves an MCP endpoint at `POST /mcp` — agents read and edi
 models under the same per-(user,repo) authorization as the web app:
 
 ```bash
-claude mcp add --transport http bpm-live https://<your-host>/mcp \
+claude mcp add --transport http designiq https://<your-host>/mcp \
   --header "Authorization: Bearer <token>"
 ```
 
@@ -125,7 +128,7 @@ loads, but documents never sync.
 Caddy — upgrade pass-through is automatic:
 
 ```
-bpm.example.com {
+design.example.com {
     reverse_proxy localhost:8080
 }
 ```
@@ -140,7 +143,7 @@ map $http_upgrade $connection_upgrade {
 
 server {
     listen 443 ssl;
-    server_name bpm.example.com;
+    server_name design.example.com;
     # ssl_certificate ...; ssl_certificate_key ...;
 
     location / {
@@ -187,7 +190,9 @@ docker compose pull && docker compose up -d
 
 Pull the new tag and recreate — SIGTERM triggers the graceful flush, `/data` carries the
 state across. Releases are semver-tagged; breaking changes (env, data layout) are called
-out in the release notes. For production, pin `vX.Y.Z` and move deliberately.
+out in the release notes. For production, pin `vX.Y.Z` and move deliberately. Coming from
+4.x: [upgrading-to-5.md](../upgrading-to-5.md) — the image name changed with the rename to
+designIQ, so `pull` alone does not reach 5.0.
 
 ## Health
 

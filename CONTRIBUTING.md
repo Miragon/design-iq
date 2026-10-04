@@ -1,4 +1,4 @@
-# Contributing to bpmiq
+# Contributing to designIQ
 
 **There is no build step.** This repo runs raw TypeScript on Node >= 23.6 via type
 stripping; `pnpm typecheck` is the only type gate. Backends and packages execute their
@@ -31,9 +31,9 @@ pnpm test           # workspace tests
 pnpm build          # SPAs + extension bundle
 ```
 
-A PR is expected green on all seven. If you edit **content** — the `.bpmn` models under
-`process-documentation/` — `pnpm validate` must pass before you finish; incomplete BPMNDI or
-a dangling `callActivity` are caught here (hard rule 1 in `CLAUDE.md`).
+A PR is expected green on all seven. If you edit **content** — the models under
+`process-documentation/` — `pnpm validate` must pass before you finish; incomplete BPMNDI, a
+dangling `callActivity` or a failing decision test are caught here (hard rule 1 in `CLAUDE.md`).
 
 ## Architecture rules (ADR 0003)
 

@@ -28,19 +28,19 @@ import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
 
-import { fileDeepLink, processDeepLink } from "@bpmiq/contracts/deep-link";
-import { type CanvasPresence, presenceColor, roomName } from "@bpmiq/contracts/live";
-import type { ContentConflictWire, RoomPresenceWire, TodoWire, WidgetBootWire } from "@bpmiq/contracts/live-host";
-import { mcpAppToolName } from "@bpmiq/contracts/mcp-app";
-import { analyzeDecision, simulateDecision } from "@bpmiq/decisions";
-import { parseTestSuite, type TestCase, testsPathFor } from "@bpmiq/decisions/tests";
-import { fail, ok, READ, safe, WRITE } from "@bpmiq/mcp-kit";
-import { mountStatelessMcp } from "@bpmiq/mcp-kit/mount";
-import { byExtension, byId, modelStem, NOTATIONS } from "@bpmiq/notations";
-import { deriveDecision, deriveProcess, deriveView, hasDeriver } from "@bpmiq/notations/derive";
-import { extractModelGraph } from "@bpmiq/notations/extract";
-import { hasTemplate } from "@bpmiq/notations/templates";
-import { checkModel } from "@bpmiq/validator";
+import { fileDeepLink, processDeepLink } from "@designiq/contracts/deep-link";
+import { type CanvasPresence, presenceColor, roomName } from "@designiq/contracts/live";
+import type { ContentConflictWire, RoomPresenceWire, TodoWire, WidgetBootWire } from "@designiq/contracts/live-host";
+import { mcpAppToolName } from "@designiq/contracts/mcp-app";
+import { analyzeDecision, simulateDecision } from "@designiq/decisions";
+import { parseTestSuite, type TestCase, testsPathFor } from "@designiq/decisions/tests";
+import { fail, ok, READ, safe, WRITE } from "@designiq/mcp-kit";
+import { mountStatelessMcp } from "@designiq/mcp-kit/mount";
+import { byExtension, byId, modelStem, NOTATIONS } from "@designiq/notations";
+import { deriveDecision, deriveProcess, deriveView, hasDeriver } from "@designiq/notations/derive";
+import { extractModelGraph } from "@designiq/notations/extract";
+import { hasTemplate } from "@designiq/notations/templates";
+import { checkModel } from "@miragon/design-iq-validator";
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
@@ -98,7 +98,7 @@ export type McpDeps = OverviewDeps &
     presence?: Pick<AgentPresence, "touch">;
   };
 
-// tool result codec: @bpmiq/mcp-kit — safe() runs WITHOUT a prefix here, the
+// tool result codec: @designiq/mcp-kit — safe() runs WITHOUT a prefix here, the
 // AppErrors from the use-cases carry actionable, agent-readable messages
 // (validation findings, conflict guidance, authz denials)
 
@@ -133,7 +133,7 @@ function loadWidget(webDist: string, file: string, name: string, configSalt: str
     return undefined;
   }
   const hash = createHash("sha256").update(html).update("\0").update(configSalt).digest("hex").slice(0, 8);
-  const widget = { html, uri: `ui://bpmiq/${name}-${hash}.html` };
+  const widget = { html, uri: `ui://designiq/${name}-${hash}.html` };
   widgetCache.set(key, widget);
   return widget;
 }
@@ -184,10 +184,10 @@ interface WidgetSpec {
   live: boolean;
   /** apps/web/dist/<file> — apps/web/package.json's build chain emits it */
   file: string;
-  /** `ui://bpmiq/<name>-<hash8>.html` (the tests pin the prefix) */
+  /** `ui://designiq/<name>-<hash8>.html` (the tests pin the prefix) */
   name: string;
   /** open_modeler / open_decision_modeler are wire-pinned; the rest come from
-   *  mcpAppToolName (@bpmiq/contracts/mcp-app — the SPA's assist prompt
+   *  mcpAppToolName (@designiq/contracts/mcp-app — the SPA's assist prompt
    *  derives the same name) */
   tool: string;
   description: string;
@@ -203,11 +203,12 @@ const BPMN_WIDGET: WidgetSpec = {
   name: "modeler",
   tool: "open_modeler",
   description:
-    "Open the interactive BPMN modeler widget for a process. Renders an embedded diagram " +
+    "Open the interactive BPMN modeler widget for a process (BPMN only; DMN and the other canvas " +
+    "notations have their own modeler tools). Renders an embedded diagram " +
     "editor in MCP-Apps-capable clients (claude.ai, Claude Desktop) — including the process's " +
     "todos, with a badge on every anchored element; other clients get a " +
     "text summary — use get_process/get_bpmn_xml there instead. The result's " +
-    "`opened.url` links the same model in the full bpmiq web modeler.",
+    "`opened.url` links the same model in the full designIQ web modeler.",
   inputSchema: processRef,
 };
 const DMN_WIDGET: WidgetSpec = {
@@ -223,7 +224,7 @@ const DMN_WIDGET: WidgetSpec = {
     "which is how to SHOW someone a failing case instead of describing it. The widget also " +
     "runs and captures the decision's test cases. Non-apps clients get a text summary — use " +
     "get_decision / simulate_decision there. The result's `opened.url` links the same " +
-    "decision in the bpmiq web app.",
+    "decision in the designIQ web app.",
   inputSchema: {
     ...decisionRef,
     scenario: z
@@ -253,7 +254,7 @@ const generatedWidget = (id: string): WidgetSpec => {
       "canvas inline in MCP-Apps-capable clients (claude.ai, Claude Desktop): edits save through the same " +
       "validated, conflict-guarded path as save_model_content and upgrade to live co-editing where the host " +
       "allows the socket. Other clients get a text summary — use get_view / get_model_content there. The " +
-      `result's \`opened.url\` links the same ${noun} in the bpmiq web app.`,
+      `result's \`opened.url\` links the same ${noun} in the designIQ web app.`,
     inputSchema: {
       repo: repoArg,
       id: z.string().optional().describe(`${noun} id = file stem (from list_models)`),
@@ -268,6 +269,61 @@ const WIDGET_SPECS: readonly WidgetSpec[] = [
 ];
 /** the dist files the widgets live in — test/mcp.test.ts writes its stubs from this list */
 export const WIDGET_FILES: readonly string[] = WIDGET_SPECS.map((w) => w.file);
+
+// ── server instructions: what an assistant reads at initialize, before any
+// tool. The SDK takes them only in the constructor, so they are composed from
+// the SAME switches the registration runs on (read-only, tracker, served
+// widgets); test/mcp.test.ts pins every tool name they mention against
+// tools/list in each mode. ──────────────────────────────────────────────────
+
+/** "a, b and c" */
+const andList = (items: readonly string[]): string =>
+  items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+/** tool names, backticked */
+const named = (names: readonly string[]): string => andList(names.map((n) => `\`${n}\``));
+/** every registered notation with its file extensions */
+const NOTATION_FILES = andList(NOTATIONS.map((n) => `${n.label} (${n.extensions.join("/")})`));
+
+function liveInstructions(on: { readOnly: boolean; todos: boolean; widgets: readonly WidgetSpec[] }): string {
+  const write = !on.readOnly;
+  // the pinned widget names (open_modeler, open_decision_modeler) do not say
+  // their notation — the label does
+  const widgetTools = on.widgets.map((w) =>
+    w.tool.includes(w.notation.replaceAll("-", "_")) ? `\`${w.tool}\`` : `\`${w.tool}\` (${byId(w.notation)?.label})`,
+  );
+  const neutralTools = [
+    "`get_view` (the derived structure)",
+    `\`get_model_content\` (the source text${write ? " plus the baseVersion a save needs" : ""})`,
+    "`validate_model`",
+    ...(write ? ["`create_model`", "`save_model_content`"] : []),
+  ];
+  return [
+    "designIQ is a Git-native workspace where teams model their business and their architecture together, live; " +
+      `through these tools you ${write ? "read, check and change" : "read and check"} the same models they work on.`,
+    `Each connected repository keeps its models as files, one model per file with the file stem as its id, in these notations: ${NOTATION_FILES}.`,
+    "Start with `list_repos`, then `list_models` to see which models a repository holds.",
+    `These tools are notation-neutral: ${andList(neutralTools)}.`,
+    `BPMN and DMN have deeper tooling: for processes ${named(["get_process", "get_bpmn_xml", "validate_bpmn"])}; ` +
+      `for decisions ${named(["get_decision", "simulate_decision", "analyze_decision", "run_decision_tests", ...(write ? ["save_decision_tests"] : [])])}` +
+      (on.todos
+        ? `; and todos anchored to process elements in the repository's issue tracker (${named(write ? ["list_todos", "create_todo", "close_todo"] : ["list_todos"])})`
+        : "") +
+      ".",
+    write
+      ? "Every save lands in the live document: people with the model open see it at once (`get_presence` shows who), " +
+        "and a stale baseVersion returns a conflict to re-apply your edit to, never an overwrite."
+      : "This host is read-only for assistants: you can read, check and show models but not change or release them.",
+    write
+      ? "Nothing reaches Git until a release: `list_changes` shows what is not yet released, and `release_process` " +
+        "opens a pull request that is reviewed and merged at the Git provider."
+      : "`list_changes` shows the edits people have made that are not yet released to Git.",
+    widgetTools.length > 0
+      ? `To show a model to a person, open its modeler widget instead of pasting source text: ${andList(widgetTools)}.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 /** one test case of a decision suite — the wire shape of `<stem>.tests.yaml` */
 const testCaseSchema = z.object({
@@ -294,7 +350,7 @@ const testCasesArg = z.array(testCaseSchema);
 type TestCaseArg = z.infer<typeof testCaseSchema>;
 
 /** the process a model path belongs to — id IS the file stem (the content
- *  contract, @bpmiq/notations/content), so a path always names its process */
+ *  contract, @designiq/notations/content), so a path always names its process */
 const processIdOf = modelStem;
 /** the decision id of a .dmn path — the same file-stem rule */
 const decisionIdOf = modelStem;
@@ -304,7 +360,7 @@ const PROVIDED = "<provided xml>";
 
 /**
  * A per-capability tool contribution — the composition hook capability modules
- * (the @bpmiq/decisions pattern) plug their live tools into. Contributions run
+ * (the @designiq/decisions pattern) plug their live tools into. Contributions run
  * AFTER the core registration, against the same deps and caller session; the
  * decision-semantics quartet migrates onto this hook once a second semantics
  * module exists (epic #118 — the same restraint as the sidecar-test framework).
@@ -320,7 +376,33 @@ export function createLiveMcpServer(
   session: Session,
   contributions: readonly LiveToolContribution[] = [],
 ): McpServer {
-  const server = new McpServer({ name: "bpmiq-live", version: "1.0.0" });
+  // the boot marker sits inside a quoted JS string in the HTML head; a double
+  // stringify yields the correctly escaped string literal. `<` is escaped on
+  // top: JSON never does, and a "</script>" inside a value (publicUrl is
+  // operator env) would terminate the inline script element. Baked into the
+  // served resource; the loadWidget salt below busts host resource caches when
+  // any of these fields change — a per-SESSION field must never ride here.
+  const boot = JSON.stringify(
+    JSON.stringify({ readonly: opts.mcpReadOnly === true, publicUrl: opts.publicUrl } satisfies WidgetBootWire),
+  ).replaceAll("<", "\\u003C");
+  // the widgets this server serves — resolved BEFORE the server exists, so
+  // the instructions name exactly the open_* tools registered further down.
+  // A row whose dist file is missing (an older web build) is simply absent.
+  const served = WIDGET_SPECS.flatMap((spec) => {
+    const widget = loadWidget(opts.webDist, spec.file, spec.name, boot);
+    return widget ? [{ spec, widget }] : [];
+  });
+
+  const server = new McpServer(
+    { name: "designiq-live", title: "designIQ Live Host", version: "1.0.0" },
+    {
+      instructions: liveInstructions({
+        readOnly: Boolean(opts.mcpReadOnly),
+        todos: Boolean(opts.issues),
+        widgets: served.map((s) => s.spec),
+      }),
+    },
+  );
 
   /** registry 404 + per-repo write authz — the shared application-layer gate;
    *  safe() surfaces the AppError message to the agent verbatim */
@@ -490,7 +572,7 @@ export function createLiveMcpServer(
         inputSchema: z.object({
           repo: repoArg,
           name: z.string().describe("human title; the file stem is its kebab-case slug"),
-          folder: z.string().optional().describe("target folder relative to the processes root"),
+          folder: z.string().optional().describe("target folder relative to the models root"),
         }),
         annotations: WRITE,
       },
@@ -556,7 +638,9 @@ export function createLiveMcpServer(
     "list_repos",
     {
       description:
-        "List the repositories you can access on this Live Host, with permission and model counts (processes + decisions).",
+        "List the repositories you can access on this Live Host, with your permission, the live session count and " +
+        "the number of BPMN processes and DMN decisions (null until the repository has been opened on this host). " +
+        "Call list_models next for every model of a repository, in all notations.",
       annotations: READ,
     },
     safe(async () => ok({ repos: await listRepos(opts, session) })),
@@ -565,7 +649,9 @@ export function createLiveMcpServer(
   server.registerTool(
     "list_processes",
     {
-      description: "List the BPMN processes in a repository (id, name, path, dirty flag, live session count).",
+      description:
+        "List the BPMN processes in a repository (id, name, path, dirty flag, live session count). " +
+        "list_models lists the models of every notation.",
       inputSchema: z.object({ repo: repoArg }),
       annotations: READ,
     },
@@ -580,9 +666,9 @@ export function createLiveMcpServer(
     "list_models",
     {
       description:
-        "List EVERY model file of the repository, grouped by notation (bpmn, dmn, wardley, " +
-        "team-topology, …) — the registry-wide superset of list_processes/list_decisions. " +
-        "Each row: id (file stem), path, dirty flag, live session count.",
+        `List EVERY model of the repository, grouped by notation (${NOTATION_IDS}) — the starting ` +
+        "point for any repository. Each row: id (file stem), path, notation, dirty flag (changed, not " +
+        "yet released), live session count. list_processes / list_decisions are the BPMN- and DMN-only listings.",
       inputSchema: z.object({ repo: repoArg }),
       annotations: READ,
     },
@@ -600,8 +686,8 @@ export function createLiveMcpServer(
     "get_process",
     {
       description:
-        "Derived process view (name, roles from lanes, steps, flow, sub-process calls) from the LIVE BPMN — " +
-        "the same shape the read-only content-repo MCP server derives.",
+        "BPMN only: the derived process view (name, roles from lanes, steps, flow, sub-process calls) from the " +
+        "LIVE BPMN — the same shape the read-only content-repo MCP server derives. get_view covers every notation.",
       inputSchema: z.object(processRef),
       annotations: READ,
     },
@@ -620,11 +706,11 @@ export function createLiveMcpServer(
     {
       description:
         "The derived view of ANY live model — its own name, a one-line summary, stats, and the " +
-        "rich notation payload in `detail` where one exists. The notation-agnostic sibling of " +
-        "get_process/get_decision: works for every notation with extract+derive capabilities " +
+        "rich notation payload in `detail` where one exists (the process view for BPMN, the decision " +
+        "tables for DMN). Works for every notation with extract+derive capabilities " +
         `(${NOTATIONS.filter((n) => hasDeriver(n.id))
           .map((n) => n.id)
-          .join(", ")}).`,
+          .join(", ")}). Read this before the source text when you need the structure.`,
       inputSchema: z.object({
         repo: repoArg,
         id: z.string().optional().describe("model id = file stem (from list_models)"),
@@ -668,8 +754,8 @@ export function createLiveMcpServer(
   registerGetContentTool({
     name: "get_bpmn_xml",
     description:
-      "The current LIVE BPMN XML of a process plus the baseVersion token save_bpmn_xml requires " +
-      "for conflict-safe writes.",
+      "BPMN only: the current LIVE XML of a process plus the baseVersion token save_bpmn_xml requires " +
+      "for conflict-safe writes — the same content get_model_content returns for any notation.",
     ref: processRef,
     resolve: (r, a) => resolveBpmnPath(r, a.id, a.path),
     legacyAlias: true,
@@ -679,9 +765,9 @@ export function createLiveMcpServer(
     "validate_bpmn",
     {
       description:
-        "Dry-run the platform validator on BPMN XML WITHOUT writing anything — structure, BPMNDI " +
+        "BPMN only: dry-run the platform validator on BPMN XML WITHOUT writing anything — structure, BPMNDI " +
         "coverage, callActivity links (against the repo's processes when `repo` is given). " +
-        "Iterate here until ok before calling save_bpmn_xml.",
+        "Iterate here until ok before calling save_bpmn_xml; validate_model checks any notation.",
       inputSchema: z.object({
         xml: z.string().describe("the complete BPMN XML to check"),
         repo: repoArg.optional(),
@@ -706,9 +792,9 @@ export function createLiveMcpServer(
   registerGetContentTool({
     name: "get_model_content",
     description:
-      `The current LIVE text of a model of ANY notation (${NOTATION_IDS}) plus the baseVersion token ` +
-      "save_model_content requires for conflict-safe writes — the notation-agnostic sibling of " +
-      "get_bpmn_xml/get_dmn_xml. Read get_view first when you need the derived structure, not the source.",
+      `The current LIVE source text of a model of ANY notation (${NOTATION_IDS}) plus the baseVersion token ` +
+      "save_model_content requires for conflict-safe writes. For BPMN and DMN this is the same XML " +
+      "get_bpmn_xml / get_dmn_xml return. Read get_view first when you need the derived structure, not the source.",
     ref: modelRef,
     resolve: resolveModelPath,
     legacyAlias: false,
@@ -719,7 +805,7 @@ export function createLiveMcpServer(
     {
       description:
         "Dry-run the platform validator on the text of a model of ANY notation WITHOUT writing anything — " +
-        "the same check the save gate and `pnpm validate` run (structure + DI coverage for the XML " +
+        "the same check every save and the designiq-validate CLI run (structure + DI coverage for the XML " +
         "notations, the baseline parse for the others, dangling references against the repo's models " +
         "when `repo` is given). The notation comes from `path`'s extension or an explicit `notation`. " +
         "Iterate here until ok before calling save_model_content.",
@@ -941,7 +1027,9 @@ export function createLiveMcpServer(
   server.registerTool(
     "list_changes",
     {
-      description: "Files that differ from origin (the release selection pool) in a repository.",
+      description:
+        "Files that differ from origin in a repository — the live edits of any notation not yet released, " +
+        "i.e. what release_process can pick from.",
       inputSchema: z.object({ repo: repoArg }),
       annotations: READ,
     },
@@ -1007,10 +1095,10 @@ export function createLiveMcpServer(
       "create_model",
       {
         description:
-          `Create a new model of ANY template-capable notation (${CREATABLE_IDS}) from its blank template — ` +
-          "the registry-generic sibling of create_process/create_decision. Returns its ModelInfo incl. the " +
-          "path for get_model_content/save_model_content. A notation without a template answers with an " +
-          "error: its files arrive via git only.",
+          `Create a new model of ANY template-capable notation (${CREATABLE_IDS}) from its blank template. ` +
+          "Returns its ModelInfo incl. the path for get_model_content/save_model_content. A notation without " +
+          "a template answers with an error: its files arrive via git only. create_process / create_decision " +
+          "are the BPMN- and DMN-specific variants.",
         inputSchema: z.object({
           repo: repoArg,
           notation: z.string().describe(`registry notation id — one of: ${CREATABLE_IDS}`),
@@ -1036,11 +1124,11 @@ export function createLiveMcpServer(
       name: "save_model_content",
       description:
         "Validate and save the complete text of a model of ANY notation into the LIVE document " +
-        "(co-editors see it immediately) — the notation-agnostic sibling of save_bpmn_xml/save_dmn_xml. " +
-        "The platform check gates it exactly like `pnpm validate` does (structure + DI for the XML " +
-        "notations, the baseline parse for the others, dangling references against the repo). " +
+        "(co-editors see it immediately). The same platform check as validate_model gates it (structure + " +
+        "DI for the XML notations, the baseline parse for the others, dangling references against the repo). " +
         "baseVersion (from get_model_content) is REQUIRED; a stale one returns {conflict:true, " +
-        "currentContent} instead of overwriting — re-derive your edit against currentContent and retry.",
+        "currentContent} instead of overwriting — re-derive your edit against currentContent and retry. " +
+        "For BPMN and DMN, save_bpmn_xml / save_dmn_xml do the same.",
       ref: modelRef,
       payloadKey: "content",
       payloadDoc: "the complete document text in the notation's own format (XML, DSL, JSON, …)",
@@ -1104,8 +1192,9 @@ export function createLiveMcpServer(
       "release_process",
       {
         description:
-          "Open a pull request releasing either one process (processId) or an explicit changed-file " +
-          "selection. Merge rights stay at the git provider.",
+          "Open a pull request that releases live changes to git: either an explicit selection of changed " +
+          "files of any notation (`files`, from list_changes) or one BPMN process (`processId`). Merge rights " +
+          "stay at the git provider.",
         inputSchema: z.object({
           repo: repoArg,
           processId: z.string().optional().describe("release exactly this process as one PR"),
@@ -1157,7 +1246,7 @@ export function createLiveMcpServer(
       "list_todos",
       {
         description:
-          "OPEN model-anchored todos of a repository — work items filed from the live model into the " +
+          "OPEN todos anchored to BPMN processes — work items filed from the live model into the " +
           "repo's issue tracker. Pass `id`/`path` to narrow to ONE process, omit both for the whole repo. " +
           "Each row carries its tracker url, the anchored BPMN elements and the author.",
         inputSchema: z.object(processRef),
@@ -1179,7 +1268,7 @@ export function createLiveMcpServer(
         "create_todo",
         {
           description:
-            "File a model-anchored todo into the repository's issue tracker. Anchor it to concrete BPMN " +
+            "File a todo on a BPMN process into the repository's issue tracker. Anchor it to concrete BPMN " +
             "elements via `elements` (ids from get_bpmn_xml/get_process) — the modeler then shows a badge " +
             "on each one; omit them for a process-level todo. The item is bot-authored, you stay attributed.",
           inputSchema: z.object({
@@ -1252,19 +1341,11 @@ export function createLiveMcpServer(
   }
 
   // ── MCP Apps: the embedded modelers — ONE registry row per single-file
-  // widget apps/web MAY have built (WIDGET_SPECS). Registered in BOTH modes:
-  // opening is a read; the readonly marker turns the widget into a viewer. A
-  // row whose dist file is missing (an older web build) registers nothing and
-  // never fails — /mcp works, just without that widget. ─────────────────────
-  // the boot marker sits inside a quoted JS string in the HTML head; a double
-  // stringify yields the correctly escaped string literal. `<` is escaped on
-  // top: JSON never does, and a "</script>" inside a value (publicUrl is
-  // operator env) would terminate the inline script element. Baked into the
-  // served resource; the loadWidget salt below busts host resource caches when
-  // any of these fields change — a per-SESSION field must never ride here.
-  const boot = JSON.stringify(
-    JSON.stringify({ readonly: opts.mcpReadOnly === true, publicUrl: opts.publicUrl } satisfies WidgetBootWire),
-  ).replaceAll("<", "\\u003C");
+  // widget apps/web MAY have built (WIDGET_SPECS; `served` and the boot
+  // payload are resolved at the top). Registered in BOTH modes: opening is a
+  // read; the readonly marker turns the widget into a viewer. A row whose dist
+  // file is missing (an older web build) registers nothing and never fails —
+  // /mcp works, just without that widget. ─────────────────────────────────
   // the live Yjs connection needs connect-src for our ws AND https origin —
   // declared per spec (McpUiResourceCsp); hosts that ignore it leave the
   // widget on its bridge-autosave fallback, never broken
@@ -1283,7 +1364,7 @@ export function createLiveMcpServer(
             mimeType: RESOURCE_MIME_TYPE,
             // replacer FUNCTION: a plain replacement string would expand `$`
             // patterns ($&, $') lurking in the operator-controlled boot value
-            text: widget.html.replace('"__BPMIQ_BOOT__"', () => boot),
+            text: widget.html.replace('"__DESIGNIQ_BOOT__"', () => boot),
             _meta: { ui: { csp } },
           },
         ],
@@ -1360,11 +1441,7 @@ export function createLiveMcpServer(
     }
   };
 
-  const served: Array<{ spec: WidgetSpec; widget: Widget }> = [];
-  for (const spec of WIDGET_SPECS) {
-    const widget = loadWidget(opts.webDist, spec.file, spec.name, boot);
-    if (!widget) continue; // older web dist without this bundle — tool absent, never failing
-    served.push({ spec, widget });
+  for (const { spec, widget } of served) {
     serveWidget(widget);
     const b = behaviourOf(spec);
     registerAppTool(
@@ -1411,7 +1488,7 @@ export function createLiveMcpServer(
         description:
           "Mint a short-lived, single-use WebSocket ticket for the modeler widgets' live " +
           "co-editing connection (Hocuspocus/Yjs) to a model of ANY notation. Internal to the " +
-          "widgets — agents edit via save_bpmn_xml / save_model_content instead.",
+          "widgets — agents edit via save_model_content (or save_bpmn_xml / save_dmn_xml) instead.",
         inputSchema: z.object(modelRef),
         annotations: READ,
         _meta: { ui: { resourceUri: first.uri, visibility: ["app"] } },
@@ -1441,7 +1518,7 @@ export function createLiveMcpServer(
   return server;
 }
 
-/** Stateless Streamable HTTP mount (@bpmiq/mcp-kit). api.ts has already
+/** Stateless Streamable HTTP mount (@designiq/mcp-kit). api.ts has already
  *  authenticated `session` and answered non-POST. */
 export function handleMcp(req: IncomingMessage, res: ServerResponse, opts: McpDeps, session: Session): Promise<void> {
   // save_bpmn_xml carries whole models — same body budget as the content PUT
