@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { NOTATIONS } from "@designiq/notations";
+
 import type { Session } from "../src/adapters/sqlite/sessions.ts";
 import {
   listAllModels,
@@ -231,6 +233,8 @@ test("listRepos: a session with write access sees every repo with write permissi
   assert.equal(r.permission, "write");
   assert.equal(r.processCount, 2);
   assert.equal(r.decisionCount, 1, "the .dmn twin of processCount");
+  assert.equal(r.modelCount, 5, "every notation counts — the wardley map and the markdown note too");
+  assert.deepEqual(r.modelCounts, { bpmn: 2, dmn: 1, wardley: 1, markdown: 1 });
   assert.equal(r.dirtyCount, 1, "only the order process differs from origin (dirty DECISIONS would count too)");
   assert.equal(r.liveSessions, 3, "every live room of the repo counts, foreign repos never");
 });
@@ -249,7 +253,70 @@ test("listRepos: no contract file (workspace absent or plain repo) → null coun
   assert.equal(repos.length, 1);
   assert.equal(repos[0]?.processCount, null);
   assert.equal(repos[0]?.decisionCount, null);
+  assert.equal(repos[0]?.modelCount, null, "null like processCount — not opened on this host yet");
+  assert.equal(repos[0]?.modelCounts, null);
   assert.equal(repos[0]?.dirtyCount, null);
+});
+
+test("listRepos: modelCount/modelCounts cover every notation, keyed by registry id in registry order", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "designiq-overview-notations-"));
+  writeFileSync(join(ws, "designiq.yml"), "models: models\n");
+  mkdirSync(join(ws, "models", "board"), { recursive: true });
+  // the sorted file order (storm, value chain, context map, bpmn …) is NOT the
+  // registry order — the counts must follow the registry; no wardley map here
+  writeFileSync(join(ws, "models", "readme.md"), "# notes");
+  writeFileSync(join(ws, "models", "chain.vc.json"), "{}"); // compound suffix — a value chain, not a .json
+  writeFileSync(join(ws, "models", "contexts.cm.json"), "{}");
+  writeFileSync(join(ws, "models", "board", "order-to-cash.storm"), "");
+  writeFileSync(join(ws, "models", "board", "returns.storm"), "");
+  writeFileSync(join(ws, "models", "teams.tt"), "");
+  writeFileSync(join(ws, "models", "teams-v2.ttm.json"), "{}"); // the notation's second extension
+  writeFileSync(join(ws, "models", "rabatt.dmn"), "<dmn/>");
+  writeFileSync(join(ws, "models", "order.bpmn"), "<bpmn/>");
+  writeFileSync(join(ws, "models", "rabatt.tests.yaml"), "cases: []"); // not a model
+  writeFileSync(join(ws, "models", "data.json"), "{}"); // no registered extension → not a model
+  const { deps } = setup({
+    workspaces: { dir: () => ws, changedPaths: async () => [], changedFiles: async () => [] },
+  });
+  const [r] = await listRepos(deps, session("s1"));
+  assert.ok(r);
+  assert.equal(r.modelCount, 9);
+  assert.deepEqual(r.modelCounts, {
+    bpmn: 1,
+    dmn: 1,
+    "team-topology": 2,
+    "event-storming": 2,
+    "context-map": 1,
+    "value-chain": 1,
+    markdown: 1,
+  });
+  assert.deepEqual(
+    Object.keys(r.modelCounts ?? {}),
+    NOTATIONS.map((n) => n.id).filter((id) => id !== "wardley"),
+    "registry order, a notation without a model omitted",
+  );
+  assert.equal(r.processCount, 1, "the process/decision counts stay — older clients read them");
+  assert.equal(r.decisionCount, 1);
+});
+
+test("listRepos: a listing that fails leaves every count null — modelCount included", async () => {
+  const base = setup();
+  const deps: OverviewDeps = {
+    ...base.deps,
+    workspaces: {
+      ...base.deps.workspaces,
+      changedPaths: async () => {
+        throw new Error("broken tree");
+      },
+    },
+  };
+  const [r] = await listRepos(deps, session("s1"));
+  assert.ok(r, "one repo's broken tree never fails the overview");
+  assert.equal(r.processCount, null);
+  assert.equal(r.decisionCount, null);
+  assert.equal(r.modelCount, null);
+  assert.equal(r.modelCounts, null);
+  assert.equal(r.dirtyCount, null);
 });
 
 test("listRepos: checks the repos in parallel, bounded, and keeps the registry order (#212)", async () => {

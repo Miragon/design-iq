@@ -1,12 +1,13 @@
 /**
  * The GET /changes move semantics (#182): a moved model is a deleted + added
  * pair of the same file name, and both the release and the release dialog
- * treat the pair — plus a decision's tests sidecar — as ONE unit.
+ * treat the pair — plus a decision's tests sidecar — as ONE unit. Plus the
+ * additive RepoInfo model counts (GET /api/repos, MCP list_repos).
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { moveSources, moveUnits } from "../src/live-host.ts";
+import { moveSources, moveUnits, type RepoInfo } from "../src/live-host.ts";
 
 test("moveUnits: a deleted + added pair of the same file name is one unit", () => {
   const units = moveUnits([
@@ -103,5 +104,47 @@ test("moveSources: a renamed file points at its old path by renamedFrom, a moved
       ["p/credit-limit.dmn", "p/credit.dmn"],
       ["p/new/order.bpmn", "p/old/order.bpmn"],
     ]),
+  );
+});
+
+// ── RepoInfo (GET /api/repos, MCP list_repos) ───────────────────────────────
+
+/** a row as a 5.0 host sends it — without modelCount/modelCounts */
+const olderHostRow = {
+  fullName: "acme/models",
+  owner: "acme",
+  name: "models",
+  defaultBranch: "main",
+  avatarUrl: null,
+  suspended: false,
+  permission: "write",
+  processCount: 2,
+  decisionCount: 1,
+  dirtyCount: 0,
+  liveSessions: 0,
+} satisfies RepoInfo;
+
+test("RepoInfo: modelCount/modelCounts are additive — an older host's row still is a RepoInfo", () => {
+  // the satisfies clauses ARE the compile-time half (pnpm typecheck covers test/):
+  // an older host's row, a repo not opened on the host yet, and a counted one
+  const older: RepoInfo = olderHostRow;
+  const notOpened = {
+    ...olderHostRow,
+    processCount: null,
+    decisionCount: null,
+    modelCount: null,
+    modelCounts: null,
+  } satisfies RepoInfo;
+  const counted = {
+    ...olderHostRow,
+    modelCount: 4,
+    modelCounts: { bpmn: 2, dmn: 1, "event-storming": 1 },
+  } satisfies RepoInfo;
+  assert.equal(older.modelCount, undefined, "clients must handle the absent field");
+  assert.equal(notOpened.modelCounts, null);
+  assert.equal(
+    Object.values(counted.modelCounts).reduce((a, b) => a + b, 0),
+    counted.modelCount,
+    "the per-notation counts add up to modelCount",
   );
 });

@@ -294,6 +294,13 @@ export interface RepoInfo {
   processCount: number | null;
   /** .dmn twin of processCount (additive: absent from pre-3.4 servers) */
   decisionCount: number | null;
+  /** every model of ANY registered notation — null exactly when processCount
+   *  is (additive: absent from 5.0 and older servers, so clients fall back to
+   *  the process/decision counts) */
+  modelCount?: number | null;
+  /** modelCount per notation registry id (@designiq/notations) in registry
+   *  order, notations without a model omitted — null exactly when modelCount is */
+  modelCounts?: Record<string, number> | null;
   /** models (processes AND decisions) differing from origin/<default> */
   dirtyCount: number | null;
   liveSessions: number;
