@@ -182,7 +182,7 @@ test("list_models: grouped by notation, rows enriched via extract+deriveView", a
   const grouped = await callJson("list_models");
   assert.deepEqual(Object.keys(grouped.models).sort(), ["bpmn", "wardley"]);
   assert.deepEqual(grouped.models.bpmn.map((m: { id: string }) => m.id).sort(), ["invoice-handling", "order-to-cash"]);
-  assert.match(grouped.models.wardley[0].summary, /^Wardley map with /);
+  assert.match(grouped.models.wardley[0].summary, /^Wardley Map with /);
   // notations with extract+derive get the derived core on every row —
   // the acceptance path of epic #118 step 3 (zero consumer changes)
   const row = grouped.models.bpmn.find((m: { id: string }) => m.id === "order-to-cash");
@@ -307,7 +307,7 @@ test("shared stems: bpmn wins by default, the notation arg disambiguates, unknow
     // an unknown id under a notation filter lists ONLY that notation, noun-phrased
     const filtered = toolText(await c.callTool({ name: "get_view", arguments: { id: "ghost", notation: "wardley" } }));
     assert.ok(filtered.isError);
-    assert.match(filtered.text, /Unknown wardley map 'ghost'/);
+    assert.match(filtered.text, /Unknown Wardley Map 'ghost'/);
     assert.doesNotMatch(filtered.text, /\(bpmn\)/);
   } finally {
     await c.close();
@@ -327,7 +327,7 @@ test("graph tools: notations without graphHints opt out gracefully; cyclic-only 
   await Promise.all([s.connect(st), c.connect(ct)]);
   try {
     const paths = toolText(await c.callTool({ name: "enumerate_paths", arguments: { id: "teams" } }));
-    assert.ok(!paths.isError && /team topologies have no flow semantics/.test(paths.text));
+    assert.ok(!paths.isError && /Team Topologies have no flow semantics/.test(paths.text));
     const cycles = toolText(await c.callTool({ name: "find_cycles", arguments: { id: "teams" } }));
     assert.ok(!cycles.isError && /have no flow semantics/.test(cycles.text));
 

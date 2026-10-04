@@ -21,8 +21,8 @@ test("notationCount: the registry noun, counted and qualified by its notation", 
     "a noun naming its notation is not doubled",
   );
   assert.equal(notationCount("event-storming", 3), "3 Event Storming boards");
-  assert.equal(notationCount("wardley", 2), "2 Wardley maps");
-  assert.equal(notationCount("team-topology", 1), "1 Team topology");
+  assert.equal(notationCount("wardley", 2), "2 Wardley Maps");
+  assert.equal(notationCount("team-topology", 1), "1 Team Topology");
   assert.equal(notationCount("markdown", 3), "3 Markdown documents");
   assert.equal(notationCount("archimate", 2), "2 archimate models", "an id from a newer host still counts");
 });

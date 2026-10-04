@@ -248,7 +248,7 @@ export function createMcpServer(
     return graph;
   };
   const isGraph = (g: ModelGraph | ToolResult): g is ModelGraph => !("content" in g);
-  /** the registry nouns for user-facing copy ("wardley map" / "team topologies") */
+  /** the registry nouns for user-facing copy ("Wardley Map" / "Team Topologies") */
   const nounOf = (notation: string): string => byId(notation)?.noun.singular ?? notation;
   const pluralOf = (notation: string): string => byId(notation)?.noun.plural ?? notation;
   const notAContentRepo = () =>

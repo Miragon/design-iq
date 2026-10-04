@@ -72,7 +72,7 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
   {
     id: "wardley",
     label: "Wardley Map",
-    noun: { singular: "wardley map", plural: "wardley maps" },
+    noun: { singular: "Wardley Map", plural: "Wardley Maps" },
     extensions: [".owm", ".wmap"],
     mediaKind: "dsl",
     docShape: "text",
@@ -82,7 +82,7 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
   {
     id: "team-topology",
     label: "Team Topology",
-    noun: { singular: "team topology", plural: "team topologies" },
+    noun: { singular: "Team Topology", plural: "Team Topologies" },
     extensions: [".tt", ".ttm.json"],
     mediaKind: "json",
     docShape: "text",
@@ -91,7 +91,7 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
   {
     id: "event-storming",
     label: "Event Storming",
-    noun: { singular: "event storming board", plural: "event storming boards" },
+    noun: { singular: "Event Storming board", plural: "Event Storming boards" },
     extensions: [".storm"],
     mediaKind: "dsl",
     docShape: "text",
@@ -101,7 +101,7 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
   {
     id: "context-map",
     label: "Context Map",
-    noun: { singular: "context map", plural: "context maps" },
+    noun: { singular: "Context Map", plural: "Context Maps" },
     extensions: [".cm.json"],
     mediaKind: "json",
     docShape: "text",
@@ -116,7 +116,7 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
   {
     id: "value-chain",
     label: "Value Chain",
-    noun: { singular: "value chain", plural: "value chains" },
+    noun: { singular: "Value Chain", plural: "Value Chains" },
     extensions: [".vc.json"],
     mediaKind: "json",
     docShape: "text",

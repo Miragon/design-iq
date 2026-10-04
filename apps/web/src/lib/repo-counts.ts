@@ -18,7 +18,7 @@ const qualifier = (n: NotationDescriptor): string =>
 /**
  * "2 BPMN processes", "1 Event Storming board", "3 Markdown documents" — the
  * registry noun of the notation, counted. A noun that already names its
- * notation ("event storming board") takes the label's spelling for those
+ * notation ("Event Storming board") takes the label's spelling for those
  * words; any other noun gets the label in front ("processes" → "BPMN
  * processes"). An id this build does not know (a newer host) still counts.
  */
