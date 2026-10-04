@@ -1,11 +1,13 @@
 # @miragon/design-iq-mcp
 
-designIQ's read-only MCP server: it exposes a BPM content repo's processes to any MCP client
-(Claude Code, Claude Desktop, IDEs, ...). A content repo is a root `designiq.yml` naming its
-models folder (`models:`, legacy alias `processes:`; the legacy file name `bpmiq.yml` is still
-read); a model IS a file with a registered notation extension there (a process its `.bpmn`),
-and the process view — name, roles (BPMN lanes), steps, gateways, flow, and sub-process
-calls — is **derived from the BPMN** on the fly. Tools:
+designIQ's read-only MCP server: it exposes the models of a designIQ content repo — processes
+(BPMN), decisions (DMN), Wardley maps, team topologies, event-storming boards, context maps,
+value chains and Markdown — to any MCP client (Claude Code, Claude Desktop, IDEs, ...). A
+content repo is a root `designiq.yml` naming its models folder (`models:`, legacy alias
+`processes:`; the legacy file name `bpmiq.yml` is still read); a model IS a file with a
+registered notation extension there (a process its `.bpmn`). Views are **derived from the
+models** on the fly; BPMN gets the richest one — name, roles (BPMN lanes), steps, gateways,
+flow, and sub-process calls. Tools:
 `list_models`, `list_processes`, `get_process`, `get_view`, `get_model`, `enumerate_paths`,
 `find_cycles`, `who_owns`, `which_processes_use`, `which_models_use`. Read-only by
 construction: the tools only ever read files, and all of them carry `readOnlyHint`.

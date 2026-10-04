@@ -16,7 +16,7 @@ export function AppHeader({ me }: { me?: Me }) {
         <MiragonComet className="h-3 w-auto shrink-0" />
         <span className="flex items-baseline gap-2">
           <span className="text-lg font-semibold tracking-tight">designIQ</span>
-          <span className="text-muted-foreground hidden text-xs sm:inline">Let your processes talk</span>
+          <span className="text-muted-foreground hidden text-xs sm:inline">Model together. Decide with AI.</span>
         </span>
       </Link>
       <div className="flex-1" />

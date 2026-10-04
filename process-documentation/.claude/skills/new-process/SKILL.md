@@ -1,12 +1,12 @@
 ---
 name: new-process
-description: Scaffolds a new business process in this repository — creates a single BPMN file under the processes folder with a complete diagram (semantics + layout), lanes for the owning roles, and callActivity links to any sub-processes. Use when the process facts (trigger, outcome, roles, rough flow) are already known — from the user or a capture-process interview — and the user wants to add, scaffold, or start modeling a new process.
+description: Scaffolds a new business process in this repository — creates a single BPMN file under the models folder with a complete diagram (semantics + layout), lanes for the owning roles, and callActivity links to any sub-processes. Use when the process facts (trigger, outcome, roles, rough flow) are already known — from the user or a capture-process interview — and the user wants to add, scaffold, or start modeling a new process. One of the BPMN process skills (`.bpmn` models only).
 ---
 
 # New Process
 
 Scaffold a process as a single `.bpmn` file. The slim content contract is just
-`designiq.yml` + `.bpmn` files: a process IS its BPMN, there is no `process.yaml`,
+`designiq.yml` + model files: a process IS its BPMN, there is no `process.yaml`,
 no landscape, no INDEX. The process id is the file name without the extension.
 
 ## Inputs to gather

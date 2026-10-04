@@ -2,7 +2,7 @@
   "name": "@miragon/design-iq-validator",
   "version": "4.3.1",
   "type": "module",
-  "description": "Platform-owned validator for BPM content repos — designiq.yml discovery + BPMN structure and BPMNDI coverage. Runs against any checkout via --root; never executes content-repo code.",
+  "description": "Platform-owned validator for designIQ content repos — designiq.yml discovery, BPMN/DMN structure and diagram coverage, cross-model references, and a parse check for every other notation. Runs against any checkout via --root; never executes content-repo code.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -10,8 +10,10 @@
     "directory": "packages/validator"
   },
   "keywords": [
+    "modeling",
     "bpm",
     "bpmn",
+    "dmn",
     "validator",
     "cli"
   ],

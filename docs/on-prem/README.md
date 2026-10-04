@@ -1,8 +1,8 @@
 # On-premise installation
 
-Self-host the designIQ platform with Docker: one container runs the Live Host — Hocuspocus
-document sync (WebSocket), the REST API, the collaborative web app, and the MCP endpoint
-for AI clients on **one port**.
+Self-host designIQ, collaborative modeling and architecture with AI, with Docker. One
+container runs the Live Host: Hocuspocus document sync (WebSocket), the REST API, the
+collaborative web app, and the MCP endpoint for AI clients, all on **one port**.
 Releases become pull requests in your own GitHub organization; review + merge stays where it
 is today. The platform never executes code from a content repository.
 
@@ -21,7 +21,8 @@ Companion documents:
 
 ## Prerequisites
 
-- A GitHub organization (or GitHub Enterprise) holding your BPM content repositories.
+- A GitHub organization (or GitHub Enterprise) holding your content repositories — each a
+  root `designiq.yml` naming the folder its models live in.
 - An OIDC identity provider — the one login ([ADR 0007](../adr/0007-idp-only-login-and-no-auth-mode.md)).
   None yet? The compose file ships a Keycloak with a ready realm
   ([idp-quickstart.md](idp-quickstart.md)); evaluating without any login is `LIVE_AUTH=none`.

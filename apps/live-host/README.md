@@ -1,5 +1,9 @@
 # Live Collaboration — MVP
 
+The designIQ Live Host: live sync for the models of every notation, the REST API, the web app
+and the `/mcp` endpoint for AI clients, on one port. This README records how it was built and
+verified; to operate it, see [docs/on-prem/](../../docs/on-prem/).
+
 **Status: pitchable MVP** (2026-07-08). One `pnpm live-host` (monorepo root) runs
 everything on **one port**: HTTP API + built web app + WebSocket sync share
 http://localhost:8301 (Hocuspocus rides the same server via upgrade — behind Fly this is
@@ -28,10 +32,11 @@ webhook receiver at `POST /webhook/github`, fallback: the host's own repo when n
 private key is configured). The web app opens with a **repo overview** (`GET /api/repos`,
 filtered per user permission); rooms are **`<owner>/<repo>/<path>`**; every repo gets its
 own workspace (`.live/workspaces/<owner>/<repo>`, cloned on demand with installation
-tokens — the host's own repo keeps using this checkout). A repo is a BPM content
-repo when it has a root **`designiq.yml`** (legacy `bpmiq.yml` still read) naming its
-models folder; a process is a `.bpmn` file under it. Releases are repo-scoped
-(`POST /api/repos/:owner/:repo/release/:id`) and publish that file's live state as a PR.
+tokens — the host's own repo keeps using this checkout). A repo is a content repo when it
+has a root **`designiq.yml`** (legacy `bpmiq.yml` still read) naming its models folder; a
+model is a file with a registered notation extension under it (a process its `.bpmn`).
+Releases are repo-scoped (`POST /api/repos/:owner/:repo/release/:id`) and publish that
+file's live state as a PR.
 Requires in `.env` (from `pnpm create-app` in this directory): `GITHUB_APP_ID` + the app
 private key — via any of (first match wins):
 `GITHUB_APP_PRIVATE_KEY` (paste the raw PEM straight into `.env`, wrapped in double quotes —
@@ -166,7 +171,7 @@ Recipe: [docs/extending/mcp-idp-setup.md](../../docs/extending/mcp-idp-setup.md)
 
 ## Original M0 spike notes (Hocuspocus)
 
-Proves the core of [the platform concept](../docs/platform-concept.md) after the
+Proves the core of [the platform concept](../../docs/platform-concept.md) after the
 **Hocuspocus pivot** (see the concept's revision note): the Live Host is a Hocuspocus server —
 sync server and workspace service in one process, the server _is_ the host. One Y.Doc per
 model file, room name = repo-relative path, Y.Text field `content`.

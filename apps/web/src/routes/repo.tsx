@@ -679,11 +679,11 @@ export function ProcessList() {
           Not a content repository — this repo has no usable <code className="bg-muted rounded px-1">designiq.yml</code>{" "}
           (or legacy <code className="bg-muted rounded px-1">bpmiq.yml</code>) at its root naming the folder its models
           live in (e.g. <code className="bg-muted rounded px-1">models: models</code>). Add one to create folders,
-          processes and releases here.
+          models and releases here.
         </p>
       ) : empty && dir !== "" ? (
         <p className="text-muted-foreground max-w-prose text-sm">
-          This folder is empty — create a process or folder here, or head back to the{" "}
+          This folder is empty — create a model or folder here, or head back to the{" "}
           <Link to="/r/$owner/$repo" params={{ owner, repo: name }} className="underline">
             repository root
           </Link>
@@ -691,7 +691,7 @@ export function ProcessList() {
         </p>
       ) : empty ? (
         <p className="text-muted-foreground max-w-prose text-sm">
-          No models yet — create a process, decision or folder with the <span className="font-medium">New</span> button.
+          No models yet — create a model or folder with the <span className="font-medium">New</span> button.
         </p>
       ) : (
         <div className="rounded-xl border">

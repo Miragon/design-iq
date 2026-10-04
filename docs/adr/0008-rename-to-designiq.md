@@ -17,7 +17,9 @@ ADRs 0001–0007 predate this decision and keep the names of their time.
 The platform started as a BPM tool and was named for it — "bpmiq", "BPM Live". <!-- legacy-name-ok -->
 Since ADR 0006 it models BPMN, DMN, Wardley Maps, Team Topologies, Event Storming and
 Context Maps; the name described one notation of six. The GitHub repository was renamed to
-`Miragon/design-iq` first; everything else followed in two releases.
+`Miragon/design-iq` first; everything else followed in two releases. The positioning moved with
+the name: collaborative modeling and architecture with AI, with BPMN and DMN as the notations
+with the deepest tooling ([README](../../README.md)).
 
 The name is not one string. It lives in four kinds of places, and each breaks differently:
 

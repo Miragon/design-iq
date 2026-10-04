@@ -1,5 +1,8 @@
 # Platform Concept: Live Collaboration for the BPM Landscape
 
+> **Note (2026-10):** written when the product was a BPM platform; the architecture still
+> applies — see the [README](../README.md) for the current positioning.
+
 > Status: concept (2026-07-07), **revision 2 — Hocuspocus pivot**. Scope of v1: BPMN diagrams
 >
 > - `process.yaml` + Markdown docs. Everything TypeScript. Builds on what exists: the repo as

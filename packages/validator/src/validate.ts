@@ -1,5 +1,5 @@
 /**
- * Deterministic validation of a BPM content repository (the slim contract).
+ * Deterministic validation of a content repository (the slim contract).
  *
  * A content repo is a root `designiq.yml` naming the folder its BPMN processes
  * live in (@designiq/notations/content); a process IS a `.bpmn` file there. This

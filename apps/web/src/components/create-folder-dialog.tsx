@@ -1,5 +1,5 @@
 /**
- * "New folder" dialog — creates a folder under the repo's processes root,
+ * "New folder" dialog — creates a folder under the repo's models root,
  * inside the folder currently shown in the table. Server errors (409 exists,
  * 400 invalid name) surface inline. Mounted on open, so state resets by
  * unmounting.
@@ -67,7 +67,7 @@ export function CreateFolderDialog({
               Created inside <code className="bg-muted rounded px-1">{parent}/</code>.
             </>
           ) : (
-            "Created at the root of the processes folder."
+            "Created at the root of the models folder."
           )}
         </p>
         <label className="mt-3 block text-xs font-medium" htmlFor="folder-name">
@@ -78,7 +78,7 @@ export function CreateFolderDialog({
           className={fieldClass}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. subprocesses"
+          placeholder="e.g. sales"
           autoFocus
           required
         />

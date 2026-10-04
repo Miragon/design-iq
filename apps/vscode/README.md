@@ -1,7 +1,10 @@
 # designIQ for VS Code
 
-Opens the designIQ Live Host's model documents as `designiq://` files — the same
-live Y.Text the web app and the MCP tools edit. The Miragon BPMN Modeler
+[designIQ](https://github.com/Miragon/design-iq) is collaborative modeling and
+architecture with AI — live, Git-native, with every model a file in your repo.
+This extension brings its live models into the editor: it opens the Live Host's
+model documents as `designiq://` files — the same live Y.Text the web app and
+the MCP tools edit. The Miragon BPMN Modeler
 (`miragon-gmbh.vs-code-bpmn-modeler`) opens them like any other `.bpmn` file;
 every other notation opens as text.
 
