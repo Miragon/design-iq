@@ -47,7 +47,7 @@ const manifest = JSON.stringify({
   // no user OAuth (ADR 0007): people sign in at the IdP, the App only authorizes
   request_oauth_on_install: false,
   description:
-    "designIQ Live Host — live model collaboration; releases become pull requests in the name of the releasing user.",
+    "designIQ Live Host — collaborative modeling and architecture with AI, where every model is a file in the repository and a release becomes a pull request in the name of the releasing user.",
   public: false,
   default_permissions: { contents: "write", pull_requests: "write", issues: "write", metadata: "read" },
   ...(webhookUrl ? { hook_attributes: { url: webhookUrl, active: false } } : {}),

@@ -1,5 +1,8 @@
 # Multi-repo architecture — gap analysis
 
+> **Note (2026-10):** written when the product was a BPM platform; the architecture still
+> applies — see the [README](../README.md) for the current positioning.
+
 > **Status (2026-07-08): MR-1 + MR-2 implemented** — installation registry (app JWT +
 > webhook receiver + static fallback), workspace manager (clone on demand, host repo =
 > this checkout), repo-qualified rooms incl. lineage migration, per-(user,repo)

@@ -12,7 +12,8 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 
 import { READ } from "@designiq/mcp-kit";
-import { toolText } from "@designiq/mcp-kit/testing";
+import { toolNamesIn, toolText } from "@designiq/mcp-kit/testing";
+import { NOTATIONS } from "@designiq/notations";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 import { createMcpServer } from "../tools.ts";
@@ -110,6 +111,37 @@ test("registration: the ten read-only tools are exposed (no rich-layout tools)",
     "which_processes_use",
     "who_owns",
   ]);
+});
+
+test("instructions: present with a title, and every tool they name is registered — with and without list_todos", async () => {
+  for (const todos of [undefined, { repo: "acme/models", token: "t" }]) {
+    const mode = todos ? "with list_todos" : "zero-auth default";
+    const s = createMcpServer(slimRepo(), todos);
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const c = new Client({ name: "mcp-test", version: "0" });
+    await Promise.all([s.connect(st), c.connect(ct)]);
+    try {
+      assert.equal(c.getServerVersion()?.title, "designIQ content repo (read-only)", mode);
+      const instructions = c.getInstructions() ?? "";
+      assert.match(instructions, /^designIQ is /, `${mode}: the instructions open with the product`);
+      const registered = new Set((await c.listTools()).tools.map((t) => t.name));
+      const mentioned = toolNamesIn(instructions);
+      // the drift guard: prose may never name a tool this server lacks
+      assert.deepEqual(
+        mentioned.filter((name) => !registered.has(name)),
+        [],
+        `${mode}: instructions name unregistered tools`,
+      );
+      for (const name of ["list_models", "get_view", "get_model"]) {
+        assert.ok(mentioned.includes(name), `${mode}: instructions name ${name}`);
+      }
+      assert.equal(mentioned.includes("list_todos"), todos !== undefined, `${mode}: list_todos only when registered`);
+      for (const n of NOTATIONS) assert.ok(instructions.includes(n.label), `${mode}: names ${n.label}`);
+    } finally {
+      await c.close();
+      await s.close();
+    }
+  }
 });
 
 test("list_models: grouped by notation, rows enriched via extract+deriveView", async () => {

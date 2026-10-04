@@ -1,6 +1,18 @@
 # Integrations
 
-Ways for tools _outside_ the content repo's skill layer to consume the models.
+AI assistants join designIQ through MCP: they read the same models the team works on, explain
+them, check them and propose changes. This page covers the ways tools _outside_ the content
+repo's skill layer consume the models.
+
+The MCP tools start with the models of **any** notation (`@designiq/notations`: BPMN, DMN,
+Wardley Map, Team Topology, Event Storming, Context Map, Value Chain, Markdown). On both
+surfaces below, `list_models` covers every notation and `get_view` every one but Markdown; the read-only server
+adds graph analysis across notations (`get_model`, `enumerate_paths`, `find_cycles`,
+`which_models_use`); the Live Host reads, validates and saves any model's source text
+(`get_model_content`, `validate_model`, `save_model_content`, `create_model`) and renders six
+of the notations as modelers inline in the chat. BPMN and DMN have extra tools on top: the
+derived process and decision views, the XML round-trip, roles from lanes, decision simulation,
+analysis and tests, and todos anchored to BPMN elements.
 
 The platform has **two MCP surfaces**:
 
@@ -11,16 +23,21 @@ The platform has **two MCP surfaces**:
 Rule of thumb: talk _about_ released models → `packages/mcp`; read or **edit**
 work-in-progress → the Live Host endpoint.
 
+Both servers send MCP server instructions at initialize: the registered notations, the tools
+that work for every notation (start with `list_models`; on the Live Host, `list_repos` first),
+and where BPMN and DMN go deeper.
+
 ## MCP server (`packages/mcp/`)
 
 A minimal, read-only [MCP](https://modelcontextprotocol.io) server that exposes a content
-repo's processes. Any MCP client (Claude Code, other IDEs, agent frameworks) can query the
-processes **live from HEAD**: a content repo is a root `designiq.yml` naming its models folder
-(`models:`, legacy alias `processes:`; the legacy file name `bpmiq.yml` is still read), a
-model IS a file with a registered notation extension there (a process its `.bpmn`, a decision
-its `.dmn`), and the process view is **derived from the BPMN** at call time
-(`@designiq/notations/derive`). No build step; the tool definitions live in
-`packages/mcp/tools.ts`, shared by two entry points:
+repo's models — every registered notation, with the richest views for BPMN processes. Any MCP
+client (Claude Code, other IDEs, agent frameworks) can query the models **live from HEAD**: a
+content repo is a root `designiq.yml` naming its models folder (`models:`, legacy alias
+`processes:`; the legacy file name `bpmiq.yml` is still read), a model IS a file with a
+registered notation extension there (a process its `.bpmn`, a decision its `.dmn`, a Wardley
+map its `.owm`, …), and its view is **derived from the model** at call time
+(`@designiq/notations/derive`; the process view from the BPMN). No build step; the tool
+definitions live in `packages/mcp/tools.ts`, shared by two entry points:
 
 - `packages/mcp/server.ts` — **stdio**, for local use (Claude Code auto-connects via `.mcp.json`)
 - `packages/mcp/http.ts` — **Streamable HTTP** (`POST /mcp`), for remote use; the root
@@ -516,7 +533,7 @@ Decision record: [ADR 0005](adr/0005-in-process-mcp-and-oidc-resource-server.md)
 **`packages/mcp` stays read-only by construction.** The server only ever reads files; no
 tool creates, edits, or deletes anything, and missing or invalid files produce an
 explanatory message instead of an error. Changes keep going through the modeling workflow:
-edit in VS Code, check with `process-review` and `pnpm validate`, commit. That MCP server
+edit in VS Code, check with `pnpm validate` (for BPMN also the `process-review` skill), commit. That MCP server
 is a window onto the models, never a pen.
 
 **The Live Host's `/mcp` IS write-capable** — but its writes land in the live Yjs state

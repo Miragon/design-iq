@@ -1,6 +1,6 @@
 ---
 name: import-process
-description: Imports existing process documentation — draw.io or Visio XML, pasted Word/Confluence text, flowchart images the agent reads, PowerPoint exports — into the repository as a BPMN model. Extracts activities, decisions, and roles; generates a convention-conform .bpmn with a complete diagram layout; records provenance and runs the validator. Use when the user wants to import, convert, migrate, or digitize an existing process document, diagram, or wiki page.
+description: Imports existing process documentation — draw.io or Visio XML, pasted Word/Confluence text, flowchart images the agent reads, PowerPoint exports — into the repository as a BPMN model. Extracts activities, decisions, and roles; generates a convention-conform .bpmn with a complete diagram layout; records provenance and runs the validator. Use when the user wants to import, convert, migrate, or digitize an existing process document, diagram, or wiki page. One of the BPMN process skills (`.bpmn` models only).
 ---
 
 # Import Process

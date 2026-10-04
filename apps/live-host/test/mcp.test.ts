@@ -18,7 +18,8 @@ import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
 
 import { presenceColor } from "@designiq/contracts/live";
-import { toolText } from "@designiq/mcp-kit/testing";
+import { toolNamesIn, toolText } from "@designiq/mcp-kit/testing";
+import { NOTATIONS } from "@designiq/notations";
 import { Server as HocuspocusServer } from "@hocuspocus/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
@@ -311,6 +312,41 @@ test("registration: the todo tools appear only WITH a tracker; read-only keeps t
     (await ro.client.listTools()).tools.map((t) => t.name).filter((n) => n.includes("todo")),
     ["list_todos"],
   );
+});
+
+test("instructions: present with a title, and every tool they name is registered — in every mode", async () => {
+  const modes: Array<[string, McpDeps]> = [
+    ["full", deps()],
+    ["read-only", deps({ mcpReadOnly: true })],
+    ["tracker", deps({ issues: fakeIssues() })],
+    ["tracker, read-only", deps({ issues: fakeIssues(), mcpReadOnly: true })],
+    ["no widgets", deps({}, [])],
+    ["wardley widget only", deps({}, ["mcp-app-wardley.html"])],
+  ];
+  for (const [mode, d] of modes) {
+    const { client } = await connect(d);
+    assert.equal(client.getServerVersion()?.title, "designIQ Live Host", mode);
+    const instructions = client.getInstructions() ?? "";
+    assert.match(instructions, /^designIQ is /, `${mode}: the instructions open with the product`);
+    const registered = new Set((await client.listTools()).tools.map((t) => t.name));
+    const mentioned = toolNamesIn(instructions);
+    // the drift guard: prose may never name a tool this server lacks
+    assert.deepEqual(
+      mentioned.filter((name) => !registered.has(name)),
+      [],
+      `${mode}: instructions name unregistered tools`,
+    );
+    // the start order and the notation-neutral core are always named
+    for (const name of ["list_repos", "list_models", "get_view", "get_model_content", "validate_model"]) {
+      assert.ok(mentioned.includes(name), `${mode}: instructions name ${name}`);
+    }
+    // every registered notation is listed with its extensions
+    for (const n of NOTATIONS) assert.ok(instructions.includes(n.label), `${mode}: names ${n.label}`);
+    // …and every served modeler widget is offered for showing models to people
+    for (const name of registered) {
+      if (/^open_.*modeler$/.test(name)) assert.ok(mentioned.includes(name), `${mode}: instructions name ${name}`);
+    }
+  }
 });
 
 test("todos: create anchors to the open process, list filters by it, close completes it", async () => {
@@ -1009,8 +1045,13 @@ test("/mcp over HTTP: stateless JSON, 405 on GET, 401 + RFC-9728 challenge, -327
   });
   assert.equal(init.status, 200);
   assert.match(init.headers.get("content-type") ?? "", /application\/json/);
-  const body = (await init.json()) as { result: { serverInfo: { name: string } } };
+  const body = (await init.json()) as {
+    result: { serverInfo: { name: string; title?: string }; instructions?: string };
+  };
   assert.equal(body.result.serverInfo.name, "designiq-live");
+  // the title and the instructions travel in the initialize result over HTTP too
+  assert.equal(body.result.serverInfo.title, "designIQ Live Host");
+  assert.match(body.result.instructions ?? "", /^designIQ is /);
 
   const get = await fetch(`${base}/mcp`, { headers });
   assert.equal(get.status, 405);

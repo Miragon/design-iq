@@ -1,6 +1,6 @@
 ---
 name: capture-process
-description: Conversational process capture — interviews a process owner who cannot write BPMN, elicits trigger, outcome, happy path, decisions, handoffs, and exceptions one question at a time, plays the understood process back in plain language for correction, then hands the confirmed data to the new-process skill for scaffolding. Use when someone wants to talk through, describe, or explain how their process works, wants a process documented from an interview, says "let me tell you how we do X", or says they don't know BPMN.
+description: Conversational process capture — interviews a process owner who cannot write BPMN, elicits trigger, outcome, happy path, decisions, handoffs, and exceptions one question at a time, plays the understood process back in plain language for correction, then hands the confirmed data to the new-process skill for scaffolding. Use when someone wants to talk through, describe, or explain how their process works, wants a process documented from an interview, says "let me tell you how we do X", or says they don't know BPMN. One of the BPMN process skills (`.bpmn` models only).
 ---
 
 # Capture Process

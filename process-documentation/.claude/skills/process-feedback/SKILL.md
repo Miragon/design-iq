@@ -1,6 +1,6 @@
 ---
 name: process-feedback
-description: Files and triages reports that a process model no longer matches reality — the inbound channel of "let your processes talk". Use when someone says "that's not how we do it anymore", "this step is outdated", or "we skip that check now" (in any conversation, about any process), when the user pastes a PROCESS FEEDBACK block produced by an exported process skill, or when they ask to file, list, triage, accept, or reject process feedback. Owns the feedback/<id>/ inbox convention and drives accepted corrections through a model edit.
+description: Files and triages reports that a process model no longer matches reality — the channel through which the people who do the work correct the model. Use when someone says "that's not how we do it anymore", "this step is outdated", or "we skip that check now" (in any conversation, about any process), when the user pastes a PROCESS FEEDBACK block produced by an exported process skill, or when they ask to file, list, triage, accept, or reject process feedback. Owns the feedback/<id>/ inbox convention and drives accepted corrections through a model edit. One of the BPMN process skills (`.bpmn` models only).
 ---
 
 # Process Feedback

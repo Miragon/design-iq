@@ -173,6 +173,34 @@ export function todosConfigFromEnv(env: Record<string, string | undefined>): Tod
   return repo && token ? { repo, token, apiUrl: env.GITHUB_API_URL } : undefined;
 }
 
+// ── server instructions: what an assistant reads at initialize, before any
+// tool. Composed from the same switch the registration runs on (the opt-in
+// list_todos); test/tools.test.ts pins every tool name they mention against
+// tools/list. ───────────────────────────────────────────────────────────────
+
+/** "a, b and c" */
+const andList = (items: readonly string[]): string =>
+  items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+/** every registered notation with its file extensions */
+const NOTATION_FILES = andList(NOTATIONS.map((n) => `${n.label} (${n.extensions.join("/")})`));
+
+function readOnlyInstructions(on: { todos: boolean }): string {
+  return [
+    "designIQ is a Git-native workspace where teams model their business and their architecture together, live; " +
+      "this server reads one checkout of such a repository and never writes.",
+    "The repository keeps its models as files under the folder its designiq.yml names, one model per file with " +
+      `the file stem as its id, in these notations: ${NOTATION_FILES}.`,
+    "Start with `list_models` to see which models it holds.",
+    "These tools are notation-neutral: `get_view` (the derived structure), `get_model` (the raw graph of " +
+      "nodes and edges), `enumerate_paths` and `find_cycles` (flow analysis where the notation has flow " +
+      "semantics) and `which_models_use` (which models reference a given one).",
+    "BPMN has deeper tooling: `list_processes`, `get_process` (the derived process view: roles, steps, flow, " +
+      "sub-process calls), `who_owns` (ownership from lanes) and `which_processes_use`" +
+      (on.todos ? "; `list_todos` lists the open todos anchored to processes." : "."),
+    "Live editing, the modeler widgets and release as a pull request are on the designIQ Live Host, not here.",
+  ].join(" ");
+}
+
 /** A per-capability tool contribution for the read-only server — the same
  *  composition hook the Live Host exposes (LiveToolContribution), applied
  *  AFTER the core registration. Contributions must stay read-only like every
@@ -231,17 +259,20 @@ export function createMcpServer(
   const unknownProcess = async (id: string) =>
     fail(`Unknown process '${id}'. Available: ${(await processes()).map((p) => p.id).join(", ") || "(none)"}.`);
 
-  const server = new McpServer({ name: "designiq-mcp", version: "0.2.0" });
+  const server = new McpServer(
+    { name: "designiq-mcp", title: "designIQ content repo (read-only)", version: "0.2.0" },
+    { instructions: readOnlyInstructions({ todos: todos !== undefined }) },
+  );
 
   server.registerTool(
     "list_models",
     {
       description:
-        "List EVERY model file of the repository, grouped by notation (bpmn, dmn, wardley, " +
-        "team-topology, …) — the registry-wide superset of list_processes. Each row: id " +
+        `List EVERY model file of the repository, grouped by notation (${NOTATIONS.map((n) => n.id).join(", ")}) ` +
+        "— the starting point for any question. Each row: id " +
         "(file stem), path, and — for notations with a registered deriver — the model's own " +
         "name, summary and stats. Use to see which notations a repo contains before reaching " +
-        "for the notation-specific tools.",
+        "for the notation-specific tools; list_processes is the BPMN-only listing.",
       annotations: READ_ONLY,
     },
     safe(async () => {
@@ -278,10 +309,11 @@ export function createMcpServer(
     "list_processes",
     {
       description:
-        "List all modeled business processes — every .bpmn file under the repo's designiq.yml " +
+        "BPMN only: list the processes — every .bpmn file under the repo's designiq.yml " +
         "models folder. Each row: id (file name without extension), derived name, the file " +
-        "path, and a count of steps/events/gateways/roles. Use to get a portfolio overview or " +
-        "to find a process id before calling get_process, get_model, who_owns or enumerate_paths.",
+        "path, and a count of steps/events/gateways/roles. Use for a process overview or " +
+        "to find a process id before calling get_process, get_model, who_owns or enumerate_paths; " +
+        "list_models covers every notation.",
       annotations: READ_ONLY,
     },
     safe(async () => {
@@ -303,10 +335,10 @@ export function createMcpServer(
     "get_process",
     {
       description:
-        "Get one process in full: the process view DERIVED from its BPMN — name, roles (BPMN " +
+        "BPMN only: get one process in full — the process view DERIVED from its BPMN: name, roles (BPMN " +
         "lanes = owning teams), steps (activities with their role), events, gateways, the " +
         "sequence/message flow, and the sub-processes it calls (callActivity → calledElement). " +
-        "Use for walkthroughs and any deep question about a single process.",
+        "Use for walkthroughs and any deep question about a single process; get_view covers every notation.",
       inputSchema: z.object({
         id: z.string().describe("Process id = the .bpmn file name without extension, e.g. order-to-cash"),
       }),
@@ -349,8 +381,8 @@ export function createMcpServer(
     {
       description:
         "The derived view of ANY model — its own name, a one-line summary, stats, and the rich " +
-        "notation payload in `detail` where one exists (process view, decision tables, …). The " +
-        "notation-agnostic sibling of get_process: works for every notation with extract+derive " +
+        "notation payload in `detail` where one exists (the process view for BPMN, the decision " +
+        "tables for DMN). Works for every notation with extract+derive " +
         `capabilities (${NOTATIONS.filter((n) => hasDeriver(n.id))
           .map((n) => n.id)
           .join(", ")}).`,
@@ -442,7 +474,7 @@ export function createMcpServer(
     "who_owns",
     {
       description:
-        "Resolve ownership of a process from its BPMN lanes — the roles/teams that own its steps " +
+        "BPMN only: resolve ownership of a process from its lanes — the roles/teams that own its steps " +
         "(each lane, with the steps it contains) plus the pools (participants). Use for 'who owns " +
         "X', 'who does what in X', or handoff questions. Note: on the slim contract ownership is " +
         "whatever the model's lanes say; a process with no lanes has no modeled owner.",
@@ -472,10 +504,10 @@ export function createMcpServer(
     "which_processes_use",
     {
       description:
-        "Impact analysis across the portfolio: find processes whose id, derived name, role/lane " +
+        "BPMN only: find processes whose id, derived name, role/lane " +
         "names, step names, or sub-process calls (calledElement) match a query — case-insensitive " +
         "substring. Use for 'what calls invoice-handling', 'which processes have a Billing lane', " +
-        "'what touches the credit check'.",
+        "'what touches the credit check'. which_models_use follows references across every notation.",
       inputSchema: z.object({
         query: z.string().describe("Case-insensitive substring, e.g. 'invoice-handling', 'Billing', 'credit'"),
       }),
@@ -517,8 +549,7 @@ export function createMcpServer(
         "Reference-level impact analysis across EVERY notation: all models whose typed " +
         "cross-model references (callActivity calls, businessRuleTask decides, …) point at the " +
         "given model id (file stem, exact match) — the repo-wide reference index behind it also " +
-        "flags dangling references. The registry-wide sibling of which_processes_use; use for " +
-        "'what breaks if I change or delete this model?'.",
+        "flags dangling references. Use for 'what breaks if I change or delete this model?'.",
       inputSchema: z.object({
         id: z.string().describe("Target model id = file stem (from list_models), e.g. 'credit-check'"),
       }),

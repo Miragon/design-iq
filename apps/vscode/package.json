@@ -1,7 +1,7 @@
 {
   "name": "design-iq",
   "displayName": "designIQ",
-  "description": "Open live model documents (designiq://) synced through the designIQ Live Host — the Miragon BPMN Modeler opens them like any other file.",
+  "description": "Collaborative modeling and architecture with AI, in your editor: opens the live models of a designIQ Live Host (designiq://), synced in real time — BPMN in the Miragon BPMN Modeler, every other notation as text.",
   "version": "0.0.1",
   "private": true,
   "publisher": "miragon-gmbh",

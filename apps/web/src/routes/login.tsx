@@ -12,7 +12,9 @@ export function Login() {
       <Card>
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">designIQ</CardTitle>
-          <CardDescription>Model together, release via pull request — then talk to your processes.</CardDescription>
+          <CardDescription>
+            Collaborative modeling and architecture with AI — live, Git-native, with every model a file in your repo.
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {providers.length === 0 ? (
