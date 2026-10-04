@@ -1,6 +1,6 @@
 {
   "name": "@miragon/design-iq-mcp",
-  "version": "4.3.1",
+  "version": "5.0.0",
   "description": "Read-only MCP server exposing a designIQ content repo's models — BPMN processes, DMN decisions, Wardley maps, team topologies, event-storming boards, context maps and more — to any MCP client. Discovered from designiq.yml, views derived from the models.",
   "type": "module",
   "license": "MIT",
