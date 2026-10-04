@@ -62,7 +62,7 @@
   },
   "devDependencies": {
     "@types/vscode": "1.138.0",
-    "@types/ws": "8.18.1",
+    "@types/ws": "8.18.2",
     "@vscode/test-electron": "3.1.0",
     "esbuild": "0.28.2",
     "typescript": "6.0.3"
