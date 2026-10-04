@@ -68,7 +68,7 @@ const RULES = [
   [/\bbpm-live-create-app\b/g, "designiq-create-app"], // User-Agent
   [/\bbpmiq-live\b/g, "designiq-live"], // Live Host MCP serverInfo name (after the -live-host rule)
   [/\bonFileSystem:bpm-live\b/g, "onFileSystem:designiq"], // VS Code activation event
-  [/\bbpm-live:/g, "designiq:"], // VS Code document URI scheme
+  [/(?<![\w./-])bpm-live:(?=\/)/g, "designiq:"], // VS Code document URI scheme — not image refs like registry.fly.io/bpm-live:<tag>
   [/\bbpm-(todo-badge|diff-(?:viewer|added|removed|changed|layout)|presence|connect-repo)\b/g, "designiq-$1"], // CSS classes + custom properties
   [/\bbpmRemoteCarets\b/g, "designiqRemoteCarets"], // data attribute
   [/\bx-bpmiq-model\b/g, "x-designiq-model"], // drag-and-drop media type
