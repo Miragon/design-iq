@@ -654,6 +654,7 @@ export function createLiveMcpServer(
       description:
         "List the repositories you can access on this Live Host, with your permission, the live session count and " +
         "the number of BPMN processes and DMN decisions (null until the repository has been opened on this host). " +
+        "modelCount and modelCounts (notation id → count) count the models of every notation the same way. " +
         "Call list_models next for every model of a repository, in all notations.",
       annotations: READ,
     },

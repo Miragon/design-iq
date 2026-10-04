@@ -8,7 +8,8 @@
  *   listChanges   — every file differing from origin/<default>, the pool a
  *                   file-selection release picks from
  *   listRepos     — registry ∩ the session user's per-repo permission, with
- *                   process/dirty counts for locally-present workspaces
+ *                   model (per notation), process, decision and dirty counts
+ *                   for locally-present workspaces
  *
  * Pure orchestration over injected surfaces: the dirty check goes through
  * WorkspaceManager.changedPaths (the git subprocess lives behind that seam,
@@ -20,7 +21,7 @@ import { join } from "node:path";
 
 import { roomName, roomPrefix } from "@designiq/contracts/live";
 import type { ChangedFileWire, DecisionInfo, ModelInfo, ProcessInfo, RepoInfo } from "@designiq/contracts/live-host";
-import { byExtension } from "@designiq/notations";
+import { byExtension, NOTATIONS } from "@designiq/notations";
 import { deriveProcess } from "@designiq/notations/derive";
 import { extractModelGraph } from "@designiq/notations/extract";
 
@@ -240,6 +241,16 @@ async function mapBounded<T, R>(items: readonly T[], limit: number, fn: (item: T
   return out;
 }
 
+/** models per notation id, in registry order — a notation without a model is omitted */
+function countByNotation(models: ReadonlyArray<{ notation: string }>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const n of NOTATIONS) {
+    const count = models.filter((m) => m.notation === n.id).length;
+    if (count > 0) counts[n.id] = count;
+  }
+  return counts;
+}
+
 /** Repo overview: registry ∩ the session user's per-repo permission, in registry order. */
 export async function listRepos(opts: OverviewDeps, session: Session): Promise<RepoInfo[]> {
   const live = opts.liveDocs();
@@ -256,23 +267,30 @@ export async function listRepos(opts: OverviewDeps, session: Session): Promise<R
     const ws = opts.workspaces.dir(repo);
     let processCount: number | null = null;
     let decisionCount: number | null = null;
+    let modelCount: number | null = null;
+    let modelCounts: Record<string, number> | null = null;
     let dirtyCount: number | null = null;
     const cfg = loadContentConfig(ws);
     if (cfg) {
       try {
-        // counts come from DISCOVERY (readdir only) and dirty from ONE
-        // changedPaths call per repo — the per-row git subprocesses the list
-        // endpoints used to pay never belonged on the overview. dirtyCount
-        // deliberately includes dirty DECISIONS now: a repo whose only change
-        // is a decision used to show no "live changes" badge at all.
-        const [procs, decs, changedList] = await Promise.all([
-          discoverProcesses(ws, cfg),
-          discoverDecisions(ws, cfg),
+        // counts come from ONE discovery walk (readdir only) over every
+        // notation — processes and decisions are filtered out of it — and
+        // dirty from ONE changedPaths call per repo: the per-row git
+        // subprocesses the list endpoints used to pay never belonged on the
+        // overview. dirtyCount deliberately includes dirty DECISIONS: a repo
+        // whose only change is a decision used to show no "live changes"
+        // badge at all.
+        const [models, changedList] = await Promise.all([
+          discoverModels(ws, cfg),
           opts.workspaces.changedPaths(repo, cfg.processes),
         ]);
         const changed = new Set(changedList);
+        const procs = models.filter((m) => m.notation === "bpmn");
+        const decs = models.filter((m) => m.notation === "dmn");
         processCount = procs.length;
         decisionCount = decs.length;
+        modelCount = models.length;
+        modelCounts = countByNotation(models);
         dirtyCount = [...procs, ...decs].filter((m) => changed.has(m.path)).length;
       } catch (e) {
         console.log(`overview: listing ${repo.fullName} failed (${(e as Error).message.split("\n")[0]})`);
@@ -292,6 +310,8 @@ export async function listRepos(opts: OverviewDeps, session: Session): Promise<R
       permission: "write", // repos without write access were skipped above
       processCount,
       decisionCount,
+      modelCount,
+      modelCounts,
       dirtyCount,
       liveSessions: live.filter((d) => d.startsWith(roomPrefix(repo.fullName))).length,
     };

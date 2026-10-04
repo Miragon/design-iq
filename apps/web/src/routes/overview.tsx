@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { ApiError, fetchRepos, type RepoInfo } from "@/lib/api";
 import { openInstallPicker } from "@/lib/install-picker";
 import { useConfig, useRepos } from "@/lib/queries";
+import { repoCountsLine } from "@/lib/repo-counts";
 
 export function Overview() {
   const qc = useQueryClient();
@@ -133,33 +134,40 @@ export function Overview() {
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {list.map((r) => (
-            <Link key={r.fullName} to="/r/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="block">
-              <Card className="hover:border-primary/50 transition-colors">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    {r.avatarUrl && <img className="size-5 rounded" src={r.avatarUrl} alt="" />}
-                    {r.fullName}
-                  </CardTitle>
-                  <p className="text-muted-foreground text-sm">
-                    {r.defaultBranch}
-                    {r.processCount !== null ? ` · ${r.processCount} process(es)` : " · not loaded yet"}
-                    {/* != null guards BOTH null and a pre-3.4 server that does not send the field */}
-                    {r.decisionCount != null && r.decisionCount > 0 ? ` · ${r.decisionCount} decision(s)` : ""}
-                  </p>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-1.5">
-                  {r.suspended ? (
-                    <Badge variant="warning">Installation suspended</Badge>
-                  ) : (
-                    <Badge variant="success">connected</Badge>
-                  )}
-                  {r.dirtyCount ? <Badge variant="warning">{r.dirtyCount} with live changes</Badge> : null}
-                  {r.liveSessions > 0 ? <Badge variant="default">{r.liveSessions} active</Badge> : null}
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+          {list.map((r) => {
+            const counts = repoCountsLine(r);
+            return (
+              <Link key={r.fullName} to="/r/$owner/$repo" params={{ owner: r.owner, repo: r.name }} className="block">
+                <Card className="hover:border-primary/50 transition-colors">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      {r.avatarUrl && <img className="size-5 rounded" src={r.avatarUrl} alt="" />}
+                      {r.fullName}
+                    </CardTitle>
+                    <p className="text-muted-foreground text-sm">
+                      {r.defaultBranch} ·{" "}
+                      {counts.breakdown ? (
+                        <span title={counts.breakdown} className="underline decoration-dotted underline-offset-2">
+                          {counts.summary}
+                        </span>
+                      ) : (
+                        counts.summary
+                      )}
+                    </p>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap gap-1.5">
+                    {r.suspended ? (
+                      <Badge variant="warning">Installation suspended</Badge>
+                    ) : (
+                      <Badge variant="success">connected</Badge>
+                    )}
+                    {r.dirtyCount ? <Badge variant="warning">{r.dirtyCount} with live changes</Badge> : null}
+                    {r.liveSessions > 0 ? <Badge variant="default">{r.liveSessions} active</Badge> : null}
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

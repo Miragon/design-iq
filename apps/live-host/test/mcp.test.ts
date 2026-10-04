@@ -544,6 +544,16 @@ test("list_models: every notation of the repo in one grouped listing", async () 
   assert.equal(res.models.dmn[0].notation, "dmn");
 });
 
+test("list_repos: the per-notation model counts ride along with the process/decision counts", async () => {
+  const { callJson } = await connect(deps());
+  const { repos } = await callJson("list_repos", {});
+  assert.equal(repos[0].fullName, REPO.fullName);
+  assert.equal(repos[0].processCount, 2, "the existing counts stay for older clients");
+  assert.equal(repos[0].decisionCount, 1);
+  assert.equal(repos[0].modelCount, 4);
+  assert.deepEqual(repos[0].modelCounts, { bpmn: 2, dmn: 1, wardley: 1 });
+});
+
 test("get_view: the derived view of ANY live model — wardley incl. baseVersion", async () => {
   const { callJson } = await connect(deps());
   const wardley = await callJson("get_view", { repo: REPO.fullName, id: "strategy" });
