@@ -29,7 +29,7 @@
     "@anthropic-ai/sdk": "0.128.0",
     "@designiq/notations": "workspace:*",
     "@miragon/design-iq-validator": "workspace:*",
-    "@modelcontextprotocol/client": "2.1.0",
-    "@types/node": "26.6.2"
+    "@modelcontextprotocol/client": "2.2.0",
+    "@types/node": "26.6.3"
   }
 }
