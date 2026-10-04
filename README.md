@@ -5,8 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 designIQ is a Git-native workspace where teams model their business and their architecture
-together, live: processes (BPMN), decisions (DMN), Wardley maps, team topologies,
-event-storming boards, context maps, value chains and plain Markdown. Every model is a file
+together, live: processes (BPMN), decisions (DMN), Wardley Maps, Team Topologies,
+Event Storming boards, Context Maps, Value Chains and plain Markdown. Every model is a file
 in your repository; edits sync in real time in the browser and in VS Code, and a release is
 a pull request — so review and governance stay where engineering already works. AI
 assistants join through MCP: they read the same live models, explain them, check them and
@@ -17,8 +17,8 @@ views, decision simulation and test suites, and todos anchored to BPMN elements.
 
 - **Model live** — every model file (`.bpmn`, `.dmn`, `.owm`, `.tt`, `.storm`, `.cm.json`,
   `.vc.json`, `.yaml`, `.md`) syncs as a shared Y.Text document; the web client and VS Code
-  bind their editors to it. The browser has a visual modeler for BPMN, DMN, Wardley maps,
-  team topologies, event-storming boards and context maps, and a text view for every file.
+  bind their editors to it. The browser has a visual modeler for BPMN, DMN, Wardley Maps,
+  Team Topologies, Event Storming boards and Context Maps, and a text view for every file.
   Login authenticates, **repos authorize**: what you see and edit follows your git write
   permission.
 - **Release as PR** — one click cuts a branch from `origin/<default>`, pushes and opens
@@ -144,7 +144,7 @@ but the cell mode it drives is. The code you read here is the code the SaaS runs
 | `packages/notations/`    | `@designiq/notations`          | Notation registry + model analysis: one descriptor per notation (extensions, editor language), `extract` (file→graph), `derive` (graph→view, incl. the rich process and decision views), and the `designiq.yml` content discovery (legacy `bpmiq.yml` still read).                                                                |
 | `packages/validator/`    | `@miragon/design-iq-validator` | Platform validator (bin `designiq-validate`): `designiq.yml` discovery + BPMN/DMN structure and BPMNDI/DMNDI coverage + cross-model reference integrity + a parse check for every other notation. Runs against any checkout via `--root`.                                                                                         |
 | `packages/…`             | —                              | Shared foundations: `http-kit`, `github-app`, `contracts`, `live-client`, `ui-kit`, `api-client` — see `CLAUDE.md` for the full map.                                                                                                                                                                                              |
-| `process-documentation/` | —                              | Example content repo (`designiq.yml` + BPMN/DMN example models and an event-storming board + the AI skills in `.claude/skills`) — the MCP/validator example AND the content-repo contract, mirrored to [`Miragon/process-documentation-starter`](https://github.com/Miragon/process-documentation-starter) ("Use this template"). |
+| `process-documentation/` | —                              | Example content repo (`designiq.yml` + BPMN/DMN example models and an Event Storming board + the AI skills in `.claude/skills`) — the MCP/validator example AND the content-repo contract, mirrored to [`Miragon/process-documentation-starter`](https://github.com/Miragon/process-documentation-starter) ("Use this template"). |
 | `deploy/`                | —                              | Docker Compose reference for self-hosting.                                                                                                                                                                                                                                                                                        |
 | `docs/`                  | —                              | Platform docs: concept, multi-repo architecture, MCP integration, [ADRs](docs/adr/), [self-hosting](docs/on-prem/), [extending](docs/extending/).                                                                                                                                                                                 |
 

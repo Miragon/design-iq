@@ -277,7 +277,7 @@ needed or wanted in v1; OCT's server doesn't cluster either. One landscape = one
   → rebase), conflict UX, pipeline notification.
 - **M3 — Polish**: soft element-locks, remote-change highlighting, dirty-vs-released markers
   in portal ("a newer live version exists"), MCP live tools.
-- **M4 — v2 options**: operation-level BPMN sync, DMN/value-chain/team-topology canvases in
+- **M4 — v2 options**: operation-level BPMN sync, DMN/Value Chain/Team Topology canvases in
   the web app, multiple landscapes (one Live Host each).
 
 ## Assumptions & open questions

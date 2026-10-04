@@ -30,11 +30,11 @@ suggests `git mv bpmiq.yml designiq.yml`), and so does the legacy key `processes
   | -------------- | ------------------ | ----------------------- |
   | BPMN 2.0       | `.bpmn`            | a process               |
   | DMN            | `.dmn`             | a decision              |
-  | Wardley Map    | `.owm`, `.wmap`    | a Wardley map           |
-  | Team Topology  | `.tt`, `.ttm.json` | a team topology         |
-  | Event Storming | `.storm`           | an event-storming board |
-  | Context Map    | `.cm.json`         | a context map           |
-  | Value Chain    | `.vc.json`         | a value chain           |
+  | Wardley Map    | `.owm`, `.wmap`    | a Wardley Map           |
+  | Team Topology  | `.tt`, `.ttm.json` | a Team Topology         |
+  | Event Storming | `.storm`           | an Event Storming board |
+  | Context Map    | `.cm.json`         | a Context Map           |
+  | Value Chain    | `.vc.json`         | a Value Chain           |
   | Markdown       | `.md`              | a document              |
 
 - A model's **id** is its file name without the extension
@@ -47,7 +47,7 @@ suggests `git mv bpmiq.yml designiq.yml`), and so does the legacy key `processes
 designiq.yml
 processes/
   order-to-cash.bpmn              ← the process
-  order-to-cash.storm             ← same id, other notation: the event-storming session behind it
+  order-to-cash.storm             ← same id, other notation: the Event Storming session behind it
   credit-limit-check.dmn          ← called by order-to-cash (businessRuleTask calledDecision)
   credit-limit-check.tests.yaml   ← its test cases, run by `pnpm validate`
   subprocesses/

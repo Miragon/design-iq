@@ -121,7 +121,7 @@ test("instructions: present with a title, and every tool they name is registered
     const c = new Client({ name: "mcp-test", version: "0" });
     await Promise.all([s.connect(st), c.connect(ct)]);
     try {
-      assert.equal(c.getServerVersion()?.title, "designIQ content repo (read-only)", mode);
+      assert.equal(c.getServerVersion()?.title, "designIQ model repository (read-only)", mode);
       const instructions = c.getInstructions() ?? "";
       assert.match(instructions, /^designIQ is /, `${mode}: the instructions open with the product`);
       const registered = new Set((await c.listTools()).tools.map((t) => t.name));
@@ -137,6 +137,40 @@ test("instructions: present with a title, and every tool they name is registered
       }
       assert.equal(mentioned.includes("list_todos"), todos !== undefined, `${mode}: list_todos only when registered`);
       for (const n of NOTATIONS) assert.ok(instructions.includes(n.label), `${mode}: names ${n.label}`);
+    } finally {
+      await c.close();
+      await s.close();
+    }
+  }
+});
+
+test("titles: every tool carries a short, unique display title — with and without list_todos", async () => {
+  for (const todos of [undefined, { repo: "acme/models", token: "t" }]) {
+    const mode = todos ? "with list_todos" : "zero-auth default";
+    const s = createMcpServer(slimRepo(), todos);
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const c = new Client({ name: "mcp-test", version: "0" });
+    await Promise.all([s.connect(st), c.connect(ct)]);
+    try {
+      const tools = (await c.listTools()).tools;
+      // hosts show the title to people instead of the snake_case name — a tool
+      // without one falls back to the name, so a forgotten title is drift
+      assert.deepEqual(
+        tools.filter((t) => !t.title?.trim()).map((t) => t.name),
+        [],
+        `${mode}: tools without a title`,
+      );
+      const byTitle = new Map<string, string>();
+      for (const t of tools) {
+        const title = t.title ?? "";
+        assert.equal(byTitle.get(title), undefined, `${mode}: ${t.name} reuses the title of ${byTitle.get(title)}`);
+        byTitle.set(title, t.name);
+        // sentence case, verb first, no trailing period, short
+        assert.match(title, /^[A-Z][a-z]+ /, `${mode}: ${t.name} title "${title}" starts with a capitalised verb`);
+        assert.ok(!title.endsWith("."), `${mode}: ${t.name} title "${title}" ends without a period`);
+        assert.ok(title.length <= 40, `${mode}: ${t.name} title "${title}" is short`);
+      }
+      assert.equal(tools.find((t) => t.name === "list_models")?.title, "List models", mode);
     } finally {
       await c.close();
       await s.close();
