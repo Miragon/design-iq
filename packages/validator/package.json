@@ -1,6 +1,6 @@
 {
   "name": "@miragon/design-iq-validator",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "type": "module",
   "description": "Platform-owned validator for designIQ content repos — designiq.yml discovery, BPMN/DMN structure and diagram coverage, cross-model references, and a parse check for every other notation. Runs against any checkout via --root; never executes content-repo code.",
   "license": "MIT",

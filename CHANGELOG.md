@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.1.0](https://github.com/Miragon/design-iq/compare/v5.0.0...v5.1.0) (2026-10-04)
+
+
+### Features
+
+* count live changes and models of every notation — repo cards and VS Code picker ([#234](https://github.com/Miragon/design-iq/issues/234)) ([170c720](https://github.com/Miragon/design-iq/commit/170c720e53eb288848041c38791476fc8e6d3ca5))
+* **mcp:** display titles for every tool; notation labels in prose ([#230](https://github.com/Miragon/design-iq/issues/230)) ([07cc044](https://github.com/Miragon/design-iq/commit/07cc044b64e7ee1b1c5c80389e594435be802d44))
+* **overview:** count the models of every notation on the repo cards ([#231](https://github.com/Miragon/design-iq/issues/231)) ([b39fa25](https://github.com/Miragon/design-iq/commit/b39fa2516f09788c942cb1ecf34c1140b5aa67ef))
+
+
+### Bug Fixes
+
+* **notations:** spell notation nouns with their registry labels ([#233](https://github.com/Miragon/design-iq/issues/233)) ([826623f](https://github.com/Miragon/design-iq/commit/826623f5cc8ebafa7f4b59e659ec281062fe4431))
+
 ## [5.0.0](https://github.com/Miragon/design-iq/compare/v4.3.1...v5.0.0) (2026-10-04)
 
 
