@@ -194,6 +194,19 @@ out in the release notes. For production, pin `vX.Y.Z` and move deliberately. Co
 4.x: [upgrading-to-5.md](../upgrading-to-5.md) — the image name changed with the rename to
 designIQ, so `pull` alone does not reach 5.0.
 
+### Volume permissions
+
+The live-host image runs as a non-root user (UID 1000).
+
+Before running `docker compose up` for the first time, create the data directory and give it matching ownership:
+
+```bash
+mkdir -p ./data
+chown 1000:1000 ./data
+```
+
+This allows the container to write to the bind-mounted `/data` directory.
+
 ## Health
 
 `GET /healthz` — liveness plus a deep check: SQLite writability and disk headroom (<5 %
