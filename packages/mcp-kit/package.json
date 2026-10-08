@@ -19,12 +19,12 @@
   },
   "dependencies": {
     "@designiq/http-kit": "workspace:*",
-    "@modelcontextprotocol/node": "2.1.0",
-    "@modelcontextprotocol/server": "2.2.0",
+    "@modelcontextprotocol/node": "2.1.1",
+    "@modelcontextprotocol/server": "2.3.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@types/node": "26.6.3",
+    "@types/node": "26.6.4",
     "typescript": "6.0.3"
   }
 }
