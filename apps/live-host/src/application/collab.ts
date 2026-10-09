@@ -93,6 +93,11 @@ export function makeCollabHooks(deps: CollabDeps) {
     activity,
   } = deps;
 
+  /** room → its repo's fullName, for onChange: it runs on EVERY applied
+   *  update, and splitRoom pays a registry read per path segment — resolved
+   *  once per loaded room, dropped on unload (the map stays bounded) */
+  const roomRepos = new Map<string, string>();
+
   /**
    * Resolve a room to disk AND reject symlink escapes. toDiskPath (pure domain)
    * does the lexical containment; resolve() is blind to symlinks, so a *.bpmn
@@ -298,11 +303,16 @@ export function makeCollabHooks(deps: CollabDeps) {
     // What does is an edit: a person's, an agent's save, a restore.
     async onChange({ documentName }: { documentName: string }) {
       if (!activity || migrations?.isRetired(documentName)) return;
-      try {
-        activity.liveEdit(splitRoom(documentName, registry).repo.fullName);
-      } catch {
-        /* the repo was disconnected under an open room — nothing to stamp */
+      let repo = roomRepos.get(documentName);
+      if (repo === undefined) {
+        try {
+          repo = splitRoom(documentName, registry).repo.fullName;
+        } catch {
+          return; // the repo was disconnected under an open room — nothing to stamp
+        }
+        roomRepos.set(documentName, repo);
       }
+      activity.liveEdit(repo);
     },
 
     async onConnect({ documentName }: { documentName: string }) {
@@ -320,6 +330,7 @@ export function makeCollabHooks(deps: CollabDeps) {
       liveDocs.delete(documentName);
       migrations?.forget(documentName);
       docGuard.drop(documentName); // symmetric with load() — the guard map must not grow
+      roomRepos.delete(documentName);
       console.log(`unloaded: ${documentName}`);
     },
   };
