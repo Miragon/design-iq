@@ -307,6 +307,34 @@ export interface RepoInfo {
    *  decisions only, older ones processes only) */
   dirtyCount: number | null;
   liveSessions: number;
+  /** the repository is private at the provider (absent from 5.1 and older
+   *  servers — the start page then shows no Public badge) */
+  private?: boolean;
+  /** the CALLER marked this repository as a favorite (#213) — per user,
+   *  across sessions and devices; absent from 5.1 and older servers */
+  favorite?: boolean;
+  /** when the CALLER last opened the repository in the web app (ISO 8601) —
+   *  an explicit visit (PUT /api/me/recent/:fullName), never a read; null =
+   *  not within the last 90 days. Absent from 5.1 and older servers */
+  lastOpenedAt?: string | null;
+  /** the repository's last change (ISO 8601): the newer of the last live edit
+   *  and the committer time of origin/<default branch>, the provider's last
+   *  push for a repository never cloned on the host; null = no signal.
+   *  Absent from 5.1 and older servers */
+  lastChangeAt?: string | null;
+}
+
+/** PUT and DELETE /api/me/favorites/:fullName — both idempotent */
+export interface FavoriteWire {
+  fullName: string;
+  favorite: boolean;
+}
+
+/** PUT /api/me/recent/:fullName — a visit of the repository (its page or an editor) */
+export interface RepoVisitWire {
+  fullName: string;
+  /** ISO 8601 — at most one stored visit per user and repository per minute */
+  lastOpenedAt: string;
 }
 
 /** GET /api/me — and the response of POST /auth/exchange */

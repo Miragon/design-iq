@@ -133,7 +133,7 @@ call is gated by the caller's per-repo permission.
 
 | Tool                          | Kind  | What it does                                                                             |
 | ----------------------------- | ----- | ---------------------------------------------------------------------------------------- |
-| `list_repos`                  | read  | The connected repos the caller may work on.                                              |
+| `list_repos`                  | read  | The connected repos the caller may work on, with the caller's own favorites + visits.    |
 | `list_models`                 | read  | EVERY model file of one repo, grouped by notation — the superset of the two lists below. |
 | `get_view`                    | read  | The derived view of ANY live model (name, summary, stats, rich `detail`).                |
 | `get_model_content`           | read  | The live text of ANY model (`content`, own format) plus the `baseVersion` for a save.    |

@@ -554,3 +554,50 @@ test("recordRenames: a rename released and merged ends its pair — renaming the
     { path: "processes/c.bpmn", status: "added", renamedFrom: "processes/b.bpmn" },
   ]);
 });
+
+test("onDefaultBranch: clone and hard reset report origin's tip commit time; recordDefaultBranch on demand (#213)", async () => {
+  // LIVE_GIT_URL_OVERRIDE maps the clone URL to <root>/<owner>/<name>.git
+  const root = mkdtempSync(join(tmpdir(), "designiq-remotes-"));
+  const bare = join(root, "acme", "models.git");
+  mkdirSync(bare, { recursive: true });
+  git(bare, "init", "--bare", "-b", "main");
+  const seed = mkdtempSync(join(tmpdir(), "designiq-seed-"));
+  git(seed, "clone", bare, ".");
+  const commitAt = (iso: string, message: string) => {
+    writeFileSync(join(seed, "designiq.yml"), `models: processes # ${message}\n`);
+    git(seed, "add", "-A");
+    execFileSync("git", ["commit", "-m", message], { cwd: seed, env: { ...GIT_ENV, GIT_COMMITTER_DATE: iso } });
+    git(seed, "push", "origin", "main");
+  };
+  commitAt("2026-10-01T12:00:00Z", "first");
+
+  const previous = process.env.LIVE_GIT_URL_OVERRIDE;
+  process.env.LIVE_GIT_URL_OVERRIDE = root;
+  try {
+    const wm = new WorkspaceManager({
+      dataDir: mkdtempSync(join(tmpdir(), "designiq-data-")),
+      hostRepo: "Miragon/design-iq",
+      hostRoot: mkdtempSync(join(tmpdir(), "designiq-host-")), // no contract file → not the host repo
+      registry: { tokenFor: async () => undefined } as unknown as RepoRegistry,
+      githubBaseUrl: "https://github.com",
+    });
+    const seen: Array<[string, number]> = [];
+    wm.hooks = { onDefaultBranch: (r, at) => seen.push([r.fullName, at]) };
+    const r = repo("acme/models");
+
+    await wm.recordDefaultBranch(r);
+    assert.deepEqual(seen, [], "never cloned — nothing to record");
+    await wm.ensure(r); // the clone
+    assert.deepEqual(seen, [["acme/models", Date.parse("2026-10-01T12:00:00Z")]]);
+
+    commitAt("2026-10-05T09:30:00Z", "second"); // merged upstream meanwhile
+    await wm.resetToDefault(r); // fetches, then resets
+    assert.deepEqual(seen.at(-1), ["acme/models", Date.parse("2026-10-05T09:30:00Z")]);
+    await wm.recordDefaultBranch(r);
+    assert.equal(seen.length, 3, "on demand, without a fetch");
+    assert.deepEqual(seen.at(-1), ["acme/models", Date.parse("2026-10-05T09:30:00Z")]);
+  } finally {
+    if (previous === undefined) delete process.env.LIVE_GIT_URL_OVERRIDE;
+    else process.env.LIVE_GIT_URL_OVERRIDE = previous;
+  }
+});

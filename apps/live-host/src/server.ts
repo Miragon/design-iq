@@ -32,12 +32,15 @@ import type { AppCredentials } from "./adapters/github/app-auth.ts";
 import { createGitHubAppSource } from "./adapters/github/app-source.ts";
 import { createGitHubIssueTracker } from "./adapters/github/issues.ts";
 import { createGitHubProvider } from "./adapters/github/provider.ts";
+import { SqliteActivityStore } from "./adapters/sqlite/activity-store.ts";
+import { SqliteFavoritesStore } from "./adapters/sqlite/favorites-store.ts";
 import { LineageStore } from "./adapters/sqlite/lineage-store.ts";
 import { SessionStore } from "./adapters/sqlite/sessions.ts";
 import { SqliteTodoJobStore } from "./adapters/sqlite/todo-job-store.ts";
 import { AgentPresence } from "./application/agent-presence.ts";
 import { makeCollabHooks } from "./application/collab.ts";
 import { LoginCodeStore } from "./application/login-codes.ts";
+import { RepoActivity } from "./application/repo-activity.ts";
 import { RoomMigrations } from "./application/room-migrations.ts";
 import { peersOfDocument } from "./application/room-presence.ts";
 import { TodoJobs } from "./application/todo-jobs.ts";
@@ -212,6 +215,13 @@ const workspaces = new WorkspaceManager({
   registry,
   githubBaseUrl: GH_BASE,
 });
+// when each repository last changed — the start page's "Updated X ago" (#213):
+// live edits arrive through the collab hooks, default-branch moves through the
+// workspace hooks below; listRepos only reads
+const activity = new RepoActivity({ store: new SqliteActivityStore(db) });
+// a person's favorites and recently opened repositories (#213) — per user,
+// non-credential (ADR 0001 as amended)
+const favorites = new SqliteFavoritesStore(db);
 // catch-up safety (#185): never rewrite a file that is open in a live session;
 // after a catch-up, drop the Yjs lineage of the rewritten files so the next
 // open reseeds from the new tree
@@ -226,6 +236,7 @@ workspaces.hooks = {
     }
     console.log(`lineages invalidated for ${repo.fullName}: ${changedPaths.join(", ")}`);
   },
+  onDefaultBranch: (repo, committedAt) => activity.defaultBranchAt(repo.fullName, committedAt),
 };
 
 // Issue-tracker seam (model-anchored todos): GitHub Issues, acting with the SAME
@@ -392,6 +403,7 @@ const server = new Server({
     liveDocs,
     wsTickets,
     migrations,
+    activity,
   }),
 });
 
@@ -441,6 +453,8 @@ const httpServer = startApi(PORT, {
   connectionSource,
   issues,
   todoJobs,
+  favorites,
+  activity,
   // control-plane origin (from the mint URL) — a cross-tenant OIDC login
   // redirects there so the platform can rescope the session to this tenant
   controlPlaneUrl: MINT_URL ? new URL(MINT_URL).origin : undefined,
@@ -560,4 +574,8 @@ void (async () => {
   console.log(`mcp       : POST /mcp${MCP_READONLY ? " (read-only — write tools not registered)" : ""}`);
   console.log(`room name = <owner>/<repo>/<path>, Y.Text field 'content'`);
   console.log("──────────────────────────────────────────────────");
+  // checkouts made by an earlier boot: record where their default branch
+  // stands, so "Updated X ago" has a signal before the next fetch (#213) —
+  // one local git process per existing checkout, never at listing time
+  for (const repo of registry.list()) await workspaces.recordDefaultBranch(repo);
 })();

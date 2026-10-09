@@ -158,7 +158,9 @@ export interface ReleaseDeps {
     // optional: without fileAtCommit a release simply ships without its
     // decision-impact section; without the catch-up trio (#185) the upstream
     // guard alone protects foreign work (tests and in-process fakes)
-    Partial<Pick<WorkspaceManager, "fileAtCommit" | "reconcile" | "conflicts" | "markReleased">>;
+    Partial<
+      Pick<WorkspaceManager, "fileAtCommit" | "reconcile" | "conflicts" | "markReleased" | "recordDefaultBranch">
+    >;
   /** REST backend for the app installation clone token (bot-authored release) */
   connectionSource?: Pick<RepoConnectionSource, "cloneToken">;
 }
@@ -210,6 +212,8 @@ async function publish(
     await runGit(["-C", workspace, "fetch", "origin", repo.defaultBranch], {
       env: gitEnv(instToken),
     });
+    // the fetch moved origin/<default> — the start page's "Updated" follows (#213)
+    await opts.workspaces.recordDefaultBranch?.(repo);
     // absorb what the default branch gained since the last catch-up — a
     // release merged seconds ago must not read as an upstream change of its
     // own files. A failed catch-up leaves HEAD behind: the guard below still holds.

@@ -7,6 +7,7 @@
  *   onLoadDocument   → restore Yjs lineage from SQLite, else seed from the
  *                      repo's workspace tree (persisting the seed eagerly — #103)
  *   onStoreDocument  → persist lineage + debounced write-through to the tree
+ *   onChange         → the repo's last live edit (repo-activity.ts, #213)
  *
  * Every dependency is injected (no module state); the hook parameter types are
  * the MINIMAL structural surfaces each hook reads, so tests call them directly
@@ -35,6 +36,7 @@ import {
 } from "../domain/rooms.ts";
 import { growsDocument } from "../domain/sync-message.ts";
 import type { ConnectedRepo } from "../repos/registry.ts";
+import type { RepoActivity } from "./repo-activity.ts";
 import type { RoomMigrations } from "./room-migrations.ts";
 
 /** per-message cap for doc-exempt (awareness/stateless) traffic — a real
@@ -68,6 +70,9 @@ export interface CollabDeps {
   /** rename bookkeeping (#208): a retired room never persists again, a held
    *  room's load waits for its migration — absent = no renames in flight */
   migrations?: Pick<RoomMigrations, "isRetired" | "forget" | "settled">;
+  /** the start page's "Updated X ago" (#213): a real edit in a room marks
+   *  its repo as changed (throttled there) — absent = not recorded */
+  activity?: Pick<RepoActivity, "liveEdit">;
 }
 
 export function makeCollabHooks(deps: CollabDeps) {
@@ -85,6 +90,7 @@ export function makeCollabHooks(deps: CollabDeps) {
     liveDocs,
     wsTickets,
     migrations,
+    activity,
   } = deps;
 
   /**
@@ -283,6 +289,20 @@ export function makeCollabHooks(deps: CollabDeps) {
       const content = codec ? codec.encode(readSnapshot(document)) : document.getText(CONTENT_KEY).toString();
       await writeFile(await resolveRoom(documentName), content);
       console.log(`write-through: ${documentName} (${content.length} chars)`);
+    },
+
+    // Hocuspocus registers this only AFTER onLoadDocument, and Yjs emits an
+    // update only when a transaction changed the document — so a seed, a
+    // restored lineage, awareness traffic, a peer re-syncing state the room
+    // already has, and a REST/MCP write of identical text never get here.
+    // What does is an edit: a person's, an agent's save, a restore.
+    async onChange({ documentName }: { documentName: string }) {
+      if (!activity || migrations?.isRetired(documentName)) return;
+      try {
+        activity.liveEdit(splitRoom(documentName, registry).repo.fullName);
+      } catch {
+        /* the repo was disconnected under an open room — nothing to stamp */
+      }
     },
 
     async onConnect({ documentName }: { documentName: string }) {

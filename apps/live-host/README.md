@@ -30,7 +30,9 @@ One Live Host serves **many repositories** (docs/multi-repo-architecture.md). Th
 set derives from the GitHub App's **installations** (app JWT → installation enumeration,
 webhook receiver at `POST /webhook/github`, fallback: the host's own repo when no app
 private key is configured). The web app opens with a **repo overview** (`GET /api/repos`,
-filtered per user permission); rooms are **`<owner>/<repo>/<path>`**; every repo gets its
+filtered per user permission, with the person's favorites and recently opened repositories —
+`PUT`/`DELETE /api/me/favorites/<owner>/<repo>`, `PUT /api/me/recent/<owner>/<repo>`);
+rooms are **`<owner>/<repo>/<path>`**; every repo gets its
 own workspace (`.live/workspaces/<owner>/<repo>`, cloned on demand with installation
 tokens — the host's own repo keeps using this checkout). A repo is a content repo when it
 has a root **`designiq.yml`** (legacy `bpmiq.yml` still read) naming its models folder; a
