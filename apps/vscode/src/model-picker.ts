@@ -19,12 +19,18 @@ export interface PickItem<T> {
   value: T;
 }
 
-/** repos a person can open: write access, not suspended — by name */
+/** repos a person can open: write access, not suspended — their favorites
+ *  first (#213, starred), then the rest, each group by name. A host that
+ *  sends no `favorite` (5.1 and older) keeps the plain by-name order. */
 export function repoItems(repos: RepoInfo[]): PickItem<RepoInfo>[] {
   return repos
     .filter((r) => r.permission === "write" && !r.suspended)
-    .sort((a, b) => a.fullName.localeCompare(b.fullName))
-    .map((r) => ({ label: `$(repo) ${r.fullName}`, ...describeRepo(r), value: r }));
+    .sort((a, b) => Number(b.favorite === true) - Number(a.favorite === true) || a.fullName.localeCompare(b.fullName))
+    .map((r) => ({
+      label: `${r.favorite === true ? "$(star-full)" : "$(repo)"} ${r.fullName}`,
+      ...describeRepo(r),
+      value: r,
+    }));
 }
 
 /** the counts read like the web overview's repo cards
