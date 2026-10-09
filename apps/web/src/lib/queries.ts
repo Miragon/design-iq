@@ -1,8 +1,10 @@
 import { queryDefaults } from "@designiq/api-client";
 import { QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
 import {
+  ApiError,
   closeTodo,
   createDecision,
   type CreateDecisionBody,
@@ -36,16 +38,20 @@ import {
   moveModels,
   type MoveModelsBody,
   type ProcessInfo,
+  recordVisit,
   releaseFiles,
   type ReleaseFilesBody,
   renameModel,
   type RenameModelBody,
+  type RepoInfo,
   resolveConflict,
   type ResolveConflictBody,
   retryTodoJob,
   syncRepo,
   type TodoWire,
+  writeFavorite,
 } from "@/lib/api";
+import { PersonalOverlay } from "@/lib/personal";
 import {
   clearRepoSnapshot,
   dropLegacyRepoSnapshot,
@@ -74,20 +80,84 @@ export function useConfig() {
   return useQuery({ queryKey: ["config"], queryFn: fetchConfig });
 }
 
+/** favorite toggles + visits ahead of the repository list (#213, lib/personal.ts) */
+const personal = new PersonalOverlay();
+
+/** GET /api/repos — the query's own fetches and the overview's forced
+ *  refresh. Once the answer is in the cache, the toggles the server had
+ *  confirmed before this request was sent are part of it (settle runs a
+ *  task later, so the overlay never drops a toggle the cache does not show yet). */
+export async function loadRepos(refresh: boolean): Promise<RepoInfo[]> {
+  const startedAt = Date.now();
+  const list = await fetchRepos(refresh);
+  setTimeout(() => personal.settle(startedAt), 0);
+  return list;
+}
+
 /** connected repositories (a forced registry re-sync is a view-level action).
  *  Starts from the list of the last visit (#212): rendered at once, and always
  *  stale (dated 0), so every page load revalidates in the background — even a
  *  reload seconds after the last fetch, the gesture people use to see a
  *  colleague's new live session. Every view renders behind the login gate —
- *  the login is known. */
+ *  the login is known. The person's favorite toggles and visits of this tab
+ *  ride on top of whatever list landed (#213). */
 export function useRepos() {
   const login = useMe().data?.user.login;
+  const version = useSyncExternalStore(personal.subscribe, personal.getVersion);
+  // a new function per overlay change — TanStack re-runs select exactly then
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- version IS the dependency
+  const select = useCallback((list: RepoInfo[]) => personal.apply(list), [version]);
   return useQuery({
     queryKey: ["repos"],
-    queryFn: () => fetchRepos(false),
+    queryFn: () => loadRepos(false),
     initialData: () => (login ? readRepoSnapshot(login)?.repos : undefined),
     initialDataUpdatedAt: 0,
+    select,
   });
+}
+
+/** the favorite toggle (#213): optimistic, written per repository in order,
+ *  rolled back with a toast when the server refuses (the 101st favorite, a
+ *  lost access). Deliberately no invalidation of ["repos"] — see lib/personal.ts. */
+export function useToggleFavorite() {
+  const qc = useQueryClient();
+  return useCallback(
+    (repo: string, favorite: boolean) => {
+      personal.toggle(repo, favorite, writeFavorite).catch((e: unknown) => {
+        if (e instanceof ApiError && e.status === 401) {
+          void qc.invalidateQueries({ queryKey: ["me"] }); // session gone → flip to login
+          return;
+        }
+        toast.error(
+          favorite ? `Could not add ${repo} to your favorites` : `Could not remove ${repo} from your favorites`,
+          {
+            description: e instanceof Error ? e.message : undefined,
+          },
+        );
+      });
+    },
+    [qc],
+  );
+}
+
+/** visits recorded by this tab — at most one request per repository and minute
+ *  (the server keeps one per minute anyway) */
+const recordedAt = new Map<string, number>();
+
+/** record that the person opened `repo` (its page or an editor) — from a
+ *  component effect, never a route loader: with defaultPreload "intent" a
+ *  loader would also run on hover. Failures stay quiet; the page shows its own. */
+export function useRecordVisit(repo: string) {
+  useEffect(() => {
+    if (!repo.includes("/")) return;
+    const k = repo.toLowerCase();
+    if (Date.now() - (recordedAt.get(k) ?? 0) < 60_000) return;
+    recordedAt.set(k, Date.now());
+    recordVisit(repo).then(
+      (visit) => personal.visited(visit.fullName, visit.lastOpenedAt),
+      () => recordedAt.delete(k),
+    );
+  }, [repo]);
 }
 
 export function useProcesses(repo: string) {

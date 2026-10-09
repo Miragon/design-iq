@@ -1,6 +1,15 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@designiq/ui-kit/components/avatar";
 import { Button } from "@designiq/ui-kit/components/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@designiq/ui-kit/components/dropdown-menu";
 import { Link } from "@tanstack/react-router";
+import { LogOut } from "lucide-react";
 
 import { MiragonComet } from "@/components/miragon-comet";
 import type { Me } from "@/lib/api";
@@ -29,18 +38,31 @@ export function AppHeader({ me }: { me?: Me }) {
         design.miragon.ai
       </a>
       {me && (
-        <div className="flex items-center gap-2">
-          <Avatar className="size-7">
-            {me.user.avatarUrl && <AvatarImage src={me.user.avatarUrl} alt="" />}
-            <AvatarFallback>{me.user.login.slice(0, 2).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <span className="text-muted-foreground text-sm">@{me.user.login}</span>
-          {canLogout && (
-            <Button variant="ghost" size="sm" onClick={() => logout.mutate()}>
-              Logout
+        // one menu behind the avatar: who is signed in, and Logout (#213)
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full" aria-label={`Account @${me.user.login}`}>
+              <Avatar className="size-7">
+                {me.user.avatarUrl && <AvatarImage src={me.user.avatarUrl} alt="" />}
+                <AvatarFallback>{me.user.login.slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
             </Button>
-          )}
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-48">
+            <DropdownMenuLabel className="flex flex-col">
+              {me.user.name && me.user.name !== me.user.login && <span>{me.user.name}</span>}
+              <span className="text-muted-foreground text-xs font-normal">@{me.user.login}</span>
+            </DropdownMenuLabel>
+            {canLogout && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => logout.mutate()}>
+                  <LogOut /> Logout
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </header>
   );

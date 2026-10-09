@@ -30,35 +30,20 @@ import {
   ArrowLeft,
   ArrowUpDown,
   ArrowUpToLine,
-  Boxes,
-  ChartNetwork,
   ChevronDown,
   ChevronUp,
   Copy,
   Ellipsis,
-  FileText,
   Folder,
   FolderInput,
   FolderPlus,
   Pencil,
   Plus,
-  Shapes,
-  StickyNote,
   Table2,
   Trash2,
-  Users,
   Workflow,
 } from "lucide-react";
-import {
-  type ComponentType,
-  type DragEvent,
-  type MouseEvent,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type DragEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AssistMenu } from "@/components/assist-menu";
@@ -68,12 +53,23 @@ import { CreateNotationModelDialog } from "@/components/create-notation-model-di
 import { CreateProcessDialog } from "@/components/create-process-dialog";
 import { DeleteModelsDialog } from "@/components/delete-models-dialog";
 import { DuplicateModelDialog } from "@/components/duplicate-model-dialog";
+import { FavoriteToggle } from "@/components/favorite-toggle";
 import { type MovableModel, MoveModelDialog } from "@/components/move-model-dialog";
+import { notationIcon } from "@/components/notation-icon";
 import { ReleaseDialog } from "@/components/release-dialog";
 import { RenameModelDialog } from "@/components/rename-model-dialog";
 import { SyncRepoDialog } from "@/components/sync-repo-dialog";
 import { type ModelTarget, modelTarget, useOpenModel } from "@/lib/model-target";
-import { useDecisions, useFolders, useModels, useMoveModels, useProcesses, useRepos, useSyncRepo } from "@/lib/queries";
+import {
+  useDecisions,
+  useFolders,
+  useModels,
+  useMoveModels,
+  useProcesses,
+  useRecordVisit,
+  useRepos,
+  useSyncRepo,
+} from "@/lib/queries";
 import { webPlugin } from "@/notations/registry";
 
 const route = getRouteApi("/r/$owner/$repo");
@@ -81,21 +77,6 @@ const route = getRouteApi("/r/$owner/$repo");
 /** notations the "New" menu offers GENERICALLY (#139): everything with a
  *  blank template except bpmn/dmn, which keep their typed flows above */
 const CREATABLE_NOTATIONS = NOTATIONS.filter((n) => hasTemplate(n.id) && n.id !== "bpmn" && n.id !== "dmn");
-
-/** each notation's icon — one a user can GUESS from the label — shown in the
- *  "New" menu AND on the model rows of the listing, so a file reads the same
- *  where it is created and where it is found. A notation without an entry
- *  falls back to the neutral Shapes, so a new registry entry never ships
- *  icon-less */
-const NOTATION_ICONS = new Map<string, ComponentType<{ className?: string }>>([
-  ["bpmn", Workflow],
-  ["dmn", Table2],
-  ["wardley", ChartNetwork],
-  ["team-topology", Users],
-  ["event-storming", StickyNote],
-  ["context-map", Boxes],
-  ["markdown", FileText],
-]);
 
 /**
  * The table features this route opts into — v9 ships nothing but the core, so
@@ -195,7 +176,10 @@ export function ProcessList() {
   // actions don't flicker for the overwhelmingly common content repo.
   const isContentRepo = folders.data?.isContentRepo ?? true;
   const repos = useRepos();
-  const branch = repos.data?.find((r) => r.fullName === repo)?.defaultBranch ?? "main";
+  const repoRow = repos.data?.find((r) => r.fullName.toLowerCase() === repo.toLowerCase());
+  const branch = repoRow?.defaultBranch ?? "main";
+  // opening the repository is a visit — the start page's Recently opened (#213)
+  useRecordVisit(repo);
   const sync = useSyncRepo(repo);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [folderOpen, setFolderOpen] = useState(false);
@@ -389,7 +373,7 @@ export function ProcessList() {
         cell: ({ row }) => {
           const m = row.original;
           // the same icon the "New" menu shows for this notation
-          const Icon = NOTATION_ICONS.get(m.notation) ?? Shapes;
+          const Icon = notationIcon(m.notation);
           const link = { className: "flex items-center gap-2 font-medium hover:underline" };
           const body = (
             <>
@@ -570,7 +554,13 @@ export function ProcessList() {
       </Button>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{repo}</h1>
+          <h1 className="flex items-center gap-1 text-2xl font-semibold tracking-tight">
+            {repo}
+            {/* the start page's toggle — same state, no reload (#213) */}
+            {typeof repoRow?.favorite === "boolean" && (
+              <FavoriteToggle fullName={repoRow.fullName} favorite={repoRow.favorite} />
+            )}
+          </h1>
           <p className="text-muted-foreground mb-6 text-sm">
             Model live — every release becomes a reviewable pull request.
           </p>
@@ -620,7 +610,7 @@ export function ProcessList() {
                     <Table2 /> DMN decision
                   </DropdownMenuItem>
                   {CREATABLE_NOTATIONS.map((n) => {
-                    const Icon = NOTATION_ICONS.get(n.id) ?? Shapes;
+                    const Icon = notationIcon(n.id);
                     return (
                       <DropdownMenuItem key={n.id} onSelect={() => setTimeout(() => setModelNotation(n), 0)}>
                         <Icon /> {n.label}

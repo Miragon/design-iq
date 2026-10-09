@@ -3,7 +3,7 @@ import { getRouteApi, Link } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 
 import { LiveEditor } from "@/components/live-editor";
-import { useDecisions, useMe, useModels, useProcesses } from "@/lib/queries";
+import { useDecisions, useMe, useModels, useProcesses, useRecordVisit } from "@/lib/queries";
 
 const processRoute = getRouteApi("/r/$owner/$repo/p/$processId");
 const fileRoute = getRouteApi("/r/$owner/$repo/f/$");
@@ -37,6 +37,8 @@ export function ProcessEditorScreen() {
   const repo = `${owner}/${name}`;
   const me = useMe();
   const processes = useProcesses(repo);
+  // an editor opened — also from a deep link — is a visit of its repository (#213)
+  useRecordVisit(repo);
   if (me.isLoading || processes.isLoading) return <Loading />;
   if (!me.data) return null;
   // distinguish a fetch failure from a real "no BPMN model" — with retry:false,
@@ -62,6 +64,7 @@ export function FileEditorScreen() {
   const repo = `${owner}/${name}`;
   const path = _splat ?? "";
   const me = useMe();
+  useRecordVisit(repo);
   // a process is a file — resolve the id (for todos/release) from the listing
   const processes = useProcesses(repo);
   const proc = processes.data?.find((p) => p.models.some((m) => m.path === path));

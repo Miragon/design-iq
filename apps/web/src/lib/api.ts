@@ -14,6 +14,7 @@ import type {
   DeleteModelsResult,
   DuplicateModelBody,
   DuplicateModelResult,
+  FavoriteWire,
   FileAtCommitWire,
   FileCommitWire,
   FolderListWire,
@@ -29,6 +30,7 @@ import type {
   RenameModelBody,
   RenameModelResult,
   RepoInfo,
+  RepoVisitWire,
   ResolveConflictBody,
   ResolveConflictResult,
   SyncResult,
@@ -54,6 +56,7 @@ export type {
   DeleteModelsResult,
   DuplicateModelBody,
   DuplicateModelResult,
+  FavoriteWire,
   FileAtCommitWire,
   FileCommitWire,
   FolderListWire,
@@ -71,6 +74,7 @@ export type {
   RenameModelBody,
   RenameModelResult,
   RepoInfo,
+  RepoVisitWire,
   ResolveConflictBody,
   ResolveConflictResult,
   SyncResult,
@@ -96,6 +100,11 @@ export const fetchConfig = (): Promise<AppConfig> => api("/api/config");
 export const fetchMe = (): Promise<Me> => api("/api/me");
 export const logout = (): Promise<{ ok: boolean }> => api("/api/logout", { method: "POST" });
 export const fetchRepos = (refresh = false): Promise<RepoInfo[]> => api(`/api/repos${refresh ? "?refresh=1" : ""}`);
+/** favorite (PUT) or un-favorite (DELETE) a repository — per user, idempotent */
+export const writeFavorite = (repo: string, favorite: boolean): Promise<FavoriteWire> =>
+  api(`/api/me/favorites/${repo}`, { method: favorite ? "PUT" : "DELETE" });
+/** record that the person opened a repository (its page or an editor) */
+export const recordVisit = (repo: string): Promise<RepoVisitWire> => api(`/api/me/recent/${repo}`, { method: "PUT" });
 export const fetchProcesses = (repo: string): Promise<ProcessInfo[]> => api(`/api/repos/${repo}/processes`);
 /** create a new process from the blank template; response is its ProcessInfo row */
 export const createProcess = (repo: string, body: CreateProcessBody): Promise<ProcessInfo> =>
