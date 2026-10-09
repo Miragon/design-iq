@@ -301,6 +301,19 @@ function RepoToolbar({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+  // the box keeps its own text: ?q commits a moment AFTER each keystroke, and
+  // an input controlled by it directly is reset in between (the caret jumps
+  // to the end, IME composition can break). ?q follows the box; the box follows
+  // ?q only when it changed elsewhere — Clear filters, the header's link to
+  // the start page — never while someone types in it
+  const [text, setText] = useState(query);
+  useEffect(() => {
+    if (document.activeElement !== input.current) setText(query);
+  }, [query]);
+  const type = (next: string) => {
+    setText(next);
+    onQuery(next);
+  };
   const shows: ShowFilter[] = favorites ? ["all", "favorites", "live"] : ["all", "live"];
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -311,12 +324,12 @@ function RepoToolbar({
         />
         <Input
           ref={input}
-          value={query}
-          onChange={(e) => onQuery(e.target.value)}
+          value={text}
+          onChange={(e) => type(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Escape" && query) {
+            if (e.key === "Escape" && text) {
               e.preventDefault();
-              onQuery("");
+              type("");
             }
           }}
           placeholder="Find a repository…"
@@ -326,7 +339,7 @@ function RepoToolbar({
           spellCheck={false}
           className="pr-9 pl-8"
         />
-        {query ? (
+        {text ? (
           <Button
             variant="ghost"
             size="icon"
@@ -334,7 +347,7 @@ function RepoToolbar({
             aria-label="Clear the search"
             title="Clear (Esc)"
             onClick={() => {
-              onQuery("");
+              type("");
               input.current?.focus();
             }}
           >
