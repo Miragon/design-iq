@@ -46,6 +46,26 @@ test("repoItems: writable, non-suspended repos by name", () => {
   assert.equal(items[0]?.label, "$(repo) acme/models");
 });
 
+test("repoItems: the person's favorites first (starred), then the rest — each group by name (#213)", () => {
+  const items = repoItems([
+    repo({ fullName: "zeta/models", favorite: true }),
+    repo({ fullName: "acme/models", favorite: false }),
+    repo({ fullName: "beta/models", favorite: true }),
+    repo({ fullName: "acme/other", favorite: false }),
+  ]);
+  assert.deepEqual(
+    items.map((i) => i.value.fullName),
+    ["beta/models", "zeta/models", "acme/models", "acme/other"],
+  );
+  assert.equal(items[0]?.label, "$(star-full) beta/models");
+  assert.equal(items[2]?.label, "$(repo) acme/models");
+  // a host that sends no favorite: today's order, today's icon
+  assert.deepEqual(
+    repoItems([repo({ fullName: "zeta/models" }), repo({ fullName: "acme/models" })]).map((i) => i.label),
+    ["$(repo) acme/models", "$(repo) zeta/models"],
+  );
+});
+
 test("repoItems: a current host — the models of every notation, the per-notation breakdown as the detail", () => {
   const [models, single, empty, uncloned] = repoItems([
     repo({

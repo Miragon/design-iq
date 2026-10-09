@@ -13,7 +13,10 @@
  *        …?editor=<scheme>&editor_state=<nonce> → the SAME login landing in an editor (editor-login.ts)
  *   POST /auth/exchange                          → editor sign-in: one-time code → Me (session id as wsToken)
  *   GET  /api/me, POST /api/logout               (logout: cookie session, or the Bearer session id)
- *   GET  /api/repos                              → repo OVERVIEW (per-user permission)
+ *   PUT  /api/me/favorites/:owner/:repo          → favorite a repository (repo write required; 409 past the cap)
+ *   DELETE /api/me/favorites/:owner/:repo        → un-favorite (session only — always possible)
+ *   PUT  /api/me/recent/:owner/:repo             → record a visit of the repository (repo write required)
+ *   GET  /api/repos                              → repo OVERVIEW (per-user permission, the caller's favorites + visits)
  *   GET  /api/repos/:owner/:repo/processes       → process list      (repo write required)
  *   POST /api/repos/:owner/:repo/processes       → create a process from the blank template (repo write required)
  *   GET  /api/repos/:owner/:repo/decisions       → decision (.dmn) list (repo write required)
@@ -70,6 +73,7 @@ import type {
   DuplicateModelBody,
   DuplicateModelResult,
   EditorLoginExchangeBody,
+  FavoriteWire,
   FileAtCommitWire,
   FileCommitWire,
   FolderListWire,
@@ -86,6 +90,7 @@ import type {
   ReleaseResult,
   RenameModelBody,
   RenameModelResult,
+  RepoVisitWire,
   ResolveConflictBody,
   ResolveConflictResult,
   RetryTodoJobBody,
@@ -116,10 +121,12 @@ import type { AgentPresence } from "../application/agent-presence.ts";
 import { authorizeRepo } from "../application/authz.ts";
 import { resolveConflict } from "../application/conflicts.ts";
 import { type DirectDoc, editContent, getContent, putContent } from "../application/content.ts";
+import { addFavorite, type FavoritesStore, recordVisit, removeFavorite } from "../application/favorites.ts";
 import { fileAtCommit, fileHistory } from "../application/history.ts";
 import type { LoginCodeStore } from "../application/login-codes.ts";
 import { listAllModels, listChanges, listDecisions, listProcesses, listRepos } from "../application/overview.ts";
 import { referencesTo } from "../application/reference-impact.ts";
+import type { RepoActivity } from "../application/repo-activity.ts";
 import type { RoomPresenceDeps } from "../application/room-presence.ts";
 import {
   createDecision,
@@ -244,6 +251,13 @@ export interface ApiOptions {
   presence?: Pick<AgentPresence, "touch">;
   /** who is in a room (get_presence) — the raw peers of a LOADED room */
   peersOf?: RoomPresenceDeps["peersOf"];
+  /** a person's favorites and recently opened repositories (#213,
+   *  application/favorites.ts) — absent: the /api/me/favorites|recent routes
+   *  answer 501 and the overview rows carry neither field */
+  favorites?: FavoritesStore;
+  /** when each repo last changed (application/repo-activity.ts) — absent:
+   *  the overview rows carry no lastChangeAt */
+  activity?: Pick<RepoActivity, "view">;
 }
 
 // send/redirect/readBody/securityHeaders/bearerAuth come from @designiq/http-kit —
@@ -633,6 +647,41 @@ export function startApi(port: number, opts: ApiOptions): Server {
         const sid = readCookie(req.headers.cookie, COOKIE) ?? req.headers.authorization?.replace(/^Bearer /, "");
         if (sid) opts.sessions.delete(sid);
         return send(res, 200, { ok: true }, { "set-cookie": clearCookie() });
+      }
+
+      // a person's own view of the repository list (#213, application/favorites.ts).
+      // GREEDY like the repo routes — a GitLab fullName has more than two
+      // segments; /api/me itself is matched exactly above. PUT/DELETE rather
+      // than POST as defence in depth: cross-origin they need a CORS preflight,
+      // and only CORS_PATHS answer one. JSON 200, never 204 (api<T>() parses).
+      const meRoute = url.pathname.match(/^\/api\/me\/(favorites|recent)\/(.+)$/);
+      if (meRoute) {
+        const session = await sessionOf(req);
+        if (!session) return unauthorized(res, { error: "not logged in" }, url.pathname);
+        if (!opts.favorites) return send(res, 501, { error: "favorites are not available on this host" });
+        const deps = { ...opts, favorites: opts.favorites };
+        const fullName = meRoute[2] ?? "";
+        try {
+          if (meRoute[1] === "favorites") {
+            if (req.method === "PUT") {
+              const out = await addFavorite(deps, session, fullName);
+              console.log(`favorite added by @${session.user.login}: ${out.fullName}`);
+              return send(res, 200, out satisfies FavoriteWire);
+            }
+            if (req.method === "DELETE") {
+              return send(res, 200, removeFavorite(deps, session, fullName) satisfies FavoriteWire);
+            }
+            return send(res, 405, { error: "method not allowed" });
+          }
+          if (req.method !== "PUT") return send(res, 405, { error: "method not allowed" });
+          return send(res, 200, (await recordVisit(deps, session, fullName)) satisfies RepoVisitWire);
+        } catch (e) {
+          // the ordinary 404/403/409 answer here, like repoOf — the catch-all
+          // would log each as a 500
+          if (!(e instanceof AppError)) throw e;
+          const { status, body } = errorBody(e, { authenticated: true });
+          return send(res, status, body);
+        }
       }
 
       // repo OVERVIEW

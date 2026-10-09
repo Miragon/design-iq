@@ -162,7 +162,10 @@ host kept it for the zero-prerequisite quickstart.
   is the same login, so what keys on the login collapses: room presence marks
   every peer as `you`, and agent-presence leases (one per room and login)
   merge concurrent MCP clients into one marker. Inherent to the mode, not a
-  defect to fix; a team that needs told-apart people runs `oidc`.
+  defect to fix; a team that needs told-apart people runs `oidc`. The same
+  holds for the start page's favorites and recently opened repositories
+  (#213): keyed on the login, they are shared host-wide in `none` mode — and
+  kept apart from an IdP login of the same name by the `local:` provider prefix.
 - **The on-prem quickstart changes hands.** Today: register a GitHub App,
   paste five values, sign in with GitHub. Tomorrow: the same App **plus** an
   IdP that issues `github_login`. The only documented recipe is WorkOS

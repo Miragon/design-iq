@@ -19,6 +19,12 @@ export interface SourceRepo {
   avatarUrl: string | null;
   /** provider-specific connection handle (GitHub: installation id) */
   connectionRef: number;
+  /** the provider's own, rename-stable repository id (GitHub: the numeric
+   *  repository id) — absent when the provider has none */
+  providerId?: number;
+  /** the provider's last push to ANY branch (ISO 8601) — the start page's
+   *  "Updated" fallback for a repository never cloned on the host */
+  pushedAt?: string | null;
 }
 
 export interface ConnectionSnapshot {

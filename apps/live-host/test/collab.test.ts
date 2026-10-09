@@ -277,6 +277,43 @@ test("load registers liveDocs + guard; afterUnloadDocument removes both (symmetr
   assert.equal(deps.docGuard.tracked, 0);
 });
 
+// ── onChange: the repo's last live edit (#213) ──────────────────────────────
+
+test("onChange stamps the room's repo, resolving it once per loaded room — not on every update", async () => {
+  let lookups = 0;
+  const edits: string[] = [];
+  const { hooks } = setup({
+    registry: {
+      get: (n) => {
+        lookups++;
+        return n.toLowerCase() === REPO.fullName ? REPO : undefined;
+      },
+    },
+    activity: { liveEdit: (repo) => edits.push(repo) },
+  });
+  for (let i = 0; i < 5; i++) await hooks.onChange({ documentName: ROOM });
+  assert.deepEqual(edits, Array(5).fill(REPO.fullName), "every update reaches the activity (it throttles)");
+  const perResolve = lookups;
+  assert.ok(perResolve > 0);
+  await hooks.onChange({ documentName: ROOM });
+  assert.equal(lookups, perResolve, "later updates of the room pay no registry read");
+
+  // unloaded → forgotten: the next load resolves again (a reconnected repo, the bounded map)
+  await hooks.afterUnloadDocument({ documentName: ROOM });
+  await hooks.onChange({ documentName: ROOM });
+  assert.equal(lookups, perResolve * 2);
+});
+
+test("onChange: a room of a disconnected repo stamps nothing", async () => {
+  const edits: string[] = [];
+  const { hooks } = setup({
+    registry: { get: () => undefined },
+    activity: { liveEdit: (repo) => edits.push(repo) },
+  });
+  await hooks.onChange({ documentName: ROOM });
+  assert.deepEqual(edits, []);
+});
+
 // ── onStoreDocument: the size cap ───────────────────────────────────────────
 
 test("onStoreDocument under the cap persists lineage + writes through to the file", async () => {

@@ -182,6 +182,21 @@ lineages, sessions, and the registry come back; workspaces re-clone as needed.
 Released state is safe in GitHub regardless; only unreleased live edits depend on
 `live.db`. Frequent, small releases keep that exposure short.
 
+**Per-user rows.** Besides the session, `live.db` keeps two non-credential tables per person
+(ADR 0001 as amended): `favorites` (the repositories someone marked as favorites) and
+`repo_visits` (the repositories they opened last — at most 20, none older than 90 days). Both
+are keyed `<provider>:<login>` in lower case — `oidc:petra` for an IdP login. Deleting one
+person's rows (e.g. on a data-subject request):
+
+```bash
+sqlite3 /data/live.db "DELETE FROM favorites WHERE user = 'oidc:petra'; DELETE FROM repo_visits WHERE user = 'oidc:petra';"
+```
+
+`repo_activity` holds when each repository last changed (a live edit, its default branch) —
+the same for everyone, no personal data. With `LIVE_AUTH=none` every request is the one local
+principal, so favorites and recently opened repositories are **shared host-wide**
+(`local:<login>`).
+
 ## Upgrades
 
 ```bash

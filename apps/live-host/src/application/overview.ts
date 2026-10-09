@@ -9,13 +9,15 @@
  *                   file-selection release picks from
  *   listRepos     — registry ∩ the session user's per-repo permission, with
  *                   model (per notation), process, decision and dirty counts
- *                   for locally-present workspaces
+ *                   for locally-present workspaces, the caller's favorite flag
+ *                   and last visit, and the repo's last change (#213)
  *
  * Pure orchestration over injected surfaces: the dirty check goes through
  * WorkspaceManager.changedPaths (the git subprocess lives behind that seam,
  * never here). The returned object shapes ARE the wire format
  * (@designiq/contracts/live-host — shape drift is a tsc error).
  */
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -28,6 +30,8 @@ import { extractModelGraph } from "@designiq/notations/extract";
 import type { Session } from "../adapters/sqlite/sessions.ts";
 import { discoverDecisions, discoverModels, discoverProcesses, loadContentConfig } from "../repos/content.ts";
 import type { ConnectedRepo } from "../repos/registry.ts";
+import { type FavoritesStore, personalView } from "./favorites.ts";
+import type { RepoActivity } from "./repo-activity.ts";
 
 export interface OverviewDeps {
   registry: { list(): ConnectedRepo[] };
@@ -49,6 +53,12 @@ export interface OverviewDeps {
   access: { canWrite(session: Session, repo: ConnectedRepo): Promise<boolean> };
   /** repo-qualified document names of live rooms */
   liveDocs: () => string[];
+  /** the caller's favorites and visits (application/favorites.ts) — absent:
+   *  the rows carry neither `favorite` nor `lastOpenedAt` */
+  favorites?: Pick<FavoritesStore, "favorites" | "visits">;
+  /** when each repo last changed (application/repo-activity.ts) — absent:
+   *  the rows carry no `lastChangeAt` */
+  activity?: Pick<RepoActivity, "view">;
 }
 
 /** the row shape both model kinds share — wire mapping stays per wrapper */
@@ -251,9 +261,18 @@ function countByNotation(models: ReadonlyArray<{ notation: string }>): Record<st
   return counts;
 }
 
-/** Repo overview: registry ∩ the session user's per-repo permission, in registry order. */
+/**
+ * Repo overview: registry ∩ the session user's per-repo permission, in
+ * registry order. Per repo it pays exactly the permission check and one
+ * changedPaths — the personal fields and the last change come from SQLite
+ * reads made ONCE per listing, never from another git process or provider
+ * call (#212, #213). The access filter here is the only one: a favorite or a
+ * visit of a repository the caller can no longer access simply has no row.
+ */
 export async function listRepos(opts: OverviewDeps, session: Session): Promise<RepoInfo[]> {
   const live = opts.liveDocs();
+  const mine = opts.favorites ? personalView(opts.favorites, session) : undefined;
+  const activity = opts.activity?.view();
   const rows = await mapBounded(opts.registry.list(), REPO_CONCURRENCY, async (repo): Promise<RepoInfo | null> => {
     // per-repo permission (a LIVE_AUTH=none host injects an allow-all access)
     if (!(await opts.access.canWrite(session, repo))) {
@@ -318,6 +337,10 @@ export async function listRepos(opts: OverviewDeps, session: Session): Promise<R
       modelCounts,
       dirtyCount,
       liveSessions: live.filter((d) => d.startsWith(roomPrefix(repo.fullName))).length,
+      private: repo.private,
+      ...(mine ? { favorite: mine.favorite(repo.fullName), lastOpenedAt: mine.lastOpenedAt(repo.fullName) } : {}),
+      // "never cloned" is the one place the provider's push time may stand in
+      ...(activity ? { lastChangeAt: activity.lastChangeAt(repo, existsSync(ws)) } : {}),
     };
   });
   return rows.filter((r): r is RepoInfo => r !== null);

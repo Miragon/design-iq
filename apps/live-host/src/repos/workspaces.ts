@@ -78,6 +78,10 @@ export interface WorkspaceHooks {
   livePaths?: (repo: ConnectedRepo) => string[];
   /** upstream content was written into these files — invalidate their Yjs lineages */
   onReconciled?: (repo: ConnectedRepo, changedPaths: string[]) => void;
+  /** origin/<default branch> moved (clone, fetch, hard reset, the host
+   *  checkout's refresh): the committer time of its tip, epoch ms — the start
+   *  page's "Updated X ago" (#213) */
+  onDefaultBranch?: (repo: ConnectedRepo, committedAt: number) => void;
 }
 
 export class WorkspaceManager {
@@ -167,6 +171,7 @@ export class WorkspaceManager {
         try {
           await runGit(["-C", dir, "fetch", "origin", repo.defaultBranch], { env: gitEnv(token) });
           this.ensured.set(repo.fullName, Date.now());
+          await this.noteDefaultBranch(repo, dir);
           await this.reconcile(repo);
         } catch (e) {
           console.log(`fetch ${repo.fullName} failed: ${scrub((e as Error).message).split("\n")[0]}`);
@@ -185,7 +190,35 @@ export class WorkspaceManager {
       throw new Error(`clone ${repo.fullName} failed: ${scrub((e as Error).message)}`);
     }
     this.ensured.set(repo.fullName, Date.now());
+    await this.noteDefaultBranch(repo, dir);
     return dir;
+  }
+
+  /**
+   * Hand the committer time of origin/<default branch> to
+   * hooks.onDefaultBranch — called wherever that ref moves, and by
+   * recordDefaultBranch. One local git process, never at listing time. No
+   * origin ref (the in-place checkout without a remote) → no signal.
+   */
+  private async noteDefaultBranch(repo: ConnectedRepo, dir: string): Promise<void> {
+    if (!this.hooks.onDefaultBranch) return;
+    try {
+      const { stdout } = await runGit(["-C", dir, "log", "-1", "--format=%ct", `origin/${repo.defaultBranch}`]);
+      const seconds = Number(stdout.trim());
+      if (Number.isFinite(seconds) && seconds > 0) this.hooks.onDefaultBranch(repo, seconds * 1000);
+    } catch {
+      /* no origin/<branch> yet — nothing to record */
+    }
+  }
+
+  /**
+   * Record where origin/<default branch> stands without fetching — for a
+   * fetch made elsewhere (the release) and once at boot for the checkouts
+   * that already exist. A repository that was never cloned is skipped.
+   */
+  async recordDefaultBranch(repo: ConnectedRepo): Promise<void> {
+    const dir = this.checkoutDir(repo);
+    if (existsSync(join(dir, ".git"))) await this.noteDefaultBranch(repo, dir);
   }
 
   /** run `op` after every earlier index-writing operation of this repo */
@@ -712,6 +745,7 @@ export class WorkspaceManager {
     const dir = this.dir(repo);
     const token = await this.registry.tokenFor(repo);
     await runGit(["-C", dir, "fetch", "origin", repo.defaultBranch], { env: gitEnv(token) });
+    await this.noteDefaultBranch(repo, dir);
     const affected = new Set<string>();
     // tracked files whose working-tree content (committed or not) differs from
     // origin — exactly what `reset --hard` will overwrite
@@ -784,6 +818,7 @@ export class WorkspaceManager {
     try {
       const token = await this.registry.tokenFor(repo);
       await runGit(["-C", this.checkoutDir(repo), "fetch", "origin", repo.defaultBranch], { env: gitEnv(token) });
+      await this.noteDefaultBranch(repo, this.checkoutDir(repo));
     } catch (e) {
       console.log(`history fetch ${repo.fullName}: ${scrub((e as Error).message).split("\n")[0]}`);
     }

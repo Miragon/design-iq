@@ -148,3 +148,18 @@ test("RepoInfo: modelCount/modelCounts are additive — an older host's row stil
     "the per-notation counts add up to modelCount",
   );
 });
+
+test("RepoInfo: the start page's fields (#213) are additive — a 5.1 host's row still is a RepoInfo", () => {
+  const older: RepoInfo = olderHostRow;
+  const personal = {
+    ...olderHostRow,
+    private: true,
+    favorite: true,
+    lastOpenedAt: "2026-10-09T08:00:00.000Z",
+    lastChangeAt: null,
+  } satisfies RepoInfo;
+  for (const field of ["private", "favorite", "lastOpenedAt", "lastChangeAt"] as const) {
+    assert.equal(older[field], undefined, `clients must handle an absent ${field}`);
+  }
+  assert.equal(personal.lastChangeAt, null, "null = no signal, not a missing field");
+});

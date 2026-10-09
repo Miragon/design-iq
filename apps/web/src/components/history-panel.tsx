@@ -14,26 +14,7 @@ import { useEffect, useState } from "react";
 
 import { SidePanel } from "@/components/side-panel";
 import { type FileCommitWire, HISTORY_LIMIT } from "@/lib/api";
-
-const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-const STEPS: [number, Intl.RelativeTimeFormatUnit][] = [
-  [60 * 24 * 365, "year"],
-  [60 * 24 * 30, "month"],
-  [60 * 24 * 7, "week"],
-  [60 * 24, "day"],
-  [60, "hour"],
-  [1, "minute"],
-];
-
-function timeAgo(iso: string): string {
-  const then = Date.parse(iso);
-  if (Number.isNaN(then)) return iso;
-  const minutes = Math.round((then - Date.now()) / 60_000);
-  for (const [size, unit] of STEPS) {
-    if (Math.abs(minutes) >= size) return rtf.format(Math.trunc(minutes / size), unit);
-  }
-  return rtf.format(minutes, "minute");
-}
+import { timeAgo } from "@/lib/time-ago";
 
 function CommitItem({
   commit,

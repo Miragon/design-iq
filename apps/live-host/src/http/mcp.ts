@@ -655,6 +655,9 @@ export function createLiveMcpServer(
         "List the repositories you can access on this Live Host, with your permission, the live session count and " +
         "the number of BPMN processes and DMN decisions (null until the repository has been opened on this host). " +
         "modelCount and modelCounts (notation id → count) count the models of every notation the same way. " +
+        "lastChangeAt is when the repository last changed (a live edit or its default branch), the same for everyone. " +
+        "favorite and lastOpenedAt are the caller's own data — whether you marked the repository as a favorite and " +
+        "when you last opened it in the web app — never anyone else's. " +
         "Call list_models next for every model of a repository, in all notations.",
       annotations: READ,
     },

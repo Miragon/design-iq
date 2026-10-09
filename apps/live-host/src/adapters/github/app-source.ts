@@ -43,9 +43,11 @@ export function createGitHubAppSource(args: {
   async function reposFor(installationId: number): Promise<SourceRepo[]> {
     const token = await tokens.mint(installationId);
     const repos = (await paginate(githubApi(api), "/installation/repositories?per_page=100", { token })) as Array<{
+      id: number;
       full_name: string;
       default_branch: string;
       private: boolean;
+      pushed_at?: string | null;
       owner: { avatar_url?: string };
     }>;
     return repos.map((r) => ({
@@ -54,6 +56,10 @@ export function createGitHubAppSource(args: {
       private: r.private,
       avatarUrl: r.owner.avatar_url ?? null,
       connectionRef: installationId,
+      // the numeric id survives renames and transfers — kept so favorites
+      // and visits can follow a repository later (#213, #214)
+      providerId: r.id,
+      pushedAt: r.pushed_at ?? null,
     }));
   }
 

@@ -25,7 +25,18 @@ export interface ConnectedRepo {
   /** null for the static fallback entry (host repo without source credentials) */
   installationId: number | null;
   suspended: boolean;
+  /** the provider's rename-stable repository id (GitHub: numeric) — null
+   *  until a sync saw it (the static fallback entry, older rows) */
+  providerId?: number | null;
+  /** the provider's last push to any branch (epoch ms) — null when unknown */
+  pushedAt?: number | null;
 }
+
+/** an ISO timestamp as epoch ms — null when absent or unparsable */
+const epochMs = (iso: string | null | undefined): number | null => {
+  const ms = iso ? Date.parse(iso) : Number.NaN;
+  return Number.isNaN(ms) ? null : ms;
+};
 
 export class RepoRegistry {
   private readonly db: DatabaseSync;
@@ -44,6 +55,11 @@ export class RepoRegistry {
       installation_id INTEGER,
       suspended INTEGER NOT NULL DEFAULT 0
     )`);
+    // additive columns (#213) — a database from an older image gains them in
+    // place; the older image keeps working on it (it names its columns)
+    const cols = new Set((db.prepare("PRAGMA table_info(repos)").all() as Array<{ name: string }>).map((c) => c.name));
+    if (!cols.has("provider_id")) db.exec("ALTER TABLE repos ADD COLUMN provider_id INTEGER");
+    if (!cols.has("pushed_at")) db.exec("ALTER TABLE repos ADD COLUMN pushed_at INTEGER");
     if (staticRepo) {
       // fallback entry so a credential-less instance keeps serving its own repo
       this.db
@@ -66,6 +82,8 @@ export class RepoRegistry {
       avatar_url: string | null;
       installation_id: number | null;
       suspended: number;
+      provider_id: number | null;
+      pushed_at: number | null;
     }>;
     return rows.map((r) => ({
       fullName: r.full_name,
@@ -74,6 +92,8 @@ export class RepoRegistry {
       avatarUrl: r.avatar_url,
       installationId: r.installation_id,
       suspended: r.suspended === 1,
+      providerId: r.provider_id,
+      pushedAt: r.pushed_at,
     }));
   }
 
@@ -114,13 +134,22 @@ export class RepoRegistry {
       seen.add(r.fullName);
       this.db
         .prepare(
-          `INSERT INTO repos (full_name, default_branch, private, avatar_url, installation_id, suspended)
-        VALUES (?, ?, ?, ?, ?, 0)
+          `INSERT INTO repos (full_name, default_branch, private, avatar_url, installation_id, suspended, provider_id, pushed_at)
+        VALUES (?, ?, ?, ?, ?, 0, ?, ?)
         ON CONFLICT(full_name) DO UPDATE SET
           default_branch = excluded.default_branch, private = excluded.private,
-          avatar_url = excluded.avatar_url, installation_id = excluded.installation_id, suspended = 0`,
+          avatar_url = excluded.avatar_url, installation_id = excluded.installation_id, suspended = 0,
+          provider_id = COALESCE(excluded.provider_id, repos.provider_id), pushed_at = excluded.pushed_at`,
         )
-        .run(r.fullName, r.defaultBranch, r.private ? 1 : 0, r.avatarUrl, r.connectionRef);
+        .run(
+          r.fullName,
+          r.defaultBranch,
+          r.private ? 1 : 0,
+          r.avatarUrl,
+          r.connectionRef,
+          r.providerId ?? null,
+          epochMs(r.pushedAt),
+        );
     }
     // prune in exactly two cases, keep everything else:
     //   1. the connection was FULLY enumerated and no longer contains the repo

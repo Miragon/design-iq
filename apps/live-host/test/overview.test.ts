@@ -9,11 +9,15 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 
 import { NOTATIONS } from "@designiq/notations";
 
+import { SqliteActivityStore } from "../src/adapters/sqlite/activity-store.ts";
+import { SqliteFavoritesStore } from "../src/adapters/sqlite/favorites-store.ts";
 import type { Session } from "../src/adapters/sqlite/sessions.ts";
+import { addFavorite, recordVisit } from "../src/application/favorites.ts";
 import {
   listAllModels,
   listChanges,
@@ -22,6 +26,7 @@ import {
   listRepos,
   type OverviewDeps,
 } from "../src/application/overview.ts";
+import { RepoActivity } from "../src/application/repo-activity.ts";
 import type { ConnectedRepo } from "../src/repos/registry.ts";
 
 const REPO: ConnectedRepo = {
@@ -405,6 +410,105 @@ test("listRepos: checks the repos in parallel, bounded, and keeps the registry o
   );
   assert.ok(peak > 1, "the permission checks overlap instead of running one after another");
   assert.ok(peak <= 8, `at most 8 repos in flight, saw ${peak}`);
+});
+
+test("listRepos: the start page's fields (#213) — private, the caller's favorite + last visit, the last change", async () => {
+  const other: ConnectedRepo = {
+    ...REPO,
+    fullName: "acme/claims",
+    private: true,
+    pushedAt: Date.parse("2026-09-01T00:00:00Z"),
+  };
+  const never = mkdtempSync(join(tmpdir(), "designiq-overview-never-")) + "/not-cloned";
+  const db = new DatabaseSync(":memory:");
+  const favorites = new SqliteFavoritesStore(db);
+  const activity = new RepoActivity({
+    store: new SqliteActivityStore(db),
+    now: () => Date.parse("2026-10-09T08:00:00Z"),
+  });
+  activity.liveEdit("acme/models");
+  activity.defaultBranchAt("acme/models", Date.parse("2026-10-01T00:00:00Z"));
+  const base = setup();
+  const deps: OverviewDeps = {
+    ...base.deps,
+    registry: { list: () => [REPO, other] },
+    workspaces: { ...base.deps.workspaces, dir: (r) => (r.fullName === REPO.fullName ? base.ws : never) },
+    favorites,
+    activity,
+  };
+  const petra = session("s1", "petra");
+  const authz = {
+    ...deps,
+    registry: { get: (n: string) => [REPO, other].find((r) => r.fullName === n), list: () => [REPO, other] },
+    favorites,
+  };
+  await addFavorite(authz, petra, "acme/claims");
+  await recordVisit({ ...authz, now: () => Date.parse("2026-10-09T07:00:00Z") }, petra, "acme/models");
+
+  const [models, claims] = await listRepos(deps, petra);
+  assert.equal(models?.private, false);
+  assert.equal(models?.favorite, false);
+  assert.equal(models?.lastOpenedAt, "2026-10-09T07:00:00.000Z");
+  assert.equal(models?.lastChangeAt, "2026-10-09T08:00:00.000Z", "the live edit is newer than main");
+  assert.equal(claims?.private, true);
+  assert.equal(claims?.favorite, true);
+  assert.equal(claims?.lastOpenedAt, null);
+  assert.equal(claims?.lastChangeAt, "2026-09-01T00:00:00.000Z", "never cloned: the provider's push time");
+
+  // the same rows for someone else: their own (empty) favorites and visits
+  const [omarModels, omarClaims] = await listRepos(deps, session("s2", "omar"));
+  assert.equal(omarModels?.lastOpenedAt, null);
+  assert.equal(omarClaims?.favorite, false);
+});
+
+test("listRepos: a favorite the caller lost access to has no row — and comes back with the access", async () => {
+  const favorites = new SqliteFavoritesStore(new DatabaseSync(":memory:"));
+  let allowed = true;
+  const { deps: base } = setup({ access: { canWrite: async () => allowed } });
+  const deps: OverviewDeps = { ...base, favorites };
+  const petra = session("s1", "petra");
+  await addFavorite({ ...deps, registry: { get: () => REPO, list: () => [REPO] }, favorites }, petra, REPO.fullName);
+  allowed = false;
+  assert.deepEqual(await listRepos(deps, petra), [], "listRepos stays the one access filter");
+  allowed = true;
+  assert.equal((await listRepos(deps, petra))[0]?.favorite, true, "the favorite stayed stored");
+});
+
+test("listRepos: the new fields cost no git process or provider call per repo (#212, #213)", async () => {
+  const registry = Array.from({ length: 6 }, (_, i): ConnectedRepo => ({ ...REPO, fullName: `acme/r${i}` }));
+  const db = new DatabaseSync(":memory:");
+  let accessCalls = 0;
+  let storeReads = 0;
+  const favorites = new SqliteFavoritesStore(db);
+  const activityStore = new SqliteActivityStore(db);
+  const { deps: base, changedPathsCalls } = setup({
+    registry: { list: () => registry },
+    access: {
+      canWrite: async () => {
+        accessCalls++;
+        return true;
+      },
+    },
+  });
+  const deps: OverviewDeps = {
+    ...base,
+    favorites: {
+      favorites: (u) => (storeReads++, favorites.favorites(u)),
+      visits: (u) => (storeReads++, favorites.visits(u)),
+    },
+    activity: new RepoActivity({
+      store: {
+        all: () => (storeReads++, activityStore.all()),
+        recordEdit: (r, at) => activityStore.recordEdit(r, at),
+        recordDefaultCommit: (r, at) => activityStore.recordDefaultCommit(r, at),
+      },
+    }),
+  };
+  const rows = await listRepos(deps, session("s1"));
+  assert.equal(rows.length, registry.length);
+  assert.equal(accessCalls, registry.length, "one permission check per repo, as before");
+  assert.equal(changedPathsCalls.length, registry.length, "one changedPaths per repo, as before");
+  assert.equal(storeReads, 3, "favorites, visits and activity: one SQLite read each for the whole listing");
 });
 
 // ── listChanges ─────────────────────────────────────────────────────────────

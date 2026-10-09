@@ -9,11 +9,13 @@ import assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHmac, generateKeyPairSync } from "node:crypto";
 import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { AppCredentials } from "../src/adapters/github/app-auth.ts";
 import { createGitHubAppSource } from "../src/adapters/github/app-source.ts";
+import { RepoRegistry } from "../src/repos/registry.ts";
 import { localMintFn, TokenService } from "../src/repos/token-minter.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -66,6 +68,27 @@ test("multi-tenant mode enumerates ALL installations", async () => {
   assert.deepEqual(names, ["acme/processes", "globex/hr", "globex/ops"]);
   assert.deepEqual([...snap.knownRefs].sort(), [1, 2]);
   assert.deepEqual([...snap.enumeratedRefs].sort(), [1, 2]);
+});
+
+test("registry sync stores every GitHub repository's numeric id and last push (#213)", async () => {
+  const db = new DatabaseSync(":memory:");
+  // a database from an older image: the repos table without the new columns
+  db.exec(`CREATE TABLE repos (
+    full_name TEXT PRIMARY KEY, default_branch TEXT NOT NULL, private INTEGER NOT NULL DEFAULT 1,
+    avatar_url TEXT, installation_id INTEGER, suspended INTEGER NOT NULL DEFAULT 0)`);
+  db.prepare(
+    "INSERT INTO repos (full_name, default_branch, installation_id) VALUES ('acme/processes', 'main', 1)",
+  ).run();
+  const registry = new RepoRegistry(db, src(), undefined);
+  assert.equal(registry.get("acme/processes")?.providerId, null, "an older row has no id until the next sync");
+  await registry.sync();
+  const rows = registry.list();
+  assert.deepEqual(rows.map((r) => r.fullName).sort(), ["acme/processes", "globex/hr", "globex/ops"]);
+  for (const r of rows) {
+    assert.equal(typeof r.providerId, "number", `${r.fullName} carries its provider id`);
+    assert.equal(r.pushedAt, Date.parse("2026-10-01T12:00:00Z"));
+  }
+  assert.notEqual(rows[0]?.providerId, rows[1]?.providerId);
 });
 
 test("cell mode (tenantInstallationId) sees ONLY that tenant's repos", async () => {

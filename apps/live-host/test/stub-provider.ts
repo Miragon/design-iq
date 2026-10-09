@@ -135,9 +135,12 @@ createServer(async (req, res) => {
     const id = m ? Number(m[1]) : 1;
     return json(res, 200, {
       repositories: reposOf(id).map((full_name) => ({
+        // a stable numeric id per name, like GitHub's rename-stable repository id
+        id: [...full_name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 1_000_000_007, 7),
         full_name,
         default_branch: "main",
         private: true,
+        pushed_at: "2026-10-01T12:00:00Z",
         owner: { avatar_url: null },
       })),
     });

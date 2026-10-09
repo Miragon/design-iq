@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 
+import type { ShowFilter, SortOrder } from "@/lib/repo-list";
 import { FileEditorScreen, ProcessEditorScreen } from "@/routes/editor";
 import { Overview } from "@/routes/overview";
 import { ProcessList } from "@/routes/repo";
@@ -7,7 +8,19 @@ import { RootLayout } from "@/routes/root";
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
-const overviewRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: Overview });
+const overviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  // the start page's filter, Show and Sort (#213) — in the URL, so Back from a
+  // repository returns to the same list; defaults are absent, unknown values
+  // fall back to them
+  validateSearch: (search: Record<string, unknown>): { q?: string; show?: ShowFilter; sort?: SortOrder } => ({
+    ...(typeof search.q === "string" && search.q.length > 0 ? { q: search.q } : {}),
+    ...(search.show === "favorites" || search.show === "live" ? { show: search.show } : {}),
+    ...(search.sort === "name" ? { sort: search.sort } : {}),
+  }),
+  component: Overview,
+});
 // repo = owner/name (GitHub). GitLab subgroups (multi-segment) are a follow-up —
 // they'd need the repo captured as a splat instead of two params.
 const repoRoute = createRoute({

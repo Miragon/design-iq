@@ -23,9 +23,11 @@ import { NOTATIONS } from "@designiq/notations";
 import { Server as HocuspocusServer } from "@hocuspocus/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
+import { SqliteFavoritesStore } from "../src/adapters/sqlite/favorites-store.ts";
 import { LineageStore } from "../src/adapters/sqlite/lineage-store.ts";
 import { type Session, SessionStore } from "../src/adapters/sqlite/sessions.ts";
 import { makeCollabHooks } from "../src/application/collab.ts";
+import { addFavorite, recordVisit } from "../src/application/favorites.ts";
 import { WsTicketStore } from "../src/application/ws-tickets.ts";
 import { newBpmnXml } from "../src/domain/bpmn-template.ts";
 import { DocSizeGuard } from "../src/domain/doc-size-guard.ts";
@@ -542,6 +544,24 @@ test("list_models: every notation of the repo in one grouped listing", async () 
   assert.deepEqual(Object.keys(res.models).sort(), ["bpmn", "dmn", "wardley"]);
   assert.ok(res.models.bpmn.some((m: { id: string }) => m.id === "order"));
   assert.equal(res.models.dmn[0].notation, "dmn");
+});
+
+test("list_repos: favorite and lastOpenedAt are the caller's own data (#213)", async () => {
+  const favorites = new SqliteFavoritesStore(new DatabaseSync(":memory:"));
+  const d = deps({ favorites });
+  await addFavorite({ ...d, favorites }, session("petra"), REPO.fullName);
+  await recordVisit({ ...d, favorites }, session("petra"), REPO.fullName);
+  const petra = (await (await connect(d, session("petra"))).callJson("list_repos", {})).repos[0];
+  assert.equal(petra.favorite, true);
+  assert.equal(typeof petra.lastOpenedAt, "string");
+  const omar = (await (await connect(d, session("omar"))).callJson("list_repos", {})).repos[0];
+  assert.equal(omar.favorite, false, "another login never sees petra's favorite");
+  assert.equal(omar.lastOpenedAt, null);
+  // an agent listing the repos is not a visit
+  const before = petra.lastOpenedAt;
+  await (await connect(d, session("petra"))).callJson("list_models", { repo: REPO.fullName });
+  const again = (await (await connect(d, session("petra"))).callJson("list_repos", {})).repos[0];
+  assert.equal(again.lastOpenedAt, before, "MCP calls leave lastOpenedAt unchanged");
 });
 
 test("list_repos: the per-notation model counts ride along with the process/decision counts", async () => {

@@ -70,6 +70,9 @@ status (covers outside collaborators).
    The user's OAuth token is used at login for identity (`/user`) and tenant
    discovery (`/user/installations`), then **discarded**. Nothing user-scoped
    is persisted beyond the session row (login, name, avatar).
+   _Amended 2026-10-09 (#213):_ non-credential per-user preferences may be
+   persisted too — a person's favorite repositories and recently opened ones
+   (`favorites`, `repo_visits`), keyed `<provider>:<login>`; never a token.
 2. **Sessions carry no provider credential.** The session id (httpOnly cookie /
    ws token) remains the only client credential; a session without
    `provider_token` is the target state.
