@@ -15,6 +15,8 @@ import type { App } from "@modelcontextprotocol/ext-apps";
 
 import { cometElement } from "@/lib/comet";
 
+import { icon, mountIcons } from "./icons.ts";
+
 export const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 export interface WidgetChrome {
@@ -34,6 +36,8 @@ export interface WidgetChrome {
 
 /** the fixed widget chrome every HTML entry carries (mcp-app*.html) */
 export function mountChrome(): WidgetChrome {
+  // the static HTML names its icons (data-icon) — the panels' too
+  mountIcons();
   const banner = el<HTMLDivElement>("banner");
   const status = el<HTMLDivElement>("status");
   // the brand mark rides in from lib/comet rather than sitting in every HTML
@@ -54,11 +58,12 @@ export function mountChrome(): WidgetChrome {
       banner.innerHTML = "";
       const msg = document.createElement("span");
       msg.textContent = text;
-      banner.append(msg);
+      // colour is never the only signal (CI): the warning reads as one by shape
+      banner.append(icon("triangle-alert"), msg);
       for (const a of actions) {
         const b = document.createElement("button");
+        b.className = a.danger ? "btn danger" : "btn";
         b.textContent = a.label;
-        if (a.danger) b.classList.add("danger");
         b.onclick = () => a.run();
         banner.append(b);
       }

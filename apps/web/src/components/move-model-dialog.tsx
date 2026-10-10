@@ -87,7 +87,7 @@ export function MoveModelDialog({
               key={folder || "(root)"}
               className={cn(
                 "flex items-center gap-2.5 border-b px-3 py-2 text-sm last:border-b-0",
-                here ? "text-muted-foreground" : "hover:bg-accent/50 cursor-pointer",
+                here ? "text-muted-foreground" : "hover:bg-accent cursor-pointer",
               )}
               style={{ paddingLeft: `${0.75 + depth * 1}rem` }}
             >

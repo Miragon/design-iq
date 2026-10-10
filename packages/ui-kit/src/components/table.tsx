@@ -28,11 +28,12 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   );
 }
 
+/** hover is a neutral tint; a SELECTED row is blue-soft — selection is blue (CI §3) */
 function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   return (
     <tr
       data-slot="table-row"
-      className={cn("hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors", className)}
+      className={cn("hover:bg-muted/50 data-[state=selected]:bg-accent border-b transition-colors", className)}
       {...props}
     />
   );

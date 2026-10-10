@@ -4,9 +4,10 @@
  * live document → engine → CAS autosave with the conflict banner → the
  * newest-widget claim). What is DMN here: the simulation add-on inside the
  * engine (engines/dmn.ts), the tests panel (dmn-tests.ts), the inlined dmn
- * icon font — and NO live upgrade: the engine has no bindLive, so the core
- * stays on CAS autosave (a decision table is edited cell by cell by one
- * person at a time; the conflict flow covers the rare collision honestly).
+ * icon font and Geist Mono — and NO live upgrade: the engine has no bindLive,
+ * so the core stays on CAS autosave (a decision table is edited cell by cell
+ * by one person at a time; the conflict flow covers the rare collision
+ * honestly).
  *
  * `open_decision_modeler` may carry a `scenario`, which rides along in the
  * tool input and is played straight into the simulator once the decision
@@ -18,12 +19,14 @@ import "./dmn-styles.css";
 import { bootWidget } from "./core/widget";
 import { mountTests } from "./dmn-tests";
 import { type DmnEngine, mountDmnEngine, type Scenario } from "./engines/dmn";
+import { WIDGET_FONT_MONO } from "./font";
 
 bootWidget<DmnEngine>({
   notation: "dmn",
   noun: "decision",
   engine: mountDmnEngine,
-  iconFont: "dmn",
+  // the FEEL cells are set in Geist Mono (geist-mono.css)
+  fonts: ["dmn", WIDGET_FONT_MONO],
   extras: ({ app, engine, readonly, chrome }) => {
     const tests = mountTests(app, engine, { readonly, onStatus: chrome.setStatus });
     let generation = 0; // bumps per document — a stale scenario replay bails out

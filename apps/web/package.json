@@ -18,6 +18,8 @@
     "@designiq/notations": "workspace:*",
     "@designiq/ui-kit": "workspace:*",
     "@emaarco/dmn-js-simulation": "0.3.2",
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
     "@miragon/context-maps-renderer": "0.2.0",
     "@miragon/context-maps-schema-model": "0.2.0",
     "@miragon/event-storming-renderer": "0.2.2",

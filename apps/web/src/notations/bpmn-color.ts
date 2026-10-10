@@ -9,7 +9,9 @@
  * label colour in bpmn-js, and these pairs keep labels ≥ 7:1 on their fill
  * (the Miragon functional colours reach 3.4–4.8:1 on a visible tint), and the
  * values match what those other modellers write — a diagram recoloured there
- * does not churn the PR diff.
+ * does not churn the PR diff. That is why these six stay off the CI palette
+ * (#238): they are model content, not chrome. Only "Default" follows the CI —
+ * the picker previews it from `config.bpmnRenderer` (lib/canvas-theme.ts).
  *
  * Storage is modeling.setColor: BPMN in Color (`color:background-color` /
  * `color:border-color`) plus `bioc:fill` / `bioc:stroke` on the BPMNDI shape

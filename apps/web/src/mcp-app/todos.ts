@@ -31,6 +31,7 @@ import {
 
 import { closeTodo, createTodo, isMissingTool, listTodos } from "./bridge";
 import type { BpmnEngine } from "./engines/bpmn";
+import { icon } from "./icons";
 import { el, openExternal } from "./shell";
 import { implementPrompt, type PromptTarget } from "./todo-prompt";
 
@@ -42,6 +43,7 @@ export interface TodosHandle {
 
 export function mountTodos(app: App, modeler: BpmnEngine, opts: { readonly: boolean }): TodosHandle {
   const toggle = el<HTMLButtonElement>("todo-toggle");
+  const toggleCount = el<HTMLSpanElement>("todo-toggle-count");
   const panel = el<HTMLElement>("todos");
   const countEl = el<HTMLSpanElement>("todo-count");
   const listEl = el<HTMLDivElement>("todo-list");
@@ -119,8 +121,9 @@ export function mountTodos(app: App, modeler: BpmnEngine, opts: { readonly: bool
     const link = document.createElement("button");
     link.type = "button";
     link.className = "todo-link";
-    link.textContent = "↗";
+    link.append(icon("external-link", 14));
     link.title = openInTrackerTitle(todo.id);
+    link.setAttribute("aria-label", link.title);
     link.onclick = () => void openTracker(todo.url);
     head.append(title, link);
     row.append(head);
@@ -155,14 +158,15 @@ export function mountTodos(app: App, modeler: BpmnEngine, opts: { readonly: bool
       // prompt carries the whole order (read → edit → validate → save → close)
       const implement = document.createElement("button");
       implement.type = "button";
-      implement.className = "todo-implement";
-      implement.textContent = "✦ Implement";
+      implement.className = "btn small todo-implement";
+      implement.append(icon("send", 14), "Implement");
       implement.title = "Ask the assistant to do this: read the model, make the edit, validate, save, close the todo";
       implement.onclick = () => void handOver(todo);
       const done = document.createElement("button");
       done.type = "button";
-      done.className = "todo-done";
-      done.textContent = closing.has(todo.id) ? "Closing…" : "✓ Done";
+      done.className = "btn small";
+      if (closing.has(todo.id)) done.append("Closing…");
+      else done.append(icon("check", 14), "Done");
       done.title = closeInTrackerTitle(todo.id);
       done.disabled = closing.has(todo.id);
       done.onclick = () => void complete(todo.id);
@@ -174,7 +178,9 @@ export function mountTodos(app: App, modeler: BpmnEngine, opts: { readonly: bool
 
   function render(): void {
     toggle.hidden = absent || !discovered;
-    toggle.textContent = `Todos${todos.length > 0 ? ` (${todos.length})` : ""}`;
+    // the label stays put (it carries the icon); only the count badge changes
+    toggleCount.hidden = todos.length === 0;
+    toggleCount.textContent = String(todos.length);
     countEl.textContent = filter ? `${visible().length} of ${todos.length}` : String(todos.length);
     newBtn.hidden = !canWrite;
     errorEl.hidden = error.length === 0;
@@ -206,13 +212,16 @@ export function mountTodos(app: App, modeler: BpmnEngine, opts: { readonly: bool
 
   // ── panel state ───────────────────────────────────────────────────────────
 
+  // aria-expanded: the toggle reads (and is styled, chrome.css) as the open panel's
   function openPanel(): void {
     panel.hidden = false;
+    toggle.setAttribute("aria-expanded", "true");
   }
 
   function closePanel(): void {
     panel.hidden = true;
     form.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
   }
 
   // ── host actions (link, prompt) ───────────────────────────────────────────

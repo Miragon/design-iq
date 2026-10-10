@@ -6,7 +6,7 @@
  * the newest-widget claim, and the three toolbar buttons plus the App
  * handshake are wired. A WidgetSpec is everything a notation adds: its
  * engine, its noun for the status copy, an optional deep-link builder
- * (bpmn: the process route + ?element=), an optional inlined icon font and
+ * (bpmn: the process route + ?element=), the inlined fonts to rescue and
  * optional extras (bpmn: todos + the t.BPM switch; dmn: the tests panel +
  * the scenario replay).
  *
@@ -19,7 +19,7 @@ import { fileDeepLink } from "@designiq/contracts/deep-link";
 import type { App } from "@modelcontextprotocol/ext-apps";
 
 import { bootConfig, claimDocument, getModelContent, makeApp, mintWsTicket, saveModelContent } from "../bridge.ts";
-import { loadIconFont } from "../font.ts";
+import { loadInlinedFont, WIDGET_FONT } from "../font.ts";
 import { el, mountChrome, openExternal, type WidgetChrome, wireApp } from "../shell.ts";
 import type { EngineFactory, LiveEngine, WidgetEngine } from "./engine.ts";
 import {
@@ -42,9 +42,11 @@ export interface WidgetSpec<E extends WidgetEngine = WidgetEngine> {
   /** the "Open in designIQ" target. Default: fileDeepLink (the SPA's /f/ splat
    *  route — every model file has it); bpmn passes the process route + ?element= */
   deepLink?: (publicUrl: string, doc: DocRef, engine: E) => string;
-  /** rescue an INLINED icon font past the host CSP — only the engines that
-   *  ship one (bpmn, dmn); the Miragon renderers draw inline SVG */
-  iconFont?: "bpmn" | "dmn";
+  /** the families beyond Geist (rescued for every widget — the chrome's
+   *  typeface) whose INLINED faces must be registered past the host CSP: the
+   *  notation icon font of the engines that ship one (bpmn, dmn; the Miragon
+   *  renderers draw inline SVG), Geist Mono where the entry sheet carries it */
+  fonts?: string[];
   /** notation-only chrome mounted after the engine, before the first import
    *  (bpmn: todos + t.BPM) — see WidgetExtras */
   extras?: (ctx: { app: App; engine: E; readonly: boolean; chrome: WidgetChrome }) => WidgetExtras;
@@ -53,12 +55,10 @@ export interface WidgetSpec<E extends WidgetEngine = WidgetEngine> {
 const defaultDeepLink = (publicUrl: string, doc: DocRef): string => fileDeepLink(publicUrl, doc.repo, doc.path);
 
 export function bootWidget<E extends WidgetEngine>(spec: WidgetSpec<E>): void {
-  // kick off immediately — palette icons need it, but nothing blocks on it
-  if (spec.iconFont) {
-    loadIconFont(spec.iconFont).catch(() => {
-      /* icons degrade to tofu; the modeler itself is unaffected */
-    });
-  }
+  // kick off immediately — the chrome and the palette icons need them; a
+  // failed rescue degrades Geist to the system sans and the icons to tofu,
+  // the modeler itself is unaffected (allSettled: never a rejection)
+  const fontsReady = Promise.allSettled([WIDGET_FONT, ...(spec.fonts ?? [])].map(loadInlinedFont));
   const chrome = mountChrome();
   const { toolbar, saveBtn, openBtn, fullscreenBtn, status, setStatus } = chrome;
   const cfg = bootConfig();
@@ -89,8 +89,16 @@ export function bootWidget<E extends WidgetEngine>(spec: WidgetSpec<E>): void {
   };
   const bridge: ModelBridge = {
     // explicit keys: foreign tool args (a DMN scenario) never reach the read
-    load: (input) =>
-      getModelContent(app, { repo: input.repo, id: input.id, path: input.path, notation: spec.notation }),
+    // the canvas measures its labels at import, so the import waits for the
+    // fonts too — wrapped in Geist's metrics, not the fallback's (in practice
+    // they are long registered: the read is a host round-trip)
+    load: async (input) => {
+      const [content] = await Promise.all([
+        getModelContent(app, { repo: input.repo, id: input.id, path: input.path, notation: spec.notation }),
+        fontsReady,
+      ]);
+      return content;
+    },
     save: (doc, content, baseVersion) => saveModelContent(app, doc, content, baseVersion),
     saved: (doc) =>
       void app.updateModelContext({

@@ -9,10 +9,10 @@
  */
 import { processIdFromName } from "@designiq/notations";
 import { Button } from "@designiq/ui-kit/components/button";
+import { cn } from "@designiq/ui-kit/lib/utils";
 import { useEffect, useState } from "react";
 
-const fieldClass =
-  "border-input bg-background focus-visible:ring-ring/50 focus-visible:border-ring mt-1 w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]";
+import { dialogBackdrop, dialogPanel, fieldClass } from "@/components/dialog-shell";
 
 export interface CreateModelCopy {
   /** "New process" */
@@ -73,13 +73,9 @@ export function CreateModelForm<TCreated>({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={close}>
-      <form
-        className="bg-background w-full max-w-md rounded-lg border p-4 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={submit}
-      >
-        <h2 className="text-sm font-semibold">{copy.title}</h2>
+    <div className={dialogBackdrop} onClick={close}>
+      <form className={cn(dialogPanel, "max-w-md")} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <h2 className="text-base font-semibold">{copy.title}</h2>
         <p className="text-muted-foreground mt-1.5 text-xs">{copy.blurb}</p>
         <label className="mt-3 block text-xs font-medium" htmlFor={copy.inputId}>
           Name
@@ -97,7 +93,7 @@ export function CreateModelForm<TCreated>({
           {id.length > 0 ? (
             <>
               Creates{" "}
-              <code className="bg-muted rounded px-1">
+              <code className="bg-muted rounded-sm px-1">
                 {folder ? `${folder}/` : ""}
                 {id}
                 {copy.extension}
@@ -108,7 +104,7 @@ export function CreateModelForm<TCreated>({
           )}
         </p>
         {create.error && <p className="text-destructive mt-3 text-sm">{create.error.message}</p>}
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-6 flex justify-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={create.isPending}>
             Cancel
           </Button>

@@ -12,6 +12,7 @@ import { toast } from "sonner";
 
 import { SidePanel } from "@/components/side-panel";
 import { stickyModdle } from "@/notations/bpmn-sticky/sticky-moddle";
+import { STICKY_COLORS } from "@/notations/bpmn-sticky/sticky-model";
 import type { NotationPanelProps } from "@/notations/registry";
 
 // the sticky namespace has ONE definition (frozen there) — a second copy of
@@ -27,12 +28,6 @@ const KIND_LABEL: Record<Kind, string> = {
   decision: "Decisions",
   note: "Notes",
   role: "Roles",
-};
-const KIND_DOT: Record<Kind, string> = {
-  question: "#ef6c00",
-  decision: "#2e7d32",
-  note: "#f9a825",
-  role: "#1565c0",
 };
 
 interface StickyRow {
@@ -105,7 +100,8 @@ export function NotesPanel({ content, onRevealElement, onClose }: NotationPanelP
         {groups.map(({ kind, rows }) => (
           <section key={kind} className="mb-4">
             <h3 className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase">
-              <span className="size-2 rounded-full" style={{ background: KIND_DOT[kind] }} />
+              {/* the kind's stroke colour — the canvas sticky's own colour, ≥ 3:1 */}
+              <span className="size-2 rounded-full" style={{ background: STICKY_COLORS[kind].stroke }} />
               {KIND_LABEL[kind]} ({rows.length})
             </h3>
             <ul className="space-y-1">
@@ -113,7 +109,7 @@ export function NotesPanel({ content, onRevealElement, onClose }: NotationPanelP
                 <li key={row.id}>
                   <button
                     type="button"
-                    className="hover:bg-accent w-full rounded border px-2 py-1.5 text-left text-xs disabled:cursor-default disabled:opacity-70 disabled:hover:bg-transparent"
+                    className="hover:bg-accent w-full rounded-md border px-2 py-1.5 text-left text-xs disabled:cursor-default disabled:opacity-70 disabled:hover:bg-transparent"
                     title={onRevealElement ? "Reveal on the canvas" : "No visual editor is up — text view only"}
                     disabled={!onRevealElement}
                     onClick={() => {

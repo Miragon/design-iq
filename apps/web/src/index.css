@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@designiq/ui-kit/theme.css";
+@import "./lib/bpmn-io-theme.css";
 @import "./lib/todo-canvas.css";
 
 /* the kit's raw sources live under node_modules (not auto-scanned) — tell
@@ -33,38 +34,42 @@
 /* todo count badge on BPMN elements — created imperatively by lib/todo-canvas.ts
    (bpmn-js overlays get raw DOM, not React), so it is styled here, not via JSX */
 .designiq-todo-badge {
-  /* geometry/behaviour: lib/todo-canvas.css — these vars bind it to the theme
-     (--warning is theme-aware; the widget sheet binds its own tokens) */
+  /* geometry/behaviour: lib/todo-canvas.css — these vars size it in rem and
+     colour it from the CI tokens: white on --warning is 5.3:1 */
   --designiq-todo-badge-size: 1.25rem;
   --designiq-todo-badge-pad: 0.3rem;
   --designiq-todo-badge-font: 0.6875rem;
   --designiq-todo-badge-bg: var(--warning);
-  --designiq-todo-badge-fg: var(--background);
+  --designiq-todo-badge-fg: var(--cd-weiss);
 }
 
 /* semantic BPMN diff markers in the history compare dialog — set imperatively
-   via canvas.addMarker() (components/history-diff-dialog.tsx), styled here.
+   via canvas.addMarker() (notations/bpmn-diff.tsx), styled here in the CI
+   status colours (the legend in notations/bpmn.tsx names the same aliases).
+   The marker sits on the element's own <g>: child combinators keep it there —
+   a changed PROCESS marks the root layer, and a descendant selector would
+   stroke every shape and label of the diagram as changed.
    !important: bpmn-js renders stroke/fill as inline presentation attributes. */
 .designiq-diff-viewer {
   height: 100%;
   width: 100%;
 }
-.designiq-diff-viewer .designiq-diff-added:not(.djs-connection) .djs-visual > :first-child,
-.designiq-diff-viewer .designiq-diff-added.djs-connection .djs-visual > path {
+.designiq-diff-viewer .designiq-diff-added:not(.djs-connection) > .djs-visual > :first-child,
+.designiq-diff-viewer .designiq-diff-added.djs-connection > .djs-visual > path {
   stroke: var(--success) !important;
   stroke-width: 4px !important;
 }
-.designiq-diff-viewer .designiq-diff-removed:not(.djs-connection) .djs-visual > :first-child,
-.designiq-diff-viewer .designiq-diff-removed.djs-connection .djs-visual > path {
+.designiq-diff-viewer .designiq-diff-removed:not(.djs-connection) > .djs-visual > :first-child,
+.designiq-diff-viewer .designiq-diff-removed.djs-connection > .djs-visual > path {
   stroke: var(--destructive) !important;
   stroke-width: 4px !important;
 }
-.designiq-diff-viewer .designiq-diff-changed:not(.djs-connection) .djs-visual > :first-child,
-.designiq-diff-viewer .designiq-diff-changed.djs-connection .djs-visual > path {
+.designiq-diff-viewer .designiq-diff-changed:not(.djs-connection) > .djs-visual > :first-child,
+.designiq-diff-viewer .designiq-diff-changed.djs-connection > .djs-visual > path {
   stroke: var(--warning) !important;
   stroke-width: 4px !important;
 }
-.designiq-diff-viewer .designiq-diff-layout:not(.djs-connection) .djs-visual > :first-child,
-.designiq-diff-viewer .designiq-diff-layout.djs-connection .djs-visual > path {
+.designiq-diff-viewer .designiq-diff-layout:not(.djs-connection) > .djs-visual > :first-child,
+.designiq-diff-viewer .designiq-diff-layout.djs-connection > .djs-visual > path {
   stroke-dasharray: 6 3 !important;
 }

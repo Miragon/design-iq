@@ -1,8 +1,11 @@
 /* Widget chrome + the bpmn-js stylesheets — everything inlines into the
- * single-file build (vite-plugin-singlefile), including the bpmn icon font. */
+ * single-file build (vite-plugin-singlefile), including the bpmn icon font
+ * and Geist. bpmn-io-theme.css puts bpmn-js' own tokens (palette, context
+ * pad, popups) on the CI aliases, scoped to #canvas. */
 @import "bpmn-js/dist/assets/diagram-js.css";
 @import "bpmn-js/dist/assets/bpmn-js.css";
 @import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
+@import "../lib/bpmn-io-theme.css";
 @import "./chrome.css";
 @import "../lib/todo-canvas.css";
 
@@ -13,6 +16,7 @@
   flex-direction: column;
   width: min(300px, 45%);
   border-left: 1px solid var(--border);
+  background: var(--card);
   font-size: 13px;
 }
 
@@ -21,61 +25,32 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 6px 8px 6px 12px;
   border-bottom: 1px solid var(--border);
 }
 
-#todos .spacer {
-  flex: 1;
-}
-
-#todos button {
-  font: inherit;
-  padding: 2px 7px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: inherit;
-  cursor: pointer;
-}
-
-#todos button:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-
-#todos button:disabled {
-  cursor: default;
-  color: var(--muted);
+#todo-head strong {
+  font-weight: 600;
 }
 
 #todo-error:not([hidden]) {
-  padding: 6px 8px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border);
-  color: var(--danger);
+  color: var(--destructive);
   font-size: 12px;
 }
 
 #todo-form:not([hidden]) {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
+  gap: 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  background: #f6f8fa;
+  background: var(--secondary);
 }
 
-#todo-form input,
 #todo-form textarea {
-  font: inherit;
-  padding: 4px 6px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
   resize: vertical;
-}
-
-#todo-form input:focus,
-#todo-form textarea:focus {
-  outline: 1px solid var(--accent);
 }
 
 #todo-anchor {
@@ -98,13 +73,14 @@
   padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .todo {
-  padding: 6px 8px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--cd-radius-md);
+  background: var(--card);
 }
 
 .todo.busy {
@@ -121,66 +97,93 @@
 .todo-title {
   flex: 1;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
-/* the tracker link is a button (the sandbox blocks target="_blank") — strip the
-   panel's button chrome so it still reads as a link */
-#todos button.todo-link {
-  padding: 0 2px;
+/* the tracker link is a button (the sandbox blocks target="_blank") without
+   button chrome, so it still reads as a link */
+.todo-link {
+  flex: none;
+  display: inline-flex;
+  padding: 2px;
   border: none;
-  color: var(--muted);
-  line-height: 1;
+  border-radius: var(--cd-radius-sm);
+  background: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    color var(--cd-motion-fast) var(--cd-ease),
+    background-color var(--cd-motion-fast) var(--cd-ease);
 }
 
-#todos button.todo-link:hover {
-  color: var(--accent);
+.todo-link:hover {
+  background: var(--accent);
+  color: var(--link);
+}
+
+.todo-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
 }
 
 .todo-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .todo-meta {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 11px;
+  margin-top: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
 }
 
-.todo-implement,
-.todo-done {
-  font-size: 11px !important;
+/* "#38 · @author" yields to the two actions, never wraps under them */
+.todo-meta > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-/* #todos button sets `color: inherit` — an ID selector, so the accent needs the
-   same weight to win */
-#todos button.todo-implement {
+/* handing the todo to the assistant is the row's lead action — blue text */
+.btn.todo-implement {
   margin-left: auto;
-  color: var(--accent);
+  color: var(--link);
 }
 
 .todo-empty {
   margin: 0;
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 12px;
+}
+
+/* the open-todo count on the toolbar toggle */
+.btn-count:not([hidden]) {
+  display: inline-block;
+  min-width: 18px;
+  padding: 2px 5px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
 }
 
 /* count badge on an anchored element — the shared canvas controller
    (lib/todo-canvas.ts) creates it, both surfaces style it themselves */
 .designiq-todo-badge {
-  /* geometry/behaviour: ../lib/todo-canvas.css — the widget sheet has no
-     prefers-color-scheme block, hence the fixed #bf8700 instead of --warning */
+  /* geometry/behaviour: ../lib/todo-canvas.css */
   --designiq-todo-badge-size: 18px;
   --designiq-todo-badge-pad: 4px;
   --designiq-todo-badge-font: 11px;
-  --designiq-todo-badge-bg: #bf8700;
-  --designiq-todo-badge-fg: var(--bg);
+  --designiq-todo-badge-bg: var(--warning);
+  --designiq-todo-badge-fg: var(--background);
 }
 
 /* t.BPM workshop switch (#117) — the widget twin of the web header toggle */
@@ -191,32 +194,41 @@
   font-size: 12px;
   cursor: pointer;
 }
+
+/* off: the kontur fill keeps both the track (on white) and the knob (on the
+   track) at ≥ 3:1 — the CI's bar for a control nobody can see otherwise */
 #tbpm button[role="switch"] {
   position: relative;
-  width: 34px;
+  flex: none;
+  width: 32px;
   height: 18px;
   padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: #e7e7e7;
+  border: 1px solid var(--input);
+  border-radius: var(--cd-radius-pill);
+  background: var(--input);
   cursor: pointer;
-  transition: background 0.15s;
+  transition:
+    background-color var(--cd-motion-fast) var(--cd-ease),
+    border-color var(--cd-motion-fast) var(--cd-ease);
 }
+
 #tbpm button[aria-checked="true"] {
-  background: var(--accent);
-  border-color: var(--accent);
+  border-color: var(--primary);
+  background: var(--primary);
 }
+
 #tbpm button[role="switch"] > span {
   position: absolute;
   top: 1px;
   left: 1px;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  transition: transform 0.15s;
+  border-radius: var(--cd-radius-pill);
+  background: var(--background);
+  box-shadow: var(--cd-shadow-1);
+  transition: transform var(--cd-motion-fast) var(--cd-ease);
 }
+
 #tbpm button[aria-checked="true"] > span {
-  transform: translateX(16px);
+  transform: translateX(14px);
 }

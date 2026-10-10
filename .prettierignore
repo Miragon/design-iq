@@ -42,3 +42,6 @@ CHANGELOG.md
 
 # Conductor workspace collaboration files (gitignored, agent-written)
 .context/
+
+# vendored verbatim from Miragon/corporate-identity (re-copied, never edited)
+packages/ui-kit/src/cd-tokens.generated.css

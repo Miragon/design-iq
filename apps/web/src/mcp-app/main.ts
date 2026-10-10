@@ -21,7 +21,7 @@ bootWidget<BpmnEngine>({
   notation: "bpmn",
   noun: "model",
   engine: mountBpmnEngine,
-  iconFont: "bpmn",
+  fonts: ["bpmn"],
   // the process route, carrying the canvas selection (?element=)
   deepLink: (publicUrl, doc, engine) =>
     processDeepLink(publicUrl, doc.repo, modelStem(doc.path), engine.selectedElementId?.()),

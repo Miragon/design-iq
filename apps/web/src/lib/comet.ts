@@ -1,17 +1,20 @@
 /**
  * The Miragon comet — the one geometry, shared by the React SPA header
  * (components/miragon-comet.tsx) and the vanilla-TS widget toolbars
- * (mcp-app/shell.ts). The contour is fitted from the brand asset; the colour
- * is hard-wired because a brand colour does not follow the theme.
+ * (mcp-app/shell.ts). Path and viewBox are the official CI asset
+ * (logo/miragon-komet-gruen.svg) UNCHANGED — the CI forbids redrawing the
+ * logo (B5); the colour is the CI green, which does not follow any theme.
  *
- * The favicon (public/favicon.svg) carries the same path — a standalone file
- * cannot import, so keep the two in sync.
+ * The favicon (public/favicon.svg) is the official app icon — this same comet
+ * on the blue rounded square — copied verbatim from the CI as well.
  */
-export const COMET_VIEW_BOX = "0 0 112 34.9";
-export const COMET_ASPECT = 112 / 34.9;
-export const COMET_COLOR = "#00E676";
+import { CD } from "@designiq/ui-kit/lib/tokens";
+
+export const COMET_VIEW_BOX = "0 0 288.08 89.63";
+export const COMET_ASPECT = 288.08 / 89.63;
+export const COMET_COLOR = CD.gruen;
 export const COMET_PATH =
-  "M0 34.83C1.15 34.59 2.22 34.08 3.31 33.66C5.14 32.95 6.95 32.21 8.77 31.51C14.6 29.24 20.41 26.95 26.22 24.65C37.63 20.14 49.07 15.68 60.52 11.26C67.92 8.42 75.26 5.39 82.74 2.77C84.43 2.19 86.17 1.74 87.91 1.34C94.39-0.13 102.84-1.5 108.06 3.67C108.9 4.5 109.62 5.44 110.22 6.47C110.92 7.68 111.42 8.99 111.71 10.36C112.01 11.79 112.08 13.27 111.9 14.72C111.51 17.99 109.9 21.04 107.41 23.19C106.89 23.65 106.32 24.07 105.73 24.44C105.55 24.55 105.21 24.84 105 24.86C103.44 25 101.52 26.3 99.8 26.84C96.63 27.82 93.25 28.35 89.96 28.74C84.65 29.37 79.29 29.58 73.97 29.93C63.67 30.61 53.37 31.21 43.08 32C33.98 32.69 24.88 33.22 15.79 33.83C10.55 34.19 5.25 34.79 0 34.85Z";
+  "M0,89.63l220.2-14.78c11.65-.78,23.38-2.66,33.31-5.14s22.92-8.94,29.16-19.41c3.65-6.12,5.09-13.73,5.38-18.91,.27-4.94-.99-10.2-2.54-13.33-2.76-5.55-6.11-8.42-8.55-10.26-2.45-1.84-7.55-5.77-18.08-7.35-10.53-1.58-29.62,1.2-44.31,5.84C199.87,10.92,0,89.63,0,89.63Z";
 
 /** the comet as a DOM node, for the widget bundles (no React in there) */
 export function cometElement(heightPx: number): SVGSVGElement {

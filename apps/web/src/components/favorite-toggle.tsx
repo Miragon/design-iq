@@ -3,7 +3,10 @@
  * GitHub-style rows, "Star" would read like a GitHub star, which this is not
  * (a designIQ favorite is per person and never leaves the platform). A
  * `<button aria-pressed>`, always a SIBLING of the repository's link — never
- * inside it — so one click toggles without opening the repository.
+ * inside it — so one click toggles without opening the repository. On, it is
+ * a FILLED star in the CI blue: a favorite is a personal selection, and
+ * selection is blue (5.5:1 on the card); the fill, not the hue, tells on from
+ * off.
  */
 import { Button } from "@designiq/ui-kit/components/button";
 import { cn } from "@designiq/ui-kit/lib/utils";
@@ -37,7 +40,7 @@ export function FavoriteToggle({
         onToggled?.(!favorite);
       }}
     >
-      <Star className={cn("transition-colors", favorite ? "fill-amber-400 text-amber-500" : "text-muted-foreground")} />
+      <Star className={cn("transition-colors", favorite ? "fill-primary text-primary" : "text-muted-foreground")} />
     </Button>
   );
 }

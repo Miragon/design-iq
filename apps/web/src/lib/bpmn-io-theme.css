@@ -1,0 +1,320 @@
+/* bpmn-js and dmn-js on the designIQ tokens (the Miragon CI). Both read the
+ * `@bpmn-io/theme` semantic tokens (--bio-*) from `.bio-theme-parent`, which
+ * diagram-js, bpmn-js and every dmn-js view put on their containers — so one
+ * mapping restyles palette, context pad, popup menus, search, tooltips,
+ * breadcrumbs and the decision table at once. The rules after the mapping
+ * cover what no token reaches: CI shape and elevation (radius md + shadow-3
+ * for menus, sm for their entries), ≥ 3:1 input borders, the blue hover of
+ * the chrome, Geist Mono where the vendors hard-code `monospace`, and the
+ * simulation add-on. The diagram itself (shape fill, stroke, label font)
+ * is renderer config, not CSS: lib/canvas-theme.ts.
+ *
+ * Scoped to the hosts of THESE engines: the SPA's editors + the diff viewer
+ * and the widget canvas (#canvas — only the bpmn and dmn widget sheets import
+ * this file). The Miragon renderers ship their own CI styling for the same
+ * diagram-js classes; a global rule would override it. The :is() also lifts
+ * specificity above the vendor sheets' `.bio-theme-parent` (and the
+ * `.djs-parent` that sets the popup/search fonts — the same canvas element),
+ * whatever the load order. Both widgets load bpmn-js' diagram-js.css, the
+ * copy that derives its colours from --bio-*; dmn-js' own copy does not.
+ *
+ * Imported by the SPA (index.css) and the bpmn/dmn widget sheets. */
+
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) {
+  background: var(--canvas-background);
+}
+
+/* the bpmn.io link and the context pad float at z-index 100 (the link
+   inline), over the side panels (z-10) and the dialog backdrop (z-50) —
+   back to the canvas level (CI §5), still over the decision table's sticky
+   cells (z 1–4). Not by isolating the host: its popup menus (fixed, z 200)
+   would then hide under a side panel they reach into */
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) :is(.bjs-powered-by, .djs-context-pad) {
+  z-index: 5 !important;
+}
+
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) .bio-theme-parent {
+  --bio-surface: var(--card);
+  --bio-surface-overlay: var(--popover);
+  --bio-surface-subtle: var(--muted);
+  --bio-surface-medium: var(--accent);
+  --bio-surface-inverted: var(--foreground);
+  --bio-surface-inverted-subtle: var(--muted-foreground);
+  --bio-text: var(--foreground);
+  --bio-text-subtle: var(--muted-foreground);
+  --bio-text-subtlest: var(--muted-foreground);
+  --bio-text-on-primary: var(--primary-foreground);
+  --bio-text-on-inverted: var(--background);
+  --bio-border: var(--border);
+  --bio-border-disabled: var(--border);
+  --bio-primary: var(--primary);
+  --bio-primary-hover: var(--primary-hover);
+  --bio-primary-surface: var(--accent);
+  --bio-neutral: var(--muted-foreground);
+  --bio-danger: var(--destructive);
+  --bio-danger-text: var(--destructive);
+  --bio-danger-surface-subtle: var(--cd-danger-soft);
+  --bio-selected-surface: var(--accent);
+  --bio-selected-text: var(--accent-foreground);
+  --bio-focus: var(--ring);
+  --bio-focus-surface: var(--accent);
+  --bio-focus-ring: color-mix(in srgb, var(--ring) 35%, transparent);
+  --bio-focus-ring-danger: color-mix(in srgb, var(--destructive) 35%, transparent);
+  --bio-canvas-accent: var(--canvas-accent);
+  --bio-canvas-accent-subtle: color-mix(in srgb, var(--canvas-accent) 45%, transparent);
+  /* the CI tints every shadow with its ink (--cd-shadow-*) */
+  --bio-shadow: color-mix(in srgb, var(--cd-schwarz) 16%, transparent);
+  --bio-shadow-subtle: color-mix(in srgb, var(--cd-schwarz) 10%, transparent);
+  /* sm → inputs; md → the small buttons of dense chrome (drill-down, chips),
+     where 12px would turn a 20px button round; lg → surfaces: palette,
+     search, breadcrumbs, tooltips — the CI standard md 12px */
+  --bio-radius-sm: var(--cd-radius-sm);
+  --bio-radius-md: var(--cd-radius-sm);
+  --bio-radius-lg: var(--cd-radius-md);
+
+  /* the vendor sheets name their own fonts (Arial, IBM Plex Sans, monospace) */
+  --bjs-font-family: var(--designiq-font-sans);
+  --popup-font-family: var(--designiq-font-sans);
+  --search-font-family: var(--designiq-font-sans);
+  --hover-tooltip-font-family: var(--designiq-font-sans);
+  --decision-table-font-family: var(--designiq-font-sans);
+  --literal-expression-font-family: var(--designiq-font-sans);
+  --literal-expression-font-family-monospace: var(--designiq-font-mono);
+  --boxed-expression-font-family: var(--designiq-font-sans);
+  --boxed-expression-font-family-monospace: var(--designiq-font-mono);
+  --drd-font-family-monospace: var(--designiq-font-mono);
+  --popup-header-font-weight: 600;
+
+  /* inputs need ≥ 3:1 (CI --cd-kontur), decorative borders do not */
+  --input-border-color: var(--input);
+  --popup-search-border-color: var(--input);
+  --search-input-border-color: var(--input);
+
+  /* palette + context pad: light floating chrome over the paper (CI §8) */
+  --palette-background-color: var(--card);
+  --palette-border-color: var(--border);
+  --palette-separator-color: var(--border);
+  --popup-border-color: var(--border);
+  --search-preselected-background-color: var(--accent);
+  --breadcrumbs-background-color: var(--card);
+  --breadcrumbs-item-color: var(--link);
+  --dmn-definitions-background-color: var(--card);
+  /* the DRD's name/id fields: the input border on hover (the vendor's one
+     colour for hover AND focus; focus turns blue below) */
+  --dmn-definitions-focus-border-color: var(--input);
+  --powered-by-overlay-background-color: var(--overlay);
+}
+
+/* ── shape and elevation of the chrome (CI §6) ─────────────────────────── */
+
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) :is(.djs-palette, .bjs-breadcrumbs, .dmn-definitions) {
+  box-shadow: var(--cd-shadow-1);
+}
+
+/* menus: surface, md, shadow-3, a short pop-in (reduced motion is honoured
+   globally by tokens.css) */
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) .djs-popup {
+  border-radius: var(--cd-radius-md);
+  box-shadow: var(--cd-shadow-3);
+  animation: designiq-canvas-pop-in var(--cd-motion-fast) var(--cd-ease-out);
+}
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas)
+  :is(.djs-popup-body .entry, .djs-popup-body .entry-header, .djs-popup-header .entry) {
+  border-radius: var(--cd-radius-sm);
+}
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) .djs-search-container {
+  box-shadow: var(--cd-shadow-3);
+}
+/* a one-line label: sm, or the surface radius turns it into a pill */
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) .djs-hover-tooltip {
+  border-radius: var(--cd-radius-sm);
+}
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas)
+  :is(.djs-popup-search input:focus, .djs-search-input input:focus) {
+  box-shadow: 0 0 0 3px var(--accent);
+}
+
+@keyframes designiq-canvas-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* the vendors hard-code `monospace` here (element ids, shortcut chips, FEEL) */
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas)
+  :is(.djs-search-result-secondary, .djs-palette-tooltip-shortcut, .cell-editor, .cell-editor .cm-scroller) {
+  font-family: var(--designiq-font-mono);
+}
+
+/* ── palette + context pad: hover blue (CI §8) ─────────────────────────── */
+
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) :is(.djs-palette .entry, .djs-context-pad .entry) {
+  transition:
+    color var(--cd-motion-fast) var(--cd-ease),
+    background-color var(--cd-motion-fast) var(--cd-ease);
+}
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) .djs-context-pad .entry {
+  border-radius: var(--cd-radius-sm);
+}
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) .djs-context-pad .entry:hover {
+  color: var(--primary);
+}
+
+/* the canvas svg takes focus on every click (diagram-js keyboard shortcuts):
+   a frame around the whole diagram after each click is noise — the CI ring
+   shows for keyboard focus only */
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) .djs-container svg:focus:not(:focus-visible) {
+  outline: none;
+}
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) .djs-container svg:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+/* direct editing: external labels, annotations and stickies edit in a box
+   with an inline grey border — a focused input, so the CI focus colour
+   (!important beats the inline style; task labels edit borderless and stay so) */
+:is(.bpmn-canvas, .dmn-canvas, .designiq-diff-viewer, #canvas) .djs-direct-editing-parent {
+  border-color: var(--ring) !important;
+  border-radius: var(--cd-radius-sm);
+}
+
+/* ── breadcrumbs (drill-down into a collapsed sub-process) ─────────────── */
+
+:is(.bpmn-canvas, .designiq-diff-viewer, #canvas) .bjs-breadcrumbs {
+  font-size: 14px;
+}
+:is(.bpmn-canvas, .designiq-diff-viewer, #canvas) .bjs-breadcrumbs li:last-child .bjs-crumb {
+  font-weight: 600;
+}
+/* the separator is a Material chevron image in bpmn-js — Lucide's
+   chevron-right (the one icon set, CI §11), masked so it takes the colour */
+:is(.bpmn-canvas, .designiq-diff-viewer, #canvas) .bjs-breadcrumbs li:not(:first-child)::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  margin: 0 6px;
+  padding: 0;
+  background-color: var(--muted-foreground);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m9%2018%206-6-6-6%22%2F%3E%3C%2Fsvg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m9%2018%206-6-6-6%22%2F%3E%3C%2Fsvg%3E")
+    center / contain no-repeat;
+}
+
+/* ── dmn-js: DRD, decision table, literal expression ───────────────────── */
+
+:is(.dmn-canvas, #canvas) .djs-overlay .drill-down-overlay > :is(button, span) {
+  border-radius: var(--cd-radius-sm);
+}
+
+/* the DRD's name and id are text fields (CI §8): focus = blue border +
+   blue-soft ring, so it no longer looks like hover (an invalid id keeps red) */
+:is(.dmn-canvas, #canvas) .dmn-definitions > [contenteditable]:focus:not(.dmn-definitions-error) {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px var(--accent);
+}
+
+/* "View DRD" is a secondary button (CI §8): md, 600, blue on hover — and
+   Geist: the widget has no preflight, a button would fall back to the UA font */
+:is(.dmn-canvas, #canvas) .view-drd .view-drd-button {
+  border-radius: var(--cd-radius-md);
+  font-family: inherit;
+  font-weight: 600;
+  box-shadow: var(--cd-shadow-1);
+  transition:
+    color var(--cd-motion-fast) var(--cd-ease),
+    border-color var(--cd-motion-fast) var(--cd-ease),
+    background-color var(--cd-motion-fast) var(--cd-ease);
+}
+:is(.dmn-canvas, #canvas) .view-drd .view-drd-button:hover {
+  border-color: var(--primary);
+  color: var(--link);
+  background: var(--accent);
+}
+
+/* the table is one card: its outer corners round (dmn-js keeps them square) */
+:is(.dmn-canvas, #canvas) :is(.dmn-decision-table-container, .dmn-literal-expression-container) {
+  --table-border-radius: var(--cd-radius-md);
+  --panel-border-radius: var(--cd-radius-md);
+}
+
+/* hit policy / type-ref dropdowns and the cell context menu are menus */
+:is(.dmn-canvas, #canvas) :is(.dms-select-options, .dmn-decision-table-container .context-menu) {
+  border-radius: var(--cd-radius-md);
+  box-shadow: var(--cd-shadow-3);
+}
+:is(.dmn-canvas, #canvas) :is(.dms-select-options .option, .context-menu-group-entry) {
+  border-radius: var(--cd-radius-sm);
+}
+:is(.dmn-canvas, #canvas) .dms-select-options {
+  padding: var(--cd-space-1);
+}
+
+/* ── the simulation add-on (@emaarco/dmn-js-simulation) ────────────────── */
+
+/* it ships the CI as literal defaults on :root; bind them to the aliases so
+   there is one source */
+:is(.dmn-canvas, #canvas) {
+  --dmn-sim-font: var(--designiq-font-sans);
+  --dmn-sim-font-mono: var(--designiq-font-mono);
+  --dmn-sim-surface: var(--card);
+  --dmn-sim-ink: var(--foreground);
+  --dmn-sim-muted: var(--muted-foreground);
+  --dmn-sim-line: var(--border);
+  --dmn-sim-accent: var(--primary);
+  --dmn-sim-accent-ink: var(--primary-hover);
+  --dmn-sim-accent-soft: var(--accent);
+  --dmn-sim-on-accent: var(--primary-foreground);
+  --dmn-sim-success: var(--success);
+  --dmn-sim-success-soft: var(--cd-success-soft);
+  --dmn-sim-warning: var(--warning);
+  --dmn-sim-warning-soft: var(--cd-warning-soft);
+  --dmn-sim-danger: var(--destructive);
+  --dmn-sim-danger-soft: var(--cd-danger-soft);
+  --dmn-sim-match-bg: var(--accent);
+  --dmn-sim-match-accent: var(--primary);
+  /* translucent: a dropped candidate must read darker than the zebra stripe */
+  --dmn-sim-candidate-bg: color-mix(in srgb, var(--cd-schwarz) 5%, transparent);
+  --dmn-sim-fired: var(--success);
+  --dmn-sim-space-1: var(--cd-space-1);
+  --dmn-sim-space-2: var(--cd-space-2);
+  --dmn-sim-space-3: var(--cd-space-3);
+  --dmn-sim-radius-sm: var(--cd-radius-sm);
+  --dmn-sim-radius-md: var(--cd-radius-md);
+  --dmn-sim-radius-lg: var(--cd-radius-lg);
+  --dmn-sim-radius-pill: var(--cd-radius-pill);
+  --dmn-sim-shadow-1: var(--cd-shadow-1);
+  --dmn-sim-shadow-2: var(--cd-shadow-2);
+  --dmn-sim-shadow-3: var(--cd-shadow-3);
+  --dmn-sim-motion-fast: var(--cd-motion-fast);
+  --dmn-sim-ease: var(--cd-ease);
+}
+/* its inputs draw the decorative line — an input needs ≥ 3:1 (the :is()
+   carries #canvas' specificity, so the focus colour is restated) */
+:is(.dmn-canvas, #canvas) .dmn-sim-input {
+  border-color: var(--input);
+}
+:is(.dmn-canvas, #canvas) .dmn-sim-input:focus {
+  border-color: var(--dmn-sim-accent);
+}
+/* the type hint: SPA preflight greys it to 3.3:1, the widget shows the UA
+   grey — the muted text on both */
+:is(.dmn-canvas, #canvas) .dmn-sim-input::placeholder {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+/* its buttons mark keyboard focus with a 10% halo only (~1.15:1): the CI
+   ring instead, over their resting elevation (which the halo replaced) */
+:is(.dmn-canvas, #canvas) :is(.dmn-sim-run, .dmn-sim-reset):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: var(--dmn-sim-shadow-1);
+}
+/* disabled = the button at half strength (CI §9), not a grey of its own */
+:is(.dmn-canvas, #canvas) .dmn-sim-run:disabled {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  opacity: 0.5;
+}

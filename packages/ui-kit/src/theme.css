@@ -1,62 +1,38 @@
-/* Shared designIQ design tokens + base layer (shadcn new-york, neutral).
-   Imported by each SPA's index.css AFTER `@import "tailwindcss"` — Tailwind
-   inlines it at build time, so @apply/@theme resolve in the combined sheet. */
+/* The designIQ theme for the SPAs: the Miragon CI (tokens.css — semantic
+   aliases over the vendored --cd-* tokens, one light mode), Geist (fonts.css)
+   and the Tailwind mapping of both. Imported by each SPA's index.css AFTER
+   `@import "tailwindcss"` — Tailwind inlines it at build time, so @apply/@theme
+   resolve in the combined sheet. Shape and motion come straight from the CI
+   tokens: radius md 12px is the standard, shadows are soft and tinted, motion
+   eases on --cd-ease. */
 @import "tw-animate-css";
-
-@custom-variant dark (&:is(.dark *));
-
-:root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.49 0.13 264);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.49 0.13 264);
-  --success: oklch(0.55 0.13 160);
-  --warning: oklch(0.68 0.15 70);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.7 0.12 264);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.7 0.12 264);
-  --success: oklch(0.7 0.13 162);
-  --warning: oklch(0.78 0.15 75);
-}
+@import "./fonts.css";
+@import "./tokens.css";
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--designiq-font-sans);
+  --font-mono: var(--designiq-font-mono);
+
+  /* CI §6: sm 6px (badges, chips, menu entries) · md 12px (buttons, inputs,
+     cards, menus) · lg 16px (large panels, dialogs). A bare `rounded` lands
+     on sm too, not on Tailwind's off-CI 4px. */
+  --radius: var(--cd-radius-sm);
+  --radius-sm: var(--cd-radius-sm);
+  --radius-md: var(--cd-radius-md);
+  --radius-lg: var(--cd-radius-lg);
+  --radius-xl: var(--cd-radius-lg);
+
+  --shadow-xs: var(--cd-shadow-1);
+  --shadow-sm: var(--cd-shadow-1);
+  --shadow-md: var(--cd-shadow-2);
+  --shadow-lg: var(--cd-shadow-3);
+  --shadow-xl: var(--cd-shadow-3);
+
+  --ease-out: var(--cd-ease-out);
+  --ease-in-out: var(--cd-ease);
+  --default-transition-duration: var(--cd-motion-fast);
+  --default-transition-timing-function: var(--cd-ease);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -65,6 +41,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -72,16 +49,24 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-success-soft: var(--success-soft);
+  --color-warning-soft: var(--warning-soft);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-link: var(--link);
+  --color-brand: var(--brand);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
+  --color-overlay: var(--overlay);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   html,
   body,
@@ -89,10 +74,6 @@
     height: 100%;
   }
   body {
-    @apply bg-background text-foreground;
-    font-family:
-      system-ui,
-      -apple-system,
-      sans-serif;
+    @apply bg-background text-foreground font-sans antialiased;
   }
 }

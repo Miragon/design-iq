@@ -1,0 +1,46 @@
+/* Vendored from Miragon/corporate-identity (miragon-brand:modeler-tool-design skill,
+   assets/cd-tokens.generated.css). DO NOT EDIT: to update, re-copy it from the skill and put
+   this header back. `CD` in ./lib/tokens.ts mirrors it, drift-tested (test/tokens.test.ts). */
+/* AUTOMATISCH GENERIERT aus brand/tokens.json. Nicht von Hand ändern, sondern die Quelle bearbeiten und `npm run tokens:build` laufen lassen. */
+:root {
+  --cd-blau: #335DE5;
+  --cd-gruen: #00E676;
+  --cd-grau: #F9F7F7;
+  --cd-schwarz: #1D1D1D;
+  --cd-weiss: #FFFFFF;
+  --cd-blau-link: #2B50D4;
+  --cd-blau-hell: #6B8AFF;
+  --cd-success: #0B7A55;
+  --cd-success-soft: rgba(11, 122, 85, 0.12);
+  --cd-warning: #92610A;
+  --cd-warning-soft: rgba(146, 97, 10, 0.12);
+  --cd-danger: #C92A2A;
+  --cd-danger-soft: rgba(201, 42, 42, 0.12);
+  --cd-info: #2B50D4;
+  --cd-info-soft: rgba(43, 80, 212, 0.12);
+  --cd-linie: #E6E2E2;
+  --cd-kontur: #8F8A8A;
+  --cd-text-leise: #6B6666;
+  --cd-gradient-brand: linear-gradient(120deg, #335DE5 30%, #00E676);
+  --cd-gradient-format: linear-gradient(135deg, #335DE5 0%, #00E676 140%);
+  --cd-space-1: 4px;
+  --cd-space-2: 8px;
+  --cd-space-3: 16px;
+  --cd-space-4: 24px;
+  --cd-space-5: 32px;
+  --cd-space-6: 48px;
+  --cd-space-7: 64px;
+  --cd-space-8: 96px;
+  --cd-radius-sm: 6px;
+  --cd-radius-md: 12px;
+  --cd-radius-lg: 16px;
+  --cd-radius-pill: 999px;
+  --cd-shadow-1: 0 1px 2px rgba(29, 29, 29, 0.06), 0 1px 3px rgba(29, 29, 29, 0.10);
+  --cd-shadow-2: 0 4px 12px rgba(29, 29, 29, 0.10);
+  --cd-shadow-3: 0 12px 32px rgba(29, 29, 29, 0.16);
+  --cd-motion-fast: 150ms;
+  --cd-motion-base: 250ms;
+  --cd-motion-slow: 400ms;
+  --cd-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --cd-ease-out: cubic-bezier(0, 0, 0.2, 1);
+}

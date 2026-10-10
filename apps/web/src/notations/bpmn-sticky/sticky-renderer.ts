@@ -9,9 +9,10 @@
  * lines out itself in the diagram's label font — bpmn-js' TextRenderer only
  * wraps at a fixed size and cuts long words without a hyphen.
  */
+import { CD, mix } from "@designiq/ui-kit/lib/tokens";
 import BaseRenderer from "diagram-js/lib/draw/BaseRenderer";
 
-import { isSticky, STICKY_COLORS, stickyKindOf } from "./sticky-model";
+import { isSticky, STICKY_COLORS, STICKY_TEXT_COLOR, stickyKindOf } from "./sticky-model";
 import {
   fitStickyText,
   type MeasureText,
@@ -22,6 +23,10 @@ import {
 
 const PRIORITY = 1500;
 const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** a soft paper shadow (CSS filters apply to SVG), tinted with the CI ink like
+ *  every CI elevation — a literal colour, so it survives an SVG export */
+const PAPER_SHADOW = `filter: drop-shadow(0 3px 5px ${mix(CD.schwarz, 18, "transparent")})`;
 
 /** the slice of bpmn-js' TextRenderer we use: the diagram's label font */
 interface TextRendererLike {
@@ -95,8 +100,8 @@ export class StickyRenderer extends BaseRenderer {
       fill,
       stroke,
       "stroke-width": 1,
-      // a soft paper shadow (CSS filters apply to SVG) — the miro look
-      style: "filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.22))",
+      // the miro look: the note lifts off the diagram
+      style: PAPER_SHADOW,
     });
     rect.classList.add("designiq-sticky-note");
     parentGfx.appendChild(rect);
@@ -106,7 +111,7 @@ export class StickyRenderer extends BaseRenderer {
       "font-family": this.font.family,
       "font-size": layout.fontSize,
       "font-weight": this.font.weight,
-      fill: "#333333",
+      fill: STICKY_TEXT_COLOR,
       "text-anchor": "middle",
     });
     label.classList.add("djs-label", "designiq-sticky-text");

@@ -51,7 +51,7 @@ function TodoItem({
           target="_blank"
           rel="noreferrer"
           title={openInTrackerTitle(todo.id)}
-          className="text-muted-foreground hover:text-foreground mt-0.5 shrink-0"
+          className="text-muted-foreground hover:text-link mt-0.5 shrink-0 rounded-sm transition-colors"
         >
           <ExternalLink className="size-3.5" />
         </a>
@@ -73,7 +73,7 @@ function TodoItem({
         <Button
           variant="ghost"
           size="sm"
-          className="text-muted-foreground hover:text-foreground ml-auto h-6 gap-1 px-1.5 text-xs font-normal"
+          className="text-muted-foreground ml-auto h-6 gap-1 px-1.5 text-xs font-normal"
           title={closeInTrackerTitle(todo.id)}
           disabled={closing}
           onClick={onCloseTodo}

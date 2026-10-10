@@ -1,19 +1,18 @@
-/* The widget chrome shared by the model widgets (mcp-app.html and
- * mcp-app-dmn.html): layout, toolbar, banner, status line and the small
- * primitives their side panels use. Notation-specific stylesheets (bpmn-js /
- * dmn-js) are imported by each widget's own entry stylesheet.
+/* The widget chrome shared by every model widget (mcp-app*.html): layout,
+ * toolbar, banner, status line and the small primitives their side panels
+ * use. Notation-specific stylesheets (bpmn-js / dmn-js) are imported by each
+ * widget's own entry stylesheet.
+ *
+ * On the Miragon CI through the SPA's own semantic layer (@designiq/ui-kit/
+ * tokens.css — plain CSS, no Tailwind): every colour here is an alias, so the
+ * widgets and the web app cannot drift apart. --accent is the translucent
+ * HOVER tint (shadcn's meaning); the blue itself is --primary (fills) and
+ * --link (interactive text on white).
  *
  * Every widget builds to ONE self-contained HTML file, so everything here is
  * inlined into EVERY widget bundle (mcp-app*.html) — keep it small. */
-
-:root {
-  --fg: #1f2328;
-  --bg: #ffffff;
-  --muted: #656d76;
-  --border: #d1d9e0;
-  --accent: #0969da;
-  --danger: #cf222e;
-}
+@import "@designiq/ui-kit/tokens.css";
+@import "./geist.css";
 
 * {
   box-sizing: border-box;
@@ -24,9 +23,9 @@ body,
 #app {
   height: 100%;
   margin: 0;
-  font-family: system-ui, sans-serif;
-  color: var(--fg);
-  background: var(--bg);
+  font-family: var(--designiq-font-sans);
+  color: var(--foreground);
+  background: var(--background);
 }
 
 #app {
@@ -38,12 +37,20 @@ body,
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
 
-#toolbar .spacer {
+#title {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.spacer {
   flex: 1;
 }
 
@@ -53,27 +60,147 @@ body,
   display: block;
 }
 
-#dirty {
-  color: var(--accent);
+/* unsaved changes: a blue dot (labelled in the HTML), not a glyph */
+#dirty:not([hidden]) {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--cd-radius-pill);
+  background: var(--primary);
 }
 
-#toolbar button,
-#banner button {
-  font: inherit;
-  padding: 3px 10px;
+/* ── buttons ──────────────────────────────────────────────────────────────────
+ * Opt-in (.btn) rather than `button`: dmn-js draws its own buttons inside
+ * #canvas, and a widget rule must never reach them. The CI's md radius (12px)
+ * is for full-size controls — on these 26px chrome buttons it would turn every
+ * one into a pill, so they take sm (6px), the CI step for compact controls. */
+.btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
+  border-radius: var(--cd-radius-sm);
+  background: var(--card);
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
+  transition:
+    color var(--cd-motion-fast) var(--cd-ease),
+    background-color var(--cd-motion-fast) var(--cd-ease),
+    border-color var(--cd-motion-fast) var(--cd-ease),
+    box-shadow var(--cd-motion-fast) var(--cd-ease),
+    transform var(--cd-motion-fast) var(--cd-ease);
 }
 
-#toolbar button:hover,
-#banner button:hover {
-  border-color: var(--accent);
+/* the lifecycle hides chrome buttons with [hidden] — an author `display`
+   would beat the UA's [hidden] { display: none } (see #banner below) */
+.btn[hidden] {
+  display: none;
 }
 
-#banner button.danger {
-  color: var(--danger);
+/* hover — and a panel toggle while its panel is open */
+.btn:hover:not(:disabled),
+.btn[aria-expanded="true"] {
+  border-color: var(--link);
+  background: var(--accent);
+  color: var(--link);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* the one main action of a bar or form; disabled it falls back to the plain
+   button at half opacity — a pale blue would still read as clickable */
+.btn.primary:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
+  box-shadow: var(--cd-shadow-1);
+}
+
+.btn.primary:hover:not(:disabled) {
+  border-color: var(--primary-hover);
+  background: var(--primary-hover);
+  color: var(--primary-foreground);
+  box-shadow: var(--cd-shadow-2);
+  transform: translateY(-1px);
+}
+
+.btn.primary:active:not(:disabled) {
+  box-shadow: var(--cd-shadow-1);
+  transform: none;
+}
+
+.btn.danger {
+  color: var(--destructive);
+}
+
+.btn.danger:hover:not(:disabled) {
+  border-color: var(--destructive);
+  background: var(--destructive-soft);
+  color: var(--destructive);
+}
+
+/* icon-only: square, the title/aria-label carries the name */
+.btn.icon-only {
+  width: 26px;
+  padding: 0;
+}
+
+/* row actions inside the side panels */
+.btn.small {
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.btn.small.icon-only {
+  width: 22px;
+  padding: 0;
+}
+
+.btn > .icon {
+  flex: none;
+}
+
+:is(.btn, .chip, .case, [role="switch"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+/* ── inputs ── */
+.input {
+  padding: 5px 8px;
+  border: 1px solid var(--input);
+  border-radius: var(--cd-radius-sm);
+  background: var(--card);
+  color: var(--foreground);
+  font: inherit;
+  transition:
+    border-color var(--cd-motion-fast) var(--cd-ease),
+    box-shadow var(--cd-motion-fast) var(--cd-ease);
+}
+
+.input::placeholder {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
 }
 
 /* :not([hidden]) is load-bearing — a bare `display: flex` here is an author rule
@@ -82,10 +209,16 @@ body,
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  font-size: 13px;
-  background: #fff8c5;
+  padding: 6px 12px 6px 9px;
   border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 13px;
+}
+
+#banner > .icon {
+  flex: none;
 }
 
 #main {
@@ -101,14 +234,14 @@ body,
 }
 
 #status {
-  padding: 3px 10px;
-  font-size: 12px;
-  color: var(--muted);
+  padding: 4px 12px;
   border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 12px;
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 12px;
 }
 
@@ -119,8 +252,10 @@ body,
   overflow: hidden;
   padding: 1px 6px;
   border: 1px solid var(--border);
-  border-radius: 9999px;
-  background: var(--bg);
+  border-radius: var(--cd-radius-sm);
+  background: var(--card);
+  color: var(--foreground);
+  font: inherit;
   font-size: 11px;
   line-height: 1.5;
   white-space: nowrap;
@@ -130,4 +265,14 @@ body,
 
 button.chip {
   cursor: pointer;
+  transition:
+    color var(--cd-motion-fast) var(--cd-ease),
+    background-color var(--cd-motion-fast) var(--cd-ease),
+    border-color var(--cd-motion-fast) var(--cd-ease);
+}
+
+button.chip:hover {
+  border-color: var(--link);
+  background: var(--accent);
+  color: var(--link);
 }

@@ -6,9 +6,15 @@
  * `content` strings and SVG labels, avatar urls in an <img src>.
  */
 
+import { CD } from "@designiq/ui-kit/lib/tokens";
+
 /** hex colors only — anything else could smuggle CSS past a generated rule */
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
-export const FALLBACK_PRESENCE_COLOR = "#71717a";
+/** a peer whose color is missing or malformed: the CI's neutral, so they read
+ *  as "someone" rather than as a person's identity hue (presenceColor never
+ *  hands out a grey). text-leise, not kontur: names sit on it in white, and
+ *  kontur carries white text at only 3.4:1 — text-leise at 5.6:1. */
+export const FALLBACK_PRESENCE_COLOR = CD.textLeise;
 
 export function safePresenceColor(color: unknown): string {
   return typeof color === "string" && HEX_COLOR.test(color) ? color : FALLBACK_PRESENCE_COLOR;

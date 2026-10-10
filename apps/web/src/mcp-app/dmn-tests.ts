@@ -17,7 +17,7 @@
  */
 import type { App } from "@modelcontextprotocol/ext-apps";
 
-import { caseGlyph, pendingActualLine, uncoveredRulesLine } from "@/lib/decision-view";
+import { CASE_STATUS_LABEL, type CaseStatus, pendingActualLine, uncoveredRulesLine } from "@/lib/decision-view";
 
 import {
   type CaseOutcomeWire,
@@ -30,7 +30,18 @@ import {
   type SuiteRunWire,
 } from "./bridge";
 import type { DmnSimulator, Scenario } from "./engines/dmn";
+import { icon, type IconName } from "./icons";
 import { el } from "./shell";
+
+/** a case's state as a Lucide icon — its SHAPE tells the states apart, the
+ *  colour (dmn-styles.css) only repeats it; the spoken name is shared with the
+ *  SPA (lib/decision-view) */
+const CASE_ICON: Record<CaseStatus, IconName> = {
+  pass: "circle-check",
+  fail: "circle-x",
+  pending: "circle-question-mark",
+  unrun: "circle-dashed",
+};
 
 export interface TestsHandle {
   /** (re)load the panel for a decision */
@@ -69,6 +80,12 @@ export function mountTests(
 
   captureBtn.hidden = opts.readonly;
 
+  // aria-expanded: the toggle reads (and is styled, chrome.css) as the open panel's
+  const setOpen = (open: boolean): void => {
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+  };
+
   const showError = (message: string | undefined): void => {
     error.textContent = message ?? "";
     error.hidden = !message;
@@ -104,7 +121,11 @@ export function mountTests(
     head.className = "case-head";
     const status = document.createElement("span");
     status.className = `case-status ${result?.status ?? ""}`;
-    status.textContent = caseGlyph(result?.status);
+    const state = result?.status ?? "unrun";
+    status.setAttribute("role", "img");
+    status.setAttribute("aria-label", CASE_STATUS_LABEL[state]);
+    status.title = CASE_STATUS_LABEL[state];
+    status.append(icon(CASE_ICON[state], 14));
     const name = document.createElement("span");
     name.textContent = testCase.name;
     head.append(status, name);
@@ -159,7 +180,7 @@ export function mountTests(
       // a host without the decision tools (older Live Host) — hide, don't shout
       if (isMissingTool(err, "get_decision_tests")) {
         toggle.hidden = true;
-        panel.hidden = true;
+        setOpen(false);
         return;
       }
       showError((err as Error).message);
@@ -271,12 +292,10 @@ export function mountTests(
   }
 
   toggle.onclick = () => {
-    panel.hidden = !panel.hidden;
+    setOpen(panel.hidden !== false); // `hidden` may also be "until-found"
     if (!panel.hidden && !outcome) void reload();
   };
-  hideBtn.onclick = () => {
-    panel.hidden = true;
-  };
+  hideBtn.onclick = () => setOpen(false);
   runBtn.onclick = () => void run();
   captureBtn.onclick = () => void startCapture();
   cancelBtn.onclick = () => {
@@ -303,7 +322,7 @@ export function mountTests(
     },
     destroy(): void {
       destroyed = true;
-      panel.hidden = true;
+      setOpen(false);
     },
   };
 }

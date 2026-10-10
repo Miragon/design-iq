@@ -12,14 +12,34 @@
   </head>
   <body>
     <div id="app">
+      <!-- data-icon: a Lucide icon shell.ts prepends at boot (mcp-app/icons.ts) —
+           one geometry per icon, not an SVG copied into every entry -->
       <div id="toolbar">
         <span id="title">Loading…</span>
-        <span id="dirty" hidden>●</span>
+        <span id="dirty" role="img" aria-label="Unsaved changes" title="Unsaved changes" hidden></span>
         <span class="spacer"></span>
-        <button id="tests-toggle" title="Test cases for this decision">Tests</button>
-        <button id="open" hidden>Open in designIQ</button>
-        <button id="fullscreen" title="Open fullscreen">⛶</button>
-        <button id="save" hidden title="Changes save automatically — this forces it now">Save now</button>
+        <button
+          id="tests-toggle"
+          class="btn"
+          title="Test cases for this decision"
+          aria-controls="tests"
+          aria-expanded="false"
+          data-icon="flask-conical"
+          data-icon-size="14"
+        >
+          Tests
+        </button>
+        <button id="open" class="btn" hidden data-icon="external-link" data-icon-size="14">Open in designIQ</button>
+        <button
+          id="fullscreen"
+          class="btn icon-only"
+          title="Open fullscreen"
+          aria-label="Open fullscreen"
+          data-icon="maximize"
+        ></button>
+        <button id="save" class="btn primary" hidden title="Changes save automatically — this forces it now">
+          Save now
+        </button>
       </div>
       <div id="banner" hidden></div>
       <div id="main">
@@ -30,8 +50,23 @@
             <strong>Test cases</strong>
             <span id="test-count" class="muted"></span>
             <span class="spacer"></span>
-            <button id="test-run" title="Run every case against the saved decision">Run</button>
-            <button id="test-hide" title="Close the panel">✕</button>
+            <button
+              id="test-run"
+              class="btn small"
+              title="Run every case against the saved decision"
+              data-icon="play"
+              data-icon-size="14"
+            >
+              Run
+            </button>
+            <button
+              id="test-hide"
+              class="btn small icon-only"
+              title="Close the panel"
+              aria-label="Close the panel"
+              data-icon="x"
+              data-icon-size="14"
+            ></button>
           </div>
           <div id="test-error" hidden></div>
           <!-- naming a captured run: an inline form, NEVER window.prompt() —
@@ -39,18 +74,24 @@
                prompt() is silently ignored and the button appears dead -->
           <form id="test-form" hidden>
             <div id="test-form-given" class="muted"></div>
-            <input id="test-name" placeholder="What does this case show?" maxlength="200" required />
+            <input id="test-name" class="input" placeholder="What does this case show?" maxlength="200" required />
             <div id="test-form-actions">
-              <button type="button" id="test-cancel">Cancel</button>
-              <button type="submit" id="test-submit">Capture</button>
+              <button type="button" id="test-cancel" class="btn">Cancel</button>
+              <button type="submit" id="test-submit" class="btn primary">Capture</button>
             </div>
           </form>
           <div id="test-list"></div>
           <div id="test-empty">Enter values in the decision table, then capture the run as a test case.</div>
           <div id="coverage" hidden></div>
           <div id="test-foot">
-            <button id="test-capture" title="Turn the values currently entered into a test case">
-              ＋ Capture current run
+            <button
+              id="test-capture"
+              class="btn"
+              title="Turn the values currently entered into a test case"
+              data-icon="plus"
+              data-icon-size="14"
+            >
+              Capture current run
             </button>
           </div>
         </aside>
