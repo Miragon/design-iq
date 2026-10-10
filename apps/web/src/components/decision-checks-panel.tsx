@@ -38,12 +38,12 @@ import { extractModelGraph } from "@designiq/notations/extract";
 import { Badge } from "@designiq/ui-kit/components/badge";
 import { Button } from "@designiq/ui-kit/components/button";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Info, Play, ShieldCheck, XCircle } from "lucide-react";
+import { CircleCheck, CircleHelp, CircleX, Info, Play, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { SidePanel } from "@/components/side-panel";
 import { ApiError, fetchContent } from "@/lib/api";
-import { caseGlyph, pendingActualLine, uncoveredRulesLine } from "@/lib/decision-view";
+import { CASE_STATUS_LABEL, pendingActualLine, uncoveredRulesLine } from "@/lib/decision-view";
 
 /** the derived view + its findings, or the reason there are none */
 function useDecision(xml: string, docPath: string) {
@@ -68,8 +68,8 @@ function useDecision(xml: string, docPath: string) {
 }
 
 const ICON = {
-  ERROR: <XCircle className="text-destructive size-3.5 shrink-0" />,
-  WARN: <AlertTriangle className="size-3.5 shrink-0 text-amber-600" />,
+  ERROR: <CircleX className="text-destructive size-3.5 shrink-0" />,
+  WARN: <TriangleAlert className="text-warning size-3.5 shrink-0" />,
   INFO: <Info className="text-muted-foreground size-3.5 shrink-0" />,
 };
 
@@ -103,7 +103,7 @@ function VariableInput({
       <span className="font-mono">{profile.name}</span>
       <span className="text-muted-foreground ml-1 text-[10px]">{profile.typeRef}</span>
       <input
-        className="border-input bg-background mt-1 h-7 w-full rounded-md border px-2 text-xs"
+        className="border-input bg-background placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-accent mt-1 h-7 w-full rounded-md border px-2 text-xs transition-[color,border-color,box-shadow] outline-none focus-visible:ring-[3px]"
         value={value}
         list={suggestions.length > 0 ? listId : undefined}
         placeholder={suggestions.slice(0, 3).join(" / ") || "value"}
@@ -145,7 +145,7 @@ function Outcome({ result }: { result: SimulationResult }) {
           <div className="flex items-center gap-2">
             <span className="truncate font-medium">{d.name ?? d.id}</span>
             <span className="flex-1" />
-            <code className="bg-muted rounded px-1 py-0.5 font-mono text-[11px]">
+            <code className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[11px]">
               {d.value === null || d.value === undefined ? "no match" : JSON.stringify(d.value)}
             </code>
           </div>
@@ -159,31 +159,34 @@ function Outcome({ result }: { result: SimulationResult }) {
   );
 }
 
+/** a case's status as a Lucide icon — the CI draws icons from ONE set, never
+ *  text glyphs (§11); the label, shared with the widget, reads it out */
+const CASE_ICON = {
+  pass: <CircleCheck role="img" aria-label={CASE_STATUS_LABEL.pass} className="text-success mt-px size-3.5 shrink-0" />,
+  fail: <CircleX role="img" aria-label={CASE_STATUS_LABEL.fail} className="text-destructive mt-px size-3.5 shrink-0" />,
+  pending: (
+    <CircleHelp
+      role="img"
+      aria-label={CASE_STATUS_LABEL.pending}
+      className="text-muted-foreground mt-px size-3.5 shrink-0"
+    />
+  ),
+};
+
 function CaseRow({ result }: { result: CaseOutcome }) {
-  const mark = caseGlyph(result.status);
   return (
     <li className="border-b px-3 py-2 text-xs last:border-b-0">
       <div className="flex gap-2">
-        <span
-          className={
-            result.status === "fail"
-              ? "text-destructive"
-              : result.status === "pass"
-                ? "text-emerald-600"
-                : "text-muted-foreground"
-          }
-        >
-          {mark}
-        </span>
+        {CASE_ICON[result.status]}
         <span className="min-w-0 break-words">{result.name}</span>
       </div>
       {result.failures.map((f, i) => (
-        <p key={i} className="text-destructive mt-1 pl-4">
+        <p key={i} className="text-destructive mt-1 pl-5.5">
           {f}
         </p>
       ))}
       {result.status === "pending" && (
-        <p className="text-muted-foreground mt-1 pl-4">{pendingActualLine(result.actual.value)}</p>
+        <p className="text-muted-foreground mt-1 pl-5.5">{pendingActualLine(result.actual.value)}</p>
       )}
     </li>
   );

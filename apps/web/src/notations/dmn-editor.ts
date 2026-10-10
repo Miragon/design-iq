@@ -4,17 +4,21 @@
  * simulation add-on the MCP-App decision widget mounts: enter values in a
  * decision table and the matching rows light up. It evaluates with `feelin`,
  * as does @designiq/decisions in the Checks panel and on the server — one
- * semantics, three places.
+ * semantics, three places. The DRD wears the CI (lib/canvas-theme.ts) and
+ * waits for its font before the first import.
  */
 import { bindDmn } from "@designiq/live-client/dmn-sync";
 import DmnModeler from "dmn-js/lib/Modeler";
 
+import { canvasFontReady, withDrdCanvasTheme } from "@/lib/canvas-theme";
 import { dmnSimulationViews } from "@/lib/dmn-simulation";
 
 import type { EditorContext, MountedEditor } from "./registry";
 
-export function mountDmnEditor(container: HTMLElement, ctx: EditorContext): MountedEditor {
-  const modeler = new DmnModeler({ container, ...dmnSimulationViews });
+export async function mountDmnEditor(container: HTMLElement, ctx: EditorContext): Promise<MountedEditor> {
+  // bindDmn imports right away — DRD labels must be measured in Geist
+  await canvasFontReady();
+  const modeler = new DmnModeler({ container, ...withDrdCanvasTheme(dmnSimulationViews) });
   const unbind = bindDmn(
     modeler as never,
     ctx.ytext,

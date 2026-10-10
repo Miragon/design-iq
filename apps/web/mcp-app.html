@@ -12,14 +12,35 @@
   </head>
   <body>
     <div id="app">
+      <!-- data-icon: a Lucide icon shell.ts prepends at boot (mcp-app/icons.ts) —
+           one geometry per icon, not an SVG copied into every entry -->
       <div id="toolbar">
         <span id="title">Loading…</span>
-        <span id="dirty" hidden>●</span>
+        <span id="dirty" role="img" aria-label="Unsaved changes" title="Unsaved changes" hidden></span>
         <span class="spacer"></span>
-        <button id="todo-toggle" hidden title="Open todos for this process">Todos</button>
-        <button id="open" hidden>Open in designIQ</button>
-        <button id="fullscreen" title="Open fullscreen">⛶</button>
-        <button id="save" hidden title="Changes save automatically — this forces it now">Save now</button>
+        <button
+          id="todo-toggle"
+          class="btn"
+          hidden
+          title="Open todos for this process"
+          aria-controls="todos"
+          aria-expanded="false"
+          data-icon="list-todo"
+          data-icon-size="14"
+        >
+          Todos <span id="todo-toggle-count" class="btn-count" hidden></span>
+        </button>
+        <button id="open" class="btn" hidden data-icon="external-link" data-icon-size="14">Open in designIQ</button>
+        <button
+          id="fullscreen"
+          class="btn icon-only"
+          title="Open fullscreen"
+          aria-label="Open fullscreen"
+          data-icon="maximize"
+        ></button>
+        <button id="save" class="btn primary" hidden title="Changes save automatically — this forces it now">
+          Save now
+        </button>
       </div>
       <div id="banner" hidden></div>
       <!-- canvas + the todo side panel (mcp-app/todos.ts owns everything inside
@@ -31,24 +52,47 @@
             <strong>Open todos</strong>
             <span id="todo-count" class="muted"></span>
             <span class="spacer"></span>
-            <button id="todo-new" hidden title="File a todo on the current selection">＋ New</button>
-            <button id="todo-refresh" title="Reload from the tracker">↻</button>
-            <button id="todo-hide" title="Close the panel">✕</button>
+            <button
+              id="todo-new"
+              class="btn small"
+              hidden
+              title="File a todo on the current selection"
+              data-icon="plus"
+              data-icon-size="14"
+            >
+              New
+            </button>
+            <button
+              id="todo-refresh"
+              class="btn small icon-only"
+              title="Reload from the tracker"
+              aria-label="Reload from the tracker"
+              data-icon="refresh-cw"
+              data-icon-size="14"
+            ></button>
+            <button
+              id="todo-hide"
+              class="btn small icon-only"
+              title="Close the panel"
+              aria-label="Close the panel"
+              data-icon="x"
+              data-icon-size="14"
+            ></button>
           </div>
           <div id="todo-filter" hidden>
             <span class="muted">Element:</span>
             <span id="todo-filter-name" class="chip"></span>
             <span class="spacer"></span>
-            <button id="todo-filter-clear">Show all</button>
+            <button id="todo-filter-clear" class="btn small">Show all</button>
           </div>
           <div id="todo-error" hidden></div>
           <form id="todo-form" hidden>
             <div id="todo-anchor" class="muted"></div>
-            <input id="todo-title" placeholder="What needs to be done?" maxlength="200" required />
-            <textarea id="todo-body" rows="3" placeholder="Description (optional)"></textarea>
+            <input id="todo-title" class="input" placeholder="What needs to be done?" maxlength="200" required />
+            <textarea id="todo-body" class="input" rows="3" placeholder="Description (optional)"></textarea>
             <div id="todo-form-actions">
-              <button type="button" id="todo-cancel">Cancel</button>
-              <button type="submit" id="todo-submit">Create todo</button>
+              <button type="button" id="todo-cancel" class="btn">Cancel</button>
+              <button type="submit" id="todo-submit" class="btn primary">Create todo</button>
             </div>
           </form>
           <div id="todo-list"></div>

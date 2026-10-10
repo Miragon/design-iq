@@ -23,6 +23,7 @@ import type { MiragonRendererSpec } from "./src/notations/miragon/spec.ts";
 export const widgetConfig = (htmlFile: string, opts: { alias?: Alias[]; emitAs?: string } = {}) =>
   defineConfig({
     plugins: [viteSingleFile(), ...(opts.emitAs ? [emitHtmlAs(htmlFile, opts.emitAs)] : [])],
+    css: { postcss: { plugins: [woff2Only] } },
     resolve: {
       // the shared browser modules under src/lib import via "@/lib/…"
       alias: [...(opts.alias ?? []), { find: "@", replacement: here("./src") }],
@@ -58,6 +59,43 @@ export const miragonWidgetConfig = (spec: MiragonRendererSpec) =>
   });
 
 const here = (rel: string): string => fileURLToPath(new URL(rel, import.meta.url));
+
+/** the slice of the postcss AST woff2Only touches (postcss is vite's, not ours) */
+interface CssDecl {
+  prop: string;
+  value: string;
+  remove(): void;
+}
+interface CssRoot {
+  walkAtRules(name: string, visit: (rule: { nodes?: Array<CssDecl | { prop?: undefined }> }) => void): void;
+}
+
+/**
+ * Only the woff2 of a @font-face that has one. The notation icon fonts
+ * (bpmn.css / dmn.css) list eot (twice), woff2, woff and ttf, and the
+ * single-file build would inline them ALL — ~215 KB (bpmn) / ~75 KB (dmn)
+ * per bundle no MCP-App host ever reads: every host is an evergreen browser,
+ * and font.ts registers exactly the woff2 past the host CSP. That room is
+ * what Geist (geist.css, woff2 only already) takes. Runs before vite's url
+ * rewrite (both OnceExit; config plugins come first), so the dropped files
+ * are never even resolved.
+ */
+const woff2Only = {
+  postcssPlugin: "designiq:woff2-only",
+  OnceExit(root: CssRoot) {
+    root.walkAtRules("font-face", (rule) => {
+      const srcs = (rule.nodes ?? []).filter((node): node is CssDecl => node.prop === "src");
+      // a src list splits before each url( — a data: URI's own commas never precede one
+      const woff2 = srcs
+        .flatMap((decl) => decl.value.split(/,\s*(?=url\()/))
+        .filter((source) => /format\(\s*["']?woff2/.test(source));
+      const [first, ...rest] = srcs;
+      if (!first || woff2.length === 0) return;
+      for (const decl of rest) decl.remove();
+      first.value = woff2.join(", ");
+    });
+  },
+};
 
 /** rename the emitted HTML once everything is written — the template's name
  *  is fixed by its input path, the bundle's by the widget registry */

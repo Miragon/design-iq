@@ -87,12 +87,12 @@ export function RenameModelDialog({
           "The file name is derived from the name — use at least one letter or digit."
         ) : unchanged ? (
           <>
-            This is its current name — <code className="bg-muted rounded px-1">{fileName(model.path)}</code>
+            This is its current name — <code className="bg-muted rounded-sm px-1">{fileName(model.path)}</code>
           </>
         ) : (
           <>
-            <code className="bg-muted rounded px-1">{fileName(model.path)}</code> becomes{" "}
-            <code className="bg-muted rounded px-1">{fileName(target)}</code>
+            <code className="bg-muted rounded-sm px-1">{fileName(model.path)}</code> becomes{" "}
+            <code className="bg-muted rounded-sm px-1">{fileName(target)}</code>
           </>
         )}
       </p>

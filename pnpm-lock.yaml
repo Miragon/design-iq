@@ -74,6 +74,12 @@ importers:
       '@designiq/notations':
         specifier: workspace:*
         version: link:../../packages/notations
+      '@fontsource-variable/geist':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/geist-mono':
+        specifier: 5.3.0
+        version: 5.3.0
       '@hocuspocus/server':
         specifier: 4.7.0
         version: 4.7.0(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
@@ -175,6 +181,12 @@ importers:
       '@emaarco/dmn-js-simulation':
         specifier: 0.3.2
         version: 0.3.2(diagram-js@15.28.0)(dmn-js@17.12.2)(inferno@5.6.3)
+      '@fontsource-variable/geist':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/geist-mono':
+        specifier: 5.3.0
+        version: 5.3.0
       '@miragon/context-maps-renderer':
         specifier: 0.2.0
         version: 0.2.0
@@ -419,6 +431,12 @@ importers:
 
   packages/ui-kit:
     dependencies:
+      '@fontsource-variable/geist':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/geist-mono':
+        specifier: 5.3.0
+        version: 5.3.0
       '@radix-ui/react-avatar':
         specifier: 1.2.6
         version: 1.2.6(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -450,6 +468,9 @@ importers:
         specifier: 1.4.0
         version: 1.4.0
     devDependencies:
+      '@types/node':
+        specifier: 26.6.4
+        version: 26.6.4
       '@types/react':
         specifier: 19.3.0
         version: 19.3.0
@@ -829,6 +850,12 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
+  '@fontsource-variable/geist-mono@5.3.0':
+    resolution: {integrity: sha512-vBbuwDEo9AkrqADMXOrlAR3DFcJi4/JxeuU43FoiQERnNwsfXNnvxvReZG02cQKmyk4DZkZdBZX3oTDvy2zBAw==}
+
+  '@fontsource-variable/geist@5.3.0':
+    resolution: {integrity: sha512-j0m+vLQuG5XAYoHtGCVu0spvlGreR3EzpECUVzkFmI1mTVnAO38l/NEPDCFgZ177JxzYJCLSmTQibIiYPilGrA==}
 
   '@hocuspocus/common@4.7.0':
     resolution: {integrity: sha512-KyS6dXoIcWsd+v3gwd6nnZW04M77df5XstPNkOwqoDxwuncygobEN7xsf0x2PmdvlQdQyRaLm2SF4r1GZZGRnA==}
@@ -3748,6 +3775,10 @@ snapshots:
       react-dom: 19.3.0(react@19.3.0)
 
   '@floating-ui/utils@0.2.12': {}
+
+  '@fontsource-variable/geist-mono@5.3.0': {}
+
+  '@fontsource-variable/geist@5.3.0': {}
 
   '@hocuspocus/common@4.7.0':
     dependencies:

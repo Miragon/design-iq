@@ -16,6 +16,8 @@ import { createServer } from "node:http";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { brandPage, SUCCESS_ICON } from "../http/brand-page.ts";
+
 const REPO = process.env.GITHUB_REPO;
 if (!REPO || !REPO.includes("/")) {
   console.error("GITHUB_REPO must be set to <owner>/<repo> — the app is registered in that owner's org.");
@@ -53,13 +55,9 @@ const manifest = JSON.stringify({
   ...(webhookUrl ? { hook_attributes: { url: webhookUrl, active: false } } : {}),
 });
 
-const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>designIQ — create the GitHub App</title>
-<style>body{font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f6f8fa}
-.card{background:#fff;border:1px solid #d0d7de;border-radius:12px;padding:40px 48px;max-width:560px}
-h1 em{color:#fa8100;font-style:normal} p{color:#656d76;font-size:14px;line-height:1.6}
-button{background:#fa8100;color:#fff;border:0;border-radius:6px;padding:12px 22px;font-size:15px;font-weight:600;cursor:pointer}
-code{background:#f6f8fa;padding:1px 5px;border-radius:4px}</style></head><body><div class="card">
-<h1><em>designIQ</em> — create the central GitHub App (one-time)</h1>
+const page = brandPage({
+  title: "designIQ — create the GitHub App",
+  body: `<h1><em>designIQ</em> — create the central GitHub App (one-time)</h1>
 <p>This is the vendor step from the Netlify/GitBook model: <strong>one</strong> app,
 registered in the <strong>${OWNER}</strong> organization. From then on users only ever see
 GitHub's install picker (connect repositories) — sign-in happens at your identity provider.</p>
@@ -69,8 +67,9 @@ GitHub's install picker (connect repositories) — sign-in happens at your ident
   <input type="hidden" name="manifest" value='${manifest.replace(/'/g, "&#39;")}' />
   <button type="submit">Create the app under ${OWNER}</button>
 </form>
-<p style="font-size:12px">Credentials are written to <code>apps/live-host/.env</code>
-automatically — nothing to copy.</p></div></body></html>`;
+<p class="note">Credentials are written to <code>apps/live-host/.env</code>
+automatically — nothing to copy.</p>`,
+});
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
@@ -119,11 +118,16 @@ const server = createServer(async (req, res) => {
     console.log(`✓ App "${app.slug}" (id ${app.id}) created — credentials written to ${ENV_FILE}`);
     console.log("  Next step: (re)start the Live Host — pnpm start");
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    res.end(`<html><body style="font-family:system-ui;padding:40px"><h1 style="color:#1a7f37">✓ App created</h1>
-      <p>Credentials were written to <code>apps/live-host/.env</code>.</p>
-      <p><strong>(Re)start the Live Host</strong> (<code>pnpm start</code>) with your identity provider configured
-      (<code>LIVE_OIDC_*</code>) — users sign in there; the App connects repositories and authorizes.</p>
-      <p>Manage the app: <a href="${app.html_url}">${app.html_url}</a></p></body></html>`);
+    res.end(
+      brandPage({
+        title: "designIQ — GitHub App created",
+        body: `${SUCCESS_ICON}<h1>App created</h1>
+<p>Credentials were written to <code>apps/live-host/.env</code>.</p>
+<p><strong>(Re)start the Live Host</strong> (<code>pnpm start</code>) with your identity provider configured
+(<code>LIVE_OIDC_*</code>) — users sign in there; the App connects repositories and authorizes.</p>
+<p>Manage the app: <a href="${app.html_url}">${app.html_url}</a></p>`,
+      }),
+    );
     setTimeout(() => process.exit(0), 500);
     return;
   }

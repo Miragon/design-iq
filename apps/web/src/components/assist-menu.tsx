@@ -4,7 +4,8 @@
  * builds the work order and the deep link; this menu only picks the
  * destination: Claude Desktop, ChatGPT, or the clipboard. Two shapes: the
  * editor-toolbar button (the canvas selection rides along) and the compact
- * per-row trigger on the repo overview.
+ * per-row trigger on the repo overview. The icon is the chat it opens, not a
+ * sparkle (CI anti-slop U4: the concrete function, never "AI magic").
  *
  * The handover is a PREFILL on every target — the chat opens with the prompt
  * prepared, the user reviews and sends. Whether claude:// is handled cannot be
@@ -23,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@designiq/ui-kit/components/dropdown-menu";
-import { BookOpen, Sparkles } from "lucide-react";
+import { BookOpen, MessageSquareText } from "lucide-react";
 import { toast } from "sonner";
 
 import type { TodoElementWire } from "@/lib/api";
@@ -102,7 +103,7 @@ export function AssistMenu({
             aria-label="Analyse with AI"
             title="Open this model in an AI chat — the modeler widget renders in the conversation, live-synced with this editor"
           >
-            <Sparkles />
+            <MessageSquareText />
             {/* the editor toolbar collapses its tool labels as the bar narrows
                 (components/editor-toolbar.tsx) — this trigger travels with them */}
             <span className="@max-7xl:hidden">Analyse with AI</span>
@@ -116,7 +117,7 @@ export function AssistMenu({
             title="Analyse with AI"
             onClick={(e) => e.stopPropagation()}
           >
-            <Sparkles />
+            <MessageSquareText />
           </Button>
         )}
       </DropdownMenuTrigger>

@@ -5,6 +5,7 @@
  * elements so the persistence module and tests stay decoupled from the
  * engine.
  */
+import { CD, mix } from "@designiq/ui-kit/lib/tokens";
 
 // FROZEN with the moddle descriptor (sticky-moddle.ts): moddle names a parsed
 // element "<descriptor prefix>:<type name>", so the left half MUST equal that
@@ -17,13 +18,25 @@ export type StickyKind = (typeof STICKY_KINDS)[number];
 export const STICKY_SIZE = { width: 120, height: 120 };
 export const STICKY_MIN = { width: 60, height: 60 };
 
-/** kind → fill/stroke — the classic workshop palette, muted for the canvas */
+/**
+ * kind → fill/stroke on the CI palette (§3.6): the fill is a CI colour mixed
+ * into white, the stroke the functional colour of its family (≥ 3:1 on the
+ * canvas and on the fill) — note = warning, question = danger (an open end),
+ * decision = green fill + success stroke, role = blue. Literal hex from the
+ * tokens mirror: the renderer writes SVG attributes and the context pad a
+ * data-URL icon, neither can read a CSS variable. Render-only — the file
+ * stores the kind, never a colour. The Notes panel keys its dots on the
+ * strokes.
+ */
 export const STICKY_COLORS: Record<StickyKind, { fill: string; stroke: string }> = {
-  note: { fill: "#fff9c4", stroke: "#f9a825" },
-  question: { fill: "#ffe0b2", stroke: "#ef6c00" },
-  decision: { fill: "#c8e6c9", stroke: "#2e7d32" },
-  role: { fill: "#bbdefb", stroke: "#1565c0" },
+  note: { fill: mix(CD.warning, 20, CD.weiss), stroke: CD.warning },
+  question: { fill: mix(CD.danger, 18, CD.weiss), stroke: CD.danger },
+  decision: { fill: mix(CD.gruen, 24, CD.weiss), stroke: CD.success },
+  role: { fill: mix(CD.blau, 18, CD.weiss), stroke: CD.blau },
 };
+
+/** text on every sticky fill (≥ 10:1 on each) */
+export const STICKY_TEXT_COLOR = CD.schwarz;
 
 /** minimal structural view of a moddle element */
 export interface ModdleLike {

@@ -1,0 +1,26 @@
+{
+  "_comment": "Activates the miragon-brand brand-lint hook for this repo (CLAUDE.md, Design system). designIQ's UI, docs and code are English, so the German copy rules are off (A*, S*, C5 'UI-Texte auf Deutsch' - a separate decision, see #238). The rest is not switched off, but the hook only lints colours: the palette (B1), in CSS also raw brand hex instead of --cd-* tokens (C1) and gradient text (U5). Logo, fonts, icons and the AI look are review items (miragon-brand:brand-review), not linted.",
+  "ignorieren": ["docs/", "process-documentation/", "CHANGELOG.md", "*.test.ts", "*/test/*"],
+  "aus": [
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A5",
+    "A6",
+    "A7",
+    "A8",
+    "A9",
+    "A10",
+    "A11",
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "S7",
+    "S8",
+    "C5"
+  ]
+}

@@ -44,6 +44,7 @@ import {
   type TodoWire,
 } from "@/lib/api";
 import { modelTarget, useOpenModel, wasExpected } from "@/lib/model-target";
+import { installMonacoTheme, MONACO_OPTIONS } from "@/lib/monaco-theme";
 import type { PresenceSurface, RemotePresence } from "@/lib/presence-canvas";
 import { invalidateModelLists, useFileHistory, useModels, useTodos } from "@/lib/queries";
 import { createRemoteCaretStyles } from "@/lib/remote-carets";
@@ -277,11 +278,12 @@ export function LiveEditor({
       if (cancelled) return;
       if (sourceRef.current && !structuredDoc) {
         sourceModel = monaco.editor.createModel(ytext.toString(), monacoLanguage(docPath));
+        installMonacoTheme(monaco.editor);
         sourceEditor = monaco.editor.create(sourceRef.current, {
+          ...MONACO_OPTIONS,
           model: sourceModel,
           automaticLayout: true,
           minimap: { enabled: false },
-          fontSize: 12,
         });
         monacoBinding = new MonacoBinding(ytext, sourceModel, new Set([sourceEditor]), session.awareness ?? undefined);
       }
@@ -499,14 +501,19 @@ export function LiveEditor({
         onRename={() => setRenameOpen(true)}
         onDuplicate={() => setDuplicateOpen(true)}
       />
-      {error && <div className="bg-destructive/10 text-destructive border-b px-4 py-2 text-sm">{error}</div>}
+      {error && <div className="bg-destructive-soft text-destructive border-b px-4 py-2 text-sm">{error}</div>}
       <div className="relative min-h-0 flex-1">
+        {/* both layers stay mounted and laid out (the engines measure their
+            host), the hidden one inert: out of the Tab order — a Tab into an
+            invisible Monaco would type indentation into the shared model */}
         <div
           ref={canvasRef}
+          inert={sourceActive}
           className={cn(plugin?.canvasClassName, "absolute inset-0", sourceActive && "pointer-events-none opacity-0")}
         />
         <div
           ref={sourceRef}
+          inert={!sourceActive}
           className={cn("monaco-host absolute inset-0", !sourceActive && "pointer-events-none opacity-0")}
         />
         {ActivePanel && (

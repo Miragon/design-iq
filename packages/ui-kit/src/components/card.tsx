@@ -2,11 +2,12 @@ import type * as React from "react";
 
 import { cn } from "../lib/utils.ts";
 
+/** CI §6: a card is radius md and the card elevation (shadow-2) */
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card"
-      className={cn("bg-card text-card-foreground flex flex-col gap-4 rounded-xl border py-5 shadow-sm", className)}
+      className={cn("bg-card text-card-foreground flex flex-col gap-4 rounded-md border py-5 shadow-md", className)}
       {...props}
     />
   );

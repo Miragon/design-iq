@@ -18,14 +18,13 @@
 import { moveUnits } from "@designiq/contracts/live-host";
 import { Badge } from "@designiq/ui-kit/components/badge";
 import { Button } from "@designiq/ui-kit/components/button";
+import { cn } from "@designiq/ui-kit/lib/utils";
 import { Link2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { dialogBackdrop, dialogPanel, fieldClass } from "@/components/dialog-shell";
 import { type ChangedFileWire } from "@/lib/api";
 import { useChanges, useReferences, useReleaseFiles, useRepos, useResolveConflict } from "@/lib/queries";
-
-const fieldClass =
-  "border-input bg-background focus-visible:ring-ring/50 focus-visible:border-ring mt-1 w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]";
 
 const fileName = (path: string): string => path.split("/").pop() ?? path;
 
@@ -123,13 +122,13 @@ export function ReleaseDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={close}>
+    <div className={dialogBackdrop} onClick={close}>
       <form
-        className="bg-background flex max-h-[85vh] w-full max-w-lg flex-col rounded-lg border p-4 shadow-lg"
+        className={cn(dialogPanel, "flex max-h-[85vh] max-w-lg flex-col")}
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
       >
-        <h2 className="text-sm font-semibold">Release → PR</h2>
+        <h2 className="text-base font-semibold">Release → PR</h2>
         <p className="text-muted-foreground mt-1.5 text-xs">
           Ship exactly the files you pick as one pull request. The workspace is shared — files marked{" "}
           <Badge variant="warning">active</Badge> are open in a live session and may be mid-edit.
@@ -164,7 +163,7 @@ export function ReleaseDialog({
               ) : (
                 <label
                   key={c.path}
-                  className="hover:bg-accent/50 flex cursor-pointer items-center gap-2.5 border-b px-3 py-2 text-sm last:border-b-0"
+                  className="hover:bg-accent flex cursor-pointer items-center gap-2.5 border-b px-3 py-2 text-sm last:border-b-0"
                 >
                   <input
                     type="checkbox"
@@ -220,7 +219,7 @@ export function ReleaseDialog({
 
         {release.error && <p className="text-destructive mt-3 text-sm">{release.error.message}</p>}
         {resolve.error && <p className="text-destructive mt-3 text-sm">{resolve.error.message}</p>}
-        <div className="mt-4 flex items-center justify-end gap-2">
+        <div className="mt-6 flex items-center justify-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={release.isPending}>
             Cancel
           </Button>

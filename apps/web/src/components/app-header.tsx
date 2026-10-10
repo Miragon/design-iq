@@ -33,7 +33,7 @@ export function AppHeader({ me }: { me?: Me }) {
         href="https://design.miragon.ai"
         target="_blank"
         rel="noreferrer"
-        className="text-muted-foreground hover:text-foreground hidden text-xs transition-colors sm:inline"
+        className="text-muted-foreground hover:text-link hidden text-xs transition-colors sm:inline"
       >
         design.miragon.ai
       </a>

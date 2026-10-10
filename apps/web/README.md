@@ -14,11 +14,41 @@ Desktop, ChatGPT).
 | `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts` — the DOM-free widget-core suites (lifecycle, live upgrade, engines).                              |
 | `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                         |
 
+## Theming
+
+The UI follows the Miragon CI in ONE light mode (`CLAUDE.md` → Design system). Every
+colour comes from `@designiq/ui-kit`:
+
+| Layer                                                                | Source                                                                 | Consumed by                                                             |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| CI tokens (`--cd-*`)                                                 | `packages/ui-kit/src/cd-tokens.generated.css` — vendored, never edited | the aliases                                                             |
+| Semantic aliases (`--primary`, `--link`, `--border`, `--canvas-*` …) | `packages/ui-kit/src/tokens.css`                                       | the SPA (through `theme.css`) and the widget sheets                     |
+| Tailwind utilities, radius, shadow, motion, Geist                    | `packages/ui-kit/src/theme.css`                                        | the SPA (`src/index.css`)                                               |
+| bpmn-js / dmn-js chrome (`--bio-*`)                                  | `src/lib/bpmn-io-theme.css`                                            | the bpmn/dmn editors, the diff viewer, the bpmn/dmn widgets             |
+| Real colour values (`CD`, `ALIASES`, `mix()`)                        | `@designiq/ui-kit/lib/tokens`                                          | Monaco themes, canvas defaults, data-URL icons, exported SVG attributes |
+
+- **No hex in components.** Tailwind utilities on the aliases (`bg-primary hover:bg-primary-hover`,
+  `text-link`, `text-muted-foreground`, `border-input`), `var(--alias)` in plain CSS,
+  `ALIASES` / `CD` in TS.
+- **A new colour** is an alias in `tokens.css` (built from `--cd-*` and `color-mix()` only)
+  AND its value in `ALIASES` (`lib/tokens.ts`), plus a `--color-*` line in `theme.css` when
+  components need the utility. `pnpm --filter @designiq/ui-kit test` evaluates the CSS
+  against the mirror and checks contrast (text ≥ 4.5:1, non-text ≥ 3:1) — so prefer an
+  existing alias.
+- **Canvas defaults** (bpmn-js / dmn-js shape fill, stroke, label font) take literal values
+  from `lib/tokens.ts`, so an exported SVG stays self-contained; `--canvas-*` paints the host.
+  The Miragon renderers keep their own CI styling — nothing here restyles them.
+- **Icons** are Lucide only: `lucide-react` in the SPA; the React-free widgets inline the
+  same icon nodes from `src/mcp-app/icons.ts` (`test/widget-icons.test.ts` holds them to
+  the package).
+
 ## The MCP-App widgets
 
-Each widget is ONE self-contained HTML file (`dist/mcp-app*.html`: scripts, CSS
-and, for bpmn/dmn, the icon font inlined) built by `vite.widget.config.ts`'s
-factory; `scripts/build-widgets.ts` runs every build. The Live Host
+Each widget is ONE self-contained HTML file (`dist/mcp-app*.html`: scripts, CSS,
+Geist (latin + latin-ext; Geist Mono latin in the decision widget) and, for
+bpmn/dmn, the icon font as woff2 — all inlined; `src/mcp-app/font.ts` registers
+the fonts through the FontFace API because host CSPs block `data:` fonts) built
+by `vite.widget.config.ts`'s factory; `scripts/build-widgets.ts` runs every build. The Live Host
 (`apps/live-host/src/http/mcp.ts`) serves it as a `ui://` resource behind an
 `open_*` tool — a dist without a bundle simply lacks that tool.
 

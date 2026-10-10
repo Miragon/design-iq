@@ -7,7 +7,10 @@
  */
 import { Badge } from "@designiq/ui-kit/components/badge";
 import { Button } from "@designiq/ui-kit/components/button";
+import { cn } from "@designiq/ui-kit/lib/utils";
 import { useEffect } from "react";
+
+import { dialogBackdrop, dialogPanel } from "@/components/dialog-shell";
 
 export function SyncRepoDialog({
   branch,
@@ -36,17 +39,11 @@ export function SyncRepoDialog({
   }, [onClose, pending]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={() => !pending && onClose()}
-    >
-      <div
-        className="bg-background w-full max-w-md rounded-lg border p-4 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-sm font-semibold">Load latest from {branch}?</h2>
+    <div className={dialogBackdrop} onClick={() => !pending && onClose()}>
+      <div className={cn(dialogPanel, "max-w-md")} onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-base font-semibold">Load latest from {branch}?</h2>
         <p className="text-muted-foreground mt-2 text-sm">
-          This resets the workspace to <code className="bg-muted rounded px-1">{branch}</code> and{" "}
+          This resets the workspace to <code className="bg-muted rounded-sm px-1">{branch}</code> and{" "}
           <strong className="text-foreground">discards the unreleased live changes</strong> in{" "}
           {dirtyModels.length === 1 ? "this model" : `these ${dirtyModels.length} models`}:
         </p>
@@ -61,7 +58,7 @@ export function SyncRepoDialog({
           Release them first if you want to keep them. This can't be undone.
         </p>
         {error && <p className="text-destructive mt-3 text-sm">{error.message}</p>}
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-6 flex justify-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={pending}>
             Cancel
           </Button>

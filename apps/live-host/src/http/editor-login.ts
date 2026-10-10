@@ -21,6 +21,8 @@
  */
 import { EDITOR_EXTENSION_ID, EDITOR_LOGIN_PATH } from "@designiq/contracts/live";
 
+import { brandPage, SUCCESS_ICON } from "./brand-page.ts";
+
 /** a custom URI scheme (RFC 3986 scheme grammar, lowercase): vscode,
  *  vscode-insiders, cursor … — what vscode.env.uriScheme reports */
 const SCHEME_RE = /^[a-z][a-z0-9+.-]{0,63}$/;
@@ -69,16 +71,14 @@ const escapeHtml = (s: string): string =>
  *  case the bounce is blocked */
 export function editorReturnPage(returnUri: string, login: string): string {
   const href = escapeHtml(returnUri);
-  return [
-    "<!doctype html>",
-    '<html lang="en"><head><meta charset="utf-8">',
-    `<meta http-equiv="refresh" content="0;url=${href}">`,
-    "<title>designIQ — signed in</title>",
-    "<style>body{font:15px/1.5 system-ui,sans-serif;margin:3rem auto;max-width:36rem;padding:0 1rem;color:#222}</style>",
-    "</head><body>",
-    `<h1>Signed in as @${escapeHtml(login)}</h1>`,
-    `<p>Returning to your editor… <a href="${href}">Open the editor</a> if nothing happens.</p>`,
-    "<p>You can close this tab.</p>",
-    "</body></html>",
-  ].join("\n");
+  return brandPage({
+    title: "designIQ — signed in",
+    head: `<meta http-equiv="refresh" content="0;url=${href}">`,
+    body: [
+      SUCCESS_ICON,
+      `<h1>Signed in as @${escapeHtml(login)}</h1>`,
+      `<p>Returning to your editor… <a href="${href}">Open the editor</a> if nothing happens.</p>`,
+      '<p class="note">You can close this tab.</p>',
+    ].join("\n"),
+  });
 }

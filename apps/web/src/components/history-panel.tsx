@@ -7,7 +7,7 @@
  * doc stays recoverable through this very history).
  */
 import { Badge } from "@designiq/ui-kit/components/badge";
-import { Button } from "@designiq/ui-kit/components/button";
+import { Button, focusRing } from "@designiq/ui-kit/components/button";
 import { cn } from "@designiq/ui-kit/lib/utils";
 import { ChevronDown, ChevronRight, GitCompare, History, Loader2, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -50,7 +50,15 @@ function CommitItem({
   const Chevron = expanded ? ChevronDown : ChevronRight;
   return (
     <div className="rounded-md border">
-      <button type="button" className="flex w-full items-start gap-2 p-2.5 text-left" onClick={onToggle}>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        className={cn(
+          "hover:bg-muted/50 flex w-full items-start gap-2 rounded-md p-2.5 text-left transition-colors",
+          focusRing,
+        )}
+        onClick={onToggle}
+      >
         <Chevron className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
         <div className="min-w-0 flex-1">
           <p className={cn("text-sm leading-snug font-medium", !expanded && "truncate")}>{commit.subject}</p>

@@ -78,7 +78,7 @@ export function DuplicateModelDialog({
           `A ${noun} named '${id}' already exists — ids are unique across all folders.`
         ) : (
           <>
-            Creates <code className="bg-muted rounded px-1">{target}</code>
+            Creates <code className="bg-muted rounded-sm px-1">{target}</code>
           </>
         )}
       </p>

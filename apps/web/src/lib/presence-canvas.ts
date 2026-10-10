@@ -21,6 +21,7 @@
  * the first outlined element, so "where the AI worked" reads at a glance.
  */
 import type { CanvasPresence, PresenceUser } from "@designiq/contracts/live";
+import { CD, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
 
 // relative on purpose: the MCP-App engines import this controller and the
 // node --test suites import THEM — no vite alias there
@@ -77,20 +78,22 @@ const svg = <K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap
 
 /** a peer's name pill at (x, y) in the group's own coordinates — the width
  *  fits the text, measurable only once the group is in the live SVG, so the
- *  caller appends the group and THEN calls fit() */
+ *  caller appends the group and THEN calls fit(). A chip: CI radius sm (6),
+ *  Geist, white on the peer's color (presenceColor keeps that ≥ 4.5:1) —
+ *  literal values from lib/tokens: SVG presentation attributes take no var(). */
 function namePill(color: string, name: string, x: number, y: number): { group: SVGGElement; fit(): void } {
   const group = svg("g");
   const pill = svg("rect");
   pill.setAttribute("x", String(x));
   pill.setAttribute("y", String(y));
   pill.setAttribute("height", "16");
-  pill.setAttribute("rx", "4");
+  pill.setAttribute("rx", "6");
   pill.setAttribute("fill", color);
   const label = svg("text");
   label.setAttribute("x", String(x + 6));
   label.setAttribute("y", String(y + 11.5));
-  label.setAttribute("fill", "#fff");
-  label.setAttribute("style", "font: 600 10px system-ui, sans-serif");
+  label.setAttribute("fill", CD.weiss);
+  label.setAttribute("style", `font: 600 10px ${FONT_SANS}`);
   label.textContent = safePresenceLabel(name);
   group.append(pill, label);
   return { group, fit: () => pill.setAttribute("width", String(Math.ceil(label.getComputedTextLength()) + 12)) };
@@ -222,7 +225,7 @@ export function attachPresenceCanvas(modeler: ModelerLike, presence: PresenceSur
         const arrow = svg("path");
         arrow.setAttribute("d", "M0,0 L0,14 L4,10.5 L6.5,16 L9,15 L6.5,9.5 L11,9.5 Z");
         arrow.setAttribute("fill", color);
-        arrow.setAttribute("stroke", "#fff");
+        arrow.setAttribute("stroke", CD.weiss);
         arrow.setAttribute("stroke-width", "0.75");
         const pill = namePill(color, peer.user.name, 12, 14);
         group.append(arrow, pill.group);

@@ -1,7 +1,12 @@
 /* The decision widget's stylesheet: the shared chrome, the dmn-js views and
  * the simulation add-on, plus the test panel (mcp-app/dmn-tests.ts).
- * Everything inlines into mcp-app-dmn.html (vite-plugin-singlefile). */
-@import "dmn-js/dist/assets/diagram-js.css";
+ * Everything inlines into mcp-app-dmn.html (vite-plugin-singlefile).
+ * bpmn-io-theme.css puts dmn-js' own tokens (DRD palette, decision table) on
+ * the CI aliases, scoped to #canvas. diagram-js.css comes from bpmn-js, like in
+ * the SPA (main.tsx): dmn-js ships an older copy with literal bpmn.io blues
+ * that never read the --bio-* tokens; the newer one matches the diagram-js
+ * dmn-js runs on. */
+@import "bpmn-js/dist/assets/diagram-js.css";
 @import "dmn-js/dist/assets/dmn-js-shared.css";
 @import "dmn-js/dist/assets/dmn-js-drd.css";
 @import "dmn-js/dist/assets/dmn-js-decision-table.css";
@@ -9,7 +14,9 @@
 @import "dmn-js/dist/assets/dmn-js-literal-expression.css";
 @import "dmn-js/dist/assets/dmn-font/css/dmn.css";
 @import "@emaarco/dmn-js-simulation/assets/dmn-js-simulation.css";
+@import "../lib/bpmn-io-theme.css";
 @import "./chrome.css";
+@import "./geist-mono.css";
 
 /* the dmn-js decision-table view scrolls internally; give it the whole pane */
 #canvas .dmn-decision-table-container,
@@ -33,6 +40,7 @@
   flex-direction: column;
   width: min(340px, 48%);
   border-left: 1px solid var(--border);
+  background: var(--card);
   font-size: 13px;
 }
 
@@ -41,8 +49,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 6px 8px 6px 12px;
   border-bottom: 1px solid var(--border);
+}
+
+#test-head strong {
+  font-weight: 600;
 }
 
 #test-foot {
@@ -50,54 +62,20 @@
   border-top: 1px solid var(--border);
 }
 
-#tests .spacer {
-  flex: 1;
-}
-
-#tests button {
-  font: inherit;
-  padding: 2px 7px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: inherit;
-  cursor: pointer;
-}
-
-#tests button:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-
-#tests button:disabled {
-  cursor: default;
-  color: var(--muted);
-}
-
 #test-error:not([hidden]) {
-  padding: 6px 8px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border);
-  color: var(--danger);
+  color: var(--destructive);
   font-size: 12px;
 }
 
 #test-form:not([hidden]) {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
+  gap: 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  background: #f6f8fa;
-}
-
-#test-form input {
-  font: inherit;
-  padding: 4px 6px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-#test-form input:focus {
-  outline: 1px solid var(--accent);
+  background: var(--secondary);
 }
 
 #test-form-actions {
@@ -111,62 +89,75 @@
   overflow: auto;
 }
 
+/* one case = one row button: click replays it on the decision table */
 .case {
   display: flex;
   flex-direction: column;
   gap: 2px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 12px;
   border: none;
   border-bottom: 1px solid var(--border);
   background: none;
+  color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--cd-motion-fast) var(--cd-ease);
 }
 
 .case:hover {
-  background: #f6f8fa;
+  background: var(--accent);
+}
+
+.case:focus-visible {
+  outline-offset: -2px;
 }
 
 .case-head {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 6px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
+/* the lines under a case align with its name, not with the status icon */
+.case > :not(.case-head) {
+  padding-left: 20px;
+}
+
+/* the status is an icon (dmn-tests.ts) whose SHAPE differs per state — the
+   colour only repeats it */
 .case-status {
   flex: none;
-  width: 1em;
-  font-weight: 600;
+  display: inline-flex;
+  margin-top: 2px;
+  color: var(--muted-foreground);
 }
 
 .case-status.pass {
-  color: #1a7f37;
+  color: var(--success);
 }
 
 .case-status.fail {
-  color: var(--danger);
-}
-
-.case-status.pending {
-  color: var(--muted);
+  color: var(--destructive);
 }
 
 .case-failure {
-  color: var(--danger);
+  color: var(--destructive);
   font-size: 12px;
 }
 
 #test-empty {
-  padding: 10px 8px;
-  color: var(--muted);
+  padding: 10px 12px;
+  color: var(--muted-foreground);
   font-size: 12px;
 }
 
 #coverage:not([hidden]) {
-  padding: 6px 8px;
+  padding: 6px 12px;
   border-top: 1px solid var(--border);
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 12px;
 }

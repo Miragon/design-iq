@@ -3,14 +3,23 @@
  * dimmed backdrop, a centered form panel, header + blurb, right-aligned footer.
  * Escape and a backdrop click close it — never while the action runs (an
  * unmounted dialog would drop the mutation's onSuccess). Mounted on open, so
- * state resets by unmounting (create-dialog convention).
+ * state resets by unmounting (create-dialog convention). Its backdrop, panel
+ * and field classes are every dialog's — the create, release, sync and todo
+ * dialogs keep their own markup, not their own look.
  */
 import { Button } from "@designiq/ui-kit/components/button";
 import { cn } from "@designiq/ui-kit/lib/utils";
 import { type ReactNode, useEffect, useId } from "react";
 
+/** every dialog's backdrop (CI §8): --cd-schwarz dimmed, the page softly blurred behind it */
+export const dialogBackdrop = "bg-overlay fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm";
+
+/** every dialog's panel: a popover surface, radius lg, the popover/dialog elevation */
+export const dialogPanel = "bg-popover text-popover-foreground w-full rounded-lg border p-6 shadow-lg";
+
+/** a dialog's native text field — the kit Input's look: kontur frame, focus = blue frame + blue-soft halo */
 export const fieldClass =
-  "border-input bg-background focus-visible:ring-ring/50 focus-visible:border-ring mt-1 w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]";
+  "border-input bg-background placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-accent mt-1 w-full rounded-md border px-3 py-2 text-sm shadow-xs transition-[color,border-color,box-shadow] outline-none focus-visible:ring-[3px]";
 
 export function DialogShell({
   title,
@@ -53,22 +62,19 @@ export function DialogShell({
   }, [onClose, pending]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={close}>
+    <div className={dialogBackdrop} onClick={close}>
       <form
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={cn(
-          "bg-background flex max-h-[85vh] w-full flex-col rounded-lg border p-4 shadow-lg",
-          wide ? "max-w-lg" : "max-w-md",
-        )}
+        className={cn(dialogPanel, "flex max-h-[85vh] flex-col", wide ? "max-w-lg" : "max-w-md")}
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
           if (!pending && !submitDisabled) onSubmit();
         }}
       >
-        <h2 id={titleId} className="text-sm font-semibold">
+        <h2 id={titleId} className="text-base font-semibold">
           {title}
         </h2>
         {blurb && <p className="text-muted-foreground mt-1.5 text-xs">{blurb}</p>}
@@ -78,7 +84,7 @@ export function DialogShell({
             {error.message}
           </p>
         )}
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-6 flex justify-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={pending}>
             Cancel
           </Button>

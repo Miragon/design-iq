@@ -7,13 +7,12 @@
  */
 import { Badge } from "@designiq/ui-kit/components/badge";
 import { Button } from "@designiq/ui-kit/components/button";
+import { cn } from "@designiq/ui-kit/lib/utils";
 import { useEffect, useState } from "react";
 
+import { dialogBackdrop, dialogPanel, fieldClass } from "@/components/dialog-shell";
 import type { TodoElementWire } from "@/lib/api";
 import { useCreateTodo } from "@/lib/queries";
-
-const fieldClass =
-  "border-input bg-background focus-visible:ring-ring/50 focus-visible:border-ring mt-1 w-full rounded-md border px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]";
 
 export function TodoCreateDialog({
   repo,
@@ -61,13 +60,9 @@ export function TodoCreateDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <form
-        className="bg-background w-full max-w-md rounded-lg border p-4 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={submit}
-      >
-        <h2 className="text-sm font-semibold">Create todo</h2>
+    <div className={dialogBackdrop} onClick={onClose}>
+      <form className={cn(dialogPanel, "max-w-md")} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <h2 className="text-base font-semibold">Create todo</h2>
         {elements.length > 0 ? (
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             <span className="text-muted-foreground text-xs">Anchored to:</span>
@@ -105,7 +100,7 @@ export function TodoCreateDialog({
           onChange={(e) => setBody(e.target.value)}
         />
         {create.error && <p className="text-destructive mt-3 text-sm">{create.error.message}</p>}
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-6 flex justify-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
             Cancel
           </Button>

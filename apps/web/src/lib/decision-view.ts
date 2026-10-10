@@ -1,14 +1,21 @@
 /**
  * Shared decision-test wording of the SPA Checks panel (components/
  * decision-checks-panel.tsx) and the DMN widget (mcp-app/dmn-tests.ts) —
- * the derivations both frontends must phrase identically. Colours stay per
- * frontend on purpose (Tailwind classes vs widget CSS classes — two token
- * systems). Framework-free, like lib/todo-view.ts.
+ * the derivations and status names both frontends must phrase identically.
+ * Only the drawing stays per frontend (Tailwind classes + lucide-react vs
+ * widget CSS classes + inline Lucide SVG), on the same CI tokens.
+ * Framework-free, like lib/todo-view.ts.
  */
 
-/** status glyph of one test case; `undefined` = stored but never run */
-export const caseGlyph = (status: "pass" | "fail" | "pending" | undefined): string =>
-  status ? { pass: "✓", fail: "✗", pending: "?" }[status] : "·";
+/** a test case's state as a screen reader announces it — the status icon's
+ *  label in both frontends; `unrun` = stored but never run */
+export const CASE_STATUS_LABEL = {
+  pass: "Passes",
+  fail: "Fails",
+  pending: "No expectation yet",
+  unrun: "Not run yet",
+} as const;
+export type CaseStatus = keyof typeof CASE_STATUS_LABEL;
 
 /** the golden-master hint under a case without an expectation */
 export const pendingActualLine = (actualValue: unknown): string =>

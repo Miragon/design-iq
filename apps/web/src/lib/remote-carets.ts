@@ -9,14 +9,23 @@
  */
 import type { PresenceUser } from "@designiq/contracts/live";
 
-import { safePresenceColor, safePresenceLabel, withAlpha } from "@/lib/presence-format";
+// relative: test/monaco-theme.test.ts imports this module under node --test
+import { safePresenceColor, safePresenceLabel, withAlpha } from "./presence-format.ts";
+
+/** a peer's selection wash — as faint as the theme's own unfocused selection
+ *  (8 %): the source keeps its syntax colours ≥ 4.5:1 under a peer's
+ *  selection too (lib/monaco-theme); the caret and its label say who it is */
+export const REMOTE_SELECTION_ALPHA = 0.08;
 
 export interface RemoteCaretStyles {
   update(peers: ReadonlyArray<{ clientId: number; user: PresenceUser }>): void;
   destroy(): void;
 }
 
-// shared shape of every caret head; per-peer rules add only color and label
+// shared shape of every caret head; per-peer rules add only color and label.
+// The label is a chip on the CI tokens (Geist, radius sm, white on the peer's
+// color — presenceColor keeps that ≥ 4.5:1), flagged off the caret: the corner
+// at the caret stays square
 const BASE_RULES = `
 [class*="yRemoteSelectionHead-"] {
   position: absolute;
@@ -25,15 +34,16 @@ const BASE_RULES = `
 }
 [class*="yRemoteSelectionHead-"]::after {
   position: absolute;
-  top: -1.15em;
+  top: -14px;
   left: -2px;
-  padding: 0 4px;
-  border-radius: 3px 3px 3px 0;
-  font-size: 10px;
-  line-height: 1.15em;
-  font-family: system-ui, sans-serif;
+  padding: 0 5px;
+  border-radius: var(--cd-radius-sm) var(--cd-radius-sm) var(--cd-radius-sm) 0;
+  font-family: var(--designiq-font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
   white-space: nowrap;
-  color: #fff;
+  color: var(--cd-weiss);
   pointer-events: none;
   z-index: 10;
 }
@@ -56,7 +66,7 @@ export function createRemoteCaretStyles(): RemoteCaretStyles {
         const color = safePresenceColor(peer.user.color);
         const label = safePresenceLabel(peer.user.name);
         rules.push(
-          `.yRemoteSelection-${id} { background-color: ${withAlpha(color, 0.25)}; }`,
+          `.yRemoteSelection-${id} { background-color: ${withAlpha(color, REMOTE_SELECTION_ALPHA)}; }`,
           `.yRemoteSelectionHead-${id} { border-left: 2px solid ${color}; }`,
           `.yRemoteSelectionHead-${id}::after { content: "${label}"; background: ${color}; }`,
         );

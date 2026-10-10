@@ -7,11 +7,15 @@
  * chrome, the view toggle and the Monaco text-diff fallback.
  *
  * If either side fails to import (invalid intermediate XML), onUnavailable()
- * hands control back to the dialog — the text diff still works.
+ * hands control back to the dialog — the text diff still works. Both viewers
+ * render like the editor (lib/canvas-theme.ts): same font, same defaults, so
+ * the compare reads like the diagram it compares.
  */
 import NavigatedViewer from "bpmn-js/lib/NavigatedViewer";
 import { diff } from "bpmn-js-differ";
 import { useEffect, useRef } from "react";
+
+import { BPMN_CANVAS_OPTIONS, canvasFontReady } from "@/lib/canvas-theme";
 
 import type { DiagramDiffProps } from "./registry";
 
@@ -45,11 +49,13 @@ export function BpmnDiagramDiff({ historical, current, onUnavailable }: DiagramD
   useEffect(() => {
     if (!leftRef.current || !rightRef.current) return;
     let disposed = false;
-    const left = new NavigatedViewer({ container: leftRef.current }) as unknown as ViewerLike;
-    const right = new NavigatedViewer({ container: rightRef.current }) as unknown as ViewerLike;
+    const left = new NavigatedViewer({ container: leftRef.current, ...BPMN_CANVAS_OPTIONS }) as unknown as ViewerLike;
+    const right = new NavigatedViewer({ container: rightRef.current, ...BPMN_CANVAS_OPTIONS }) as unknown as ViewerLike;
     const offFns: (() => void)[] = [];
 
     void (async () => {
+      await canvasFontReady();
+      if (disposed) return;
       try {
         await left.importXML(historical);
         await right.importXML(current);

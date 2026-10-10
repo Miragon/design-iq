@@ -1,0 +1,76 @@
+/* designIQ's semantic colour layer over the Miragon CI tokens — plain CSS (no
+   Tailwind), so the SPA (theme.css) and the vanilla MCP-App widgets
+   (apps/web/src/mcp-app/chrome.css) share ONE definition.
+
+   Every value is a --cd-* token or a color-mix() of them: no colour of its own.
+   ONE light mode, as the CI prescribes (no dark override, no scheme switch).
+
+   Mirrored in ./lib/tokens.ts (ALIASES) for code that needs real colour values
+   (Monaco, renderer defaults, data-URL icons); test/tokens.test.ts evaluates
+   this file against the mirror and checks WCAG contrast. */
+@import "./cd-tokens.generated.css";
+
+:root {
+  color-scheme: light;
+  --designiq-font-sans: "Geist Variable", Geist, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --designiq-font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --background: var(--cd-weiss);
+  --foreground: var(--cd-schwarz);
+  --card: var(--cd-weiss);
+  --card-foreground: var(--cd-schwarz);
+  --popover: var(--cd-weiss);
+  --popover-foreground: var(--cd-schwarz);
+  /* blue leads: buttons, focus, selection — hover deepens to blau-link */
+  --primary: var(--cd-blau);
+  --primary-foreground: var(--cd-weiss);
+  --primary-hover: var(--cd-blau-link);
+  --secondary: var(--cd-grau);
+  --secondary-foreground: var(--cd-schwarz);
+  --muted: color-mix(in srgb, var(--cd-linie) 50%, var(--cd-grau));
+  --muted-foreground: var(--cd-text-leise);
+  /* hover / highlighted entries: blue-soft, blue text */
+  --accent: color-mix(in srgb, var(--cd-blau) 10%, transparent);
+  --accent-foreground: var(--cd-blau-link);
+  --destructive: var(--cd-danger);
+  --destructive-foreground: var(--cd-weiss);
+  --success: var(--cd-success);
+  --warning: var(--cd-warning);
+  --info: var(--cd-info);
+  /* status tints for status-coloured text (badges, banners, destructive
+     hover): the CI's --cd-*-soft 12 % baked onto the ground, OPAQUE — the
+     translucent token would let a selected or hovered row show through and
+     drop the text under 4.5:1 */
+  --success-soft: color-mix(in srgb, var(--cd-success) 12%, var(--background));
+  --warning-soft: color-mix(in srgb, var(--cd-warning) 12%, var(--background));
+  --destructive-soft: color-mix(in srgb, var(--cd-danger) 12%, var(--background));
+  /* interactive text */
+  --link: var(--cd-blau-link);
+  /* green accents: a fill or indicator, never text on white */
+  --brand: var(--cd-gruen);
+  --border: var(--cd-linie);
+  --input: var(--cd-kontur);
+  --ring: var(--cd-blau-link);
+  --overlay: color-mix(in srgb, var(--cd-schwarz) 42%, transparent);
+
+  /* the diagram canvases (bpmn-js, dmn-js DRD): the host ground and the
+     selection accent. The renderer defaults (shape fill, stroke, label) take
+     the SAME values from lib/tokens.ts as literal colours, so an exported SVG
+     stays self-contained. */
+  --canvas-background: var(--cd-weiss);
+  --canvas-shape: var(--cd-weiss);
+  --canvas-stroke: var(--cd-schwarz);
+  --canvas-label: var(--cd-schwarz);
+  --canvas-accent: var(--cd-blau);
+}
+
+/* CI §7: motion is a courtesy — honour the OS setting everywhere */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

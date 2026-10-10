@@ -40,7 +40,7 @@ simulation and tests, todos anchored to BPMN elements) and the BPMN/DMN hard rul
 | `packages/http-kit/`                    | Shared node:http primitives + `AppError`/`errorBody` for backend services (`@designiq/http-kit`, zero-dep). ADR 0003.                                                                                                                                                                                                                                        |
 | `packages/github-app/`                  | GitHub App plumbing (`@designiq/github-app`, zero-dep): appJwt/loadPrivateKey + appRest/mint/paginate — User-Agent per app.                                                                                                                                                                                                                                  |
 | `packages/contracts/`                   | Backend↔frontend wire types + the live-doc contract (`@designiq/contracts`: `CONTENT_KEY`, `roomName()`). Backends pin responses with `satisfies`; frontends re-export. Drift = tsc error.                                                                                                                                                                   |
-| `packages/ui-kit/`                      | Shared shadcn primitives + `cn()` + `theme.css` for the SPAs (`@designiq/ui-kit`). Run the shadcn CLI HERE, not in the apps.                                                                                                                                                                                                                                 |
+| `packages/ui-kit/`                      | Shared shadcn primitives + `cn()` + the Miragon CI theme for the SPAs and widgets (`@designiq/ui-kit`): vendored `cd-tokens.generated.css` (never edit), aliases `tokens.css` + TS mirror `lib/tokens.ts` (drift/contrast test), Geist `fonts.css`, Tailwind mapping `theme.css`. Run the shadcn CLI HERE, not in the apps.                                  |
 | `packages/api-client/`                  | `ApiError` + `api<T>()` + TanStack Query defaults for the SPAs (`@designiq/api-client`).                                                                                                                                                                                                                                                                     |
 | `packages/live-client/`                 | The ONE live-session implementation (`@designiq/live-client`): `openLiveSession()`, minimal-diff Y.Text writer, the canvas sync bridges (bpmn-sync, dmn-sync, miragon-sync). Consumers: web, vscode, guest-test, live-host (the minimal-diff writer via `@designiq/live-client/text`) — nothing else.                                                        |
 | `packages/validator/`                   | Platform validator (`@miragon/design-iq-validator`, bin `designiq-validate`): designiq.yml discovery (legacy bpmiq.yml still read) + BPMN/DMN structure, BPMNDI+DMNDI coverage, cross-model reference integrity (callActivity, decisions), a parse check for every other notation. Runs against any checkout via `--root`; never executes content-repo code. |
@@ -89,6 +89,33 @@ sqlite) · `http/` (router) · `server.ts` (the ONLY place reading env/construct
 adapters). A new connector (GitLab, Jira, …) = a new `adapters/<vendor>/` folder against the
 existing ports. Boundaries are CI-enforced: `pnpm arch` (dependency-cruiser) — the PR that
 moves a module deletes its grandfather exception in `.dependency-cruiser.mjs`.
+
+## Design system (mandatory)
+
+All UI work follows the Miragon product design system. The source of truth is the skill
+`miragon-brand:modeler-tool-design` in Miragon/corporate-identity — it loads for UI work when
+the plugin is installed; without it, read the guide:
+https://raw.githubusercontent.com/Miragon/corporate-identity/main/plugins/miragon-brand/skills/modeler-tool-design/assets/modeler-design-system.md
+
+- **Tokens are vendored, never forked:** `packages/ui-kit/src/cd-tokens.generated.css` —
+  never edit it, re-copy it from the skill to update. App aliases (`--primary`, `--link`,
+  `--border`, `--canvas-*` …) live in `packages/ui-kit/src/tokens.css`, mirrored in
+  `lib/tokens.ts` for code that needs a real colour value (Monaco, renderer defaults, SVG
+  attributes); `pnpm --filter @designiq/ui-kit test` fails on drift and on contrast below
+  4.5:1 (text) / 3:1 (non-text). No hex in components — a new colour is an alias in BOTH files.
+- **ONE light mode** — no dark theme, no scheme switch. Blue leads (buttons, focus,
+  selection; interactive text is `--link`); green (`--brand`) is a fill or indicator, never
+  text on white. Radius, shadows and motion come from the tokens (`theme.css`; md 12px).
+- **Geist / Geist Mono** everywhere, canvas text included; **Lucide** is the only icon set
+  (no emoji or unicode glyphs as icons, no sparkles/wand/robot for AI).
+- The Miragon renderers (`@miragon/*-renderer`) bring their own CI styling — don't restyle
+  them. The Live Host's own HTML pages (editor sign-in landing, `create-app`) cannot load
+  the SPA sheet: they share the inline CI shell in `apps/live-host/src/http/brand-page.ts`.
+- **brand-lint** (the miragon-brand PostToolUse hook, active via `.miragon/brand.json`) flags
+  colours outside the CI palette in every edit — in CSS also a raw brand hex instead of its
+  `--cd-*` token, and gradient text. It does NOT check fonts, icons, emoji or the AI look:
+  those are review items (`miragon-brand:brand-review`). Its German copy rules are off: UI
+  copy stays English.
 
 ## Hard rules
 

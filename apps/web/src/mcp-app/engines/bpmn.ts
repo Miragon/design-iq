@@ -18,6 +18,7 @@ import Modeler from "bpmn-js/lib/Modeler";
 import NavigatedViewer from "bpmn-js/lib/NavigatedViewer";
 import type * as Y from "yjs";
 
+import { BPMN_CANVAS_OPTIONS } from "../../lib/canvas-theme.ts";
 import { attachPresenceCanvas } from "../../lib/presence-canvas.ts";
 import { bpmnColorModule } from "../../notations/bpmn-color.ts";
 import { bpmnStickyModule, bpmnStickyViewModule, stickyModdle } from "../../notations/bpmn-sticky/index.ts";
@@ -34,11 +35,14 @@ export const mountBpmnEngine: EngineFactory<BpmnEngine> = (container, readonly) 
   const instance = readonly
     ? new NavigatedViewer({
         container,
+        // the CI canvas, exactly as the web editor renders it (lib/canvas-theme.ts)
+        ...BPMN_CANVAS_OPTIONS,
         additionalModules: [bpmnStickyViewModule],
         moddleExtensions: { sticky: stickyModdle },
       })
     : new Modeler({
         container,
+        ...BPMN_CANVAS_OPTIONS,
         additionalModules: [bpmnStickyModule, bpmnColorModule],
         moddleExtensions: { sticky: stickyModdle },
       });

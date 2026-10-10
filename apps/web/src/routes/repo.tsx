@@ -136,6 +136,9 @@ const modelRowId = (path: string): string => `model-row:${path}`;
 const DRAG_TYPE = "application/x-designiq-model";
 type DragPayload = { repo: string; models: MovableModel[] };
 
+/** where a dragged model would land (CI §9 drag-over): dashed blue frame, blue-soft fill */
+const DROP_TARGET = "bg-accent outline-2 outline-dashed outline-primary -outline-offset-2";
+
 /** one model row of the current level, whatever its kind — the unit the
  *  selection, the row menu and the dialogs work on */
 interface VisibleModel {
@@ -629,7 +632,7 @@ export function ProcessList() {
           <Link
             to="/r/$owner/$repo"
             params={{ owner, repo: name }}
-            className={cn("text-muted-foreground rounded px-1 hover:underline", dropTarget === "" && "bg-primary/10")}
+            className={cn("text-muted-foreground rounded-sm px-1 hover:underline", dropTarget === "" && DROP_TARGET)}
             {...dropInto("")}
           >
             {name}
@@ -648,8 +651,8 @@ export function ProcessList() {
                     params={{ owner, repo: name }}
                     search={{ dir: path }}
                     className={cn(
-                      "text-muted-foreground rounded px-1 hover:underline",
-                      dropTarget === path && "bg-primary/10",
+                      "text-muted-foreground rounded-sm px-1 hover:underline",
+                      dropTarget === path && DROP_TARGET,
                     )}
                     {...dropInto(path)}
                   >
@@ -666,15 +669,16 @@ export function ProcessList() {
         <p className="text-muted-foreground text-sm">Loading… (the first load clones the repository)</p>
       ) : !isContentRepo ? (
         <p className="text-muted-foreground max-w-prose text-sm">
-          Not a content repository — this repo has no usable <code className="bg-muted rounded px-1">designiq.yml</code>{" "}
-          (or legacy <code className="bg-muted rounded px-1">bpmiq.yml</code>) at its root naming the folder its models
-          live in (e.g. <code className="bg-muted rounded px-1">models: models</code>). Add one to create folders,
-          models and releases here.
+          Not a content repository — this repo has no usable{" "}
+          <code className="bg-muted rounded-sm px-1">designiq.yml</code> (or legacy{" "}
+          <code className="bg-muted rounded-sm px-1">bpmiq.yml</code>) at its root naming the folder its models live in
+          (e.g. <code className="bg-muted rounded-sm px-1">models: models</code>). Add one to create folders, models and
+          releases here.
         </p>
       ) : empty && dir !== "" ? (
         <p className="text-muted-foreground max-w-prose text-sm">
           This folder is empty — create a model or folder here, or head back to the{" "}
-          <Link to="/r/$owner/$repo" params={{ owner, repo: name }} className="underline">
+          <Link to="/r/$owner/$repo" params={{ owner, repo: name }} className="text-link underline underline-offset-2">
             repository root
           </Link>
           .
@@ -684,7 +688,7 @@ export function ProcessList() {
           No models yet — create a model or folder with the <span className="font-medium">New</span> button.
         </p>
       ) : (
-        <div className="rounded-xl border">
+        <div className="rounded-lg border">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
@@ -714,7 +718,8 @@ export function ProcessList() {
                   id={folderRowId(f.path)}
                   className={cn(
                     "cursor-pointer transition-colors duration-700",
-                    (f.path === createdFolder || f.path === dropTarget) && "bg-primary/10",
+                    f.path === createdFolder && "bg-accent",
+                    f.path === dropTarget && DROP_TARGET,
                   )}
                   {...dropInto(f.path)}
                   onClick={() =>
@@ -760,7 +765,7 @@ export function ProcessList() {
                     id={modelRowId(m.path)}
                     className={cn(
                       "cursor-pointer transition-colors duration-700",
-                      highlighted === m.path && "bg-primary/10",
+                      highlighted === m.path && "bg-accent",
                     )}
                     data-state={selected.has(m.path) ? "selected" : undefined}
                     draggable
@@ -938,7 +943,7 @@ function SelectionBar({
     <div
       role="toolbar"
       aria-label="Selected models"
-      className="bg-background animate-in fade-in slide-in-from-bottom-2 fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-xl border p-1.5 pl-3.5 shadow-lg motion-reduce:animate-none"
+      className="bg-popover text-popover-foreground animate-in fade-in slide-in-from-bottom-2 ease-out fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-lg border p-1.5 pl-3.5 shadow-lg motion-reduce:animate-none"
     >
       <span className="text-sm font-medium tabular-nums" role="status">
         {count} selected
@@ -947,7 +952,12 @@ function SelectionBar({
       <Button variant="ghost" size="sm" onClick={onMove}>
         <FolderInput /> Move to…
       </Button>
-      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={onDelete}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-destructive not-disabled:hover:bg-destructive-soft not-disabled:hover:text-destructive"
+        onClick={onDelete}
+      >
         <Trash2 /> Delete…
       </Button>
       <span className="bg-border mx-1.5 h-5 w-px" aria-hidden="true" />
@@ -1055,7 +1065,7 @@ function SortHeader({ column, children }: { column: Column<typeof features, Mode
       ) : sorted === "desc" ? (
         <ChevronDown className="text-foreground" />
       ) : (
-        <ArrowUpDown className="text-muted-foreground/50" />
+        <ArrowUpDown className="text-muted-foreground" />
       )}
     </Button>
   );

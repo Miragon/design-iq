@@ -40,6 +40,7 @@ import { type Scenario, variableOf } from "@designiq/decisions";
 import DmnModeler from "dmn-js/lib/Modeler";
 import DmnViewer from "dmn-js/lib/Viewer";
 
+import { withDrdCanvasTheme } from "@/lib/canvas-theme";
 import { dmnSimulationViews } from "@/lib/dmn-simulation";
 
 import type { EngineFactory, WidgetEngine } from "../core/engine.ts";
@@ -86,7 +87,8 @@ export interface DmnSimulator {
 export interface DmnEngine extends WidgetEngine, DmnSimulator {}
 
 export const mountDmnEngine: EngineFactory<DmnEngine> = (container, readonly) => {
-  const options = { container, ...dmnSimulationViews };
+  // the CI DRD, exactly as the web editor renders it (lib/canvas-theme.ts)
+  const options = { container, ...withDrdCanvasTheme(dmnSimulationViews) };
   const instance = readonly ? new DmnViewer(options) : new DmnModeler(options);
 
   const dirtyCbs = new Set<() => void>();

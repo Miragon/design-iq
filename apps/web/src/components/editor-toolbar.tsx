@@ -25,13 +25,13 @@
  * links, migrated editors) on a stray blur.
  *
  * Tool labels collapse to icon + tooltip through container queries as the bar
- * narrows, cheapest first: the actions go at @7xl (a sparkle and a list-plus
- * are guessable), the panel names hold on to @6xl (they are the labels a
- * once-a-month process owner actually needs), the view switch to @4xl.
+ * narrows, cheapest first: the actions go at @7xl (a chat bubble and a
+ * list-plus are guessable), the panel names hold on to @6xl (they are the
+ * labels a once-a-month process owner actually needs), the view switch to @4xl.
  */
 import type { PresenceUser } from "@designiq/contracts/live";
 import { Badge } from "@designiq/ui-kit/components/badge";
-import { Button } from "@designiq/ui-kit/components/button";
+import { Button, focusRing } from "@designiq/ui-kit/components/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -50,9 +50,9 @@ import {
   GitPullRequest,
   ListPlus,
   Loader2,
+  MessageSquareText,
   Pencil,
   Shapes,
-  Sparkles,
 } from "lucide-react";
 import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
 
@@ -153,12 +153,12 @@ export function EditorToolbar({
             to="/r/$owner/$repo"
             params={{ owner, repo: name }}
             search={{}}
-            className="text-muted-foreground hover:text-foreground @max-4xl:hidden truncate transition-colors"
+            className="text-muted-foreground hover:text-link @max-4xl:hidden truncate transition-colors"
             title={`All models in ${repo}`}
           >
             {repo}
           </Link>
-          <span className="text-muted-foreground/40 @max-4xl:hidden mx-1.5 shrink-0">/</span>
+          <span className="text-muted-foreground @max-4xl:hidden mx-1.5 shrink-0">/</span>
           {/* shrinks at a twentieth of the repo's rate: the repo gives up its
               characters first, the model name only once there is nothing left */}
           {onRename ? (
@@ -167,7 +167,10 @@ export function EditorToolbar({
               onClick={onRename}
               title="Rename…"
               aria-label={`Rename ${title}`}
-              className="group hover:bg-accent focus-visible:ring-ring/50 -mx-1 flex min-w-0 shrink-[.05] cursor-pointer items-center gap-1 rounded px-1 font-medium outline-none focus-visible:ring-[3px]"
+              className={cn(
+                "group hover:bg-accent hover:text-accent-foreground -mx-1 flex min-w-0 shrink-[.05] cursor-pointer items-center gap-1 rounded-sm px-1 font-medium transition-colors",
+                focusRing,
+              )}
             >
               <span className="truncate">{title}</span>
               <Pencil
@@ -228,7 +231,8 @@ export function EditorToolbar({
                   aria-label={p.label}
                   title={p.title}
                   onClick={() => onTogglePanel(p.id)}
-                  className={cn(open && "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15")}
+                  // open = the CI's selection look: blue frame, blue-soft fill
+                  className={cn(open && "border-primary bg-accent text-accent-foreground")}
                 >
                   <p.icon />
                   <span className="@max-6xl:hidden">{p.label}</span>
@@ -326,7 +330,7 @@ function CountChip({ children, active = false }: { children: ReactNode; active?:
     <span
       className={cn(
         "rounded-sm px-1 text-[10px] font-semibold tabular-nums",
-        active ? "bg-primary/15" : "bg-muted text-muted-foreground",
+        active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
       )}
     >
       {children}
@@ -367,16 +371,17 @@ function PeerAvatar({ user }: { user: PresenceUser }) {
   // render sites (url(...) would fetch on paint)
   const background = safePresenceColor(user.color);
   // an AI client acting for someone (kind is server-asserted, see
-  // @designiq/contracts/live): a sparkle on its color, named after that person
+  // @designiq/contracts/live): the assist menu's chat bubble on its color,
+  // named after that person
   if (user.kind === "agent") {
     return (
       <div
-        className="border-background flex size-6 items-center justify-center rounded-full border-2 text-white"
+        className="border-background text-background flex size-6 items-center justify-center rounded-full border-2"
         style={{ background }}
         title={user.name}
         aria-label={user.name}
       >
-        <Sparkles className="size-3.5" aria-hidden="true" />
+        <MessageSquareText className="size-3.5" aria-hidden="true" />
       </div>
     );
   }
@@ -391,7 +396,7 @@ function PeerAvatar({ user }: { user: PresenceUser }) {
     />
   ) : (
     <div
-      className="border-background flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-semibold text-white"
+      className="border-background text-background flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-semibold"
       style={{ background }}
       title={user.name}
     >
@@ -426,7 +431,8 @@ function ViewSwitch({
           title={o.title}
           onClick={() => onChange(o.source)}
           className={cn(
-            "focus-visible:ring-ring/50 flex h-7 cursor-pointer items-center gap-1.5 rounded-sm px-2 text-xs font-medium transition-colors outline-none focus-visible:ring-[3px]",
+            "flex h-7 cursor-pointer items-center gap-1.5 rounded-sm px-2 text-xs font-medium transition-colors",
+            focusRing,
             o.active ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
           )}
         >
@@ -461,10 +467,11 @@ function ModeAction({ action }: { action: EditorToolbarAction }) {
       title={action.buttonTitle}
       onClick={() => action.run()}
       className={cn(
-        "focus-visible:ring-ring/50 flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors outline-none focus-visible:ring-[3px]",
+        "flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors",
+        focusRing,
         active
-          ? "border-primary/40 bg-primary/10 text-primary"
-          : "border-input bg-background text-muted-foreground hover:text-foreground",
+          ? "border-primary bg-accent text-accent-foreground"
+          : "bg-background text-muted-foreground hover:border-primary hover:text-link",
       )}
     >
       <span

@@ -71,15 +71,41 @@ export interface PresenceUser {
   kind?: "human" | "agent";
 }
 
+/** The identity palette presenceColor hashes into (Miragon CI, #238). Every
+ *  entry carries a WHITE name label at ≥ 4.5:1 — which also makes cursors and
+ *  outlines ≥ 3:1 on the white canvas (pinned by test/live.test.ts).
+ *  CI first: warning, success and danger as they are, plus CI blau deepened
+ *  toward schwarz. CI blau itself stays OUT — it is the LOCAL selection color
+ *  (canvas outline, Monaco selection), and a peer outlined in it would read as
+ *  your own selection. Seven people need more hues than the CI has: teal,
+ *  magenta and brown are the documented exception — no violet (CI anti-slop
+ *  U9), no grey (the unknown-peer fallback, web presence-format).
+ *  The length keys the hash: changing it reshuffles everyone's color, changing
+ *  an entry recolors only the people on that slot. Five slots kept the hue
+ *  family of the previous palette, whose orange and cyan carried white text
+ *  at only 2.6 and 3.0:1. */
+// brand-lint exception: categorical identity hues (the reasoning above); every
+// entry names its CI source or is one of the three exception hues
+// brand-lint-disable
+export const PRESENCE_COLORS = [
+  "#92610a", // CI warning
+  "#0e7490", // teal
+  "#29408b", // CI blau 55 % into schwarz (color-mix in srgb)
+  "#0b7a55", // CI success
+  "#b0207a", // magenta
+  "#c92a2a", // CI danger
+  "#7b3f00", // brown
+] as const;
+// brand-lint-enable
+
 /** presence color, DETERMINISTIC per principal — the same person shows up in
  *  the same color on every device, session and client (web, VS Code, the
  *  Live Host's agent presence). Erasable-syntax-safe on purpose: the
  *  type-stripped backend calls it at runtime. */
 export const presenceColor = (principal: string): string => {
-  const palette = ["#fa8100", "#0aa2c0", "#7c4dff", "#2e7d32", "#c2185b", "#00695c", "#5d4037"] as const;
   let hash = 0;
   for (const ch of principal) hash = (hash * 31 + (ch.codePointAt(0) ?? 0)) >>> 0;
-  return palette[hash % palette.length] ?? palette[0];
+  return PRESENCE_COLORS[hash % PRESENCE_COLORS.length] ?? PRESENCE_COLORS[0];
 };
 
 /** where a client is on the CANVAS — model coordinates (the space the DI

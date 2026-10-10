@@ -373,13 +373,13 @@ either side, and never a silent stop of persistence.
 
 The widget also carries the **todos** of the open process: a side panel lists them, count
 badges sit on every anchored element (a badge click filters the panel to it, a chip click
-reveals the element on the canvas), "＋ New" files one against the current canvas
-selection, and "✓ Done" closes it in the tracker. It drives the same `list_todos` /
+reveals the element on the canvas), "New" files one against the current canvas
+selection, and "Done" closes it in the tracker. It drives the same `list_todos` /
 `create_todo` / `close_todo` tools over the app bridge — so a tracker-less host simply has
 no todo button, and a read-only host gets the list without the buttons. Nothing about the
 modeling path depends on it.
 
-**"✦ Implement" hands a todo to the assistant.** The widget injects a work order into the
+**"Implement" hands a todo to the assistant.** The widget injects a work order into the
 chat as a user message (`ui/message`) — repo, model path, process, anchored element ids and
 the todo's description inlined, followed by the exact steps: `get_bpmn_xml` (keep the
 `baseVersion`) → make the edit → `validate_bpmn` until clean → `save_bpmn_xml` (CAS; on
@@ -427,7 +427,7 @@ Two things make it more than a viewer:
   `scenario` (the same variable → value map as `simulate_decision`), which the widget
   plays straight into the simulator. "This case returns `manual-review` instead of
   `approve`" stops being a sentence and becomes a highlighted row.
-- **A run can be captured as a test.** "＋ Capture current run" takes the values
+- **A run can be captured as a test.** "Capture current run" takes the values
   currently entered, asks for a name, and writes them into `<decision>.tests.yaml` via
   `save_decision_tests` with `record: true` — the server evaluates and freezes what the
   decision produces. The panel lists the stored cases with their pass/fail state

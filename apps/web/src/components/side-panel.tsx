@@ -23,11 +23,12 @@ export function SidePanel({
   onClose: () => void;
   children: ReactNode;
 }) {
+  // docked over the canvas: a card surface with the card elevation (CI §6)
   return (
-    <aside className="bg-background absolute inset-y-0 right-0 z-10 flex w-80 flex-col border-l shadow-lg">
+    <aside className="bg-card text-card-foreground absolute inset-y-0 right-0 z-10 flex w-80 flex-col border-l shadow-md">
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <Icon className="text-muted-foreground size-4 shrink-0" />
-        <span className="text-sm font-medium">{title}</span>
+        <span className="text-sm font-semibold">{title}</span>
         {badge}
         <div className="flex-1" />
         <Button variant="ghost" size="icon" className="size-7" title="Close" onClick={onClose}>

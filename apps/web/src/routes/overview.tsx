@@ -11,7 +11,7 @@
  */
 import { Avatar, AvatarFallback, AvatarImage } from "@designiq/ui-kit/components/avatar";
 import { Badge } from "@designiq/ui-kit/components/badge";
-import { Button } from "@designiq/ui-kit/components/button";
+import { Button, focusRing } from "@designiq/ui-kit/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -208,7 +208,7 @@ export function Overview() {
         onSort={(next) => setSearch({ sort: next })}
       />
       {visible.length === 0 ? (
-        <div className="rounded-xl border border-dashed px-6 py-10 text-center">
+        <div className="rounded-lg border border-dashed px-6 py-10 text-center">
           <p className="font-medium">No repositories match</p>
           <p className="text-muted-foreground mt-1 text-sm">
             {q ? <>Nothing named like “{q}”</> : "Nothing"}
@@ -219,7 +219,7 @@ export function Overview() {
           </Button>
         </div>
       ) : (
-        <ul className="divide-y rounded-xl border" aria-label="Repositories">
+        <ul className="divide-y rounded-lg border" aria-label="Repositories">
           {visible.map((r) => (
             <RepoRow
               key={r.fullName}
@@ -356,7 +356,7 @@ function RepoToolbar({
         ) : (
           <kbd
             aria-hidden="true"
-            className="text-muted-foreground pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 rounded border px-1.5 font-mono text-[11px] leading-4"
+            className="text-muted-foreground pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 rounded-sm border px-1.5 font-mono text-[11px] leading-4"
           >
             /
           </kbd>
@@ -384,7 +384,8 @@ function RepoToolbar({
   );
 }
 
-/** a toolbar menu showing its current choice: "Show: Favorites ▾" */
+/** a toolbar menu showing its current choice: "Show: Favorites ▾" — a filter
+ *  that is on reads as selected (blue frame, blue-soft fill) */
 function MenuButton({
   label,
   value,
@@ -399,7 +400,7 @@ function MenuButton({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className={cn("h-9", active && "border-primary/50 bg-primary/5")}>
+        <Button variant="outline" size="sm" className={cn("h-9", active && "border-primary bg-accent")}>
           <span className="text-muted-foreground">{label}:</span> {value}
           <ChevronDown className="text-muted-foreground" />
         </Button>
@@ -575,9 +576,12 @@ function SidebarLink({ repo: r, detail }: { repo: RepoInfo; detail?: string }) {
     <Link
       to="/r/$owner/$repo"
       params={{ owner: r.owner, repo: r.name }}
-      className="hover:bg-muted focus-visible:bg-muted flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm focus-visible:outline-none"
+      className={cn(
+        "hover:bg-accent hover:text-accent-foreground flex min-w-0 items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors",
+        focusRing,
+      )}
     >
-      <OwnerAvatar repo={r} className="size-5 rounded" />
+      <OwnerAvatar repo={r} className="size-5 rounded-sm" />
       <span className="flex min-w-0 flex-col">
         <span className="truncate">{r.fullName}</span>
         {detail && <span className="text-muted-foreground text-xs">{detail}</span>}
@@ -589,7 +593,7 @@ function SidebarLink({ repo: r, detail }: { repo: RepoInfo; detail?: string }) {
 /** the first load without a cached list: placeholders in the rows' shape */
 function RepoRowSkeletons() {
   return (
-    <ul className="divide-y rounded-xl border" aria-busy="true" aria-label="Loading repositories">
+    <ul className="divide-y rounded-lg border" aria-busy="true" aria-label="Loading repositories">
       {Array.from({ length: 5 }, (_, i) => (
         <li key={i} className="flex items-start gap-3 px-4 py-3">
           <Skeleton className="size-8 rounded-md" />

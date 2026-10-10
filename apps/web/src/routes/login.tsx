@@ -11,6 +11,8 @@ export function Login() {
     <div className="mx-auto flex max-w-md flex-col px-6 py-20">
       <Card>
         <CardHeader className="text-center">
+          {/* the landing's mark is the official app icon, as the CI prescribes (§8, §11) */}
+          <img src="/favicon.svg" alt="" className="mx-auto mb-2 size-12" />
           <CardTitle className="text-2xl">designIQ</CardTitle>
           <CardDescription>
             Collaborative modeling and architecture with AI — live, Git-native, with every model a file in your repo.
@@ -20,17 +22,17 @@ export function Login() {
           {providers.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               This instance has no browser login configured. Point it at your identity provider (
-              <code className="bg-muted rounded px-1">LIVE_OIDC_CLIENT_ID</code> next to the OIDC issuer and JWKS
+              <code className="bg-muted rounded-sm px-1">LIVE_OIDC_CLIENT_ID</code> next to the OIDC issuer and JWKS
               variables —{" "}
               <a
-                className="underline"
+                className="text-link underline underline-offset-2"
                 href="https://github.com/Miragon/design-iq/blob/main/docs/on-prem/configuration.md"
                 target="_blank"
                 rel="noreferrer"
               >
                 configuration guide
               </a>
-              ), or run it with <code className="bg-muted rounded px-1">LIVE_AUTH=none</code> for a local evaluation
+              ), or run it with <code className="bg-muted rounded-sm px-1">LIVE_AUTH=none</code> for a local evaluation
               without any login.
             </p>
           ) : (

@@ -15,13 +15,23 @@
          emits it once per renderer spec as mcp-app-<notation>.html, the spec
          resolved through the build-time alias @/mcp-app/widget-spec -->
     <div id="app">
+      <!-- data-icon: a Lucide icon shell.ts prepends at boot (mcp-app/icons.ts) —
+           one geometry per icon, not an SVG copied into every entry -->
       <div id="toolbar">
         <span id="title">Loading…</span>
-        <span id="dirty" hidden>●</span>
+        <span id="dirty" role="img" aria-label="Unsaved changes" title="Unsaved changes" hidden></span>
         <span class="spacer"></span>
-        <button id="open" hidden>Open in designIQ</button>
-        <button id="fullscreen" title="Open fullscreen">⛶</button>
-        <button id="save" hidden title="Changes save automatically — this forces it now">Save now</button>
+        <button id="open" class="btn" hidden data-icon="external-link" data-icon-size="14">Open in designIQ</button>
+        <button
+          id="fullscreen"
+          class="btn icon-only"
+          title="Open fullscreen"
+          aria-label="Open fullscreen"
+          data-icon="maximize"
+        ></button>
+        <button id="save" class="btn primary" hidden title="Changes save automatically — this forces it now">
+          Save now
+        </button>
       </div>
       <div id="banner" hidden></div>
       <div id="main">

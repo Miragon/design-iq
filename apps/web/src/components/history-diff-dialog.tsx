@@ -17,11 +17,14 @@
  * and closes on success.
  */
 import { Button } from "@designiq/ui-kit/components/button";
+import { cn } from "@designiq/ui-kit/lib/utils";
 import { GitCompare, RotateCcw, X } from "lucide-react";
 import * as monaco from "monaco-editor";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
+import { dialogBackdrop } from "@/components/dialog-shell";
 import type { FileCommitWire } from "@/lib/api";
+import { installMonacoTheme, MONACO_OPTIONS } from "@/lib/monaco-theme";
 import type { DiffSpec } from "@/notations/registry";
 
 export function HistoryDiffDialog({
@@ -70,11 +73,12 @@ export function HistoryDiffDialog({
     if (view !== "text" || !monacoHostRef.current) return;
     const original = monaco.editor.createModel(historical, language);
     const modified = monaco.editor.createModel(current, language);
+    installMonacoTheme(monaco.editor);
     const editor = monaco.editor.createDiffEditor(monacoHostRef.current, {
+      ...MONACO_OPTIONS,
       readOnly: true,
       automaticLayout: true,
       minimap: { enabled: false },
-      fontSize: 12,
       renderOverviewRuler: false,
     });
     editor.setModel({ original, modified });
@@ -87,9 +91,9 @@ export function HistoryDiffDialog({
 
   const showDiagram = view === "diagram";
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div className={dialogBackdrop} onClick={onClose}>
       <div
-        className="bg-background flex h-[85vh] w-full max-w-6xl flex-col rounded-lg border shadow-lg"
+        className="bg-popover text-popover-foreground flex h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b px-4 py-2">
@@ -100,18 +104,21 @@ export function HistoryDiffDialog({
           <div className="flex-1" />
           {diagramDiff && !diagramFailed && (
             <div className="flex rounded-md border">
+              {/* the current view reads as selected: blue-soft, blue text */}
               <Button
-                variant={showDiagram ? "secondary" : "ghost"}
+                variant="ghost"
                 size="sm"
-                className="h-7 rounded-r-none text-xs"
+                aria-pressed={showDiagram}
+                className={cn("h-7 rounded-r-none text-xs", showDiagram && "bg-accent text-accent-foreground")}
                 onClick={() => setView("diagram")}
               >
                 Diagram
               </Button>
               <Button
-                variant={showDiagram ? "ghost" : "secondary"}
+                variant="ghost"
                 size="sm"
-                className="h-7 rounded-l-none text-xs"
+                aria-pressed={!showDiagram}
+                className={cn("h-7 rounded-l-none text-xs", !showDiagram && "bg-accent text-accent-foreground")}
                 onClick={() => setView("text")}
               >
                 {language === "xml" ? "XML" : language === "json" ? "JSON" : "Text"}
