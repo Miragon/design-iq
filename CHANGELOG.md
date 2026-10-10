@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.2.0](https://github.com/Miragon/design-iq/compare/v5.1.0...v5.2.0) (2026-10-10)
+
+
+### Features
+
+* adopt the Miragon corporate identity in light mode ([#238](https://github.com/Miragon/design-iq/issues/238)) ([#240](https://github.com/Miragon/design-iq/issues/240)) ([65fc120](https://github.com/Miragon/design-iq/commit/65fc1207f5913a0e6ee952673dc5010b2a393f6a))
+* GitHub-style start page — filter, favorites, recently opened and last change ([#213](https://github.com/Miragon/design-iq/issues/213)) ([#237](https://github.com/Miragon/design-iq/issues/237)) ([6d690ca](https://github.com/Miragon/design-iq/commit/6d690ca40b38055744aea5332496647d7398b5b7))
+
 ## [5.1.0](https://github.com/Miragon/design-iq/compare/v5.0.0...v5.1.0) (2026-10-04)
 
 
