@@ -1,16 +1,19 @@
-/* The widget chrome shared by every model widget (mcp-app*.html): layout,
- * toolbar, banner, status line and the small primitives their side panels
- * use. Notation-specific stylesheets (bpmn-js / dmn-js) are imported by each
- * widget's own entry stylesheet.
+/* The frameless chrome every model widget shares (spec §2): the iframe is
+ * canvas, the chrome floats in corner clusters. Inlined into EVERY widget
+ * bundle — notation-only rules live in the entry sheets (styles.css,
+ * dmn-styles.css, miragon-styles.css: the palette slot, the Workshop chip, the
+ * view switch, the panels' internals).
  *
- * On the Miragon CI through the SPA's own semantic layer (@designiq/ui-kit/
- * tokens.css — plain CSS, no Tailwind): every colour here is an alias, so the
- * widgets and the web app cannot drift apart. --accent is the translucent
- * HOVER tint (shadcn's meaning); the blue itself is --primary (fills) and
- * --link (interactive text on white).
+ * Colours are @designiq/ui-kit aliases only. --accent is a translucent tint,
+ * laid over the surface (`linear-gradient(accent), card`); blue fills are
+ * --primary, interactive text on white --link.
  *
- * Every widget builds to ONE self-contained HTML file, so everything here is
- * inlined into EVERY widget bundle (mcp-app*.html) — keep it small. */
+ * The layout contract (data attributes and px custom properties on #app,
+ * data-step on #tl/#tr) is chrome/contracts.ts LayoutChrome: core/layout.ts
+ * computes it, chrome/layout-dom.ts writes it at mount — before anything
+ * shows — so no property needs a default here.
+ * z (CI §5): canvas 0 · palette 20 · corners, panels 30 · menus, popovers 40
+ * · state cards 50 · decision cards, toasts 60. */
 @import "@designiq/ui-kit/tokens.css";
 @import "./geist.css";
 
@@ -19,75 +22,151 @@
 }
 
 html,
-body,
-#app {
+body {
   height: 100%;
   margin: 0;
+  overflow: hidden;
+}
+
+body {
   font-family: var(--designiq-font-sans);
   color: var(--foreground);
-  background: var(--background);
+  background: var(--canvas-background);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 #app {
-  display: flex;
-  flex-direction: column;
-}
-
-#toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 13px;
-}
-
-#title {
-  min-width: 0;
+  position: relative;
+  height: 100%;
   overflow: hidden;
-  font-weight: 500;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  background: var(--canvas-background);
+}
+
+#canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* a state card owns the screen: no work chrome around it */
+#app[data-state] :is(.corner, .panel, #menu, #sync-popover) {
+  display: none;
+}
+
+/* [hidden] must beat the author display of these */
+:is(.fb, .pb, .pill, .zoom, .zoom button, .count, .menu, .popover, .panel, .panel-foot, .callout, .state)[hidden],
+:is(.slot, .count):empty {
+  display: none;
 }
 
 .spacer {
   flex: 1;
 }
 
-/* the brand mark (shell.ts puts it before the title) — never squeezed */
-#toolbar > svg {
+.icon {
   flex: none;
   display: block;
 }
 
-/* unsaved changes: a blue dot (labelled in the HTML), not a glyph */
-#dirty:not([hidden]) {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--cd-radius-pill);
-  background: var(--primary);
+.icon.spin {
+  animation: spin 1s linear infinite;
 }
 
-/* ── buttons ──────────────────────────────────────────────────────────────────
- * Opt-in (.btn) rather than `button`: dmn-js draws its own buttons inside
- * #canvas, and a widget rule must never reach them. The CI's md radius (12px)
- * is for full-size controls — on these 26px chrome buttons it would turn every
- * one into a pill, so they take sm (6px), the CI step for compact controls. */
-.btn {
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* the official app icon (lib/comet.ts appIconElement) */
+.appicon-bg {
+  fill: var(--primary);
+}
+
+.appicon-comet {
+  fill: var(--brand);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+:is(button, [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ── corners */
+.corner {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tl {
+  top: var(--inset-t);
+  left: var(--inset-l);
+}
+
+.tr {
+  top: var(--inset-t);
+  right: var(--inset-r);
+}
+
+.bl {
+  bottom: var(--inset-b);
+  left: var(--inset-l);
+}
+
+/* beside the bpmn.io watermark (bottom 15, right 15, 53 wide), never on it */
+.br {
+  bottom: var(--inset-b);
+  right: var(--zoom-right);
+}
+
+/* layout-dom.ts measures clones of #tl / #tr here, at their natural width */
+.measure {
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  contain: layout style;
+}
+
+.measure > .corner {
+  inset: 0 auto auto 0;
+  width: max-content;
+}
+
+/* ── buttons: floating 36px (.fb, CI §8); panel, card and toast 28px (.pb) */
+:is(.fb, .pb) {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 26px;
-  padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: var(--cd-radius-sm);
+  border-radius: var(--cd-radius-md);
   background: var(--card);
   color: var(--foreground);
-  font: inherit;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -99,97 +178,623 @@ body,
     transform var(--cd-motion-fast) var(--cd-ease);
 }
 
-/* the lifecycle hides chrome buttons with [hidden] — an author `display`
-   would beat the UA's [hidden] { display: none } (see #banner below) */
-.btn[hidden] {
-  display: none;
-}
-
-/* hover — and a panel toggle while its panel is open */
-.btn:hover:not(:disabled),
-.btn[aria-expanded="true"] {
-  border-color: var(--link);
-  background: var(--accent);
-  color: var(--link);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* the one main action of a bar or form; disabled it falls back to the plain
-   button at half opacity — a pale blue would still read as clickable */
-.btn.primary:not(:disabled) {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-foreground);
-  font-weight: 600;
+.fb {
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
   box-shadow: var(--cd-shadow-1);
 }
 
-.btn.primary:hover:not(:disabled) {
+.pb {
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.fb.icon {
+  width: 36px;
+  padding: 0;
+}
+
+.pb.icon {
+  width: 28px;
+  padding: 0;
+}
+
+/* hover, and a floating button's pressed state: the CI selection look */
+:is(.fb, .pb):not(:disabled, [aria-disabled="true"], .primary):hover,
+.fb:is([aria-expanded="true"], [aria-pressed="true"], [aria-checked="true"]) {
+  border-color: var(--primary);
+  background: linear-gradient(var(--accent), var(--accent)), var(--card);
+  color: var(--link);
+}
+
+.pb:is(.ghost, .link) {
+  border-color: transparent;
+  background: transparent;
+}
+
+.pb.link {
+  color: var(--link);
+}
+
+:is(.fb, .pb).primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--cd-shadow-1);
+}
+
+:is(.fb, .pb).primary:not(:disabled, [aria-disabled="true"]):hover {
   border-color: var(--primary-hover);
   background: var(--primary-hover);
-  color: var(--primary-foreground);
+}
+
+.fb.primary:hover {
   box-shadow: var(--cd-shadow-2);
   transform: translateY(-1px);
 }
 
-.btn.primary:active:not(:disabled) {
-  box-shadow: var(--cd-shadow-1);
-  transform: none;
-}
-
-.btn.danger {
+.pb.danger {
   color: var(--destructive);
 }
 
-.btn.danger:hover:not(:disabled) {
+/* a call in flight (Run, Create todo, Implement, a refresh) is aria-disabled:
+   dimmed, still focusable — a disabled button would drop the focus on <body> */
+.pb:is(:disabled, [aria-disabled="true"]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pb[aria-disabled="true"] {
+  cursor: progress;
+}
+
+/* a panel toggle's count: muted, primary while its panel is open (CountChip) */
+.count {
+  min-width: 18px;
+  padding: 2px 5px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+[aria-expanded="true"] > .count,
+.mi[aria-checked="true"] .count {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--cd-radius-pill);
+  background: var(--input);
+}
+
+.dot.live {
+  background: var(--success);
+}
+
+.dot.bad {
+  background: var(--destructive);
+}
+
+.dot.warn {
+  background: var(--warning);
+}
+
+.dot.info {
+  background: var(--info);
+}
+
+.dot.dirty {
+  background: var(--primary);
+}
+
+/* a key hint (a menu item, Save now) */
+.kbd {
+  color: var(--muted-foreground);
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.pb .kbd {
+  margin-left: 2px;
+}
+
+/* ── top-left: the menu trigger */
+.trigger {
+  gap: 10px;
+  padding: 0 14px 0 10px;
+}
+
+.trigger .comet {
+  flex: none;
+}
+
+.trigger .sep {
+  align-self: stretch;
+  width: 1px;
+  margin: 9px 0;
+  background: var(--border);
+}
+
+.trigger .name {
+  min-width: 0;
+  max-width: var(--name-max, none);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── the measured degrade (spec §2.3), cumulative per data-step; steps 3 and
+   7 also live in styles.css (Workshop) and dmn-styles.css (view switch) */
+.open .label.short {
+  display: none;
+}
+
+/* ≥ 1: the comet and its separator */
+.corner[data-step]:not([data-step="0"]) .trigger :is(.comet, .sep) {
+  display: none;
+}
+
+/* ≥ 2: "Open in designIQ" → "Open" */
+.corner[data-step]:not([data-step="0"], [data-step="1"]) .open .label.long {
+  display: none;
+}
+
+.corner[data-step]:not([data-step="0"], [data-step="1"]) .open .label.short {
+  display: inline;
+}
+
+/* ≥ 4: the panel toggle drops its label */
+.corner[data-step]:not([data-step="0"], [data-step="1"], [data-step="2"], [data-step="3"]) .toggle {
+  padding: 0 9px;
+}
+
+.corner[data-step]:not([data-step="0"], [data-step="1"], [data-step="2"], [data-step="3"]) .toggle .label {
+  display: none;
+}
+
+/* ≥ 5: "Open" → icon-only (:is(.long, .short) outweighs the step-2 rule) */
+.corner[data-step]:is([data-step="5"], [data-step="6"], [data-step="7"], [data-step="8"], [data-step="9"]) .open {
+  width: 36px;
+  padding: 0;
+}
+
+.corner[data-step]:is([data-step="5"], [data-step="6"], [data-step="7"], [data-step="8"], [data-step="9"])
+  .open
+  :is(.label.long, .label.short) {
+  display: none;
+}
+
+/* ≥ 8: fullscreen is menu-only */
+.corner[data-step]:is([data-step="8"], [data-step="9"]) #fullscreen {
+  display: none;
+}
+
+/* 9: the trigger is the menu icon alone (the name: aria-label, title, header) */
+.corner[data-step="9"] .trigger {
+  width: 36px;
+  padding: 0;
+}
+
+.corner[data-step="9"] .trigger .name {
+  display: none;
+}
+
+/* ── bottom-left: the sync pill (a button; its popover holds the detail) */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--cd-radius-pill);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: var(--cd-shadow-1);
+  cursor: pointer;
+}
+
+.pill:hover {
+  background: linear-gradient(var(--accent), var(--accent)), var(--card);
+}
+
+.pill:not(.warning, .danger):hover {
+  border-color: var(--primary);
+}
+
+.pill[aria-expanded="true"] {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.pill .sub {
+  color: var(--muted-foreground);
+  font-weight: 400;
+}
+
+.pill.warning {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.pill.danger {
   border-color: var(--destructive);
+  color: var(--destructive);
+}
+
+/* failed: two sibling buttons in one group, never a button inside a button */
+.pill-group {
+  display: inline-flex;
+}
+
+.pill-group .pill:first-child {
+  border-radius: var(--cd-radius-pill) 0 0 var(--cd-radius-pill);
+}
+
+.pill-group .pill.act {
+  margin-left: -1px;
+  padding: 0 12px;
+  border-color: var(--destructive);
+  border-radius: 0 var(--cd-radius-pill) var(--cd-radius-pill) 0;
+  color: var(--link);
+  font-weight: 600;
+}
+
+.avatars {
+  display: inline-flex;
+  margin-left: 2px;
+}
+
+/* the PEER's presence colour arrives inline (safePresenceColor), like the
+   SPA's PeerAvatar — never a chrome colour */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--card);
+  border-radius: var(--cd-radius-pill);
+  background: var(--muted-foreground);
+  color: var(--primary-foreground);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.avatar + .avatar {
+  margin-left: -5px;
+}
+
+/* "+N": no person, so no presence colour */
+.avatar.more {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+/* ── bottom-right: zoom (28px targets; compact hides the readout) */
+.zoom {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--cd-radius-md);
+  background: var(--card);
+  box-shadow: var(--cd-shadow-1);
+}
+
+.zoom button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 4px;
+  border: 0;
+  /* nested in the md group: its radius minus the inset */
+  border-radius: calc(var(--cd-radius-md) - 4px);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.zoom button:hover:not([aria-disabled="true"]) {
+  background: var(--accent);
+  color: var(--link);
+}
+
+/* − / + at the zoom limit — aria-disabled keeps the keyboard focus */
+.zoom button[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.zoom .pct {
+  min-width: 44px;
+  color: var(--muted-foreground);
+}
+
+.zoom .vsep {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--border);
+}
+
+/* compact: the renderer palette (its slot: the entry sheet) stays behind
+   Tools until opened */
+#app[data-palette="tools"]:not([data-palette-open]) #canvas .djs-palette,
+#app:not([data-palette="tools"]) #tools {
+  display: none;
+}
+
+/* ── menus and popovers (surface, md, shadow-3, 6px inset) */
+.menu,
+.popover {
+  position: absolute;
+  z-index: 40;
+  border: 1px solid var(--border);
+  border-radius: var(--cd-radius-md);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: var(--cd-shadow-3);
+  font-size: 13px;
+  animation: pop var(--cd-motion-fast) var(--cd-ease-out);
+}
+
+.menu {
+  top: var(--under-row);
+  left: var(--inset-l);
+  width: 288px;
+  max-height: calc(100% - var(--under-row) - var(--inset-b));
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.popover {
+  bottom: calc(var(--inset-b) + 40px);
+  left: var(--inset-l);
+  width: min(320px, calc(100% - var(--inset-l) - var(--inset-r)));
+  padding: 12px;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.menu-head {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  align-items: center;
+  gap: 1px 10px;
+  padding: 8px 8px 10px;
+  user-select: text;
+}
+
+.menu-head .appicon {
+  grid-row: span 4;
+  align-self: start;
+}
+
+.menu-head .t {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.menu-head .sub {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.menu-head .path {
+  color: var(--muted-foreground);
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.menu hr {
+  height: 1px;
+  margin: 4px 2px;
+  border: 0;
+  background: var(--border);
+}
+
+.mi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--cd-radius-sm);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mi .icon {
+  color: var(--muted-foreground);
+}
+
+.mi .label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mi:is(:hover, :focus-visible):not([aria-disabled="true"]) {
+  outline: none;
+  background: var(--accent);
+  color: var(--link);
+}
+
+.mi:is(:hover, :focus-visible):not([aria-disabled="true"]) .icon,
+.mi .icon.tick {
+  color: var(--link);
+}
+
+.mi[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* the trailing key hint, count, verdict, switch or check */
+.mi .end {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* why a disabled item is disabled, where its key hint sat */
+.mi .end .hint {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+/* the inline destructive confirm (CI §9), under the item's label */
+.mi-confirm {
+  display: grid;
+  gap: 6px;
+  padding: 2px 8px 8px 34px;
+  font-size: 12px;
+}
+
+.mi-confirm .row {
+  display: flex;
+  gap: 6px;
+}
+
+.popover h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* focused on open so a screen reader starts here — not a control, no ring */
+.popover h3:focus {
+  outline: none;
+}
+
+.popover h3 .time {
+  margin-left: auto;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.popover h3[data-tone="warning"] .icon {
+  color: var(--warning);
+}
+
+.popover h3[data-tone="danger"] .icon {
+  color: var(--destructive);
+}
+
+:is(.popover h3, .pill) .icon.ok {
+  color: var(--success);
+}
+
+.popover p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.popover p + p {
+  margin-top: 6px;
+}
+
+/* the last save's findings, one tinted row each */
+.findings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.finding {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.finding.danger {
   background: var(--destructive-soft);
   color: var(--destructive);
 }
 
-/* icon-only: square, the title/aria-label carries the name */
-.btn.icon-only {
-  width: 26px;
-  padding: 0;
+.finding .icon {
+  margin-top: 1px;
 }
 
-/* row actions inside the side panels */
-.btn.small {
-  gap: 4px;
-  min-height: 22px;
-  padding: 0 6px;
-  font-size: 12px;
-}
-
-.btn.small.icon-only {
-  width: 22px;
-  padding: 0;
-}
-
-.btn > .icon {
-  flex: none;
-}
-
-:is(.btn, .chip, .case, [role="switch"]):focus-visible {
+.finding:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 1px;
 }
 
-/* ── inputs ── */
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.popover .actions {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.actions .hint {
+  margin-right: auto;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
 .input {
-  padding: 5px 8px;
+  padding: 6px 8px;
   border: 1px solid var(--input);
   border-radius: var(--cd-radius-sm);
   background: var(--card);
   color: var(--foreground);
-  font: inherit;
-  transition:
-    border-color var(--cd-motion-fast) var(--cd-ease),
-    box-shadow var(--cd-motion-fast) var(--cd-ease);
 }
 
 .input::placeholder {
@@ -198,81 +803,438 @@ body,
 }
 
 .input:focus {
-  outline: none;
-  border-color: var(--ring);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
+  outline: 2px solid var(--ring);
+  outline-offset: 0;
 }
 
-/* :not([hidden]) is load-bearing — a bare `display: flex` here is an author rule
- * and would beat the UA stylesheet's [hidden] { display: none } */
-#banner:not([hidden]) {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px 6px 9px;
-  border-bottom: 1px solid var(--border);
-  border-left: 3px solid var(--warning);
-  background: var(--warning-soft);
-  color: var(--warning);
-  font-size: 13px;
-}
-
-#banner > .icon {
-  flex: none;
-}
-
-#main {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-#canvas {
-  flex: 1;
-  min-width: 0;
-  min-height: 320px;
-}
-
-#status {
-  padding: 4px 12px;
-  border-top: 1px solid var(--border);
-  color: var(--muted-foreground);
-  font-size: 12px;
-}
-
+/* also the pill's inactive tone (`.pill.muted`) */
 .muted {
   color: var(--muted-foreground);
   font-size: 12px;
 }
 
-/* element chips — a span in the anchor preview, a button in a todo row */
-.chip {
-  display: inline-block;
-  max-width: 100%;
+/* ── panels: right inspector cards, full-width sheets (core/layout.ts) */
+.panel {
+  position: absolute;
+  z-index: 30;
+  top: var(--under-row);
+  right: var(--inset-r);
+  display: flex;
+  flex-direction: column;
+  width: var(--panel-w);
+  max-height: calc(100% - var(--under-row) - var(--lane-bottom));
+  /* never scrolled itself, not even by a focus: the head stays — what does
+     not fit scrolls in .panel-scroll (clip; hidden where clip is unknown) */
   overflow: hidden;
-  padding: 1px 6px;
+  overflow: clip;
   border: 1px solid var(--border);
-  border-radius: var(--cd-radius-sm);
+  border-radius: var(--cd-radius-lg);
   background: var(--card);
-  color: var(--foreground);
-  font: inherit;
-  font-size: 11px;
+  box-shadow: var(--cd-shadow-2);
+  font-size: 13px;
+  animation: panel-in var(--cd-motion-base) var(--cd-ease-out);
+}
+
+/* the lane never overlaps an open panel (WCAG 2.4.11): it passes beside a
+   card (--lane-left / --lane-w), and a sheet ends above what it holds
+   (--lane-h, layout-dom.ts) — the lane never reaches the sheet's head
+   (--lane-max), and its toasts leave the sheet 120px of body (planLane) */
+#app[data-panel="sheet"] .panel {
+  left: var(--inset-l);
+  bottom: calc(var(--lane-bottom) + var(--lane-h, 0px));
+  width: auto;
+  min-height: 50px;
+  max-height: none;
+  animation-name: rise;
+}
+
+/* a decision card over a sheet folds it to its head (panel.ts fold): the
+   body is hidden — out of the tab order, not squeezed under the card — and
+   the head stays where it is; the card answered or deferred, it unfolds */
+#app[data-panel] .panel[data-folded] {
+  bottom: auto;
+}
+
+#app .panel[data-folded] > :not(.panel-head) {
+  display: none;
+}
+
+#app .panel[data-folded] .panel-head {
+  border-bottom-color: transparent;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+.panel-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+}
+
+/* the ONE scroller under the head: a panel's form, callout and list scroll
+   together, so a short card or sheet reaches every control by scrolling */
+.panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* a control the focus scrolls into view lands 8px clear of the edge (the
+   margin layout-dom.ts follows with) — Chrome otherwise stops a fraction of
+   a pixel short, a chip (overflow: hidden) its border's width short */
+.panel-scroll :focus {
+  scroll-margin-block: 8px;
+}
+
+/* a list of row cards (in the scroller) */
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* an error inside a panel (every callout is one) */
+.callout {
+  flex: none;
+  margin: 10px 10px 0;
+  padding: 8px 10px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--destructive-soft);
+  color: var(--destructive);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* read-only: the one line that says why nothing can be saved here */
+.panel-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* ── feedback: toasts and decision cards (bottom-centre lane, z 60) — centred
+   in the frame, or in the canvas column beside an open card, never up to the
+   corner row (--lane-max; core/layout.ts). What it holds fits (planLane):
+   the decision card whole, at most one toast beside it, two without */
+.lane {
+  position: absolute;
+  z-index: 60;
+  bottom: var(--lane-bottom);
+  left: var(--lane-left);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  width: var(--lane-w);
+  max-height: var(--lane-max);
+  pointer-events: none;
+}
+
+/* an open menu or popover is what the user just asked for: the lane yields */
+#app:has(:is(#menu, #sync-popover):not([hidden])) .lane {
+  z-index: 39;
+}
+
+.lane > * {
+  flex: none;
+  pointer-events: auto;
+  animation: rise var(--cd-motion-base) var(--cd-ease-out);
+}
+
+/* a waiting toast laid out for one synchronous read of its height (toasts.ts) */
+.lane > .measuring {
+  position: absolute;
+  right: 0;
+  left: 0;
+  visibility: hidden;
+  animation: none;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* a leaving toast (replaced by its key, dismissed, timed out) fades OUT of
+   the flow: it holds no room — its keyed successor never stacks on it and
+   pushes the lane past --lane-max — pinned where it was (toasts.ts sets its
+   bottom, core/feedback.ts leavingBottom), under the entries that stay, and
+   it takes no pointer (it is inert) */
+.lane > .leaving {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: -1;
+  pointer-events: none;
+  animation: sink var(--cd-motion-fast) var(--cd-ease) forwards;
+}
+
+@keyframes sink {
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.toast,
+.decide {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--info);
+  border-radius: var(--cd-radius-md);
+  background: var(--card);
+  box-shadow: var(--cd-shadow-3);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px 10px 12px;
+}
+
+/* level with the 28px action / × buttons */
+.toast .dot {
+  margin-top: 10px;
+}
+
+.toast .msg {
+  flex: 1;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.toast .msg b {
+  font-weight: 600;
+}
+
+.toast .detail {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* a URL (the blocked link): exact, selectable */
+.toast .detail.mono {
+  font-family: var(--designiq-font-mono);
+  font-size: 11.5px;
+  user-select: all;
+}
+
+.toast .actions {
+  gap: 4px;
+}
+
+/* the tone's left rule (a decision card is warning or info) */
+.toast.success {
+  border-left-color: var(--success);
+}
+
+:is(.toast, .decide).warning {
+  border-left-color: var(--warning);
+}
+
+.toast.danger {
+  border-left-color: var(--destructive);
+}
+
+/* whole whenever the frame has room for it; a frame too short for the card
+   itself lets it scroll inside (its shadow stays — the lane never clips) */
+.decide {
+  max-height: var(--lane-max);
+  overflow-y: auto;
+  padding: 14px 10px 14px 16px;
+}
+
+.decide .head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* the tone icon (svg) — not the × button, which also carries .icon */
+.decide .head > svg.icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--info);
+}
+
+.decide .text {
+  flex: 1;
+  min-width: 0;
+}
+
+.decide.warning .head > svg.icon {
+  color: var(--warning);
+}
+
+.decide h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.decide p {
+  margin: 3px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12.5px;
   line-height: 1.5;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  vertical-align: bottom;
 }
 
-button.chip {
-  cursor: pointer;
-  transition:
-    color var(--cd-motion-fast) var(--cd-ease),
-    background-color var(--cd-motion-fast) var(--cd-ease),
-    border-color var(--cd-motion-fast) var(--cd-ease);
+.decide .later {
+  margin: -4px 0 0 auto;
 }
 
-button.chip:hover {
-  border-color: var(--link);
-  background: var(--accent);
-  color: var(--link);
+/* one row per choice: equal-width buttons + the consequence line */
+.choices {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 12px 6px 0 28px;
+}
+
+.choices .pb {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.choices .why {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+#app[data-compact] .choices {
+  margin-left: 0;
+}
+
+/* ── state cards: loading / failed / no input (CI §8 empty state) */
+.state {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  animation: fade var(--cd-motion-base) var(--cd-ease-out);
+}
+
+/* the canvas paper with a quiet dot grid — no previous canvas behind it */
+.state.paper {
+  background-color: var(--canvas-background);
+  background-image: radial-gradient(var(--border) 1.2px, transparent 1.2px);
+  background-size: 20px 20px;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 440px;
+  padding: 28px 32px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--cd-radius-lg);
+  background: var(--card);
+  box-shadow: var(--cd-shadow-3);
+  text-align: center;
+}
+
+.state-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.state-card h2 .icon {
+  color: var(--muted-foreground);
+}
+
+.state-card p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.state-card .err {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--destructive-soft);
+  color: var(--destructive);
+  font-family: var(--designiq-font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.state-card .actions {
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.state-card .pb {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+/* CI §7: the token sheet zeroes every duration under reduced motion; the
+   primary lift is a transform, not a duration — it goes too */
+@media (prefers-reduced-motion: reduce) {
+  .fb.primary:hover {
+    transform: none;
+  }
 }

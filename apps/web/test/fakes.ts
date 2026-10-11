@@ -5,11 +5,13 @@
  * supersede, and a live upgrade that resolves whatever the test decides.
  * Real timers with fast timing knobs — no mocked clock to forget to advance.
  */
-import type { LiveBindHooks, WidgetEngine } from "../src/mcp-app/core/engine.ts";
+import type { LiveBindHooks, ViewControls, WidgetEngine } from "../src/mcp-app/core/engine.ts";
 import type {
   BannerAction,
+  BannerOptions,
   ChromePort,
   ClaimDocument,
+  DocLabel,
   DocRef,
   LiveHandle,
   LiveHooks,
@@ -17,12 +19,35 @@ import type {
   LoadedModel,
   ModelBridge,
   ModelInput,
+  PeerLabel,
   SaveResult,
+  StateCard,
+  SyncState,
+  ToastSpec,
 } from "../src/mcp-app/core/lifecycle.ts";
 
 export const tick = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 /** fast enough for a suite, slow enough that ordering stays observable */
-export const TIMING = { autosaveMs: 10, flushDeadlineMs: 200, flushPollMs: 5 };
+export const TIMING = { autosaveMs: 10, flushDeadlineMs: 200, flushPollMs: 5, retryMs: [20, 40, 80] };
+
+/** inert view controls: the lifecycle only hands engine.view to the chrome
+ *  (onMount) — the fit and zoom rules are widget-engines' and widget-layout's */
+function fakeView(): ViewControls {
+  let level = 1;
+  return {
+    hasViewport: () => true,
+    fit: () => {},
+    zoomBy(step) {
+      level *= 1 + step;
+    },
+    zoomTo(next) {
+      level = next;
+    },
+    level: () => level,
+    isTouched: () => false,
+    onChange: () => () => {},
+  };
+}
 
 export interface FakeEngine extends WidgetEngine {
   imported: string[];
@@ -32,6 +57,8 @@ export interface FakeEngine extends WidgetEngine {
   /** the hooks the last bindLive received (live mode) */
   bound?: LiveBindHooks;
   unbound: number;
+  destroyed: number;
+  view: ViewControls;
 }
 
 export function fakeEngine(o: { editable?: boolean; live?: boolean; importFails?: () => boolean } = {}): FakeEngine {
@@ -42,6 +69,8 @@ export function fakeEngine(o: { editable?: boolean; live?: boolean; importFails?
     exports: 0,
     log: [],
     unbound: 0,
+    destroyed: 0,
+    view: fakeView(),
     async importText(text) {
       engine.log.push("importText");
       if (o.importFails?.()) throw new Error("bad import");
@@ -56,7 +85,9 @@ export function fakeEngine(o: { editable?: boolean; live?: boolean; importFails?
       return () => dirtyCbs.delete(cb);
     },
     selectedElementId: () => undefined,
-    destroy() {},
+    destroy() {
+      engine.destroyed++;
+    },
     fire: {
       dirty: () => {
         for (const cb of dirtyCbs) cb();
@@ -72,6 +103,35 @@ export function fakeEngine(o: { editable?: boolean; live?: boolean; importFails?
     };
   }
   return engine;
+}
+
+/** the lifecycle's mountEngine(readonly): the FIRST call hands out `first`,
+ *  every later one (the superseded freeze) a fresh viewer — all recorded */
+export interface FakeMounts {
+  mount(readonly: boolean): FakeEngine;
+  /** the readonly flag of every call, in order */
+  calls: boolean[];
+  /** the viewers the later calls mounted */
+  viewers: FakeEngine[];
+}
+
+export function fakeMounts(first: FakeEngine): FakeMounts {
+  const m: FakeMounts = {
+    calls: [],
+    viewers: [],
+    mount: (readonly) => {
+      m.calls.push(readonly);
+      if (m.calls.length === 1) {
+        first.log.push("mountEngine");
+        return first;
+      }
+      const viewer = fakeEngine({ editable: !readonly, live: false });
+      viewer.log.push("mountEngine");
+      m.viewers.push(viewer);
+      return viewer;
+    },
+  };
+  return m;
 }
 
 export interface FakeBridge {
@@ -127,47 +187,67 @@ export interface FakeChrome {
   port: ChromePort;
   status: string[];
   tooltips: string[];
-  titles: string[];
+  /** every setDocument (provisional, then resolved) */
+  docs: DocLabel[];
+  /** every setSync, deduplicated by the lifecycle */
+  sync: SyncState[];
+  peers: PeerLabel[][];
+  toasts: ToastSpec[];
+  dismissed: string[];
   dirty: boolean[];
   saveButton: Array<{ visible?: boolean; enabled?: boolean }>;
   openVisible: boolean[];
-  banners: Array<{ text: string; actions: BannerAction[] }>;
+  /** every showBanner, its options included */
+  banners: Array<{ text: string; actions: BannerAction[]; opts?: BannerOptions }>;
   hidden: number;
+  states: Array<StateCard | undefined>;
   /** the current banner's labels ([] when hidden) */
   bannerLabels(): string[];
   /** run the current banner's action by label */
   click(label: string): void;
   last(): string | undefined;
+  /** the kinds of every setSync, in order */
+  kinds(): string[];
 }
 
 export function fakeChrome(): FakeChrome {
-  let current: { text: string; actions: BannerAction[] } | undefined;
+  let current: { text: string; actions: BannerAction[]; opts?: BannerOptions } | undefined;
   const c: FakeChrome = {
     status: [],
     tooltips: [],
-    titles: [],
+    docs: [],
+    sync: [],
+    peers: [],
+    toasts: [],
+    dismissed: [],
     dirty: [],
     saveButton: [],
     openVisible: [],
     banners: [],
     hidden: 0,
+    states: [],
     port: {
-      setTitle: (t) => void c.titles.push(t),
+      setDocument: (d) => void c.docs.push(d),
       setStatus: (text, tooltip) => {
         c.status.push(text);
         if (tooltip !== undefined) c.tooltips.push(tooltip);
       },
+      setSync: (s) => void c.sync.push(s),
+      setPeers: (p) => void c.peers.push(p),
+      toast: (t) => void c.toasts.push(t),
+      dismissToast: (key) => void c.dismissed.push(key),
       setDirty: (d) => void c.dirty.push(d),
       setSaveButton: (s) => void c.saveButton.push(s),
       setOpenVisible: (v) => void c.openVisible.push(v),
-      showBanner: (text, actions) => {
-        current = { text, actions };
+      showBanner: (text, actions, opts) => {
+        current = { text, actions, ...(opts ? { opts } : {}) };
         c.banners.push(current);
       },
       hideBanner: () => {
         current = undefined;
         c.hidden++;
       },
+      showState: (card) => void c.states.push(card),
     },
     bannerLabels: () => current?.actions.map((a) => a.label) ?? [],
     click: (label) => {
@@ -176,6 +256,7 @@ export function fakeChrome(): FakeChrome {
       action.run();
     },
     last: () => c.status[c.status.length - 1],
+    kinds: () => c.sync.map((s) => s.kind),
   };
   return c;
 }

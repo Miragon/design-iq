@@ -24,6 +24,7 @@ import type {
   TodoWire,
   WidgetBootWire,
 } from "@designiq/contracts/live-host";
+import type { DecisionAnalysis } from "@designiq/decisions";
 import type { CaseOutcome, SuiteOutcome, TestCase, TestSuite } from "@designiq/decisions/tests";
 import { unwrapToolResult } from "@designiq/mcp-kit";
 import { App } from "@modelcontextprotocol/ext-apps";
@@ -75,8 +76,17 @@ export function bootConfig(): BootConfig {
   return { readonly: false, publicUrl: window.location.origin };
 }
 
+/** inline + fullscreen; NO auto-resize — the widget declares its inline
+ *  height after connect and re-declares it only when the frame crosses 600px
+ *  wide or returns to inline (core/host-context.ts planInlineHeight, spec
+ *  §2.6); cards, toasts and panels float over the canvas instead of growing
+ *  the frame */
 export function makeApp(): App {
-  return new App({ name: "designiq-modeler", version: "1.0.0" });
+  return new App(
+    { name: "designiq-modeler", version: "1.0.0" },
+    { availableDisplayModes: ["inline", "fullscreen"] },
+    { autoResize: false },
+  );
 }
 
 /** one tool call → parsed JSON payload; tool `isError` becomes a throw with
@@ -102,7 +112,7 @@ export const saveModelContent = (
 ): Promise<SaveResult> =>
   call(app, "save_model_content", { repo: ref.repo, path: ref.path, content, baseVersion, lint: "warn" });
 
-// ── DMN decision tests (the decision widget's tests panel) ──────────────────
+// ── DMN decision checks (the decision widget's Checks card) ─────────────────
 // The wire shapes below are the LIB's own types (@designiq/decisions, isomorphic —
 // the widget runs the very same module the Live Host answers with), so a server
 // change breaks the build here instead of drifting silently. Only the tool
@@ -135,6 +145,14 @@ export const saveDecisionTests = (
   opts: { baseVersion?: string; record?: boolean } = {},
 ): Promise<{ ok?: boolean; conflict?: true; path: string; baseVersion: string }> =>
   call(app, "save_decision_tests", { repo: ref.repo, path: ref.path, cases, ...opts });
+
+/** the stored decision's static analysis (broken FEEL, rules that never fire,
+ *  hit-policy breaks …) — the Checks card's Findings section; `path` /
+ *  `baseVersion` name the version it analysed */
+export type DecisionAnalysisWire = DecisionAnalysis & { path: string | null; baseVersion?: string };
+
+export const analyzeDecision = (app: App, ref: ProcessRef): Promise<DecisionAnalysisWire> =>
+  call(app, "analyze_decision", { repo: ref.repo, path: ref.path });
 
 export interface WsTicket {
   ticket: string;

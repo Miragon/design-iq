@@ -1,0 +1,23 @@
+/* The Miragon-renderer widgets' stylesheet (miragon-main.ts): the shared
+ * chrome plus the renderer palette's slot — the renderers bring their own CI
+ * styling, only the slot is ours. */
+@import "./chrome.css";
+
+/* top-centre (the renderer sheets centre it), under the row (tier 2) unless
+   it fits between the clusters (tier 1); `max-content` lifts the leaked
+   two-column clamp */
+#app[data-kind="miragon"] #canvas .djs-palette {
+  top: var(--under-row);
+  width: max-content;
+  max-width: calc(100% - var(--inset-l) - var(--inset-r));
+}
+
+#app[data-kind="miragon"][data-palette="tier1"] #canvas .djs-palette {
+  top: var(--inset-t);
+}
+
+/* clamped narrower than its tools (compact): groups wrap, never clip */
+#app[data-kind="miragon"] #canvas .djs-palette-entries {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}

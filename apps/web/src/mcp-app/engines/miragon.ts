@@ -38,18 +38,21 @@ import type * as Y from "yjs";
 
 import { attachPresenceCanvas } from "../../lib/presence-canvas.ts";
 import type { LoadedMiragonRenderer, MiragonRendererLike } from "../../notations/miragon/spec.ts";
-import type { LiveBindHooks, WidgetEngine } from "../core/engine.ts";
-import { fitViewport, selectedElementOf, viewerCommandStackShim } from "./diagram-js.ts";
+import type { EngineOptions, LiveBindHooks, WidgetEngine } from "../core/engine.ts";
+import { type DiagramView, diagramView, selectedElementOf, viewerCommandStackShim } from "./diagram-js.ts";
 
 export interface MiragonEngine extends WidgetEngine {
   /** the renderer instance — for tests and future extras */
   raw: MiragonRendererLike;
+  /** fit / zoom; `palette` is the renderer's own (top-centre, tier 1/2) */
+  view: DiagramView;
 }
 
 export function mountMiragonEngine(
   renderer: LoadedMiragonRenderer,
   container: HTMLElement,
   readonly: boolean,
+  opts?: EngineOptions,
 ): MiragonEngine {
   const { lane } = renderer;
   const instance = readonly
@@ -61,6 +64,7 @@ export function mountMiragonEngine(
     lane.kind === "dsl"
       ? dslText(asDslModeler(instance), lane)
       : documentText(asDocumentModeler(instance), lane, readonly);
+  const view = diagramView(instance, opts ? { insets: opts.insets } : {});
   let importing = false;
   const dirtyCbs = new Set<() => void>();
   if (!readonly) {
@@ -73,6 +77,7 @@ export function mountMiragonEngine(
   return {
     raw: instance,
     editable: !readonly,
+    view,
     async importText(content: string): Promise<void> {
       importing = true;
       try {
@@ -80,7 +85,7 @@ export function mountMiragonEngine(
       } finally {
         importing = false;
       }
-      fitViewport(instance);
+      view.importFit();
     },
     async exportText(): Promise<string> {
       if (readonly) throw new Error("read-only view");
@@ -102,6 +107,7 @@ export function mountMiragonEngine(
       };
     },
     destroy(): void {
+      view.destroy();
       instance.destroy();
     },
   };

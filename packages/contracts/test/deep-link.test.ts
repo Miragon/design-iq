@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { fileDeepLink, processDeepLink } from "../src/deep-link.ts";
+import { fileDeepLink, processDeepLink, repoDeepLink } from "../src/deep-link.ts";
 
 test("processDeepLink: /r/<owner>/<repo>/p/<id>, trailing slash stripped, segments encoded", () => {
   assert.equal(
@@ -38,4 +38,12 @@ test("fileDeepLink: /r/<owner>/<repo>/f/<path> — slashes keep separating the s
     fileDeepLink("https://design.example", "acme/bpm-processes", "processes/preis rabatt.dmn"),
     "https://design.example/r/acme/bpm-processes/f/processes/preis%20rabatt.dmn",
   );
+});
+
+test("repoDeepLink: /r/<owner>/<repo> — the same base the editor routes extend", () => {
+  assert.equal(
+    repoDeepLink("https://design.example/", "acme/bpm-processes"),
+    "https://design.example/r/acme/bpm-processes",
+  );
+  assert.equal(repoDeepLink("https://design.example", "group/sub/name"), "https://design.example/r/group/sub%2Fname");
 });

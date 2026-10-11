@@ -9,10 +9,14 @@
  *
  * The static HTML names its icons declaratively (`<button data-icon="x">`);
  * mountIcons fills them once at boot, so each geometry lives here only.
+ * Phase 2 adds git-pull-request (Release → PR) and undo-2 / redo-2 (touch).
  */
 export const LUCIDE_ICONS = {
   check: '<path d="M20 6 9 17l-5-5"/>',
-  // test case states (dmn-tests.ts): shape, not just colour, tells them apart
+  "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+  "circle-alert":
+    '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>',
+  // test case states (dmn-checks.ts): shape, not just colour, tells them apart
   "circle-check": '<circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/>',
   "circle-x": '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
   "circle-question-mark":
@@ -25,28 +29,64 @@ export const LUCIDE_ICONS = {
   "external-link":
     '<path d="M15 3h6v6"/><path d="M10 14 21 3"/>' +
     '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
-  // the SPA's Checks icon
-  "flask-conical":
-    '<path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/>' +
-    '<path d="M6.453 15h11.094"/><path d="M8.5 2h7"/>',
+  eye:
+    '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/>' +
+    '<circle cx="12" cy="12" r="3"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  // Add todo — the SPA's name and icon
+  "list-plus": '<path d="M16 5H3"/><path d="M11 12H3"/><path d="M16 19H3"/><path d="M18 9v6"/><path d="M21 12h-6"/>',
   // the SPA's todo icon
   "list-todo":
     '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/>' +
     '<rect x="3" y="4" width="6" height="6" rx="1"/>',
-  maximize:
-    '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/>' +
-    '<path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  // spinners: rotated by CSS, a static icon + text under reduced motion
+  "loader-circle": '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+  "maximize-2": '<path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/>',
+  menu: '<path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/>',
+  // an agent peer's avatar — what an assistant does in the room is write, so a
+  // message mark, never a robot or sparkles (CI anti-slop U4)
+  "message-square-text":
+    '<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/>' +
+    '<path d="M7 11h10"/><path d="M7 15h6"/><path d="M7 7h8"/>',
+  "minimize-2": '<path d="m14 10 7-7"/><path d="M20 10h-6V4"/><path d="m3 21 7-7"/><path d="M4 14h6v6"/>',
+  minus: '<path d="M5 12h14"/>',
+  // the DMN view switch: DRD
+  network:
+    '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/>' +
+    '<rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
   play: '<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
   "refresh-cw":
     '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>' +
     '<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  "rotate-ccw": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  save:
+    '<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>' +
+    '<path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/>',
+  // Fit diagram
+  scan:
+    '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/>' +
+    '<path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>',
   // "Implement" hands a todo to the assistant — what the button DOES is post
   // a work order into the chat, so the icon says that (no sparkles for "AI",
   // CI anti-slop U4)
   send:
     '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/>' +
     '<path d="m21.854 2.147-10.94 10.939"/>',
+  // Tools — the modelling palette behind a button when compact
+  shapes:
+    '<path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z"/>' +
+    '<rect x="3" y="14" width="7" height="7" rx="1"/><circle cx="17.5" cy="17.5" r="3.5"/>',
+  // the SPA's Checks icon (decision checks)
+  "shield-check":
+    '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>' +
+    '<path d="m9 12 2 2 4-4"/>',
+  // Workshop mode (t.BPM stickies)
+  "sticky-note":
+    '<path d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/>' +
+    '<path d="M15 3v5a1 1 0 0 0 1 1h5"/>',
+  // the DMN view switch: Table
+  "table-2": '<path d="M3 9h18"/><path d="M9 3v18"/><rect x="3" y="3" width="18" height="18" rx="2"/>',
   "triangle-alert":
     '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>' +
     '<path d="M12 9v4"/><path d="M12 17h.01"/>',
@@ -58,8 +98,9 @@ export type IconName = keyof typeof LUCIDE_ICONS;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** a Lucide icon as a DOM node — decorative (aria-hidden): the control that
- *  carries it owns the accessible name (its text, title or aria-label) */
-export function icon(name: IconName, size = 16): SVGSVGElement {
+ *  carries it owns the accessible name (its text, title or aria-label).
+ *  `cls` joins "icon" (chrome.css `.icon.spin` rotates a loader-circle). */
+export function icon(name: IconName, size = 16, cls?: string): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, "svg");
   const attrs: Array<[string, string]> = [
     ["viewBox", "0 0 24 24"],
@@ -71,7 +112,7 @@ export function icon(name: IconName, size = 16): SVGSVGElement {
     ["stroke-linecap", "round"],
     ["stroke-linejoin", "round"],
     ["aria-hidden", "true"],
-    ["class", "icon"],
+    ["class", cls ? `icon ${cls}` : "icon"],
   ];
   for (const [key, value] of attrs) svg.setAttribute(key, value);
   // innerHTML on an SVG element parses its children in the SVG namespace

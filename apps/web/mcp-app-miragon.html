@@ -13,31 +13,80 @@
   <body>
     <!-- the ONE template of every Miragon-renderer widget: scripts/build-widgets.ts
          emits it once per renderer spec as mcp-app-<notation>.html, the spec
-         resolved through the build-time alias @/mcp-app/widget-spec -->
-    <div id="app">
-      <!-- data-icon: a Lucide icon shell.ts prepends at boot (mcp-app/icons.ts) —
-           one geometry per icon, not an SVG copied into every entry -->
-      <div id="toolbar">
-        <span id="title">Loading…</span>
-        <span id="dirty" role="img" aria-label="Unsaved changes" title="Unsaved changes" hidden></span>
-        <span class="spacer"></span>
-        <button id="open" class="btn" hidden data-icon="external-link" data-icon-size="14">Open in designIQ</button>
+         resolved through the build-time alias @/mcp-app/widget-spec. The
+         frameless widget (spec §2): the whole iframe is canvas, the chrome
+         floats in the corners; the renderer palette sits top-centre. #canvas
+         gets the spec's canvasClassName at boot (miragon-main.ts). -->
+    <div id="app" data-kind="miragon">
+      <div id="canvas"></div>
+      <div id="tl" class="corner tl">
+        <button
+          id="menu-trigger"
+          class="fb trigger"
+          type="button"
+          hidden
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="menu"
+          data-icon="menu"
+        >
+          <span class="sep" aria-hidden="true"></span><span id="doc-name" class="name"></span>
+        </button>
+        <button
+          id="tools"
+          class="fb icon"
+          type="button"
+          hidden
+          aria-label="Tools"
+          aria-expanded="false"
+          title="Tools — the modelling palette"
+          data-icon="shapes"
+        ></button>
+        <span id="mode-slot" class="slot"></span>
+      </div>
+      <div id="tr" class="corner tr">
         <button
           id="fullscreen"
-          class="btn icon-only"
-          title="Open fullscreen"
+          class="fb icon"
+          type="button"
+          hidden
           aria-label="Open fullscreen"
-          data-icon="maximize"
+          title="Open fullscreen"
+          data-icon="maximize-2"
         ></button>
-        <button id="save" class="btn primary" hidden title="Changes save automatically — this forces it now">
-          Save now
+        <button
+          id="open"
+          class="fb primary open"
+          type="button"
+          hidden
+          aria-label="Open in designIQ (new tab)"
+          data-icon="external-link"
+        >
+          <span class="label long">Open in designIQ</span><span class="label short">Open</span>
         </button>
       </div>
-      <div id="banner" hidden></div>
-      <div id="main">
-        <div id="canvas"></div>
+      <div id="bl" class="corner bl"><span id="sync" class="sync" hidden></span></div>
+      <div id="br" class="corner br">
+        <div id="zoom" class="zoom" role="group" aria-label="Zoom" hidden>
+          <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out" data-icon="minus"></button>
+          <button id="zoom-pct" class="pct" type="button" title="Reset zoom to 100%">100%</button>
+          <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in" data-icon="plus"></button>
+          <span class="vsep" aria-hidden="true"></span>
+          <button
+            id="zoom-fit"
+            type="button"
+            aria-label="Fit diagram (Shift+1)"
+            title="Fit diagram (Shift+1)"
+            data-icon="scan"
+          ></button>
+        </div>
       </div>
-      <div id="status"></div>
+      <div id="lane" class="lane"></div>
+      <div id="state" class="state" hidden></div>
+      <div id="menu" class="menu" role="menu" aria-labelledby="menu-trigger" hidden></div>
+      <div id="sync-popover" class="popover" role="dialog" hidden></div>
+      <div id="announce" class="sr-only" aria-live="polite"></div>
+      <div id="alert" class="sr-only" role="alert"></div>
     </div>
     <script type="module" src="/src/mcp-app/miragon-main.ts"></script>
   </body>

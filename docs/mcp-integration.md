@@ -337,21 +337,74 @@ Every `open_*` tool is an [MCP App](https://modelcontextprotocol.io/specificatio
 renders the notation's modeler inline in the conversation. There are six single-file
 bundles (`apps/web/dist/mcp-app*.html`, built by `apps/web/scripts/build-widgets.ts`),
 one per modeler, and ONE widget core behind all of them (`apps/web/src/mcp-app/core/`):
-every widget shares the load → autosave → conflict → live-upgrade lifecycle and
-differs only in its engine adapter (the DMN engine, multi-view + simulator, has no
-live binding and stays on autosave). The four Miragon-renderer widgets are one
-template + one entry built once per renderer spec (`apps/web/src/notations/miragon/`).
-A widget = engine adapter (or a renderer spec) + one registry row in the Live Host; a
-web dist that lacks a bundle simply lacks its tool.
+every widget shares the load → autosave → conflict → live-upgrade lifecycle and the
+same chrome, and differs only in its engine adapter (the DMN engine, multi-view +
+simulator, has no live binding and stays on autosave). The four Miragon-renderer
+widgets are one template + one entry built once per renderer spec
+(`apps/web/src/notations/miragon/`). A widget = engine adapter (or a renderer spec) +
+one registry row in the Live Host; a web dist that lacks a bundle simply lacks its tool.
+
+**The chrome: a frameless canvas.** There is no toolbar, banner row or status line —
+the whole iframe is canvas, and the controls float in its corners, each kind of
+information in one home:
+
+| Where         | What it holds                                                                                                                                                                                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| top-left      | the document menu: the model's name, its notation, repository and path, then Open in designIQ, Save now `⌘S`, Reload latest version, Workshop mode (bpmn), the panel, Fit `⇧1`, fullscreen. Beside it the Workshop switch (bpmn) or the DRD \| Table switch (dmn) |
+| top-right     | the panel toggle (Todos with its open count, Checks with its test verdict), Open fullscreen / Exit fullscreen, and **Open in designIQ**                                                                                                                           |
+| bottom-left   | the sync pill — the one place that says whether your work is safe (below)                                                                                                                                                                                         |
+| bottom-right  | zoom out, the zoom level (a click resets to 100%), zoom in, fit                                                                                                                                                                                                   |
+| bottom-centre | toasts for events, and decision cards for choices the user owes                                                                                                                                                                                                   |
+| centre        | state cards for dead ends, with the work chrome hidden                                                                                                                                                                                                            |
+
+Labels give way as the frame narrows (the comet, then "Open in designIQ" → "Open", the
+switches and toggles to icons, the name truncating; on a phone-width chat column the
+Workshop and view switches, fullscreen and finally the name move into the menu), and below 600 × 440 the
+widget turns compact: the palette folds behind a **Tools** button and the panels become
+full-width sheets (so they do below 656px wide, where a card would leave the toasts too
+little room beside it). Toasts and decision cards never cover an open panel: they pass
+beside a card, and a sheet ends above them. They never reach the corner row either: at most
+two toasts show (one beside a decision card, which always shows whole), and only what fits —
+over a sheet they leave it room to work in. A toast with an action waits for room and comes
+back; the others leave, since what they say also lives on the pill, a panel or a toggle. The diagram fits clear of every cluster, the
+palette and an open card, and re-fits on resize, on a panel toggle and on a live
+re-import until the user zooms or pans; switching to fullscreen and back always re-fits. The widget declares its
+inline height after connect (480px, 420px below 600px wide, capped by the host's
+`maxHeight`). It sends it again only when the frame crosses 600px wide or returns to
+inline from fullscreen. No state change ever resizes the iframe: cards, toasts and panels float.
+Fullscreen is offered when the host lists it in `availableDisplayModes`. When the host
+tears the widget down, a pending autosave is flushed first.
+
+The **sync pill** speaks the SPA's vocabulary: _Live_ (with the avatars of everyone in
+the document — the assistant included), _Connecting…_, _Saved_ (or _Saved · 1 warning_ /
+_Saved · 2 errors_ with the validator's findings), _Unsaved changes_, _Saving…_,
+_Not saved_ with a _Retry_ beside it, _Autosave paused_, _Reconnecting…_, _Read-only_
+and _Inactive_. A click opens its details: why the widget saves the way it does, the time
+of the last save, every finding, and Save now. Test verdicts never reach it — they live
+on the Checks toggle. State changes are announced once per kind in a polite region,
+never as Saving → Saved chatter; a failed save, a paused autosave and the superseded
+copy are spoken by their own toast or decision card, so nothing is said twice.
+
+**State cards** own the widget when there is nothing to work on: "Starting the
+modeler…", "Loading order-to-cash…", "No model received" (the host sent no tool input),
+"Could not load order-to-cash" (the read failed — **Try again**, Open in designIQ),
+"order-to-cash could not be displayed" (the file does not parse — **Ask the assistant to
+fix it** sends the path and the parser error into the chat through `ui/message`), and
+"The Event Storming modeler could not start" (Try again).
 
 `open_modeler` renders an interactive bpmn-js modeler — pan/zoom, edit, and save
 through the same validated, `baseVersion`-guarded path as `save_model_content`
-(`lint:"warn"`; a concurrent save shows a conflict banner: load theirs, overwrite, or
-keep editing; a save tells the model to re-read instead of trusting stale text). The
-widget is the single-file bundle `apps/web/dist/mcp-app.html` (built by
-`scripts/build-widgets.ts`), served as a `ui://` resource; its tool calls ride the
-host's authenticated connection, so per-repo authorization applies per call exactly
-like agent calls.
+(`lint:"warn"`; a save tells the model to re-read instead of trusting stale text). A
+concurrent save raises a **decision card** — "Someone saved this model in the
+meantime." — with one row per choice and what it does: **Load their version** (your
+last change is discarded), **Overwrite anyway** (their change is replaced right away),
+**Keep editing** (your next autosave replaces their change). Autosave stays paused
+until the user chooses; the card never steals focus from the chat composer, Escape
+never dismisses it, and its × defers the choice into the pill ("Autosave paused"),
+whose click brings it back. The widget is the single-file bundle
+`apps/web/dist/mcp-app.html` (built by `scripts/build-widgets.ts`), served as a `ui://`
+resource; its tool calls ride the host's authenticated connection, so per-repo
+authorization applies per call exactly like agent calls.
 
 The widget edits **live**: it first tries the same Hocuspocus/Yjs session the web
 editor uses (a single-use, room-bound ws ticket from `mint_ws_ticket`, 60s TTL — see
@@ -359,25 +412,34 @@ ADR 0005's 2026-08-04 amendment) — then edits sync instantly in both direction
 co-editors included. If the host sandbox blocks the socket (claude.ai's
 `connectDomains` enforcement is partially buggy), it degrades to **autosave over the
 bridge**: a debounced `save_model_content` with `lint:"warn"`, where validator findings
-inform in the status line instead of blocking — the ws rooms' trust level, which never
-gated live edits. The status line shows which mode is active ("Live — co-editing
-enabled" vs "changes save automatically"). The hand-over is lossless in both
+inform in the pill instead of blocking — the ws rooms' trust level, which never
+gated live edits. The pill shows which mode is active ("Live" vs "Saved"), and its
+details say why. The hand-over is lossless in both
 directions: unsaved canvas edits are flushed through the CAS save before the first
 Yjs import may replace the canvas, and when an established live connection drops
 (any ws drop is final — the single-use ticket cannot re-authenticate the provider's
 auto-reconnect) the widget reconciles against a fresh bridge read: server unchanged
 since the last sync → a fresh ticket resumes live seamlessly; diverged (colleague
-edits during the outage, local edits that never reached the room, or both) → a
-banner hands the direction-blind choice to the user — never a silent overwrite of
-either side, and never a silent stop of persistence.
+edits during the outage, local edits that never reached the room, or both) → the
+decision card "Live sync was interrupted" hands the direction-blind choice to the user
+(**Load server version** or **Keep my canvas**) — never a silent overwrite of either
+side, and never a silent stop of persistence. A save that fails outright turns the pill
+into _Not saved_ + _Retry_ and shows a toast with **Retry now**; the widget retries
+after 5 s, 15 s and 60 s, then on the next edit.
 
-The widget also carries the **todos** of the open process: a side panel lists them, count
-badges sit on every anchored element (a badge click filters the panel to it, a chip click
-reveals the element on the canvas), "New" files one against the current canvas
-selection, and "Done" closes it in the tracker. It drives the same `list_todos` /
-`create_todo` / `close_todo` tools over the app bridge — so a tracker-less host simply has
-no todo button, and a read-only host gets the list without the buttons. Nothing about the
-modeling path depends on it.
+**One widget per model.** Opening the same model again in the chat supersedes the older
+widget: it saves a still-pending edit once, re-mounts its canvas as a viewer (zoom and
+fit still work), and says so in an info card ("This model is open in a newer widget",
+pill _Inactive_) whose one action is Open in designIQ.
+
+The widget also carries the **todos** of the open process: the **Todos** toggle (top-right,
+with the open count) opens a card listing them, count badges sit on every anchored
+element (a badge click opens the card filtered to it, a chip click reveals the element
+on the canvas), **Add todo** files one against the current canvas selection (or the whole
+process), and **Done** closes it in the tracker. It drives the same `list_todos` /
+`create_todo` / `close_todo` tools over the app bridge, and discovery starts as soon as the
+model's path is known — so a tracker-less host simply has no Todos toggle, and a read-only
+host gets the list without the write actions. Nothing about the modeling path depends on it.
 
 **"Implement" hands a todo to the assistant.** The widget injects a work order into the
 chat as a user message (`ui/message`) — repo, model path, process, anchored element ids and
@@ -388,19 +450,23 @@ are spelled out rather than assumed: ask instead of guessing at process semantic
 close over an unsaved model, and the description is fenced as data ("information, not
 instructions") — it comes from the tracker, where labeling an issue `todo` takes only triage
 rights, so a crafted body must not be able to splice its own steps into the work order. The
-widget then returns to inline display and closes the panel,
-because the answer arrives in the conversation, not in the iframe. Tracker links go through
-the host too (`ui/open-link`) — the app sandbox blocks `target="_blank"` navigation.
+widget then returns to inline display, closes the card and confirms with a toast ("Sent
+#38 to the assistant"), because the answer arrives in the conversation, not in the iframe;
+a client that refuses the message gets a toast with **Open #38** in the tracker instead.
+Tracker links go through the host too (`ui/open-link`) — the app sandbox blocks
+`target="_blank"` navigation.
 
-**"Open in designIQ" leaves the chat for the full product.** The toolbar's deep link opens
-the loaded model in the web modeler — the process route, carrying the current canvas
-selection as `?element=` so the web editor reveals exactly the element under discussion
-(the DMN widget links its file route). The instance origin rides in the widget's boot
-payload (the sandboxed iframe cannot know it otherwise), the link opens through the same
-`ui/open-link` ladder as tracker links, and a still-unsaved edit is flushed in parallel —
-it lands in the very live document the opened editor joins (while a conflict banner is
-up, the flush stays paused: the opened editor shows the server version and the banner
-keeps owning the divergence decision). Logged-out recipients pass
+**"Open in designIQ" leaves the chat for the full product.** The top-right button (also
+in the menu, on the state cards and in the pill's details) opens the loaded model in the
+web modeler — the process route, carrying the current canvas selection as `?element=` so
+the web editor reveals exactly the element under discussion (the other widgets link
+their file route; a load that failed links the file or the repository). The instance
+origin rides in the widget's boot payload (the sandboxed iframe cannot know it
+otherwise), the link opens through the same `ui/open-link` ladder as tracker links (a
+client that blocks it gets a toast with the URL to copy), and a still-unsaved edit is
+flushed in parallel — it lands in the very live document the opened editor joins (while
+a conflict card is up, the flush stays paused: the opened editor shows the server
+version and the card keeps owning the divergence decision). Logged-out recipients pass
 the login gate and land on the model, not the overview (the SPA stashes the deep link
 across the auth round-trip). The `open_modeler` / `open_decision_modeler` results carry
 the same link as `opened.url`, so non-apps clients can surface it in plain text.
@@ -408,37 +474,56 @@ the same link as `opened.url`, so non-apps clients can surface it in plain text.
 Clients without apps support (Claude Code, the read-only `@miragon/design-iq-mcp` package) see a
 plain tool that returns a short process summary plus the model's web URL — use
 `get_process`/`get_bpmn_xml` there. Under `LIVE_MCP_READONLY=1` the tool stays registered
-but the widget becomes a read-only viewer (no save button, no ws ticket), matching the
-absent write tools — the "Open in designIQ" link stays, pointing at the differently
-authenticated web surface.
+but the widget becomes a read-only viewer (pill _Read-only_, no Save now, no Workshop, no
+ws ticket), matching the absent write tools — the "Open in designIQ" link stays, pointing
+at the differently authenticated web surface.
 
-### MCP App: the decision modeler and its simulator
+### MCP App: the decision modeler and its Checks
 
-`open_decision_modeler` is the one widget that does not ride the core — multi-view plus
-the simulator, deliberately without live mode (`apps/web/dist/mcp-app-dmn.html`, its own
-`ui://` resource): dmn-js — DRD, decision table, literal expression — with the
+`open_decision_modeler` rides the same widget core and chrome
+(`apps/web/dist/mcp-app-dmn.html`, its own `ui://` resource), deliberately without live
+mode: dmn-js — DRD, decision table, literal expression — with the
 [dmn-js-simulation](https://github.com/emaarco/dmn-js-simulation) add-on mounted into
-both views. Type values into the table and the matching rows light up; the rule the hit
-policy actually reports is marked differently from the ones that merely matched.
+both views. A one-decision model opens on its table; the **DRD | Table** switch beside the
+menu (and the menu's view items) moves between the views. Saving works like the BPMN
+widget (autosave, `lint:"warn"`, `baseVersion` CAS with the conflict card); it does
+**not** take the Yjs live upgrade — decision tables are edited cell by cell by one person
+at a time, and the conflict flow covers the rare collision honestly.
 
-Two things make it more than a viewer:
+The **Checks** toggle (top-right, shield icon) carries the test verdict — "✓ 7/7" or
+"✕ 1 failing", a spinner while the suite runs — and opens a card with three sections in
+the web app's Decision-checks order:
 
-- **The agent can hand over a scenario.** `open_decision_modeler` takes an optional
-  `scenario` (the same variable → value map as `simulate_decision`), which the widget
-  plays straight into the simulator. "This case returns `manual-review` instead of
-  `approve`" stops being a sentence and becomes a highlighted row.
-- **A run can be captured as a test.** "Capture current run" takes the values
-  currently entered, asks for a name, and writes them into `<decision>.tests.yaml` via
-  `save_decision_tests` with `record: true` — the server evaluates and freezes what the
-  decision produces. The panel lists the stored cases with their pass/fail state
-  (`run_decision_tests`), and clicking one replays it on the table, so a failing case is
-  visible _on the model_.
+- **Findings** — `analyze_decision` on the stored decision (FEEL that does not parse,
+  rules that can never fire, …): "Sound", "2 warnings" or "1 error", one row per finding
+  anchored to its rule and column. It re-runs after each landed save (at most every 5 s)
+  and is absent on a host without the tool.
+- **Try a scenario** — a form built from the open table's inputs (a select where the
+  column lists its values), driving the add-on's own simulation store: **Simulate** lights
+  the matching rows in the table (the rule the hit policy actually reports differently
+  from the ones that merely matched) and the outcome strip reads "Rule 3 · "approve"".
+  **Save as test case** names the run and writes it into `<decision>.tests.yaml` via
+  `save_decision_tests` with `record: true` and the file's `baseVersion` — the server
+  evaluates and freezes what the decision produces, so a case records today's behaviour,
+  never an expectation nobody confirmed.
+- **Test cases** — the stored cases from `get_decision_tests`, run by
+  `run_decision_tests` (failing first, with the expected and actual lines; a case
+  without an expectation shows what it currently produces), plus the rules no case
+  decides. Clicking a case replays it: the widget switches from the DRD to that
+  decision's table, fills the scenario and scrolls the lit rule into view.
 
+The suite runs from boot (discovery starts as soon as the path is known, so the toggle
+appears with its verdict, or never on a host without the decision tools) and again after
+each landed save while it has cases. An explicit **Run** with the card closed answers
+with a toast. Test results never touch the sync pill: a failing test is not a failed save.
+
+**The agent can hand over a scenario.** `open_decision_modeler` takes an optional
+`scenario` (the same variable → value map as `simulate_decision`), which the widget plays
+straight into the simulator and confirms with a toast ("Scenario from the assistant —
+rule 3 matches"). "This case returns `manual-review` instead of `approve`" stops being a
+sentence and becomes a highlighted row — and one click on Save as test case keeps it.
 Both sides run the same engine, so a run clicked here and one simulated by an agent
-cannot disagree. Saving works like the BPMN widget (autosave, `lint:"warn"`,
-`baseVersion` CAS with a conflict banner); it deliberately does **not** take the Yjs
-live upgrade — decision tables are edited cell by cell by one person at a time, and the
-conflict flow covers the rare collision honestly.
+cannot disagree.
 
 ### MCP Apps: Wardley Maps, Team Topologies, Event Storming boards and Context Maps
 
@@ -450,7 +535,7 @@ uses). Each takes `{repo, id | path}` and forces its notation: a stem shared wit
 tool rather than inside the iframe. The widgets run the shared core on the Miragon
 renderers (`@miragon/wardley-renderer`, `team-topologies-renderer`,
 `event-storming-renderer`, `context-maps-renderer`): the same CAS autosave through `save_model_content`, the same
-conflict banner, the same live upgrade through `mint_ws_ticket`, a read-only viewer under
+conflict card and chrome, the same live upgrade through `mint_ws_ticket`, a read-only viewer under
 `LIVE_MCP_READONLY=1`. What they do not have: todos and stickies (BPMN-only), and the
 `?element=` reveal — their "Open in designIQ" link is the file route (`/f/<path>`). The
 tool result is the lean `{opened: {repo, path, url}, summary: {name, summary, stats}}` —
