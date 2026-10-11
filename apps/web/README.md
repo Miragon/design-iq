@@ -52,29 +52,74 @@ by `vite.widget.config.ts`'s factory; `scripts/build-widgets.ts` runs every buil
 (`apps/live-host/src/http/mcp.ts`) serves it as a `ui://` resource behind an
 `open_*` tool — a dist without a bundle simply lacks that tool.
 
-| Bundle                        | Tool                          | Engine                                  |
-| ----------------------------- | ----------------------------- | --------------------------------------- |
-| `mcp-app.html`                | `open_modeler`                | bpmn-js (+ stickies, t.BPM, todos)      |
-| `mcp-app-dmn.html`            | `open_decision_modeler`       | dmn-js + simulation (+ the tests panel) |
-| `mcp-app-wardley.html`        | `open_wardley_modeler`        | `@miragon/wardley-renderer`             |
-| `mcp-app-team-topology.html`  | `open_team_topology_modeler`  | `@miragon/team-topologies-renderer`     |
-| `mcp-app-event-storming.html` | `open_event_storming_modeler` | `@miragon/event-storming-renderer`      |
-| `mcp-app-context-map.html`    | `open_context_map_modeler`    | `@miragon/context-maps-renderer`        |
+| Bundle                        | Tool                          | Engine                                             |
+| ----------------------------- | ----------------------------- | -------------------------------------------------- |
+| `mcp-app.html`                | `open_modeler`                | bpmn-js (+ stickies, t.BPM, the Todos card)        |
+| `mcp-app-dmn.html`            | `open_decision_modeler`       | dmn-js + the simulation add-on (+ the Checks card) |
+| `mcp-app-wardley.html`        | `open_wardley_modeler`        | `@miragon/wardley-renderer`                        |
+| `mcp-app-team-topology.html`  | `open_team_topology_modeler`  | `@miragon/team-topologies-renderer`                |
+| `mcp-app-event-storming.html` | `open_event_storming_modeler` | `@miragon/event-storming-renderer`                 |
+| `mcp-app-context-map.html`    | `open_context_map_modeler`    | `@miragon/context-maps-renderer`                   |
 
 **One lifecycle.** Every widget shares `src/mcp-app/core/`: `lifecycle.ts`
 (tool input → load via `get_model_content` → engine → debounced CAS autosave via
-`save_model_content` with `lint:"warn"` → the conflict banner → the newest-widget
-claim → the progressive live upgrade → the post-outage reconcile), `live.ts` (the
-single-use ws ticket + Yjs session) and `widget.ts` (the DOM composition:
-`bootWidget(spec)`). A notation contributes an **engine adapter**
-(`src/mcp-app/engines/*.ts`) against the contract in `core/engine.ts` —
-`importText` / `exportText` / `onDirty` / optional `selectedElementId` /
-optional `bindLive` — plus a `WidgetSpec` (`main.ts` for bpmn, `dmn-main.ts`
-for dmn). Two engine invariants the core relies on: `importText` never fires
-`onDirty` (the Miragon DSL renderers emit `commandStack.changed` from their own
-`clear()` — `engines/miragon.ts` suppresses the echo), and `bindLive` is a
-capability (absent = CAS autosave only — the dmn engine's deliberate mode).
-Full behaviour: [docs/mcp-integration.md](../../docs/mcp-integration.md).
+`save_model_content` with `lint:"warn"` and a 5 s / 15 s / 60 s retry backoff →
+the conflict decision → the newest-widget claim, whose loser saves a pending
+edit once and re-mounts as a viewer → the progressive live upgrade → the
+post-outage reconcile), `live.ts` (the single-use ws ticket + Yjs session and
+the roster of peers) and `widget.ts` (the DOM composition: `bootWidget(spec)`).
+A notation contributes an **engine adapter** (`src/mcp-app/engines/*.ts`)
+against the contract in `core/engine.ts` — `importText` / `exportText` /
+`onDirty` / optional `selectedElementId` / optional `bindLive` / optional
+`view` (fit, zoom, the palette) / optional `displayName` — plus a `WidgetSpec`
+(`main.ts` for bpmn, `dmn-main.ts` for dmn, `miragon-main.ts` for the
+renderers). Its extras (`WidgetExtras`: the Todos and Checks cards) hear
+`onRead` (the path is known: discovery runs in parallel with the import),
+`onDocument` and `onSaved`. Two engine invariants the core relies on:
+`importText` never fires `onDirty` (the Miragon DSL renderers emit
+`commandStack.changed` from their own `clear()` — `engines/miragon.ts`
+suppresses the echo), and `bindLive` is a capability (absent = CAS autosave
+only — the dmn engine's deliberate mode). Full behaviour:
+[docs/mcp-integration.md](../../docs/mcp-integration.md).
+
+**One chrome.** The iframe is all canvas; the controls float in corner
+clusters (12px from the edge inline, 16px in fullscreen, plus the host's safe
+area), each kind of information in one home. The design, its measurements and
+the reasons behind them are in
+[`docs/mcp-app-widget-chrome.md`](../../docs/mcp-app-widget-chrome.md) —
+`spec §n` in the widget sources refers to it.
+
+| Where         | What                                                                                                                                                            |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| top-left      | the document menu (name, Save now, Reload, Workshop, the panel, Fit, fullscreen); compact: **Tools**; the Workshop chip (bpmn) or the DRD \| Table switch (dmn) |
+| top-right     | the panel toggle (Todos with its count, Checks with its verdict), fullscreen, **Open in designIQ** — the one blue button                                        |
+| bottom-left   | the sync pill: Live (+ avatars), Saved, Unsaved changes, Not saved + Retry, Autosave paused, Read-only, Inactive; a click opens the details                     |
+| bottom-right  | zoom − / % / + / fit, beside the bpmn.io watermark (never covered)                                                                                              |
+| bottom-centre | toasts and the decision cards (CAS conflict, live interrupted, superseded) — beside an open card, never over a panel; a sheet ends above them                   |
+| centre        | the state cards: starting, loading, no input, load failed (Try again), import failed (Ask the assistant), renderer failed                                       |
+| right         | the Todos / Checks card — a full-width sheet when compact, or when a card would leave the toasts under 300px of canvas                                          |
+
+The split is pure-and-tested vs. DOM: `src/mcp-app/core/` holds what each
+surface says and when (`layout.ts` — the measured degrade, compact below 600 ×
+440, the fit insets, the inline height; `sync-view.ts`, `menu-model.ts`,
+`feedback.ts`, `keymap.ts`, `host-context.ts`, `todos-view.ts`,
+`checks-view.ts`), node-tested in `test/widget-*.test.ts`; `src/mcp-app/chrome/`
+binds them to the skeleton every entry carries (`mcp-app*.html` — the ids are
+the contract) behind the types in `chrome/contracts.ts`, and `shell.ts`
+composes them into ONE `WidgetChrome`. `engines/fit.ts` fits the diagram
+clear of the clusters, the palette and an open card, and re-fits it on resize,
+on a panel toggle and on a live re-import until the user zooms or pans; a
+display-mode change always re-fits. The inline height is declared after
+connect (480, or 420 below 600 wide), and again only on a width-class flip or
+the return to inline; no state change resizes the iframe.
+Colours come from the `@designiq/ui-kit` aliases only (`chrome.css` for what
+every widget shares; each entry sheet — `styles.css`, `dmn-styles.css`,
+`miragon-styles.css` — places its renderer's palette, `styles.css` adds the
+Workshop chip and the Todos internals, `dmn-styles.css` the DRD | Table switch,
+the verdict chip and the Checks sections), the icons from `icons.ts`, and `prefers-reduced-motion`
+turns every slide, spinner and animated re-fit off. The chrome modules' focus
+rules (a keyboard user never lands on `<body>`) are tested on a small fake DOM
+(`test/fake-dom.ts`, `test/widget-chrome-dom.test.ts`).
 
 **One spec per Miragon renderer.** The four Miragon widgets are not four
 entries: `src/notations/miragon/<id>.ts` holds ONE `MiragonRendererSpec` per
@@ -97,7 +142,10 @@ sheet) into one widget.
 **Read-only hosts** (`LIVE_MCP_READONLY=1` on the Live Host) mount each engine's
 `NavigatedViewer`; for the DSL-lane renderers (Wardley Map, Event Storming) with an
 inert `commandStack` value module (`engines/diagram-js.ts` — their import clears
-a stack only the Modeler registers).
+a stack only the Modeler registers). The superseded freeze takes the same viewer
+path. Every Miragon renderer adopts the element it is handed as its root and
+removes it on `destroy()`, so `miragon-main.ts` gives each mount a host element
+of its own inside `#canvas` (carrying the scope class).
 
 ### Adding a Miragon notation
 

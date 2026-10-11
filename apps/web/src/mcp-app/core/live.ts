@@ -20,11 +20,11 @@
  * session opener is injectable (the node --test suite fakes the socket), and
  * the one bpmn-specific line — bindBpmn — became the engine's bindLive.
  */
-import { openLiveSession } from "@designiq/live-client";
+import { type AwarenessPeer, openLiveSession } from "@designiq/live-client";
 
 import type { PresenceSurface, RemotePresence } from "../../lib/presence-canvas.ts";
 import type { LiveEngine } from "./engine.ts";
-import type { LiveHandle, LiveHooks } from "./lifecycle.ts";
+import type { LiveHandle, LiveHooks, PeerLabel } from "./lifecycle.ts";
 
 export const SYNC_TIMEOUT_MS = 6000;
 
@@ -63,6 +63,15 @@ export interface LiveDeps {
 }
 
 export type TryLiveHooks = LiveHooks;
+
+/** the pill's roster from the awareness states the session already receives:
+ *  announced peers only (self is excluded upstream), agents flagged — the
+ *  colour stays the peer's own (untrusted: the DOM sanitizes it) */
+export function peerLabels(peers: readonly AwarenessPeer[]): PeerLabel[] {
+  return peers.flatMap((p) =>
+    p.user ? [{ name: p.user.name, color: p.user.color, kind: p.user.kind === "agent" ? "agent" : "human" }] : [],
+  ) as PeerLabel[];
+}
 
 export async function tryLive(
   deps: LiveDeps,
@@ -162,10 +171,24 @@ export async function tryLive(
           presence,
         });
         established = true;
+        // the roster rides the same awareness — from establish on, so a failed
+        // upgrade never shows people the widget is not editing with
+        // (the states change on every remote cursor move — only a roster change reports)
+        let roster: string | undefined;
+        const offPeers = hooks.onPeers
+          ? session.onAwarenessStates((peers) => {
+              const labels = peerLabels(peers);
+              const key = JSON.stringify(labels);
+              if (key === roster) return;
+              roster = key;
+              hooks.onPeers?.(labels);
+            })
+          : undefined;
         finish({
           snapshot: () => session.content.toString(),
           destroy() {
             dead = true; // a deliberate teardown must not report a death
+            offPeers?.();
             unbind();
             session.destroy();
           },

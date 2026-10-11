@@ -9,75 +9,237 @@
 @import "./chrome.css";
 @import "../lib/todo-canvas.css";
 
-/* ── todos: the side panel (mcp-app/todos.ts) ─────────────────────────────── */
-
-#todos:not([hidden]) {
-  display: flex;
-  flex-direction: column;
-  width: min(300px, 45%);
-  border-left: 1px solid var(--border);
-  background: var(--card);
-  font-size: 13px;
+/* the palette's slot: the left column under the corner row (core/layout.ts) */
+#app[data-kind="bpmn"] #canvas .djs-palette {
+  top: var(--under-row);
+  left: var(--inset-l);
 }
 
-#todo-head,
-#todo-filter:not([hidden]) {
+/* ── the Workshop chip-switch (role=switch, chrome/mode-chip.ts): blue frame
+   + accent while ON (chrome.css .fb[aria-checked]); [track | Workshop] —
+   compact at step 3 [sticky-note | track] ON, menu-only OFF; step 7: menu-only */
+.mode {
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.mode .track {
+  order: -1;
+  position: relative;
+  flex: none;
+  width: 24px;
+  height: 14px;
+  border-radius: var(--cd-radius-pill);
+  background: var(--input);
+  transition: background-color var(--cd-motion-fast) var(--cd-ease);
+}
+
+.mode .track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--cd-radius-pill);
+  background: var(--background);
+  box-shadow: var(--cd-shadow-1);
+  transition: transform var(--cd-motion-fast) var(--cd-ease);
+}
+
+.mode[aria-checked="true"] .track {
+  background: var(--primary);
+}
+
+.mode[aria-checked="true"] .track::after {
+  transform: translateX(10px);
+}
+
+/* the menu's Workshop checkbox: a trailing switch */
+.mi .switch {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: var(--cd-radius-pill);
+  background: var(--input);
+}
+
+.mi .switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--cd-radius-pill);
+  background: var(--background);
+  transition: transform var(--cd-motion-fast) var(--cd-ease);
+}
+
+.mi[aria-checked="true"] .switch {
+  background: var(--primary);
+}
+
+.mi[aria-checked="true"] .switch::after {
+  transform: translateX(12px);
+}
+
+.mode .mode-icon {
+  display: none;
+}
+
+.corner[data-step]:not([data-step="0"], [data-step="1"], [data-step="2"]) .mode {
+  gap: 6px;
+  padding: 0 9px;
+}
+
+.corner[data-step]:not([data-step="0"], [data-step="1"], [data-step="2"]) .mode .label {
+  display: none;
+}
+
+.corner[data-step]:not([data-step="0"], [data-step="1"], [data-step="2"]) .mode .mode-icon {
+  display: block;
+}
+
+.corner[data-step]:not([data-step="0"], [data-step="1"], [data-step="2"]) .mode .track {
+  order: 0;
+}
+
+.corner[data-step]:not([data-step="0"], [data-step="1"], [data-step="2"]) .mode[aria-checked="false"],
+.corner[data-step]:is([data-step="7"], [data-step="8"], [data-step="9"]) .mode {
+  display: none;
+}
+
+/* ── the Todos card's internals (mcp-app/todos.ts; the card shell — position,
+   head, scroller, callout, foot, sheet — is chrome.css .panel) ────────────── */
+
+/* the filter row and the Add todo form, under the head */
+.panel-row {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px 6px 12px;
+  padding: 6px 10px;
+}
+
+.panel-row:not([hidden]) + .panel-row,
+.panel-head + .panel-row {
   border-bottom: 1px solid var(--border);
 }
 
-#todo-head strong {
-  font-weight: 600;
-}
-
-#todo-error:not([hidden]) {
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--destructive);
-  font-size: 12px;
-}
-
-#todo-form:not([hidden]) {
+.panel-form {
   display: flex;
+  flex: none;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 10px;
   border-bottom: 1px solid var(--border);
   background: var(--secondary);
 }
 
-#todo-form textarea {
+:is(.panel-row, .panel-form)[hidden] {
+  display: none;
+}
+
+.panel-form textarea {
   resize: vertical;
 }
 
-#todo-anchor {
+/* element chips (anchors, the filter) */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 22px;
+  overflow: hidden;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--cd-radius-sm);
+  background: var(--secondary);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.chip[hidden] {
+  display: none;
+}
+
+button.chip {
+  cursor: pointer;
+}
+
+button.chip:hover {
+  border-color: var(--primary);
+  color: var(--link);
+}
+
+.chip.whole {
+  border-style: dashed;
+  background: var(--card);
+  color: var(--muted-foreground);
+}
+
+/* Add todo is pressed while its form is open (the CI selection look) */
+#todo-new[aria-expanded="true"] {
+  border-color: var(--primary);
+  background: linear-gradient(var(--accent), var(--accent)), var(--card);
+  color: var(--link);
+}
+
+/* the filter chip: blue while it narrows the list; the whole chip clears it */
+.chip.on {
+  border-color: var(--primary);
+  background: linear-gradient(var(--accent), var(--accent)), var(--card);
+  color: var(--link);
+}
+
+.chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* the load error: ONE callout, Try again beside the words */
+#todo-error:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#todo-error-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.todo-anchor {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
 }
 
-#todo-form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
+.form-error {
+  margin: 0;
+  color: var(--destructive);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
-#todo-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.form-error[hidden] {
+  display: none;
 }
 
+/* rows are cards: title, the 2-line body, the anchor chips, the meta + actions */
 .todo {
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--cd-radius-md);
   background: var(--card);
@@ -91,88 +253,135 @@
 .todo-head {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: 8px;
 }
 
 .todo-title {
   flex: 1;
-  font-weight: 500;
+  min-width: 0;
+  font-weight: 600;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
-/* the tracker link is a button (the sandbox blocks target="_blank") without
-   button chrome, so it still reads as a link */
-.todo-link {
-  flex: none;
-  display: inline-flex;
-  padding: 2px;
-  border: none;
-  border-radius: var(--cd-radius-sm);
-  background: none;
+/* the tracker link: a 28px target that does not grow the title line */
+.pb.todo-link {
+  margin: -4px -6px -4px 0;
   color: var(--muted-foreground);
-  cursor: pointer;
-  transition:
-    color var(--cd-motion-fast) var(--cd-ease),
-    background-color var(--cd-motion-fast) var(--cd-ease);
 }
 
-.todo-link:hover {
-  background: var(--accent);
-  color: var(--link);
-}
-
-.todo-link:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 1px;
+.todo-body {
+  display: -webkit-box;
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .todo-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
-.todo-meta {
+/* block-level text so a long element name ends in an ellipsis */
+.todo-chips .chip,
+.todo-anchor .chip {
+  display: inline-block;
+  line-height: 20px;
+}
+
+/* an anchor whose element left the diagram — still listed, no longer revealable */
+.chip.gone {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+
+.todo-foot {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   margin-top: 8px;
-  color: var(--muted-foreground);
-  font-size: 12px;
 }
 
 /* "#38 · @author" yields to the two actions, never wraps under them */
-.todo-meta > span {
+.todo-meta {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 11px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-/* handing the todo to the assistant is the row's lead action — blue text */
-.btn.todo-implement {
-  margin-left: auto;
-  color: var(--link);
+/* loading: two quiet ghost rows (no shimmer — nothing to switch off under reduced motion) */
+.todo.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.todo-empty {
+.todo.skeleton .bar {
+  display: block;
+  height: 10px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--muted);
+}
+
+.bar.w70 {
+  width: 70%;
+}
+
+.bar.w40 {
+  width: 40%;
+}
+
+.bar.w30 {
+  width: 30%;
+}
+
+.todo-loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   color: var(--muted-foreground);
   font-size: 12px;
 }
 
-/* the open-todo count on the toolbar toggle */
-.btn-count:not([hidden]) {
-  display: inline-block;
-  min-width: 18px;
-  padding: 2px 5px;
-  border-radius: var(--cd-radius-sm);
-  background: var(--muted);
-  color: var(--foreground);
-  font-size: 11px;
-  font-weight: 600;
+/* the empty states (CI §8): icon, one line, a hint, the next step */
+.todo-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 12px;
+  color: var(--muted-foreground);
   text-align: center;
+}
+
+.todo-empty p {
+  margin: 0;
+}
+
+.todo-empty-title {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.todo-empty-hint {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.todo-empty .pb {
+  margin-top: 4px;
 }
 
 /* count badge on an anchored element — the shared canvas controller
@@ -184,51 +393,4 @@
   --designiq-todo-badge-font: 11px;
   --designiq-todo-badge-bg: var(--warning);
   --designiq-todo-badge-fg: var(--background);
-}
-
-/* t.BPM workshop switch (#117) — the widget twin of the web header toggle */
-#tbpm {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-/* off: the kontur fill keeps both the track (on white) and the knob (on the
-   track) at ≥ 3:1 — the CI's bar for a control nobody can see otherwise */
-#tbpm button[role="switch"] {
-  position: relative;
-  flex: none;
-  width: 32px;
-  height: 18px;
-  padding: 0;
-  border: 1px solid var(--input);
-  border-radius: var(--cd-radius-pill);
-  background: var(--input);
-  cursor: pointer;
-  transition:
-    background-color var(--cd-motion-fast) var(--cd-ease),
-    border-color var(--cd-motion-fast) var(--cd-ease);
-}
-
-#tbpm button[aria-checked="true"] {
-  border-color: var(--primary);
-  background: var(--primary);
-}
-
-#tbpm button[role="switch"] > span {
-  position: absolute;
-  top: 1px;
-  left: 1px;
-  width: 14px;
-  height: 14px;
-  border-radius: var(--cd-radius-pill);
-  background: var(--background);
-  box-shadow: var(--cd-shadow-1);
-  transition: transform var(--cd-motion-fast) var(--cd-ease);
-}
-
-#tbpm button[aria-checked="true"] > span {
-  transform: translateX(14px);
 }

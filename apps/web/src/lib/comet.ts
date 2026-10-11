@@ -6,7 +6,9 @@
  * logo (B5); the colour is the CI green, which does not follow any theme.
  *
  * The favicon (public/favicon.svg) is the official app icon — this same comet
- * on the blue rounded square — copied verbatim from the CI as well.
+ * on the blue rounded square — copied verbatim from the CI as well;
+ * appIconElement draws that very geometry for the widgets' menu header and
+ * state cards.
  */
 import { CD } from "@designiq/ui-kit/lib/tokens";
 
@@ -28,5 +30,32 @@ export function cometElement(heightPx: number): SVGSVGElement {
   const path = document.createElementNS(ns, "path");
   path.setAttribute("d", COMET_PATH);
   svg.append(path);
+  return svg;
+}
+
+/** the official app icon (CI logo/miragon-komet-blau.svg, the favicon's
+ *  geometry unchanged) as a DOM node, for the widget menu header and state
+ *  cards. The fills ride CSS classes — `.appicon-bg` on --primary, `.appicon-comet`
+ *  on --brand (mcp-app/chrome.css) — so no colour value is baked in here. */
+export function appIconElement(sizePx: number): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 512 512");
+  svg.setAttribute("width", String(sizePx));
+  svg.setAttribute("height", String(sizePx));
+  svg.setAttribute("class", "appicon");
+  svg.setAttribute("aria-hidden", "true");
+  const square = document.createElementNS(ns, "rect");
+  square.setAttribute("width", "512");
+  square.setAttribute("height", "512");
+  square.setAttribute("rx", "112");
+  square.setAttribute("class", "appicon-bg");
+  const group = document.createElementNS(ns, "g");
+  group.setAttribute("transform", "translate(66 196.9) scale(1.31908)");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", COMET_PATH);
+  path.setAttribute("class", "appicon-comet");
+  group.append(path);
+  svg.append(square, group);
   return svg;
 }

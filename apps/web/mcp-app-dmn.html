@@ -11,92 +11,125 @@
     </script>
   </head>
   <body>
-    <div id="app">
-      <!-- data-icon: a Lucide icon shell.ts prepends at boot (mcp-app/icons.ts) —
-           one geometry per icon, not an SVG copied into every entry -->
-      <div id="toolbar">
-        <span id="title">Loading…</span>
-        <span id="dirty" role="img" aria-label="Unsaved changes" title="Unsaved changes" hidden></span>
-        <span class="spacer"></span>
+    <!-- the frameless widget (spec §2): the whole iframe is canvas, the chrome
+         floats in the corners. data-icon: a Lucide icon shell.ts prepends at
+         boot (mcp-app/icons.ts). Every control starts hidden; the chrome
+         reveals it. -->
+    <div id="app" data-kind="dmn">
+      <div id="canvas"></div>
+      <div id="tl" class="corner tl">
         <button
-          id="tests-toggle"
-          class="btn"
-          title="Test cases for this decision"
-          aria-controls="tests"
+          id="menu-trigger"
+          class="fb trigger"
+          type="button"
+          hidden
+          aria-haspopup="menu"
           aria-expanded="false"
-          data-icon="flask-conical"
-          data-icon-size="14"
+          aria-controls="menu"
+          data-icon="menu"
         >
-          Tests
+          <span class="sep" aria-hidden="true"></span><span id="doc-name" class="name"></span>
         </button>
-        <button id="open" class="btn" hidden data-icon="external-link" data-icon-size="14">Open in designIQ</button>
+        <button
+          id="tools"
+          class="fb icon"
+          type="button"
+          hidden
+          aria-label="Tools"
+          aria-expanded="false"
+          title="Tools — the modelling palette"
+          data-icon="shapes"
+        ></button>
+        <!-- the DRD | Table view switch -->
+        <span id="mode-slot" class="slot"></span>
+      </div>
+      <div id="tr" class="corner tr">
+        <button
+          id="checks-toggle"
+          class="fb toggle"
+          type="button"
+          hidden
+          aria-controls="checks"
+          aria-expanded="false"
+          title="Findings, a scenario and the test cases of this decision"
+          data-icon="shield-check"
+        >
+          <span class="label">Checks</span><span id="checks-verdict" class="verdict" hidden></span>
+        </button>
         <button
           id="fullscreen"
-          class="btn icon-only"
-          title="Open fullscreen"
+          class="fb icon"
+          type="button"
+          hidden
           aria-label="Open fullscreen"
-          data-icon="maximize"
+          title="Open fullscreen"
+          data-icon="maximize-2"
         ></button>
-        <button id="save" class="btn primary" hidden title="Changes save automatically — this forces it now">
-          Save now
+        <button
+          id="open"
+          class="fb primary open"
+          type="button"
+          hidden
+          aria-label="Open in designIQ (new tab)"
+          data-icon="external-link"
+        >
+          <span class="label long">Open in designIQ</span><span class="label short">Open</span>
         </button>
       </div>
-      <div id="banner" hidden></div>
-      <div id="main">
-        <div id="canvas"></div>
-        <!-- the test panel (mcp-app/dmn-tests.ts owns everything inside) -->
-        <aside id="tests" hidden>
-          <div id="test-head">
-            <strong>Test cases</strong>
-            <span id="test-count" class="muted"></span>
-            <span class="spacer"></span>
-            <button
-              id="test-run"
-              class="btn small"
-              title="Run every case against the saved decision"
-              data-icon="play"
-              data-icon-size="14"
-            >
-              Run
-            </button>
-            <button
-              id="test-hide"
-              class="btn small icon-only"
-              title="Close the panel"
-              aria-label="Close the panel"
-              data-icon="x"
-              data-icon-size="14"
-            ></button>
-          </div>
-          <div id="test-error" hidden></div>
-          <!-- naming a captured run: an inline form, NEVER window.prompt() —
-               MCP-App hosts sandbox the iframe without allow-modals, so a
-               prompt() is silently ignored and the button appears dead -->
-          <form id="test-form" hidden>
-            <div id="test-form-given" class="muted"></div>
-            <input id="test-name" class="input" placeholder="What does this case show?" maxlength="200" required />
-            <div id="test-form-actions">
-              <button type="button" id="test-cancel" class="btn">Cancel</button>
-              <button type="submit" id="test-submit" class="btn primary">Capture</button>
-            </div>
-          </form>
-          <div id="test-list"></div>
-          <div id="test-empty">Enter values in the decision table, then capture the run as a test case.</div>
-          <div id="coverage" hidden></div>
-          <div id="test-foot">
-            <button
-              id="test-capture"
-              class="btn"
-              title="Turn the values currently entered into a test case"
-              data-icon="plus"
-              data-icon-size="14"
-            >
-              Capture current run
-            </button>
-          </div>
-        </aside>
+      <div id="bl" class="corner bl"><span id="sync" class="sync" hidden></span></div>
+      <div id="br" class="corner br">
+        <div id="zoom" class="zoom" role="group" aria-label="Zoom" hidden>
+          <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out" data-icon="minus"></button>
+          <button id="zoom-pct" class="pct" type="button" title="Reset zoom to 100%">100%</button>
+          <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in" data-icon="plus"></button>
+          <span class="vsep" aria-hidden="true"></span>
+          <button
+            id="zoom-fit"
+            type="button"
+            aria-label="Fit diagram (Shift+1)"
+            title="Fit diagram (Shift+1)"
+            data-icon="scan"
+          ></button>
+        </div>
       </div>
-      <div id="status"></div>
+      <!-- the Checks card: stacked sections in the SPA's Decision-checks order
+           (findings, a scenario, the test cases); mcp-app/dmn-checks.ts renders
+           each section's row and body -->
+      <aside id="checks" class="panel" hidden aria-labelledby="checks-h">
+        <div class="panel-head">
+          <h2 id="checks-h" tabindex="-1" data-icon="shield-check">Checks</h2>
+          <span class="spacer"></span>
+          <button
+            id="test-run"
+            class="pb"
+            type="button"
+            title="Run every test case against the saved decision"
+            data-icon="play"
+            data-icon-size="14"
+          >
+            Run
+          </button>
+          <button
+            id="test-hide"
+            class="pb icon ghost"
+            type="button"
+            title="Close checks (Esc)"
+            aria-label="Close checks"
+            data-icon="x"
+          ></button>
+        </div>
+        <div class="panel-scroll">
+          <section id="checks-findings" class="sect" hidden></section>
+          <section id="checks-scenario" class="sect" hidden></section>
+          <section id="checks-cases" class="sect"></section>
+        </div>
+      </aside>
+      <div id="lane" class="lane"></div>
+      <div id="state" class="state" hidden></div>
+      <div id="menu" class="menu" role="menu" aria-labelledby="menu-trigger" hidden></div>
+      <div id="sync-popover" class="popover" role="dialog" hidden></div>
+      <div id="announce" class="sr-only" aria-live="polite"></div>
+      <div id="alert" class="sr-only" role="alert"></div>
     </div>
     <script type="module" src="/src/mcp-app/dmn-main.ts"></script>
   </body>

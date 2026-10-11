@@ -11,94 +11,171 @@
     </script>
   </head>
   <body>
-    <div id="app">
-      <!-- data-icon: a Lucide icon shell.ts prepends at boot (mcp-app/icons.ts) —
-           one geometry per icon, not an SVG copied into every entry -->
-      <div id="toolbar">
-        <span id="title">Loading…</span>
-        <span id="dirty" role="img" aria-label="Unsaved changes" title="Unsaved changes" hidden></span>
-        <span class="spacer"></span>
+    <!-- the frameless widget (spec §2): the whole iframe is canvas, the chrome
+         floats in the corners. data-icon: a Lucide icon shell.ts prepends at
+         boot (mcp-app/icons.ts) — one geometry per icon, not an SVG copied
+         into every entry. Every control starts hidden; the chrome reveals it. -->
+    <div id="app" data-kind="bpmn">
+      <div id="canvas"></div>
+      <div id="tl" class="corner tl">
+        <button
+          id="menu-trigger"
+          class="fb trigger"
+          type="button"
+          hidden
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="menu"
+          data-icon="menu"
+        >
+          <span class="sep" aria-hidden="true"></span><span id="doc-name" class="name"></span>
+        </button>
+        <button
+          id="tools"
+          class="fb icon"
+          type="button"
+          hidden
+          aria-label="Tools"
+          aria-expanded="false"
+          title="Tools — the modelling palette"
+          data-icon="shapes"
+        ></button>
+        <span id="mode-slot" class="slot"></span>
+      </div>
+      <div id="tr" class="corner tr">
         <button
           id="todo-toggle"
-          class="btn"
+          class="fb toggle"
+          type="button"
           hidden
-          title="Open todos for this process"
           aria-controls="todos"
           aria-expanded="false"
+          title="Open todos for this process"
           data-icon="list-todo"
-          data-icon-size="14"
         >
-          Todos <span id="todo-toggle-count" class="btn-count" hidden></span>
+          <span class="label">Todos</span><span id="todo-toggle-count" class="count" hidden></span>
         </button>
-        <button id="open" class="btn" hidden data-icon="external-link" data-icon-size="14">Open in designIQ</button>
         <button
           id="fullscreen"
-          class="btn icon-only"
-          title="Open fullscreen"
+          class="fb icon"
+          type="button"
+          hidden
           aria-label="Open fullscreen"
-          data-icon="maximize"
+          title="Open fullscreen"
+          data-icon="maximize-2"
         ></button>
-        <button id="save" class="btn primary" hidden title="Changes save automatically — this forces it now">
-          Save now
+        <button
+          id="open"
+          class="fb primary open"
+          type="button"
+          hidden
+          aria-label="Open in designIQ (new tab)"
+          data-icon="external-link"
+        >
+          <span class="label long">Open in designIQ</span><span class="label short">Open</span>
         </button>
       </div>
-      <div id="banner" hidden></div>
-      <!-- canvas + the todo side panel (mcp-app/todos.ts owns everything inside
-           #todos; only the list and the anchor chips are built imperatively) -->
-      <div id="main">
-        <div id="canvas"></div>
-        <aside id="todos" hidden>
-          <div id="todo-head">
-            <strong>Open todos</strong>
-            <span id="todo-count" class="muted"></span>
-            <span class="spacer"></span>
-            <button
-              id="todo-new"
-              class="btn small"
-              hidden
-              title="File a todo on the current selection"
-              data-icon="plus"
-              data-icon-size="14"
-            >
-              New
-            </button>
-            <button
-              id="todo-refresh"
-              class="btn small icon-only"
-              title="Reload from the tracker"
-              aria-label="Reload from the tracker"
-              data-icon="refresh-cw"
-              data-icon-size="14"
-            ></button>
-            <button
-              id="todo-hide"
-              class="btn small icon-only"
-              title="Close the panel"
-              aria-label="Close the panel"
-              data-icon="x"
-              data-icon-size="14"
-            ></button>
+      <div id="bl" class="corner bl"><span id="sync" class="sync" hidden></span></div>
+      <div id="br" class="corner br">
+        <div id="zoom" class="zoom" role="group" aria-label="Zoom" hidden>
+          <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out" data-icon="minus"></button>
+          <button id="zoom-pct" class="pct" type="button" title="Reset zoom to 100%">100%</button>
+          <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in" data-icon="plus"></button>
+          <span class="vsep" aria-hidden="true"></span>
+          <button
+            id="zoom-fit"
+            type="button"
+            aria-label="Fit diagram (Shift+1)"
+            title="Fit diagram (Shift+1)"
+            data-icon="scan"
+          ></button>
+        </div>
+      </div>
+      <!-- the Todos card (mcp-app/todos.ts owns everything inside #todos; the
+           card shell — open/close, focus, Escape, the sheet — is chrome/panel.ts.
+           Only the list, the chips and the filter chip are built imperatively) -->
+      <aside id="todos" class="panel" hidden aria-labelledby="todos-h">
+        <div class="panel-head">
+          <h2 id="todos-h" tabindex="-1" data-icon="list-todo">Todos <span id="todo-count" class="count"></span></h2>
+          <span class="spacer"></span>
+          <button
+            id="todo-new"
+            class="pb"
+            type="button"
+            hidden
+            aria-expanded="false"
+            aria-controls="todo-form"
+            data-icon="list-plus"
+            data-icon-size="14"
+          >
+            Add todo
+          </button>
+          <button
+            id="todo-refresh"
+            class="pb icon ghost"
+            type="button"
+            title="Reload from the tracker"
+            aria-label="Reload from the tracker"
+            data-icon="refresh-cw"
+            data-icon-size="14"
+          ></button>
+          <button
+            id="todo-hide"
+            class="pb icon ghost"
+            type="button"
+            title="Close todos (Esc)"
+            aria-label="Close todos"
+            data-icon="x"
+          ></button>
+        </div>
+        <div id="todo-filter" class="panel-row" hidden>
+          <span class="muted">On</span>
+          <button id="todo-filter-name" class="chip on" type="button"></button>
+          <span class="spacer"></span>
+          <button id="todo-filter-clear" class="pb ghost" type="button">Show all</button>
+        </div>
+        <!-- one scroller under the head and the filter row: the error, the
+             form and the list scroll together — the head never scrolls away -->
+        <div id="todo-scroll" class="panel-scroll">
+          <div id="todo-error" class="callout danger" role="alert" hidden>
+            <span id="todo-error-text"></span>
+            <button id="todo-retry" class="pb" type="button" hidden>Try again</button>
           </div>
-          <div id="todo-filter" hidden>
-            <span class="muted">Element:</span>
-            <span id="todo-filter-name" class="chip"></span>
-            <span class="spacer"></span>
-            <button id="todo-filter-clear" class="btn small">Show all</button>
-          </div>
-          <div id="todo-error" hidden></div>
-          <form id="todo-form" hidden>
-            <div id="todo-anchor" class="muted"></div>
-            <input id="todo-title" class="input" placeholder="What needs to be done?" maxlength="200" required />
-            <textarea id="todo-body" class="input" rows="3" placeholder="Description (optional)"></textarea>
-            <div id="todo-form-actions">
-              <button type="button" id="todo-cancel" class="btn">Cancel</button>
-              <button type="submit" id="todo-submit" class="btn primary">Create todo</button>
+          <form id="todo-form" class="panel-form" hidden aria-label="Add todo">
+            <div id="todo-anchor" class="todo-anchor"></div>
+            <input
+              id="todo-title"
+              class="input"
+              aria-label="Todo title"
+              placeholder="What needs to be done?"
+              maxlength="200"
+              required
+            />
+            <textarea
+              id="todo-body"
+              class="input"
+              rows="3"
+              aria-label="Description"
+              placeholder="Description (optional)"
+            ></textarea>
+            <p id="todo-form-error" class="form-error" role="alert" hidden></p>
+            <div class="form-actions">
+              <button type="button" id="todo-cancel" class="pb">Cancel</button>
+              <button type="submit" id="todo-submit" class="pb primary">Create todo</button>
             </div>
           </form>
-          <div id="todo-list"></div>
-        </aside>
-      </div>
-      <div id="status"></div>
+          <div id="todo-list" class="panel-body"></div>
+        </div>
+        <p id="todo-foot" class="panel-foot" hidden></p>
+      </aside>
+      <!-- bottom-centre: toasts and decision cards -->
+      <div id="lane" class="lane"></div>
+      <!-- centred dead ends (loading, failed, no input) — the work chrome hides -->
+      <div id="state" class="state" hidden></div>
+      <div id="menu" class="menu" role="menu" aria-labelledby="menu-trigger" hidden></div>
+      <div id="sync-popover" class="popover" role="dialog" hidden></div>
+      <div id="announce" class="sr-only" aria-live="polite"></div>
+      <div id="alert" class="sr-only" role="alert"></div>
     </div>
     <script type="module" src="/src/mcp-app/main.ts"></script>
   </body>

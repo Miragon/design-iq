@@ -11,7 +11,7 @@ import * as Y from "yjs";
 
 import type { LiveEngine } from "../src/mcp-app/core/engine.ts";
 import type { LiveHooks } from "../src/mcp-app/core/lifecycle.ts";
-import { type LiveDeps, type LiveSessionLike, tryLive } from "../src/mcp-app/core/live.ts";
+import { type LiveDeps, type LiveSessionLike, peerLabels, tryLive } from "../src/mcp-app/core/live.ts";
 import { fakeEngine, tick } from "./fakes.ts";
 
 function fakeSession() {
@@ -316,4 +316,41 @@ test("a slow flush outlives the connect timeout, and a pre-sync drop is the prov
   s2.drop(); // the provider's normal retry dance before the first sync
   s2.sync();
   assert.ok(await p2);
+});
+
+test("onPeers: the roster from awareness after establish — announced peers only, agents flagged, cursor moves silent", async () => {
+  const s = fakeSession();
+  const seen: unknown[] = [];
+  const h = hooks();
+  const p = tryLive(deps(s), liveEngine(), { ...h.hooks, onPeers: (peers) => void seen.push(peers) });
+  await tick(1);
+  s.sync();
+  const handle = await p;
+  assert.ok(handle);
+  const petra = { name: "Petra Muster", color: "#fa8100" };
+  const agent = { name: "Claude for Anna Berg", color: "#0b7a55", kind: "agent" as const };
+  s.peers?.([
+    { clientId: 1, user: petra, canvas: { cursor: null, selection: [] } },
+    { clientId: 2, canvas: { cursor: null, selection: [] } }, // not announced yet
+    { clientId: 3, user: agent },
+  ]);
+  assert.deepEqual(seen, [
+    [
+      { name: "Petra Muster", color: "#fa8100", kind: "human" },
+      { name: "Claude for Anna Berg", color: "#0b7a55", kind: "agent" },
+    ],
+  ]);
+  // a remote cursor move changes the awareness, not the roster
+  s.peers?.([
+    { clientId: 1, user: petra, canvas: { cursor: { x: 5, y: 5 }, selection: [] } },
+    { clientId: 3, user: agent },
+  ]);
+  assert.equal(seen.length, 1);
+  handle.destroy();
+});
+
+test("peerLabels: a peer without a user is skipped, an unknown kind reads human", () => {
+  assert.deepEqual(peerLabels([{ clientId: 1, user: { name: "a", color: "#000" } }, { clientId: 2 }]), [
+    { name: "a", color: "#000", kind: "human" },
+  ]);
 });

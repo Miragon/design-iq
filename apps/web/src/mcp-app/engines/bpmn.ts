@@ -23,15 +23,22 @@ import { attachPresenceCanvas } from "../../lib/presence-canvas.ts";
 import { bpmnColorModule } from "../../notations/bpmn-color.ts";
 import { bpmnStickyModule, bpmnStickyViewModule, stickyModdle } from "../../notations/bpmn-sticky/index.ts";
 import type { EngineFactory, LiveBindHooks, WidgetEngine } from "../core/engine.ts";
-import { fitViewport, selectedElementOf } from "./diagram-js.ts";
+import { type DiagramView, diagramView, selectedElementOf } from "./diagram-js.ts";
 
 export interface BpmnEngine extends WidgetEngine {
   /** the underlying bpmn-js instance — todos, the t.BPM switch and the live
    *  binding need it raw */
   raw: Modeler | NavigatedViewer;
+  view: DiagramView;
 }
 
-export const mountBpmnEngine: EngineFactory<BpmnEngine> = (container, readonly) => {
+interface BpmnRoot {
+  $type: string;
+  name?: string;
+  participants?: Array<{ name?: string }>;
+}
+
+export const mountBpmnEngine: EngineFactory<BpmnEngine> = (container, readonly, opts) => {
   const instance = readonly
     ? new NavigatedViewer({
         container,
@@ -46,6 +53,9 @@ export const mountBpmnEngine: EngineFactory<BpmnEngine> = (container, readonly) 
         additionalModules: [bpmnStickyModule, bpmnColorModule],
         moddleExtensions: { sticky: stickyModdle },
       });
+  // every import re-fits while untouched (diagramView listens to import.done)
+  // — the live re-imports (bindBpmn imports straight into bpmn-js) included
+  const view = diagramView(instance as never, opts ? { insets: opts.insets } : {});
   const dirtyCbs = new Set<() => void>();
   if (!readonly) {
     // fires on every applied/undone command — exactly the web editor's signal
@@ -56,9 +66,11 @@ export const mountBpmnEngine: EngineFactory<BpmnEngine> = (container, readonly) 
   return {
     raw: instance,
     editable: !readonly,
+    view,
     async importText(xml: string): Promise<void> {
       await instance.importXML(xml);
-      fitViewport(instance as never);
+      // with insets import.done has fitted already (diagramView)
+      if (!opts) view.importFit();
     },
     async exportText(): Promise<string> {
       if (readonly) throw new Error("read-only view");
@@ -71,6 +83,13 @@ export const mountBpmnEngine: EngineFactory<BpmnEngine> = (container, readonly) 
       return () => dirtyCbs.delete(cb);
     },
     selectedElementId: () => selectedElementOf(instance as never),
+    // the menu header: the process name ("Order to Cash"), else the pool's
+    displayName(): string | undefined {
+      const roots = (instance.getDefinitions() as { rootElements?: BpmnRoot[] } | undefined)?.rootElements ?? [];
+      const process = roots.find((r) => r.$type === "bpmn:Process" && r.name?.trim());
+      const pool = roots.find((r) => r.$type === "bpmn:Collaboration")?.participants?.find((p) => p.name?.trim());
+      return (process?.name ?? pool?.name)?.trim() || undefined;
+    },
     // bindBpmn reports no import errors (bpmn-js keeps its old canvas on a
     // failed re-import) — the hook stays unused here by design
     bindLive(ytext: Y.Text, doc: Y.Doc, hooks: LiveBindHooks): () => void {
@@ -83,6 +102,7 @@ export const mountBpmnEngine: EngineFactory<BpmnEngine> = (container, readonly) 
       };
     },
     destroy(): void {
+      view.destroy();
       instance.destroy();
     },
   };

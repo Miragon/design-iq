@@ -1,5 +1,6 @@
 /* The decision widget's stylesheet: the shared chrome, the dmn-js views and
- * the simulation add-on, plus the test panel (mcp-app/dmn-tests.ts).
+ * the simulation add-on, plus the Checks card internals (mcp-app/dmn-checks.ts;
+ * the card shell is chrome.css .panel).
  * Everything inlines into mcp-app-dmn.html (vite-plugin-singlefile).
  * bpmn-io-theme.css puts dmn-js' own tokens (DRD palette, decision table) on
  * the CI aliases, scoped to #canvas. diagram-js.css comes from bpmn-js, like in
@@ -25,139 +26,520 @@
   height: 100%;
 }
 
-/* …but not its very edge: dmn-js draws a table view edge to edge, so the "View
-   DRD" button, the simulation form and the table would sit ON the widget's
-   border. The DRD keeps the full pane — it is a canvas with an edge palette. */
+/* the frameless chrome floats over the table view: the table scrolls inside
+   the corner row, the bottom row and an open card (--table-right keeps every
+   column reachable under it). The DRD keeps the full pane — a canvas, fitted
+   with the same insets (engines/dmn.ts view). */
 #canvas .dmn-decision-table-container,
 #canvas .dmn-literal-expression-container {
-  padding: 12px;
+  padding: var(--under-row) var(--table-right) var(--lane-bottom) var(--inset-l);
 }
 
-/* ── tests: the side panel (mcp-app/dmn-tests.ts) ─────────────────────────── */
-
-#tests:not([hidden]) {
-  display: flex;
-  flex-direction: column;
-  width: min(340px, 48%);
-  border-left: 1px solid var(--border);
-  background: var(--card);
-  font-size: 13px;
+/* the TL DRD | Table switch (chrome/view-switch.ts) replaces dmn-js' own
+   "View DRD"; a group of aria-pressed buttons — icons at step 3, menu-only
+   from step 7 */
+#canvas .view-drd {
+  display: none;
 }
 
-#test-head,
-#test-foot {
-  display: flex;
+.seg:not([hidden]) {
+  display: inline-flex;
+  gap: 2px;
+  height: 36px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--cd-radius-md);
+  background: var(--muted);
+  box-shadow: var(--cd-shadow-1);
+}
+
+.seg button {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px 6px 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-#test-head strong {
-  font-weight: 600;
-}
-
-#test-foot {
-  border-bottom: none;
-  border-top: 1px solid var(--border);
-}
-
-#test-error:not([hidden]) {
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--destructive);
-  font-size: 12px;
-}
-
-#test-form:not([hidden]) {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--secondary);
-}
-
-#test-form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-#test-list {
-  flex: 1;
-  overflow: auto;
-}
-
-/* one case = one row button: click replays it on the decision table */
-.case {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  padding: 8px 12px;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color var(--cd-motion-fast) var(--cd-ease);
-}
-
-.case:hover {
-  background: var(--accent);
-}
-
-.case:focus-visible {
-  outline-offset: -2px;
-}
-
-.case-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-/* the lines under a case align with its name, not with the status icon */
-.case > :not(.case-head) {
-  padding-left: 20px;
-}
-
-/* the status is an icon (dmn-tests.ts) whose SHAPE differs per state — the
-   colour only repeats it */
-.case-status {
-  flex: none;
-  display: inline-flex;
-  margin-top: 2px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  /* nested in the md group: its radius minus the 3px inset */
+  border-radius: calc(var(--cd-radius-md) - 3px);
+  background: transparent;
   color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-.case-status.pass {
+.seg button[aria-pressed="true"] {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: var(--cd-shadow-1);
+}
+
+.corner[data-step]:not([data-step="0"], [data-step="1"], [data-step="2"]) .seg .label {
+  display: none;
+}
+
+.corner[data-step]:is([data-step="7"], [data-step="8"], [data-step="9"]) .seg {
+  display: none;
+}
+
+/* a test verdict (the Checks toggle, its menu item, the section chips): icon
+   + words, never colour alone */
+.verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.verdict[hidden] {
+  display: none;
+}
+
+.verdict.ok {
+  background: var(--success-soft);
   color: var(--success);
 }
 
-.case-status.fail {
+.verdict.bad {
+  background: var(--destructive-soft);
   color: var(--destructive);
 }
 
-.case-failure {
-  color: var(--destructive);
-  font-size: 12px;
+.verdict.warn {
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
-#test-empty {
-  padding: 10px 12px;
-  color: var(--muted-foreground);
-  font-size: 12px;
+/* the add-on's own table form and its result bar: the Checks card's "Try a
+   scenario" drives the SAME store (dmn-checks.ts), and the add-on still paints
+   the rule highlight — its DOM is hidden, never reparented */
+#canvas .dmn-sim {
+  display: none;
 }
 
-#coverage:not([hidden]) {
-  padding: 6px 12px;
+/* DRD: the palette's slot, the left column under the corner row
+   (core/layout.ts) */
+#app[data-kind="dmn"] #canvas .djs-palette {
+  top: var(--under-row);
+  left: var(--inset-l);
+}
+
+/* DRD: the definitions card under the corner row, beside the left-column
+   palette (or at the inset while the palette is not out) */
+#canvas .dmn-definitions {
+  top: var(--under-row);
+  left: var(--inset-l);
+}
+
+#app:is([data-palette="column"], [data-palette-open]) #canvas .dmn-definitions {
+  left: calc(var(--inset-l) + 56px);
+}
+
+/* DRD of several decisions: the add-on's "Simulate DRD" card takes the right
+   slot under the row — and steps aside while the Checks card holds it */
+#canvas .dmn-sim-decision-requirements-diagram-panel {
+  top: var(--under-row);
+  right: var(--inset-r);
+  max-height: calc(100% - var(--under-row) - var(--lane-bottom));
+  overflow-y: auto;
+}
+
+#app:has(#checks:not([hidden])) #canvas .dmn-sim-decision-requirements-diagram-panel {
+  display: none;
+}
+
+/* ── Checks: stacked collapsible sections (mcp-app/dmn-checks.ts) ───────── */
+.sect + .sect {
   border-top: 1px solid var(--border);
+}
+
+.sect[hidden] {
+  display: none;
+}
+
+.sect-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 12px 6px 10px;
+  font-weight: 600;
+}
+
+.sect-row .sum {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* the section row is its disclosure button */
+button.sect-row {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.sect-row:hover {
+  background: var(--accent);
+}
+
+button.sect-row:focus-visible {
+  outline-offset: -2px;
+}
+
+.sect-row .chev {
+  color: var(--muted-foreground);
+  transition: transform var(--cd-motion-fast) var(--cd-ease);
+}
+
+.sect-row[aria-expanded="true"] .chev {
+  transform: rotate(90deg);
+}
+
+.sect-row .lbl {
+  flex: none;
+  white-space: nowrap;
+}
+
+:is(.sect-row, .scn-strip, .case) code {
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.sect-body {
+  padding: 0 10px 10px;
+}
+
+.sect-body[hidden] {
+  display: none;
+}
+
+.sect-body .callout {
+  margin: 0 0 8px;
+}
+
+.sect-note {
+  margin: 0;
   color: var(--muted-foreground);
   font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Findings: the SPA's rows — the severity is the icon's shape, the colour
+   repeats it (not .findings: that is the sync popover's list) */
+.check-findings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.check-findings li {
+  display: flex;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.check-findings li + li {
+  border-top: 1px solid var(--border);
+}
+
+.check-findings .icon {
+  margin-top: 1px;
+  color: var(--muted-foreground);
+}
+
+.check-findings .error .icon {
+  color: var(--destructive);
+}
+
+.check-findings .warn .icon {
+  color: var(--warning);
+}
+
+.check-findings p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.check-findings .where {
+  margin-top: 2px;
+  color: var(--muted-foreground);
+  font-family: var(--designiq-font-mono);
+  font-size: 10.5px;
+}
+
+/* Try a scenario: the widget-owned form on the add-on's store */
+:is(.scn, .scn-pick) > .sect-note {
+  margin-bottom: 8px;
+}
+
+.scn-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+  margin: 0;
+}
+
+.scn-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.scn-field > span {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.scn .input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  font-size: 12.5px;
+}
+
+.scn-actions,
+.scn-pick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scn-actions {
+  margin-top: 10px;
+}
+
+/* the outcome: success-soft for a reported rule, warning-soft for a miss or a
+   broken hit policy — icon + words, never colour alone */
+.scn-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 6px 6px 10px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scn-strip.miss {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.scn-strip[hidden],
+.scn-name[hidden],
+.scn-error[hidden] {
+  display: none;
+}
+
+.scn-strip .si {
+  display: inline-flex;
+  flex: none;
+}
+
+.scn-strip .txt {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.scn-strip .known {
+  flex: none;
+  font-weight: 500;
+}
+
+.scn-strip .known[hidden] {
+  display: none;
+}
+
+.scn-strip .why {
+  display: block;
+  font-weight: 500;
+}
+
+.scn-name {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.scn-name .given {
+  margin: 0;
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.scn-error {
+  margin: 8px 0 0;
+  color: var(--destructive);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.scn-error.warning {
+  color: var(--warning);
+}
+
+/* Test cases: one row button per case — a click replays it on the table */
+.cases {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.case {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--cd-radius-md);
+  background: var(--card);
+  color: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--cd-motion-fast) var(--cd-ease);
+}
+
+.case:hover {
+  border-color: var(--primary);
+}
+
+.case[aria-pressed="true"] {
+  border-color: var(--primary);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.case .st {
+  display: inline-flex;
+  flex: none;
+  margin-top: 1px;
+  color: var(--muted-foreground);
+}
+
+.case .st.pass {
+  color: var(--success);
+}
+
+.case .st.fail {
+  color: var(--destructive);
+}
+
+.case .txt {
+  flex: 1;
+  min-width: 0;
+}
+
+.case .name {
+  display: block;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.case .name.one {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.case .given {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted-foreground);
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.case .outcome {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.case .outcome .icon {
+  margin-top: 1px;
+}
+
+.case .outcome.pass {
+  color: var(--success);
+}
+
+.case .outcome.fail {
+  color: var(--destructive);
+  font-weight: 500;
+}
+
+.case .outcome.pending,
+.case .outcome.unrun {
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+
+.info-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.info-line .icon {
+  margin-top: 1px;
+}
+
+/* no cases yet: the empty state hands over to Try a scenario */
+.checks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px 4px;
+  text-align: center;
+}
+
+.checks-empty .title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.checks-empty .pb {
+  margin-top: 4px;
 }

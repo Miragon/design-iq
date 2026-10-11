@@ -18,6 +18,12 @@ const repoBase = (publicUrl: string, repoFullName: string): string => {
   return `${publicUrl.replace(/\/+$/, "")}/r/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 };
 
+/** the repository overview: `/r/<owner>/<repo>` — the widgets' fallback when
+ *  a load failed before the read resolved a path */
+export function repoDeepLink(publicUrl: string, repoFullName: string): string {
+  return repoBase(publicUrl, repoFullName);
+}
+
 /** the process editor: `/r/<owner>/<repo>/p/<processId>`, optionally revealing
  *  one element (`?element=` — validated by the route, unknown ids ignored) */
 export function processDeepLink(

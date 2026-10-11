@@ -9,30 +9,40 @@
  * on the shared widget core: no extras, no icon font (the renderers draw
  * inline SVG), the file-route deep link (core/widget.ts defaults).
  */
-import "./chrome.css";
+import "./miragon-styles.css";
 
 import { byId } from "@designiq/notations";
 
 import { spec } from "@/mcp-app/widget-spec";
+import type { LoadedMiragonRenderer } from "@/notations/miragon/spec";
 
+import { h } from "./chrome/dom";
 import { bootWidget } from "./core/widget";
 import { mountMiragonEngine } from "./engines/miragon";
-import { el } from "./shell";
 
 const notation = byId(spec.id);
 if (!notation) throw new Error(`widget: no notation descriptor for renderer spec '${spec.id}'`);
 document.title = `designIQ ${notation.label} modeler`;
-const noun = notation.noun.singular;
 
-// the engine module is inlined into the bundle, so this resolves in a microtask
-spec.load().then(
-  (renderer) =>
-    bootWidget({
-      notation: spec.id,
-      noun,
-      engine: (container, readonly) => mountMiragonEngine(renderer, container, readonly),
-    }),
-  (err: unknown) => {
-    el<HTMLDivElement>("status").textContent = `Modeler failed to load: ${(err as Error).message}`;
+let renderer: LoadedMiragonRenderer | undefined;
+bootWidget({
+  notation: spec.id,
+  noun: notation.noun.singular,
+  // the engine module is inlined into the bundle, so this resolves in a
+  // microtask; a rejection is the "modeler could not start" card (Try again)
+  prepare: async () => {
+    renderer = await spec.load();
   },
-);
+  // every Miragon renderer adopts the element it is handed as its root and
+  // REMOVES it on destroy — so each mount gets a host of its own inside
+  // #canvas (the superseded freeze destroys the editor, then mounts a viewer
+  // into the same #canvas). The host carries the scope class like the SPA's
+  // editor host: the dev server's vendor-CSS prefix is a compound with the
+  // renderer's root class, so both must sit on the same element
+  engine: (container, readonly, opts) => {
+    if (!renderer) throw new Error(`the ${notation.label} renderer is not loaded`);
+    const host = h("div", { class: spec.canvasClassName });
+    container.append(host);
+    return mountMiragonEngine(renderer, host, readonly, opts);
+  },
+});

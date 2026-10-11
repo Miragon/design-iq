@@ -1,6 +1,6 @@
 /**
  * Shared decision-test wording of the SPA Checks panel (components/
- * decision-checks-panel.tsx) and the DMN widget (mcp-app/dmn-tests.ts) —
+ * decision-checks-panel.tsx) and the DMN widget (mcp-app/dmn-checks.ts) —
  * the derivations and status names both frontends must phrase identically.
  * Only the drawing stays per frontend (Tailwind classes + lucide-react vs
  * widget CSS classes + inline Lucide SVG), on the same CI tokens.
