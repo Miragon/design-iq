@@ -87,6 +87,7 @@ automatically. A verified, click-by-click IdP setup (WorkOS AuthKit) lives in
 | `LIVE_OIDC_TOKEN_URL`     | discovery         | Explicit token endpoint (see above).                                                                                                                                                                |
 | `LIVE_OIDC_LOGIN_LABEL`   | `SSO`             | The web client's login-button label (e.g. "Acme SSO").                                                                                                                                              |
 | `LIVE_MCP_READONLY`       | —                 | `1` = the MCP endpoint registers **no** write tools (absent from `tools/list`, not erroring).                                                                                                       |
+| `LIVE_MCP_BPMN_EDIT`      | —                 | `1` = the MCP endpoint also registers the semantic BPMN tools `get_process_outline`, `edit_process` and `layout_process` (ADR 0009; opt-in until their benchmark gate has run).                     |
 
 The IdP-side requirement is identical for both entrances: access tokens must be JWTs
 carrying the audience and the login claim (Keycloak: an audience mapper + a

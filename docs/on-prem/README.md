@@ -117,7 +117,8 @@ The token: in production, an OIDC access token from your identity provider — s
 `LIVE_OIDC_*` variables
 ([configuration.md](configuration.md#oidc-token-auth-mcp--headless-clients)); a
 `LIVE_AUTH=none` host needs no token at all (drop the header). Set `LIVE_MCP_READONLY=1`
-to serve the read tools only. Tool list and semantics: [docs/mcp-integration.md](../mcp-integration.md).
+to serve the read tools only, `LIVE_MCP_BPMN_EDIT=1` to add the semantic BPMN tools (ADR 0009).
+Tool list and semantics: [docs/mcp-integration.md](../mcp-integration.md).
 
 ## Reverse proxy / TLS
 

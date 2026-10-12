@@ -18,3 +18,5 @@ minimumReleaseAgeExclude:
   # the team-topologies modeler pair — 0.8.0 (document v3, annotations) published minutes before the bump
   - "@miragon/team-topologies-renderer@0.8.0"
   - "@miragon/team-topologies-schema-model@0.8.0"
+  # the BPMN editing engine (#236) — 0.6.0 published the day it was adopted
+  - "@miragon/bpmn-cli@0.6.0"

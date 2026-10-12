@@ -79,7 +79,9 @@ tools over the **live** models: `list_repos`, `list_models`, `get_view`, `list_p
 `save_bpmn_xml`, `release_process`, the
 notation-generic `get_model_content` / `validate_model` / `create_model` / `save_model_content` — plus
 `list_todos` / `create_todo` / `close_todo` **when a tracker is configured** (no
-credentials → absent from `tools/list`, never a call that fails). The repo is a **tool
+credentials → absent from `tools/list`, never a call that fails), and the semantic BPMN tools
+`get_process_outline` / `edit_process` / `layout_process` **with `LIVE_MCP_BPMN_EDIT=1`** (engine
+`@miragon/bpmn-cli`, `src/application/bpmn-edit.ts`, ADR 0009). The repo is a **tool
 argument**, not a URL segment; every call runs
 through the same per-(user,repo) authorization as the rest of the API, and `save_bpmn_xml`
 is compare-and-set — it requires the `baseVersion` from a prior `get_bpmn_xml`, and a
@@ -102,6 +104,7 @@ docs/adr/0005-in-process-mcp-and-oidc-resource-server.md.
 | `LIVE_OIDC_AUDIENCE`    | `LIVE_PUBLIC_URL` | Required `aud` of accepted tokens.                                                         |
 | `LIVE_OIDC_LOGIN_CLAIM` | `github_login`    | Claim carrying the IdP-verified GitHub login; a token without it is refused (fail closed). |
 | `LIVE_MCP_READONLY`     | —                 | `1` = register no MCP write tools (absent from `tools/list`, not erroring).                |
+| `LIVE_MCP_BPMN_EDIT`    | —                 | `1` = register the semantic BPMN tools (outline, edit, layout — ADR 0009).                 |
 
 ## Authentication — the IdP authenticates, the GitHub App authorizes
 

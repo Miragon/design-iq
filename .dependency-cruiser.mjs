@@ -120,6 +120,17 @@ export default {
       to: { path: "(^|/)node_modules/fast-xml-parser/" },
     },
     {
+      name: "bpmn-cli-core-only",
+      severity: "error",
+      comment:
+        "The BPMN editing engine (@miragon/bpmn-cli, ADR 0009) is used through its " +
+        "browser-safe core: strings in, strings out, saved through the content save " +
+        "path (gate, compare-and-set, live write). Its ./node entry writes files " +
+        "past all three, and its CLI parses argv — neither belongs in the platform.",
+      from: { path: "^(apps|packages)/" },
+      to: { path: "node_modules/@miragon/bpmn-cli/(dist/(node/|cli\\.)|bin/)" },
+    },
+    {
       name: "bpmn-kinds-has-zero-imports",
       severity: "error",
       comment:

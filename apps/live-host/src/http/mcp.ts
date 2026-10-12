@@ -48,7 +48,20 @@ import { z } from "zod";
 import type { Session } from "../adapters/sqlite/sessions.ts";
 import type { AgentPresence } from "../application/agent-presence.ts";
 import { authorizeRepo } from "../application/authz.ts";
-import { type ContentDeps, getContent, putContent } from "../application/content.ts";
+import {
+  type BpmnEditIo,
+  type ChangeOptions,
+  editProcess,
+  kindsList,
+  layoutProcess,
+  type LayoutRequest,
+  OP_NAMES,
+  opsTable,
+  outlineProcess,
+  type OutlineRequest,
+  triggersList,
+} from "../application/bpmn-edit.ts";
+import { checkContent, type ContentDeps, getContent, modelIdsOf, putContent } from "../application/content.ts";
 import { readDecisionTests, runTestsFor, saveTestsFor } from "../application/decision-tests.ts";
 import { findDecisionPath, findModelPath, findProcessPath } from "../application/find-model.ts";
 import {
@@ -68,7 +81,6 @@ import { changedElementIds } from "../domain/model-diff.ts";
 import type { GitProvider } from "../ports/git-provider.ts";
 import type { IssueTracker } from "../ports/issue-tracker.ts";
 import { release, type ReleaseDeps, releaseFiles } from "../release.ts";
-import { discoverModels, loadContentConfig } from "../repos/content.ts";
 import type { ConnectedRepo } from "../repos/registry.ts";
 
 /** everything the tools need — ApiOptions satisfies this structurally (the
@@ -86,6 +98,9 @@ export type McpDeps = OverviewDeps &
      *  listed with its own — absent without a tracker */
     todoJobs?: { sourcesOf(repo: string, process: string): string[] };
     mcpReadOnly?: boolean;
+    /** the semantic BPMN tools of ADR 0009 (get_process_outline, edit_process,
+     *  layout_process) — opt-in (LIVE_MCP_BPMN_EDIT=1) until the A/B gate is run */
+    bpmnEdit?: boolean;
     /** built web assets — the MCP-App widgets (WIDGET_FILES, one single-file
      *  bundle per modeler) are read from here */
     webDist: string;
@@ -169,6 +184,33 @@ const NOTATION_IDS = NOTATIONS.map((n) => n.id).join(", ");
 const CREATABLE_IDS = NOTATIONS.filter((n) => hasTemplate(n.id))
   .map((n) => n.id)
   .join(", ");
+
+/** edit_process's copy: the contract, then the op table and the kinds the
+ *  engine derives from its own schema (they follow the pinned version) */
+const EDIT_PROCESS_DESCRIPTION = [
+  "BPMN only: change a LIVE process with operations on its element ids (get_process_outline lists them) instead " +
+    "of rewriting its XML. The diagram is computed: a hand-drawn one is kept, new elements go next to their " +
+    'neighbours. New ids follow the file\'s style; `"as": "$name"` names what an op creates for later ops. One ' +
+    "transaction: refused as a whole when an op fails or the change adds a validation error, else saved like " +
+    "save_bpmn_xml. A concurrent change gets the ops applied again to the new version (`baseVersion` makes it a " +
+    "conflict). The result lists what was created, changed and removed (use ids from a saved result; a dry run's " +
+    "may change), the warnings it added and the layout score (lower is better) — no XML.",
+  'Example: [{"op":"add","kind":"userTask","name":"Check invoice","after":"Activity_ReceiveInvoice","as":"$check"},' +
+    '{"op":"add","kind":"boundaryEvent:timer","name":"2 days","on":"$check","timer":"P2D","as":"$late"},' +
+    '{"op":"add","kind":"endEvent","name":"Invoice escalated","after":"$late"}]',
+  `Ops (* = required):\n${opsTable()}`,
+  "A new node goes `after` X (appended after a gateway or a path's end, else spliced into X's outgoing flow), " +
+    "`before` Y, into `flow` F, between `after` X and `before` Y, unconnected `in` a process, pool or " +
+    "sub-process, or `on` an activity (boundary events); `to` T also connects it. `split`: a gateway, its " +
+    "branches and the join. `remove` bridges the gap (`withBranch`: removes the path behind). `set` `values`: " +
+    'name, doc, condition, default, lane, calledElement, calledDecision, prefixed vendor keys; "" removes. A ' +
+    "format op's `path` is [fromId, toId].",
+  `Kinds: ${kindsList()}. Triggers follow the kind (boundaryEvent:timer) with their keys: ${triggersList()}. ` +
+    "In designIQ a sub-process is its own .bpmn, linked from a callActivity (`calledElement` = its file stem); a " +
+    "businessRuleTask links its .dmn by `calledDecision` (file stem).",
+  "An engine error starts with its code (E_NOT_FOUND, …); a save the gate refuses with its verdict. A hint may " +
+    'name an op as a CLI command: `bpmn move <file> X --lane L` is {"op":"move","ids":["X"],"lane":"L"}.',
+].join("\n\n");
 
 // ── MCP-App widgets: the static half of a registry row — DATA, module-level,
 // so the test suite's stub list (WIDGET_FILES) derives from the SAME list the
@@ -290,7 +332,12 @@ const named = (names: readonly string[]): string => andList(names.map((n) => `\`
 /** every registered notation with its file extensions */
 const NOTATION_FILES = andList(NOTATIONS.map((n) => `${n.label} (${n.extensions.join("/")})`));
 
-function liveInstructions(on: { readOnly: boolean; todos: boolean; widgets: readonly WidgetSpec[] }): string {
+function liveInstructions(on: {
+  readOnly: boolean;
+  todos: boolean;
+  widgets: readonly WidgetSpec[];
+  bpmnEdit: boolean;
+}): string {
   const write = !on.readOnly;
   // the pinned widget names (open_modeler, open_decision_modeler) do not say
   // their notation — the label does
@@ -309,12 +356,17 @@ function liveInstructions(on: { readOnly: boolean; todos: boolean; widgets: read
     `Each connected repository keeps its models as files, one model per file with the file stem as its id, in these notations: ${NOTATION_FILES}.`,
     "Start with `list_repos`, then `list_models` to see which models a repository holds.",
     `These tools are notation-neutral: ${andList(neutralTools)}.`,
-    `BPMN and DMN have deeper tooling: for processes ${named(["get_process", "get_bpmn_xml", "validate_bpmn"])}; ` +
+    `BPMN and DMN have deeper tooling: for processes ${named(["get_process", ...(on.bpmnEdit ? ["get_process_outline"] : []), "get_bpmn_xml", "validate_bpmn"])}; ` +
       `for decisions ${named(["get_decision", "simulate_decision", "analyze_decision", "run_decision_tests", ...(write ? ["save_decision_tests"] : [])])}` +
       (on.todos
         ? `; and todos anchored to process elements in the repository's issue tracker (${named(write ? ["list_todos", "create_todo", "close_todo"] : ["list_todos"])})`
         : "") +
       ".",
+    on.bpmnEdit && write
+      ? "To change a process, read it with `get_process_outline` and send operations on its element ids to " +
+        "`edit_process` — the diagram is laid out for you; do not fetch its XML to make an edit. Use `save_bpmn_xml` " +
+        "only for what the operations cannot express. `layout_process` tidies a diagram, or redraws it when asked."
+      : "",
     write
       ? "Every save lands in the live document: people with the model open see it at once (`get_presence` shows who), " +
         "and a stale baseVersion returns a conflict to re-apply your edit to, never an overwrite."
@@ -408,6 +460,7 @@ export function createLiveMcpServer(
         readOnly: Boolean(opts.mcpReadOnly),
         todos: Boolean(opts.issues),
         widgets: served.map((s) => s.spec),
+        bpmnEdit: Boolean(opts.bpmnEdit),
       }),
     },
   );
@@ -476,14 +529,7 @@ export function createLiveMcpServer(
   const repoModelIds = async (repo?: string): Promise<Map<string, Set<string>> | undefined> => {
     if (!repo) return undefined;
     const r = await requireRepo(repo);
-    const workspace = await opts.workspaces.ensure(r);
-    const cfg = loadContentConfig(workspace);
-    if (!cfg) return undefined;
-    const modelIds = new Map<string, Set<string>>();
-    for (const m of await discoverModels(workspace, cfg)) {
-      (modelIds.get(m.notation) ?? modelIds.set(m.notation, new Set()).get(m.notation)!).add(m.id);
-    }
-    return modelIds;
+    return modelIdsOf(await opts.workspaces.ensure(r));
   };
 
   /** parse a .dmn into the decision view — one message for every "not DMN" case.
@@ -642,6 +688,151 @@ export function createLiveMcpServer(
           if (!out.ok) return conflictResult(out.conflict, cfg.legacyConflictKey);
           console.log(`content saved: ${r.fullName}/${out.result.path} by @${session.user.login} via mcp`);
           return ok({ ok: true, ...out.result });
+        },
+      ),
+    );
+  };
+
+  // ── semantic BPMN editing (ADR 0009, opt-in: LIVE_MCP_BPMN_EDIT=1) — the
+  // engine is @miragon/bpmn-cli (application/bpmn-edit.ts); the change is
+  // saved through writeContent like save_bpmn_xml, so the save gate, the
+  // minimal-diff write and the agent presence apply unchanged ───────────────
+  const registerBpmnEditTools = (): void => {
+    const bpmnIo = (r: ConnectedRepo): BpmnEditIo => ({
+      read: (path) => readContent(r, path),
+      write: (path, body) => writeContent(r, path, body),
+      check: (path, body) => checkContent(opts, r, path, body),
+      modelIds: async () => modelIdsOf(await opts.workspaces.ensure(r)),
+    });
+    /** the engine edits BPMN only: a path of another notation is the caller's mistake, not a parse error */
+    const bpmnPath = async (r: ConnectedRepo, id?: string, path?: string): Promise<string> => {
+      const resolved = await resolveBpmnPath(r, id, path);
+      if (byExtension(resolved)?.id !== "bpmn") throw new Error(`not a BPMN model: ${resolved}`);
+      return resolved;
+    };
+    const changeArgs = {
+      dryRun: z
+        .boolean()
+        .optional()
+        .describe("compute and report without saving; `wouldSave` says whether the save gate would take it"),
+      lint: lintArg,
+      baseVersion: z
+        .string()
+        .optional()
+        .describe(
+          "apply only to this version (from get_process_outline or a previous result): a newer document is a " +
+            "conflict instead of the operations applied again — use it when a repeated call must not apply twice",
+        ),
+    };
+
+    server.registerTool(
+      "get_process_outline",
+      {
+        title: "Get BPMN process outline",
+        description:
+          "BPMN only: a LIVE process as compact text, without XML or diagram geometry — every element with its id, " +
+          "kind, name, lane, links (calledElement, calledDecision), trigger and vendor implementation, the sequence " +
+          "flows with names and conditions, pools, message flows, annotations and the problems the engine sees; " +
+          "`saveGate` lists the save gate's findings (an edit is saved only while there are no errors). One view at " +
+          "a time: `around` (with `depth`) the neighbourhood of one element — the view for a local change in a " +
+          "large model; `element` one element in its context (where it sits, its lane, before and after, what " +
+          "catches it, its message flows); `scope` one process, pool or sub-process; `find` the elements whose " +
+          "id, name, annotation text or vendor value contains a text. The ids are what edit_process addresses.",
+        inputSchema: z.object({
+          ...processRef,
+          around: z.string().optional().describe("only this element's neighbourhood along the flows"),
+          depth: z.number().int().min(0).max(20).optional().describe("with `around`: flow steps from it (default 2)"),
+          element: z.string().optional().describe("this element in its context"),
+          scope: z.string().optional().describe("only this process, pool or sub-process"),
+          find: z
+            .string()
+            .optional()
+            .describe("the elements whose id, name, annotation text or vendor value contains this text"),
+        }),
+        annotations: READ,
+      },
+      safe(async ({ repo, id, path, ...view }: { repo: string; id?: string; path?: string } & OutlineRequest) => {
+        const r = await requireRepo(repo);
+        return ok(await outlineProcess(bpmnIo(r), await bpmnPath(r, id, path), view));
+      }),
+    );
+
+    if (opts.mcpReadOnly) return;
+
+    server.registerTool(
+      "edit_process",
+      {
+        title: "Edit a BPMN process",
+        description: EDIT_PROCESS_DESCRIPTION,
+        inputSchema: z.object({
+          ...processRef,
+          ops: z
+            .array(z.looseObject({ op: z.enum(OP_NAMES) }))
+            .min(1)
+            .describe("the operations, applied in order as one transaction"),
+          ...changeArgs,
+        }),
+        annotations: WRITE,
+      },
+      safe(
+        async ({
+          repo,
+          id,
+          path,
+          ops,
+          ...change
+        }: { repo: string; id?: string; path?: string; ops: unknown[] } & ChangeOptions) => {
+          const r = await requireRepo(repo);
+          const out = await editProcess(bpmnIo(r), await bpmnPath(r, id, path), ops, change);
+          if (out.ok && out.written) {
+            console.log(`process edited: ${r.fullName}/${out.path} by @${session.user.login} via mcp`);
+          }
+          return ok(out);
+        },
+      ),
+    );
+
+    server.registerTool(
+      "layout_process",
+      {
+        title: "Lay out a BPMN process",
+        description:
+          "BPMN only: lay out the diagram of a LIVE process; only the geometry changes. 'tidy' keeps the drawing and " +
+          "only removes overlaps and gaps under 20 px with minimal moves (edit_process's `tidy` op does the same for " +
+          "a part). 'redraw' draws the whole diagram anew — colours and diagram ids survive, positions do not: it " +
+          "replaces the drawing people made and see, so redraw only when asked, or for an import or a scaffold. " +
+          "edit_process lays out what it changes by itself. Saved like edit_process.",
+        inputSchema: z.object({
+          ...processRef,
+          mode: z.enum(["tidy", "redraw"]),
+          expand: z.array(z.string()).optional().describe("redraw: sub-process ids to draw expanded"),
+          collapse: z.array(z.string()).optional().describe("redraw: sub-process ids to draw collapsed"),
+          ...changeArgs,
+        }),
+        annotations: WRITE,
+      },
+      safe(
+        async ({
+          repo,
+          id,
+          path,
+          dryRun,
+          lint,
+          baseVersion,
+          ...request
+        }: { repo: string; id?: string; path?: string } & LayoutRequest & ChangeOptions) => {
+          const r = await requireRepo(repo);
+          const out = await layoutProcess(bpmnIo(r), await bpmnPath(r, id, path), request, {
+            dryRun,
+            lint,
+            baseVersion,
+          });
+          if (out.ok && out.written) {
+            console.log(
+              `process laid out (${request.mode}): ${r.fullName}/${out.path} by @${session.user.login} via mcp`,
+            );
+          }
+          return ok(out);
         },
       ),
     );
@@ -808,6 +999,8 @@ export function createLiveMcpServer(
       return ok({ ok: !findings.some((f) => f.severity === "ERROR"), findings });
     }),
   );
+
+  if (opts.bpmnEdit) registerBpmnEditTools();
 
   // ── ANY notation: the generic model tools (#155). ONE set for the whole
   // registry beside the wire-pinned bpmn/dmn twins — ids resolve registry-

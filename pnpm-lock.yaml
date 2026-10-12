@@ -83,6 +83,9 @@ importers:
       '@hocuspocus/server':
         specifier: 4.7.0
         version: 4.7.0(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
+      '@miragon/bpmn-cli':
+        specifier: 0.6.0
+        version: 0.6.0
       '@miragon/design-iq-validator':
         specifier: workspace:*
         version: link:../../packages/validator
@@ -939,6 +942,11 @@ packages:
   '@marijn/find-cluster-break@1.0.4':
     resolution: {integrity: sha512-Wy0V7+SGUjnF9/TkiM1hKVDPj7jKXduPNboMVtHTA8dySMURWqfg/JZ9E2Sq8JgSJmkl7k7Qe9FLeMSrSraWmQ==}
 
+  '@miragon/bpmn-cli@0.6.0':
+    resolution: {integrity: sha512-dI8dpQQVjjJdFKB8euHIstG1UK9Bx29qwM8l33z2cgfAbncwBfsYpjzN/C/2T026VcBW3g5udWxURvXZDlh6Lw==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   '@miragon/context-maps-renderer@0.2.0':
     resolution: {integrity: sha512-vrQmuxf87/fbQU3+BMWP0FYmuZqAkoSdOkEbB1xQcOTIxuD2FN0IHVvoBneZE+N/KWxHFdCP0pRRQhcZOzLnMw==}
 
@@ -1317,6 +1325,10 @@ packages:
 
   '@radix-ui/rect@1.1.3':
     resolution: {integrity: sha512-JtyZR+mqgBibTo8xea3B6ZRmzZiM/YeVBtUkas6zMuXjAlfIFIW2FgqeM9eLyvEaYX66vr6DJMK+4U6LV0KhNw==}
+
+  '@resvg/resvg-wasm@2.6.2':
+    resolution: {integrity: sha512-FqALmHI8D4o6lk/LRWDnhw95z5eO+eAa6ORjVg09YRR7BkcM6oPHU9uyC0gtQG5vpFLvgpeU4+zEAz2H8APHNw==}
+    engines: {node: '>= 10'}
 
   '@rolldown/binding-android-arm-eabi@1.2.12':
     resolution: {integrity: sha512-dB/a1214qKfHMXCpgqR4OZT+jS4kTyEXbQGJPqzobt5EwH5rX080pxE37alt3RzvR1bf1Yz/yGqRfrYAxuPw0A==}
@@ -1972,6 +1984,11 @@ packages:
   baseline-browser-mapping@2.10.43:
     resolution: {integrity: sha512-AjYpR78kDWAY3Efj+cDTFH9t9SCoL7OoTp1BOb0mQV7S+6CiLwnWM3FyxhJtdPufDFKzmCSFoUncKjWgJEZTCQ==}
     engines: {node: '>=6.0.0'}
+    hasBin: true
+
+  bpmn-auto-layout@2.0.0-alpha.2:
+    resolution: {integrity: sha512-Xg8BoRMijfECgWljIlE44hbGDAuF0BkjJuLfd5o3oOx1ileL06EJQhlgO040xFIegfjxq91dVFAoxCL17wo53A==}
+    engines: {node: '>= 18'}
     hasBin: true
 
   bpmn-js-color-picker@0.7.2:
@@ -3865,6 +3882,14 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.4': {}
 
+  '@miragon/bpmn-cli@0.6.0':
+    dependencies:
+      '@resvg/resvg-wasm': 2.6.2
+      bpmn-auto-layout: 2.0.0-alpha.2
+      bpmn-moddle: 10.3.1
+      commander: 15.0.0
+      moddle: 8.2.1
+
   '@miragon/context-maps-renderer@0.2.0':
     dependencies:
       '@miragon/context-maps-schema-model': 0.2.0
@@ -4233,6 +4258,8 @@ snapshots:
       '@types/react': 19.3.0
 
   '@radix-ui/rect@1.1.3': {}
+
+  '@resvg/resvg-wasm@2.6.2': {}
 
   '@rolldown/binding-android-arm-eabi@1.2.12':
     optional: true
@@ -4693,6 +4720,11 @@ snapshots:
   balanced-match@4.0.4: {}
 
   baseline-browser-mapping@2.10.43: {}
+
+  bpmn-auto-layout@2.0.0-alpha.2:
+    dependencies:
+      bpmn-moddle: 10.3.1
+      min-dash: 5.1.0
 
   bpmn-js-color-picker@0.7.2(bpmn-js@18.31.0):
     dependencies:

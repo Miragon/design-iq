@@ -138,42 +138,7 @@ export async function putContent(
       { status: 400, expose: true },
     );
   }
-  // size cap FIRST: a CRDT can't shrink after the fact, and the ws-side ingest
-  // guard (beforeHandleMessage) does not run for direct connections
-  if (Buffer.byteLength(text, "utf8") > opts.maxDocBytes) {
-    throw new AppError("content/too-large", `content exceeds the ${opts.maxDocBytes}-byte document cap`, {
-      status: 413,
-      expose: true,
-    });
-  }
-  const workspace = await assertOnDisk(opts, repo, safePath);
-
-  // full platform validation per notation — checkModel, the one dispatch the
-  // CLI runs too (BPMN structure + BPMNDI coverage + links, DMN table/DMNDI/
-  // requirement integrity, the baseline parse of every other notation; the
-  // FEEL semantics live in the analyze_decision tool, not on the write path).
-  // A path that is no registered notation (a YAML sidecar) passes unvalidated.
-  // lint:"warn" reports ERRORs on the result instead of refusing — the modeler
-  // widget's autosave path; the ws rooms have never gated live edits, so this
-  // is the same trust level, not a new one. Default stays "block" (REST + agents).
-  let warnings: string[] = [];
-  let lintErrors: string[] = [];
-  const findings = await lintModel(workspace, safePath, text);
-  if (findings) {
-    const errors = findings.filter((f) => f.severity === "ERROR");
-    if (errors.length > 0 && body.lint !== "warn") {
-      throw new AppError(
-        "content/invalid-model",
-        `validation failed:\n- ${errors.map((f) => f.message).join("\n- ")}`,
-        {
-          status: 422,
-          expose: true,
-        },
-      );
-    }
-    lintErrors = errors.map((f) => f.message);
-    warnings = findings.filter((f) => f.severity === "WARN").map((f) => f.message);
-  }
+  const { warnings, lintErrors } = await saveGate(opts, repo, safePath, text, body.lint);
 
   let outcome: PutOutcome | undefined;
   const codec = (opts.docCodec ?? docCodecForPath)(safePath);
@@ -228,6 +193,82 @@ export async function putContent(
   return outcome;
 }
 
+/** what a save of a text would do, without saving (checkContent): the
+ *  findings it would report, or the refusal it would throw */
+export type SaveCheck =
+  { ok: true; warnings: string[]; errors?: string[] } | { ok: false; code: string; status: number; message: string };
+
+/**
+ * putContent's verdict on `body.content` without touching the document — the
+ * same gates in the same order (path, size cap, content repo + file, the
+ * validation with `lint`), so a dry run reports exactly what the save would do
+ * (#236: a dry run that skips the validator can say ok to a save the gate then
+ * refuses). The compare-and-set is the one gate it cannot run ahead of time.
+ */
+export async function checkContent(
+  opts: ContentDeps,
+  repo: ConnectedRepo,
+  path: string,
+  body: { content: string; lint?: "block" | "warn" },
+): Promise<SaveCheck> {
+  try {
+    const safePath = modelPath(opts.registry, repo, path, "content/invalid-path");
+    const { warnings, lintErrors } = await saveGate(opts, repo, safePath, body.content, body.lint);
+    return { ok: true, warnings, ...(lintErrors.length > 0 ? { errors: lintErrors } : {}) };
+  } catch (e) {
+    if (e instanceof AppError) return { ok: false, code: e.code, status: e.status, message: e.message };
+    throw e;
+  }
+}
+
+/** the gates of a save before its compare-and-set (putContent, checkContent):
+ *  throws the AppError of a refusal, returns the findings the save reports */
+async function saveGate(
+  opts: ContentDeps,
+  repo: ConnectedRepo,
+  safePath: string,
+  text: string,
+  lint: "block" | "warn" | undefined,
+): Promise<{ warnings: string[]; lintErrors: string[] }> {
+  // size cap FIRST: a CRDT can't shrink after the fact, and the ws-side ingest
+  // guard (beforeHandleMessage) does not run for direct connections
+  if (Buffer.byteLength(text, "utf8") > opts.maxDocBytes) {
+    throw new AppError("content/too-large", `content exceeds the ${opts.maxDocBytes}-byte document cap`, {
+      status: 413,
+      expose: true,
+    });
+  }
+  const workspace = await assertOnDisk(opts, repo, safePath);
+
+  // full platform validation per notation — checkModel, the one dispatch the
+  // CLI runs too (BPMN structure + BPMNDI coverage + links, DMN table/DMNDI/
+  // requirement integrity, the baseline parse of every other notation; the
+  // FEEL semantics live in the analyze_decision tool, not on the write path).
+  // A path that is no registered notation (a YAML sidecar) passes unvalidated.
+  // lint:"warn" reports ERRORs on the result instead of refusing — the modeler
+  // widget's autosave path; the ws rooms have never gated live edits, so this
+  // is the same trust level, not a new one. Default stays "block" (REST + agents).
+  let warnings: string[] = [];
+  let lintErrors: string[] = [];
+  const findings = await lintModel(workspace, safePath, text);
+  if (findings) {
+    const errors = findings.filter((f) => f.severity === "ERROR");
+    if (errors.length > 0 && lint !== "warn") {
+      throw new AppError(
+        "content/invalid-model",
+        `validation failed:\n- ${errors.map((f) => f.message).join("\n- ")}`,
+        {
+          status: 422,
+          expose: true,
+        },
+      );
+    }
+    lintErrors = errors.map((f) => f.message);
+    warnings = findings.filter((f) => f.severity === "WARN").map((f) => f.message);
+  }
+  return { warnings, lintErrors };
+}
+
 /**
  * Rewrite a document's LIVE content through `edit` (#208: a renamed model's
  * callers follow its new id) — the co-editor path: minimal diff into the
@@ -266,17 +307,20 @@ export async function editContent(
  *  file still saves). The repo-wide id scan feeds only the reference checks,
  *  so only saves of a notation WITH a refs emitter pay for it. */
 async function lintModel(workspace: string, safePath: string, content: string): Promise<Finding[] | undefined> {
-  let modelIds: Map<string, Set<string>> | undefined;
-  if (hasRefs(byExtension(safePath)?.id ?? "")) {
-    const cfg = loadContentConfig(workspace);
-    if (cfg) {
-      modelIds = new Map();
-      for (const m of await discoverModels(workspace, cfg)) {
-        (modelIds.get(m.notation) ?? modelIds.set(m.notation, new Set()).get(m.notation)!).add(m.id);
-      }
-    }
-  }
+  const modelIds = hasRefs(byExtension(safePath)?.id ?? "") ? await modelIdsOf(workspace) : undefined;
   return checkModel(content, { path: safePath, modelIds });
+}
+
+/** the model ids of a workspace per notation (file stems) — the link-check
+ *  context of checkModel; undefined when the workspace is no content repo */
+export async function modelIdsOf(workspace: string): Promise<Map<string, Set<string>> | undefined> {
+  const cfg = loadContentConfig(workspace);
+  if (!cfg) return undefined;
+  const modelIds = new Map<string, Set<string>>();
+  for (const m of await discoverModels(workspace, cfg)) {
+    (modelIds.get(m.notation) ?? modelIds.set(m.notation, new Set()).get(m.notation)!).add(m.id);
+  }
+  return modelIds;
 }
 
 /** pre-flight: content repo + file exists (typed errors BEFORE any doc work).

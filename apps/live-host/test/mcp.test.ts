@@ -296,6 +296,21 @@ test("registration: every tool; read-only mode drops the write tools AND the ws 
   ]);
 });
 
+test("registration: LIVE_MCP_BPMN_EDIT adds the semantic BPMN tools; read-only keeps the outline", async () => {
+  const bpmnTools = async (d: McpDeps) =>
+    (await (await connect(d)).client.listTools()).tools
+      .map((t) => t.name)
+      .filter((n) => ["edit_process", "get_process_outline", "layout_process"].includes(n))
+      .sort();
+  assert.deepEqual(await bpmnTools(deps({ bpmnEdit: true })), [
+    "edit_process",
+    "get_process_outline",
+    "layout_process",
+  ]);
+  assert.deepEqual(await bpmnTools(deps({ bpmnEdit: true, mcpReadOnly: true })), ["get_process_outline"]);
+  assert.deepEqual(await bpmnTools(deps()), []);
+});
+
 test("registration: the todo tools appear only WITH a tracker; read-only keeps the listing one", async () => {
   const withTracker = await connect(deps({ issues: fakeIssues() }));
   const names = (await withTracker.client.listTools()).tools.map((t) => t.name);
@@ -317,10 +332,10 @@ test("registration: the todo tools appear only WITH a tracker; read-only keeps t
 });
 
 test("titles: every tool carries a short, unique display title — in every mode", async () => {
-  // the tracker modes register the superset (todo tools on top of the core)
+  // the tracker + bpmnEdit modes register the superset (todo and semantic BPMN tools on top of the core)
   const modes: Array<[string, McpDeps]> = [
-    ["full, tracker", deps({ issues: fakeIssues() })],
-    ["read-only, tracker", deps({ issues: fakeIssues(), mcpReadOnly: true })],
+    ["full, tracker, bpmnEdit", deps({ issues: fakeIssues(), bpmnEdit: true })],
+    ["read-only, tracker, bpmnEdit", deps({ issues: fakeIssues(), mcpReadOnly: true, bpmnEdit: true })],
   ];
   for (const [mode, d] of modes) {
     const { client } = await connect(d);
@@ -364,6 +379,8 @@ test("instructions: present with a title, and every tool they name is registered
     ["tracker, read-only", deps({ issues: fakeIssues(), mcpReadOnly: true })],
     ["no widgets", deps({}, [])],
     ["wardley widget only", deps({}, ["mcp-app-wardley.html"])],
+    ["bpmnEdit", deps({ bpmnEdit: true })],
+    ["bpmnEdit, read-only", deps({ bpmnEdit: true, mcpReadOnly: true })],
   ];
   for (const [mode, d] of modes) {
     const { client } = await connect(d);
@@ -387,6 +404,10 @@ test("instructions: present with a title, and every tool they name is registered
     // …and every served modeler widget is offered for showing models to people
     for (const name of registered) {
       if (/^open_.*modeler$/.test(name)) assert.ok(mentioned.includes(name), `${mode}: instructions name ${name}`);
+    }
+    // the semantic BPMN tools are named whenever they are registered
+    for (const name of ["edit_process", "get_process_outline", "layout_process"]) {
+      if (registered.has(name)) assert.ok(mentioned.includes(name), `${mode}: instructions name ${name}`);
     }
   }
 });

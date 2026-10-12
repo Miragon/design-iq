@@ -143,6 +143,7 @@ call is gated by the caller's per-repo permission.
 | `get_process`                 | read  | The derived view (name, roles, steps, flow, calls) from the **live** BPMN.               |
 | `get_bpmn_xml`                | read  | The live BPMN XML plus the `baseVersion` for a later save.                               |
 | `validate_bpmn`               | read  | Dry-run the platform validator on submitted XML — check before saving.                   |
+| `get_process_outline`         | read  | Opt-in (`LIVE_MCP_BPMN_EDIT=1`): a live process as compact text, no XML — see below.     |
 | `list_decisions`              | read  | The DMN decisions of one repo (id = `.dmn` file stem, path, dirty, live sessions).       |
 | `get_decision`                | read  | The derived decision view (hit policy, columns, rules, DRD wiring) — see below.          |
 | `get_dmn_xml`                 | read  | The live DMN XML plus the `baseVersion` for a later save.                                |
@@ -162,6 +163,8 @@ call is gated by the caller's per-repo permission.
 | `save_model_content`          | write | Validated, conflict-guarded save of ANY model's text into the live document.             |
 | `create_process`              | write | Scaffold a new process `.bpmn` in the live workspace.                                    |
 | `save_bpmn_xml`               | write | Validated, conflict-guarded save into the live document (requires `baseVersion`).        |
+| `edit_process`                | write | Opt-in: change a live process with operations on element ids; the diagram is computed.   |
+| `layout_process`              | write | Opt-in: tidy or redraw a live process's diagram.                                         |
 | `create_decision`             | write | Scaffold a new decision `.dmn` from the blank template.                                  |
 | `save_dmn_xml`                | write | Conflict-guarded save of DMN XML into the live document (requires `baseVersion`).        |
 | `save_decision_tests`         | write | Write `<decision>.tests.yaml` next to the model (`record` freezes today's behaviour).    |
@@ -619,6 +622,34 @@ validation + compare-and-set (a stale `baseVersion` → `409` with the current s
 of overwriting).
 
 Decision record: [ADR 0005](adr/0005-in-process-mcp-and-oidc-resource-server.md).
+
+### Semantic BPMN editing (opt-in)
+
+`LIVE_MCP_BPMN_EDIT=1` registers three tools backed by the BPMN editing engine
+[`@miragon/bpmn-cli`](https://github.com/Miragon/bpmn-cli) ([ADR 0009](adr/0009-bpmn-editing-through-bpmn-cli.md)):
+an agent names elements by id and says what changes, and never writes XML or BPMNDI.
+
+- `get_process_outline` — the model as text: every element with id, kind, name, lane, links and
+  flows, or one view of it — the neighbourhood of one element (`around`, `depth`), one element in
+  its context (`element`), one process or pool (`scope`), a text search (`find`). `saveGate`
+  lists the save gate's findings on the document. Registered on read-only hosts too.
+- `edit_process` — a batch of operations (`add`, `connect`, `set`, `remove`, `retype`, `move`,
+  `order`, `ext`, `split`, and the diagram-only `place`, `align`, `color`, `label`, `route`,
+  `space`, `tidy`, `compact`) as one transaction. A hand-drawn diagram is kept: new elements are
+  placed next to their neighbours; a diagram the engine drew is redrawn. New ids follow the
+  file's style. The result names what was created, changed and removed, what each format op did,
+  the warnings the change added and the layout score — no XML.
+- `layout_process` — `tidy` (keep the drawing, remove overlaps) or `redraw` (draw it anew).
+
+The change is saved like `save_bpmn_xml` — the same validation (`lint`), compare-and-set and
+live write — but needs no `baseVersion`: on a concurrent change the tool applies the operations
+again to the newer document (three attempts in all) and notes it; with `baseVersion` it answers a
+conflict instead. Inside the engine, the platform validator refuses an error the change would
+add and lists it; errors the document already had are named as such in the save's refusal.
+`dryRun` answers `wouldSave` (and why not) without saving. An engine refusal comes back as a tool error
+starting with its code (`E_NOT_FOUND in ops[1]: …`, `E_VALIDATION: …`); a save-gate refusal with the gate's
+verdict. A model whose
+processes are all non-executable is edited as a design model (unprefixed `calledDecision`).
 
 ## Read-only vs. write-capable — which server holds a pen
 
