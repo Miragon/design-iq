@@ -18,5 +18,6 @@ extension appear there under their old names. ADR 0008 lists the new ones.
 | [0006](0006-notation-plugins-and-structured-doc-shape.md) | Notation plugins: capability slots, reference meta-model, structured doc shape             | accepted |
 | [0007](0007-idp-only-login-and-no-auth-mode.md)           | One login: IdP everywhere, explicit no-auth mode, GitHub OAuth login and dev token retired | accepted |
 | [0008](0008-rename-to-designiq.md)                        | Rename to designIQ: readers before writers, stored identifiers frozen                      | accepted |
+| [0009](0009-bpmn-editing-through-bpmn-cli.md)             | Semantic BPMN editing through bpmn-cli: outline, operations, layout on /mcp                | accepted |
 
 Operational: the SaaS activation runbook lives with the control plane (`apps/control-plane/docs/saas-activation.md`) — turning ADR 0002 from code-complete into a running SaaS.
