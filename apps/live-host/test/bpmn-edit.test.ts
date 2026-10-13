@@ -175,7 +175,7 @@ const withStarts = (n: number) =>
 
 test("validator: a counted error that improves is the same error; one that grows is a new one", async () => {
   const run = (xml: string, ops: unknown[]) =>
-    applyToXml(xml, ops, { validators: [designIqValidator(PATH, undefined)], profile: "none", layout: false });
+    applyToXml(xml, ops, { validators: [designIqValidator(PATH, undefined)], layout: false });
   // 3 → 2 start events: no new error, the old one is reported as already there
   const better = await run(withStarts(2), [{ op: "remove", ids: ["StartEvent_extra_1"] }]);
   const report = better.result.validation.validators![0]!;

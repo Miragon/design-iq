@@ -1,6 +1,7 @@
 # ADR 0009 — Semantic BPMN editing through bpmn-cli
 
-- **Status:** accepted (2026-10-12); the tools stay opt-in (`LIVE_MCP_BPMN_EDIT=1`) until
+- **Status:** accepted (2026-10-12), amended (2026-10-13, #248: the engine has no copy of
+  the save gate — see Consequences); the tools stay opt-in (`LIVE_MCP_BPMN_EDIT=1`) until
   the A/B gate below has run with this engine
 - **Context:** issue [#236](https://github.com/Miragon/design-iq/issues/236), the follow-up
   to PR [#218](https://github.com/Miragon/design-iq/pull/218) (`@bpmiq/bpmn-edit`, an editor
@@ -116,10 +117,14 @@ prompt keep using `save_bpmn_xml`, which stays.
 - The live host image carries the engine's dependencies: `bpmn-moddle` (the version bpmn-js
   brings already), `bpmn-auto-layout` (loaded only on request) and `@resvg/resvg-wasm`
   (MPL-2.0, used only by the engine's PNG rendering, which the host does not call).
-- The engine's design profile (its copy of the save gate) is not used here; design-iq's
-  validator runs instead, so the two never disagree inside the platform. An engine lint
-  warning and a design-iq finding about the same element can both appear in a result.
+- _Amended 2026-10-13 (#248):_ the engine has no copy of the save gate. bpmn-cli 0.7
+  removed its design profile, which the live host had switched off (`profile: "none"`),
+  and its lookup of the legacy `bpmiq.yml` ([Miragon/bpmn-cli#35](https://github.com/Miragon/bpmn-cli/issues/35)).
+  It never read `designiq.yml`.
+  design-iq's validator is the only check of design-iq's rules: inside the engine here,
+  and `npx @miragon/design-iq-validator` on a checkout of a content repository. An engine
+  lint warning and a design-iq finding about the same element can both appear in a result.
 - Open: the A/B run; then the "Implement" prompt and the authoring skills (`new-process`,
   `import-process`, `capture-process`, `process-feedback`) on the tools. Upstream in
   bpmn-cli: keep a file's own link spelling, warn when `ext` adds another platform's
-  extension, read `designiq.yml` in its CLI.
+  extension.

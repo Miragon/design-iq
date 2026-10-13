@@ -227,7 +227,9 @@ const conflict = (attempts: number, message: string): BpmnEditResult => ({
  * The engine's options for one attempt. The platform follows the document:
  * a model no process of which is executable is a design model whatever
  * platform the modeler declared, so links are written the design way
- * (unprefixed calledDecision) and no engine profile is reported.
+ * (unprefixed calledDecision) and no engine profile (the Camunda 7 / 8
+ * warnings) is reported. The engine has no copy of the save gate: design-iq's
+ * validator is the only check of design-iq's rules inside it.
  */
 function engineOptions(
   current: { path: string; content: string },
@@ -237,9 +239,6 @@ function engineOptions(
   return {
     file: current.path,
     platform: /\bisExecutable\s*=\s*["']true["']/.test(current.content) ? "auto" : "none",
-    // design-iq's save gate is the validator below; the engine's copy of it
-    // (the design profile) would report every finding twice
-    profile: "none",
     validators: [designIqValidator(current.path, modelIds, options.lint ?? "block")],
   };
 }
