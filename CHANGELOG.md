@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.3.0](https://github.com/Miragon/design-iq/compare/v5.2.0...v5.3.0) (2026-10-13)
+
+
+### Features
+
+* **live-host:** semantic BPMN editing on /mcp with @miragon/bpmn-cli as the engine ([#236](https://github.com/Miragon/design-iq/issues/236)) ([#244](https://github.com/Miragon/design-iq/issues/244)) ([3e34902](https://github.com/Miragon/design-iq/commit/3e34902dbf84ee71de563a8bb4c9ea1b84f4d50b))
+
 ## [5.2.0](https://github.com/Miragon/design-iq/compare/v5.1.0...v5.2.0) (2026-10-11)
 
 
