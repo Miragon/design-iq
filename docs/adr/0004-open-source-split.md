@@ -1,17 +1,17 @@
-# ADR 0004 — Open-source split: public platform monorepo, private SaaS overlay
+# ADR 0004. Open-source split: public platform monorepo, private SaaS overlay
 
 Status: **accepted** (2026-07-15) · Scope: repository topology, licensing, artifact flow
 
 ## Context
 
 On-premise customers want to run the platform themselves with source access, and the
-roadmap's next platform capabilities — SSO session issuance, a GitLab connector — should be
+roadmap's next platform capabilities (SSO session issuance, a GitLab connector) should be
 built in the open against the existing ports (ADR 0003). The SaaS business (tenant
 provisioning, billing, the GitHub App private key) must stay private.
 
 The architecture already supports the cut: the control plane consumes only dependency-free
 leaf packages (never the reverse, CI-enforced), the live-host runs standalone by default
-(cell mode is opt-in env, ADR 0002, and holds no secrets — all per-cell secrets are derived,
+(cell mode is opt-in env, ADR 0002, and holds no secrets: all per-cell secrets are derived,
 the App key never reaches a cell), and mcp/vscode have zero SaaS coupling.
 
 ## Decision
@@ -36,17 +36,17 @@ Gate before the first public push: `gitleaks detect --no-git` + manual docs revi
 ### 3. The private repo consumes shared packages via submodule, not npm
 
 The private side needs six public packages (`cell-protocol`, `contracts`, `http-kit`,
-`github-app` for the backend; `api-client`, `ui-kit` for the operator SPA — plus `cp-contracts`
+`github-app` for the backend; `api-client`, `ui-kit` for the operator SPA, plus `cp-contracts`
 locally). The private `pnpm-workspace.yaml` globs those six paths inside `vendor/bpmiq/`
 individually. pnpm symlinks them into `node_modules`, so their realpath stays outside
-`node_modules` and Node's type stripping keeps working — npm-publishing raw-`.ts` packages
+`node_modules` and Node's type stripping keeps working; npm-publishing raw-`.ts` packages
 would not (Node refuses to strip `.ts` under a `node_modules` realpath), and a build step is
 exactly what ADR 0003 avoids. The submodule gitlink doubles as an exact, reviewable version pin.
 
 ### 4. Cell mode ships in the open code
 
 The env-gated SaaS plumbing in the live-host (handoff login, remote token minting,
-`cell-protocol`) stays in the public codebase — one codebase, no fork drift; without a control
+`cell-protocol`) stays in the public codebase: one codebase, no fork drift; without a control
 plane it is inert, and it contains no secret material by design. Consequently ADRs 0001–0003
 are public too (they explain code that ships). The control-plane ↔ operator-SPA wire types are
 the one exception: they moved from `@bpmiq/contracts` into the private `@bpmiq/cp-contracts`
@@ -58,7 +58,7 @@ The public release workflow publishes `ghcr.io/miragon/bpmiq-live-host` (`sha-<s
 main push; `vX.Y.Z` + `latest` on tags). The private deploy no longer builds the live-host: it
 deploys `bpm-live` from the GHCR tag matching its submodule SHA and pins `CELL_IMAGE` to the
 same reference. On-prem installations, `bpm-live`, and every SaaS cell run the identical
-artifact, and the previous "read back whatever bpm-live is running" indirection disappears —
+artifact, and the previous "read back whatever bpm-live is running" indirection disappears:
 cell image, deployment, and control-plane code all derive from one reviewed submodule bump.
 
 ## Consequences
@@ -69,7 +69,7 @@ cell image, deployment, and control-plane code all derive from one reviewed subm
   `.dependency-cruiser.mjs` keeps the control-plane rules and adds: imports into
   `vendor/bpmiq/apps/` are forbidden (only the submodule's `packages/` are legal).
 - Every public release triggers a submodule-bump PR in the private repo (dispatch + daily
-  cron backstop) — the standing integration check; the two repos never disagree for longer
+  cron backstop), the standing integration check; the two repos never disagree for longer
   than one bump cycle.
 - Cross-repo changes (a shared-package change needed by the control plane) cost a public PR
   plus a pin bump. Accepted: the six shared packages are the platform's most stable code.

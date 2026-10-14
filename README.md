@@ -1,4 +1,4 @@
-# designIQ — _Model together. AI at the table._
+# designIQ: _Model together. AI at the table._
 
 [![CI](https://github.com/Miragon/design-iq/actions/workflows/validate.yml/badge.svg)](https://github.com/Miragon/design-iq/actions/workflows/validate.yml)
 [![GHCR](https://img.shields.io/badge/ghcr.io-miragon%2Fdesigniq--live--host-2496ed)](https://github.com/Miragon/design-iq/pkgs/container/designiq-live-host)
@@ -8,7 +8,7 @@ designIQ is a Git-native workspace where teams model their business and their ar
 together, live: processes (BPMN), decisions (DMN), Wardley Maps, Team Topologies,
 Event Storming boards, Context Maps, Value Chains and plain Markdown. Every model is a file
 in your repository; edits sync in real time in the browser and in VS Code, and a release is
-a pull request — so review and governance stay where engineering already works. AI
+a pull request, so review and governance stay where engineering already works. AI
 assistants join through MCP: they read the same live models, explain them, check them and
 propose changes.
 
@@ -19,17 +19,17 @@ views, decision simulation and test suites, and todos anchored to BPMN elements.
 [getting started](https://miragon.github.io/design-iq/getting-started), self-hosting, the MCP
 integration and the decision records. The site is built from [`docs/`](docs/).
 
-- **Model live** — every model file (`.bpmn`, `.dmn`, `.owm`, `.tt`, `.storm`, `.cm.json`,
+- **Model live**: every model file (`.bpmn`, `.dmn`, `.owm`, `.tt`, `.storm`, `.cm.json`,
   `.vc.json`, `.yaml`, `.md`) syncs as a shared Y.Text document; the web client and VS Code
   bind their editors to it. The browser has a visual modeler for BPMN, DMN, Wardley Maps,
   Team Topologies, Event Storming boards and Context Maps, and a text view for every file.
   Login authenticates, **repos authorize**: what you see and edit follows your git write
   permission.
-- **Release as PR** — one click cuts a branch from `origin/<default>`, pushes and opens
-  the PR — bot-authored, with **you as the commit author**, so you can approve your own
-  release. Merge = approval — governance stays at the git provider (CODEOWNERS / branch
-  protection), not in the tool.
-- **AI joins in** — agents read, check and edit the live models of every notation through
+- **Release as PR**: one click cuts a branch from `origin/<default>`, pushes and opens
+  the PR. The PR is bot-authored, with **you as the commit author**, so you can approve
+  your own release. Merge = approval: governance stays at the git provider (CODEOWNERS /
+  branch protection), not in the tool.
+- **AI joins in**: agents read, check and edit the live models of every notation through
   the Live Host's own `/mcp` endpoint, and people who have the model open see them as
   co-editors; apps-capable chats (claude.ai, Claude Desktop, ChatGPT) open the modelers
   inline. The read-only MCP server answers from any checkout without a running host, the
@@ -39,21 +39,21 @@ integration and the decision records. The site is built from [`docs/`](docs/).
 
 ## Run it in 5 minutes
 
-Evaluation mode — one container, no login (`LIVE_AUTH=none`: everyone is the local user):
+Evaluation mode is one container with no login (`LIVE_AUTH=none`: everyone is the local user):
 
 ```bash
 docker run --rm -p 8301:8080 -e LIVE_AUTH=none \
   -e LIVE_PUBLIC_URL=http://localhost:8301 ghcr.io/miragon/designiq-live-host:latest
 ```
 
-`LIVE_PUBLIC_URL` is the URL you actually open — deep links, the MCP resource audience and
+`LIVE_PUBLIC_URL` is the URL you actually open: deep links, the MCP resource audience and
 the same-site check on browser requests derive from it, so a published port other than the
 container's 8080 has to say so, or the editors never sync.
 
 The server is up at http://localhost:8301 (`/healthz` answers): the web app, the VS Code
 extension (`designiq.serverUrl` = `ws://localhost:8301`, no sign-in needed) and
 `pnpm --filter @designiq/live-host test:sync` all work right away. What it serves is this
-repo's example content, cloned into the container on the first request — and thrown away
+repo's example content, cloned into the container on the first request and thrown away
 again with `--rm`.
 
 **Your own models.** A content repo is any checkout with a root `designiq.yml` naming its
@@ -68,11 +68,11 @@ docker run -p 8301:8080 -e LIVE_AUTH=none -e LIVE_PUBLIC_URL=http://localhost:83
   ghcr.io/miragon/designiq-live-host:latest
 ```
 
-That clone happens without credentials, so the repo must be public — private repos (and
+That clone happens without credentials, so the repo must be public; private repos (and
 release-as-PR) need the GitHub App. Already have a checkout? Bind-mount it and the host
 serves it **in place**, no clone: edits write through to your working tree, `git diff`
-shows them, you commit as usual. Nothing is fetched then, so `GITHUB_REPO` is a pure label —
-any `<owner>/<name>`, no GitHub repository behind it:
+shows them, you commit as usual. Nothing is fetched then, so `GITHUB_REPO` is a pure label
+(any `<owner>/<name>`, no GitHub repository behind it):
 
 ```bash
 git clone https://github.com/<owner>/<repo> my-processes   # or your own; needs a root designiq.yml
@@ -83,13 +83,13 @@ docker run -p 8301:8080 -e LIVE_AUTH=none -e LIVE_PUBLIC_URL=http://localhost:83
 ```
 
 (A `/content` without a usable root `designiq.yml` (or legacy `bpmiq.yml`) is not a content
-repo: the host says so at boot and clones `GITHUB_REPO` instead — which is where a made-up
+repo: the host says so at boot and clones `GITHUB_REPO` instead, which is where a made-up
 label then fails.)
 
-A real login is your OIDC identity provider plus a GitHub App for authorization — the
+A real login is your OIDC identity provider plus a GitHub App for authorization. The
 15-minute path ships a Keycloak: [docs/on-prem/idp-quickstart.md](docs/on-prem/idp-quickstart.md).
 
-From source (Node >= 23.6 — TypeScript runs directly via type stripping, no build step):
+From source (Node >= 23.6; TypeScript runs directly via type stripping, no build step):
 
 ```bash
 pnpm install                     # pnpm, never npm/yarn (workspace: protocol)
@@ -102,12 +102,12 @@ LIVE_AUTH=none pnpm live-host    # sync + API + web app on http://localhost:8301
 More entry points: `pnpm web:dev` (web client with hot reload, proxies to the Live Host),
 `pnpm validate` (content validation of the example repo, runs in CI on every PR).
 
-**Ask the models**: open [Claude Code](https://claude.com/claude-code) in the repo —
-`.mcp.json` auto-connects the read-only MCP server (`packages/mcp`) — and ask _"Walk me
+**Ask the models**: open [Claude Code](https://claude.com/claude-code) in the repo
+(`.mcp.json` auto-connects the read-only MCP server, `packages/mcp`) and ask _"Walk me
 through order-to-cash"_ or _"What should we automate first?"_.
 
 To reach the **live, write-capable** endpoint of the running host instead, point a client at
-`/mcp` — on a `LIVE_AUTH=none` host no credential is needed:
+`/mcp`. On a `LIVE_AUTH=none` host no credential is needed:
 
 ```bash
 claude mcp add --transport http designiq http://localhost:8301/mcp
@@ -128,29 +128,29 @@ Claude Desktop's custom-connector dialog expects OAuth, so bridge a no-auth host
 ```
 
 Restart Desktop fully (Cmd+Q) afterwards. Against a real deployment the client fetches an
-OIDC access token itself — Claude Code: `claude mcp add --transport http designiq
-https://<host>/mcp --client-id designiq-mcp --callback-port 8765` with the quickstart realm —
+OIDC access token itself (Claude Code: `claude mcp add --transport http designiq
+https://<host>/mcp --client-id designiq-mcp --callback-port 8765` with the quickstart realm);
 see [docs/mcp-integration.md](docs/mcp-integration.md).
 
 ## What's in this repo
 
 This repository is the full self-hostable platform. Miragon also operates a hosted
-multi-tenant SaaS; its tenant provisioning and billing control plane is not in this repo —
+multi-tenant SaaS; its tenant provisioning and billing control plane is not in this repo,
 but the cell mode it drives is. The code you read here is the code the SaaS runs
 ([ADR 0004](docs/adr/0004-open-source-split.md)).
 
-| Path                     | Package                        | What it is                                                                                                                                                                                                                                                                                                                        |
-| ------------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/live-host/`        | `@designiq/live-host`          | The platform server: Hocuspocus (Yjs) sync + REST API + web app on **one port**. Multi-repo, per-(user,repo) authz, release-as-PR. Published as `ghcr.io/miragon/designiq-live-host`.                                                                                                                                             |
-| `apps/web/`              | `@designiq/web`                | Collaborative web client: visual modelers (bpmn-js, dmn-js, the Miragon renderers) + Monaco on a shared Y.Text, repo overview, and the MCP-App widgets.                                                                                                                                                                           |
-| `apps/vscode/`           | `design-iq`                    | VS Code extension: opens `designiq://` model documents synced through the Live Host; signs in through the host's own login (editor sign-in).                                                                                                                                                                                      |
-| `packages/mcp/`          | `@miragon/design-iq-mcp`       | Read-only MCP server exposing a content repo's models of every notation (discovered from `designiq.yml`; the process views derived from BPMN) — stdio + Streamable HTTP, `npx @miragon/design-iq-mcp --root <path>`. Read-only, against a checkout — the live, writable MCP endpoint lives in the Live Host (`/mcp`).             |
-| `packages/notations/`    | `@designiq/notations`          | Notation registry + model analysis: one descriptor per notation (extensions, editor language), `extract` (file→graph), `derive` (graph→view, incl. the rich process and decision views), and the `designiq.yml` content discovery (legacy `bpmiq.yml` still read).                                                                |
-| `packages/validator/`    | `@miragon/design-iq-validator` | Platform validator (bin `designiq-validate`): `designiq.yml` discovery + BPMN/DMN structure and BPMNDI/DMNDI coverage + cross-model reference integrity + a parse check for every other notation. Runs against any checkout via `--root`.                                                                                         |
-| `packages/…`             | —                              | Shared foundations: `http-kit`, `github-app`, `contracts`, `live-client`, `ui-kit`, `api-client` — see `CLAUDE.md` for the full map.                                                                                                                                                                                              |
-| `process-documentation/` | —                              | Example content repo (`designiq.yml` + BPMN/DMN example models and an Event Storming board + the AI skills in `.claude/skills`) — the MCP/validator example AND the content-repo contract, mirrored to [`Miragon/process-documentation-starter`](https://github.com/Miragon/process-documentation-starter) ("Use this template"). |
-| `deploy/`                | —                              | Docker Compose reference for self-hosting.                                                                                                                                                                                                                                                                                        |
-| `docs/`                  | —                              | Platform docs: concept, multi-repo architecture, MCP integration, [ADRs](docs/adr/), [self-hosting](docs/on-prem/), [extending](docs/extending/). The [docs site](https://miragon.github.io/design-iq/) is built from here.                                                                                                       |
+| Path                     | Package                        | What it is                                                                                                                                                                                                                                                                                                                       |
+| ------------------------ | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/live-host/`        | `@designiq/live-host`          | The platform server: Hocuspocus (Yjs) sync + REST API + web app on **one port**. Multi-repo, per-(user,repo) authz, release-as-PR. Published as `ghcr.io/miragon/designiq-live-host`.                                                                                                                                            |
+| `apps/web/`              | `@designiq/web`                | Collaborative web client: visual modelers (bpmn-js, dmn-js, the Miragon renderers) + Monaco on a shared Y.Text, repo overview, and the MCP-App widgets.                                                                                                                                                                          |
+| `apps/vscode/`           | `design-iq`                    | VS Code extension: opens `designiq://` model documents synced through the Live Host; signs in through the host's own login (editor sign-in).                                                                                                                                                                                     |
+| `packages/mcp/`          | `@miragon/design-iq-mcp`       | Read-only MCP server exposing a content repo's models of every notation (discovered from `designiq.yml`; the process views derived from BPMN), over stdio + Streamable HTTP, `npx @miragon/design-iq-mcp --root <path>`. Read-only, against a checkout; the live, writable MCP endpoint lives in the Live Host (`/mcp`).         |
+| `packages/notations/`    | `@designiq/notations`          | Notation registry + model analysis: one descriptor per notation (extensions, editor language), `extract` (file→graph), `derive` (graph→view, incl. the rich process and decision views), and the `designiq.yml` content discovery (legacy `bpmiq.yml` still read).                                                               |
+| `packages/validator/`    | `@miragon/design-iq-validator` | Platform validator (bin `designiq-validate`): `designiq.yml` discovery + BPMN/DMN structure and BPMNDI/DMNDI coverage + cross-model reference integrity + a parse check for every other notation. Runs against any checkout via `--root`.                                                                                        |
+| `packages/…`             | —                              | Shared foundations: `http-kit`, `github-app`, `contracts`, `live-client`, `ui-kit`, `api-client`; see `CLAUDE.md` for the full map.                                                                                                                                                                                              |
+| `process-documentation/` | —                              | Example content repo (`designiq.yml` + BPMN/DMN example models and an Event Storming board + the AI skills in `.claude/skills`): the MCP/validator example AND the content-repo contract, mirrored to [`Miragon/process-documentation-starter`](https://github.com/Miragon/process-documentation-starter) ("Use this template"). |
+| `deploy/`                | —                              | Docker Compose reference for self-hosting.                                                                                                                                                                                                                                                                                       |
+| `docs/`                  | —                              | Platform docs: concept, multi-repo architecture, MCP integration, [ADRs](docs/adr/), [self-hosting](docs/on-prem/), [extending](docs/extending/). The [docs site](https://miragon.github.io/design-iq/) is built from here.                                                                                                      |
 
 ## Self-hosting
 
@@ -161,8 +161,8 @@ designIQ)? Read [docs/upgrading-to-5.md](docs/upgrading-to-5.md) first.
 
 ## Extending
 
-The provider layer is a pair of ports — `apps/live-host/src/ports/git-provider.ts` and
-`apps/live-host/src/ports/connection-source.ts` — so a GitLab connector is a new
+The provider layer is a pair of ports (`apps/live-host/src/ports/git-provider.ts` and
+`apps/live-host/src/ports/connection-source.ts`), so a GitLab connector is a new
 `adapters/gitlab/` folder against existing contracts, not a fork. Session issuance has the
 same seam for SSO. Boundaries are CI-enforced
 ([ADR 0003](docs/adr/0003-module-architecture-and-shared-packages.md)); guides live in

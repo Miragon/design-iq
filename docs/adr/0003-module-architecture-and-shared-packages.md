@@ -1,4 +1,4 @@
-# ADR 0003 — Module architecture: hexagonal backends, shared packages, architecture tests
+# ADR 0003. Module architecture: hexagonal backends, shared packages, architecture tests
 
 Status: **accepted** (2026-07-15) · Scope: monorepo structure (both backends, both SPAs, packages/)
 
@@ -7,7 +7,7 @@ Status: **accepted** (2026-07-15) · Scope: monorepo structure (both backends, b
 Before this restructuring, each backend was organized around one god file
 (`control-plane/server.ts` at 755 LOC: wiring + router + reconciler + fleet upgrade + fanout;
 `live-host` with persistence logic inside the Hocuspocus hooks of the composition root). HTTP
-plumbing, GitHub REST, OAuth state and timing-safe compares existed as copies in both apps —
+plumbing, GitHub REST, OAuth state and timing-safe compares existed as copies in both apps,
 with two proven drift bugs (rawBody buffering, state-secret lifecycle). The two React SPAs
 shared the same stack via copy-paste; API shapes were hand-copied (two types had actually drifted).
 
@@ -30,7 +30,7 @@ src/
 
 **Connector rule:** a new connector = a new folder under `adapters/<vendor>/` against the
 existing ports (`ports/git-provider.ts` + `ports/connection-source.ts` in the live-host,
-`ports/provisioner.ts` in the control-plane) — zero changes to `domain/`/`application/`. If a
+`ports/provisioner.ts` in the control-plane), with zero changes to `domain/`/`application/`. If a
 connector ships standalone, it is extracted as `@bpmiq/connector-<vendor>` against the same
 ports (follow-up ADR then).
 
@@ -40,15 +40,15 @@ a shared router framework; outcome objects (`DriveResult` etc.) stay data instea
 
 ### 2. Shared packages (anti-drift, all raw `.ts`, no build step)
 
-| Package                | Contents                                                                                                 | Consumers                                 |
-| ---------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `@bpmiq/cell-protocol` | derived secrets + handoff codec (unchanged; stays dependency-free/copy-portable)                         | both backends                             |
-| `@bpmiq/http-kit`      | send/redirect/readBody/securityHeaders/cookie/HMAC primitives + `AppError`/`errorBody`                   | both backends                             |
-| `@bpmiq/github-app`    | appJwt/loadPrivateKey + appRest/mint/paginate + `./oauth` (User-Agent parameterized per app)             | both backends                             |
-| `@bpmiq/contracts`     | backend↔frontend wire types + `live.ts` (`CONTENT_KEY`, `roomName()`)                                    | backends + SPAs + live-client + vscode    |
-| `@bpmiq/ui-kit`        | shadcn primitives, `cn()`, `theme.css` (Tailwind v4 `@source` pattern)                                   | both SPAs                                 |
-| `@bpmiq/api-client`    | `ApiError`, `api<T>()`, `queryDefaults`                                                                  | both SPAs                                 |
-| `@bpmiq/live-client`   | `openLiveSession()` + minimal-diff writer + bpmn-sync — the ONE implementation of live-document behavior | web, vscode, guest-test — **never cp-ui** |
+| Package                | Contents                                                                                                | Consumers                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `@bpmiq/cell-protocol` | derived secrets + handoff codec (unchanged; stays dependency-free/copy-portable)                        | both backends                             |
+| `@bpmiq/http-kit`      | send/redirect/readBody/securityHeaders/cookie/HMAC primitives + `AppError`/`errorBody`                  | both backends                             |
+| `@bpmiq/github-app`    | appJwt/loadPrivateKey + appRest/mint/paginate + `./oauth` (User-Agent parameterized per app)            | both backends                             |
+| `@bpmiq/contracts`     | backend↔frontend wire types + `live.ts` (`CONTENT_KEY`, `roomName()`)                                   | backends + SPAs + live-client + vscode    |
+| `@bpmiq/ui-kit`        | shadcn primitives, `cn()`, `theme.css` (Tailwind v4 `@source` pattern)                                  | both SPAs                                 |
+| `@bpmiq/api-client`    | `ApiError`, `api<T>()`, `queryDefaults`                                                                 | both SPAs                                 |
+| `@bpmiq/live-client`   | `openLiveSession()` + minimal-diff writer + bpmn-sync: the ONE implementation of live-document behavior | web, vscode, guest-test (**never cp-ui**) |
 
 **Type-contract pattern:** plain interfaces + `satisfies` at the assembly sites (the
 cell-protocol pattern). No zod (the CP image is install-free), no OpenAPI/ts-rest. Drift = tsc error.
@@ -66,7 +66,7 @@ moved out of `@bpmiq/contracts` into the private `@bpmiq/cp-contracts`._
 yjs/hocuspocus/bpmn-js/monaco/notations/validator/live-client; no third-party runtime deps),
 cp-ui-stays-light, I/O discipline (child_process/sqlite only in designated adapters), hexagonal
 folder rules (domain pure; application without adapter impls; no cross-vendor; type-only imports
-are legal everywhere — `verbatimModuleSyntax` makes the classification exact). ESLint covers what
+are legal everywhere, as `verbatimModuleSyntax` makes the classification exact). ESLint covers what
 a dependency graph cannot see: `process.env` outside the composition roots (warn ratchet),
 `fetch` in domain/ports (error). **Rule lifecycle: the PR that moves a module deletes its
 grandfather exception.**
@@ -82,5 +82,5 @@ grandfather exception.**
 
 Implementation: 12 individually shipped, behavior-preserving PRs (23ce18c…ba4f41c), each under
 the full gate (lint, arch, format, typecheck, `pnpm -r test` incl. both offline e2e suites,
-build) — plus two real bugs fixed along the way (CP rawBody buffering; LH OAuth state now
+build), plus two real bugs fixed along the way (CP rawBody buffering; LH OAuth state now
 survives deploys) and the vscode socket leak + full-replace writes.

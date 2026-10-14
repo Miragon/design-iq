@@ -6,7 +6,7 @@ collaborative web app, and the MCP endpoint for AI clients, all on **one port**.
 Releases become pull requests in your own GitHub organization; review + merge stays where it
 is today. The platform never executes code from a content repository.
 
-The auth model in one line: **login authenticates, repositories authorize** — users sign in
+The auth model in one line: **login authenticates, repositories authorize**. Users sign in
 at your identity provider (OIDC), and per-(user,repo) write permission is checked through
 your own GitHub App's installation token. The server stores zero user tokens
 ([ADR 0001](../adr/0001-zero-stored-user-tokens.md),
@@ -14,35 +14,35 @@ your own GitHub App's installation token. The server stores zero user tokens
 
 Companion documents:
 
-- [configuration.md](configuration.md) — the complete environment reference
-- [github-app-setup.md](github-app-setup.md) — registering your GitHub App (do this first)
-- [idp-quickstart.md](idp-quickstart.md) — the login: a ready-made Keycloak realm, and how
+- [configuration.md](configuration.md): the complete environment reference
+- [github-app-setup.md](github-app-setup.md): registering your GitHub App (do this first)
+- [idp-quickstart.md](idp-quickstart.md): the login, with a ready-made Keycloak realm and how
   to bring your own identity provider
 
 ## Prerequisites
 
-- A GitHub organization (or GitHub Enterprise) holding your content repositories — each a
+- A GitHub organization (or GitHub Enterprise) holding your content repositories, each a
   root `designiq.yml` naming the folder its models live in.
-- An OIDC identity provider — the one login ([ADR 0007](../adr/0007-idp-only-login-and-no-auth-mode.md)).
+- An OIDC identity provider, the one login ([ADR 0007](../adr/0007-idp-only-login-and-no-auth-mode.md)).
   None yet? The compose file ships a Keycloak with a ready realm
   ([idp-quickstart.md](idp-quickstart.md)); evaluating without any login is `LIVE_AUTH=none`.
 - Docker with the compose plugin.
-- A **public HTTPS URL** for the instance — the OAuth callback and webhook URLs derive from
+- A **public HTTPS URL** for the instance: the OAuth callback and webhook URLs derive from
   `LIVE_PUBLIC_URL`. A localhost evaluation works without one (webhooks simply can't reach
   you; the install-redirect fallback covers repo connection).
-- Outbound HTTPS (443) to `github.com` and `api.github.com` — or your GHE hosts — for the
+- Outbound HTTPS (443) to `github.com` and `api.github.com` (or your GHE hosts) for the
   API and for git clone/fetch/push. No SSH access is needed; all git traffic is HTTPS.
 
 ## The image
 
-`ghcr.io/miragon/designiq-live-host` — multi-arch (linux/amd64 + linux/arm64), built from
+`ghcr.io/miragon/designiq-live-host`, multi-arch (linux/amd64 + linux/arm64), built from
 [`apps/live-host/Dockerfile`](https://github.com/Miragon/design-iq/blob/main/apps/live-host/Dockerfile) by the release workflow
-(see [ADR 0004](../adr/0004-open-source-split.md) for the artifact flow — the same image
+(see [ADR 0004](../adr/0004-open-source-split.md) for the artifact flow: the same image
 serves on-prem installs and Miragon's hosted cells).
 
 | Tag              | Meaning                                        |
 | ---------------- | ---------------------------------------------- |
-| `latest`         | latest release — pin `vX.Y.Z` for production   |
+| `latest`         | latest release; pin `vX.Y.Z` for production    |
 | `vX.Y.Z`         | a specific release                             |
 | `edge`           | latest `main` build                            |
 | `sha-<full-sha>` | exact commit build (full sha, for pin-mapping) |
@@ -51,20 +51,20 @@ The compose file takes the tag from `DESIGNIQ_VERSION` in `.env` (default `lates
 
 Container facts: listens on `PORT=8080`, state under `LIVE_DATA_DIR=/data` (mount a
 volume there), ships `git` + CA certificates for cloning connected repos. The container
-currently runs as **root** so a freshly mounted volume is writable out of the box — if your
+currently runs as **root** so a freshly mounted volume is writable out of the box. If your
 policy requires a non-root user, run with `user:` and make `/data` writable for that uid.
 
 ## Quickstart (compose)
 
-1. Register your GitHub App — [github-app-setup.md](github-app-setup.md). You come back
+1. Register your GitHub App: [github-app-setup.md](github-app-setup.md). You come back
    with an app id, slug, private key, and webhook secret.
-2. Decide on the identity provider — [idp-quickstart.md](idp-quickstart.md): the shipped
+2. Decide on the identity provider ([idp-quickstart.md](idp-quickstart.md)): the shipped
    Keycloak (a compose profile, its `LIVE_OIDC_*` values are in `.env.example`) or your
    own, via the `LIVE_OIDC_*` block in
-   [configuration.md](configuration.md#oidc--token-auth-mcp--headless--browser-sso).
+   [configuration.md](configuration.md#oidc-token-auth-mcp--headless--browser-sso).
    Evaluating without an IdP: `LIVE_AUTH=none`, see the operating modes below.
-3. Configure, then start (the Live Host refuses to boot without its login configured —
-   write `.env` before the first `up`; `--profile keycloak` adds the shipped Keycloak):
+3. Configure, then start (the Live Host refuses to boot without its login configured,
+   so write `.env` before the first `up`; `--profile keycloak` adds the shipped Keycloak):
 
    ```bash
    cd deploy
@@ -75,7 +75,7 @@ policy requires a non-root user, run with `user:` and make `/data` writable for 
    The compose file is [`deploy/docker-compose.yml`](https://github.com/Miragon/design-iq/blob/main/deploy/docker-compose.yml); the
    annotated env template is [`deploy/.env.example`](https://github.com/Miragon/design-iq/blob/main/deploy/.env.example). It sets
    `stop_grace_period: 30s` so the graceful-shutdown flush (`LIVE_SHUTDOWN_MS`, 25 s) can
-   persist debounced write-throughs before the container is killed — keep that headroom if
+   persist debounced write-throughs before the container is killed. Keep that headroom if
    you write your own unit files.
 
 4. Put your reverse proxy in front (below), open `https://<your-host>`, sign in at your
@@ -93,19 +93,19 @@ docker run -d --name designiq -p 8080:8080 -v designiq-data:/data \
 The server wires itself from the credentials it finds ([configuration.md](configuration.md)
 has every variable):
 
-| Mode                                | Credentials                          | What you get                                                                                                                                                                                                                                                                                                                   |
-| ----------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| No auth (`LIVE_AUTH=none`)          | none                                 | Serves a locally mounted content checkout (`LIVE_HOST_CONTENT_DIR`) — or, with App credentials, the App's repositories — to everyone as the local principal (`LIVE_LOCAL_USER`). Local evaluation / trusted single-team network only: no login, no authorization ([ADR 0007](../adr/0007-idp-only-login-and-no-auth-mode.md)). |
-| **OIDC + GitHub App** (recommended) | `LIVE_OIDC_*` + App id + private key | Installation enumeration = multi-repo overview, per-(user,repo) authorization via installation tokens, bot-authored release PRs ([ADR 0001](../adr/0001-zero-stored-user-tokens.md)), direct webhooks.                                                                                                                         |
+| Mode                                | Credentials                          | What you get                                                                                                                                                                                                                                                                                                               |
+| ----------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No auth (`LIVE_AUTH=none`)          | none                                 | Serves a locally mounted content checkout (`LIVE_HOST_CONTENT_DIR`), or with App credentials the App's repositories, to everyone as the local principal (`LIVE_LOCAL_USER`). Local evaluation / trusted single-team network only: no login, no authorization ([ADR 0007](../adr/0007-idp-only-login-and-no-auth-mode.md)). |
+| **OIDC + GitHub App** (recommended) | `LIVE_OIDC_*` + App id + private key | Installation enumeration = multi-repo overview, per-(user,repo) authorization via installation tokens, bot-authored release PRs ([ADR 0001](../adr/0001-zero-stored-user-tokens.md)), direct webhooks.                                                                                                                     |
 
-Run on-prem in **OIDC + GitHub App mode** — `oidc` refuses to start without both. There is also a cell mode (extra `TENANT_*`/`CELL_*`
+Run on-prem in **OIDC + GitHub App mode**: `oidc` refuses to start without both. There is also a cell mode (extra `TENANT_*`/`CELL_*`
 variables) used by Miragon's hosted multi-tenant operation
-([ADR 0002](../adr/0002-multi-tenant-cell-architecture.md)) — leave all of those unset;
+([ADR 0002](../adr/0002-multi-tenant-cell-architecture.md)). Leave all of those unset;
 the server then runs standalone.
 
 ## AI clients (MCP)
 
-The same container serves an MCP endpoint at `POST /mcp` — agents read and edit the live
+The same container serves an MCP endpoint at `POST /mcp`: agents read and edit the live
 models under the same per-(user,repo) authorization as the web app:
 
 ```bash
@@ -113,9 +113,9 @@ claude mcp add --transport http designiq https://<your-host>/mcp \
   --header "Authorization: Bearer <token>"
 ```
 
-The token: in production, an OIDC access token from your identity provider — set the
+The token: in production, an OIDC access token from your identity provider. Set the
 `LIVE_OIDC_*` variables
-([configuration.md](configuration.md#oidc--token-auth-mcp--headless--browser-sso)); a
+([configuration.md](configuration.md#oidc-token-auth-mcp--headless--browser-sso)); a
 `LIVE_AUTH=none` host needs no token at all (drop the header). Set `LIVE_MCP_READONLY=1`
 to serve the read tools only, `LIVE_MCP_BPMN_EDIT=1` to add the semantic BPMN tools (ADR 0009).
 Tool list and semantics: [docs/mcp-integration.md](../mcp-integration.md).
@@ -126,7 +126,7 @@ One port carries plain HTTP **and** the WebSocket upgrade (Hocuspocus rides the 
 server). A proxy that doesn't pass the upgrade through is the #1 misconfiguration: the app
 loads, but documents never sync.
 
-Caddy — upgrade pass-through is automatic:
+Caddy, where upgrade pass-through is automatic:
 
 ```
 design.example.com {
@@ -134,7 +134,7 @@ design.example.com {
 }
 ```
 
-nginx — needs HTTP/1.1 and the Upgrade/Connection headers explicitly:
+nginx, which needs HTTP/1.1 and the Upgrade/Connection headers explicitly:
 
 ```nginx
 map $http_upgrade $connection_upgrade {
@@ -158,26 +158,26 @@ server {
 }
 ```
 
-`LIVE_PUBLIC_URL` must be the public HTTPS URL — session cookies are only marked `Secure`
+`LIVE_PUBLIC_URL` must be the public HTTPS URL: session cookies are only marked `Secure`
 when it starts with `https`, and OAuth callback + webhook URLs derive from it.
 
 One cap to know about: the per-IP WebSocket limit (`LIVE_MAX_WS_PER_IP`, default 40)
-identifies clients by the `Fly-Client-IP` header, falling back to the socket address —
-behind your proxy that fallback is the **proxy's** address, so all users share one bucket.
-Either set the header at the proxy (`proxy_set_header Fly-Client-IP $remote_addr;` — safe,
+identifies clients by the `Fly-Client-IP` header, falling back to the socket address.
+Behind your proxy that fallback is the **proxy's** address, so all users share one bucket.
+Either set the header at the proxy (`proxy_set_header Fly-Client-IP $remote_addr;`, safe
 since clients can only reach the app through the proxy) or raise the limit.
 
 ## Data & backup
 
 Everything lives under `/data`:
 
-| Path                              | What                                                                                                           | Backup?                            |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| `/data/live.db`                   | SQLite: **live document lineages** (unreleased edits — the crown jewels), sessions, repo registry, token cache | **Yes**                            |
-| `/data/workspaces/<owner>/<repo>` | git checkouts of connected repos, cloned on demand                                                             | No — re-cloneable, safe to exclude |
+| Path                              | What                                                                                                          | Backup?                           |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `/data/live.db`                   | SQLite: **live document lineages** (unreleased edits, the crown jewels), sessions, repo registry, token cache | **Yes**                           |
+| `/data/workspaces/<owner>/<repo>` | git checkouts of connected repos, cloned on demand                                                            | No, re-cloneable, safe to exclude |
 
 Backup: `sqlite3 /data/live.db ".backup /backups/live.db"` (consistent while the server
-runs) or snapshot the whole volume. Restore: restore `/data`, start the container —
+runs) or snapshot the whole volume. Restore: restore `/data`, start the container:
 lineages, sessions, and the registry come back; workspaces re-clone as needed.
 
 Released state is safe in GitHub regardless; only unreleased live edits depend on
@@ -185,15 +185,15 @@ Released state is safe in GitHub regardless; only unreleased live edits depend o
 
 **Per-user rows.** Besides the session, `live.db` keeps two non-credential tables per person
 (ADR 0001 as amended): `favorites` (the repositories someone marked as favorites) and
-`repo_visits` (the repositories they opened last — at most 20, none older than 90 days). Both
-are keyed `<provider>:<login>` in lower case — `oidc:petra` for an IdP login. Deleting one
+`repo_visits` (the repositories they opened last, at most 20, none older than 90 days). Both
+are keyed `<provider>:<login>` in lower case, such as `oidc:petra` for an IdP login. Deleting one
 person's rows (e.g. on a data-subject request):
 
 ```bash
 sqlite3 /data/live.db "DELETE FROM favorites WHERE user = 'oidc:petra'; DELETE FROM repo_visits WHERE user = 'oidc:petra';"
 ```
 
-`repo_activity` holds when each repository last changed (a live edit, its default branch) —
+`repo_activity` holds when each repository last changed (a live edit, its default branch),
 the same for everyone, no personal data. With `LIVE_AUTH=none` every request is the one local
 principal, so favorites and recently opened repositories are **shared host-wide**
 (`local:<login>`).
@@ -204,21 +204,21 @@ principal, so favorites and recently opened repositories are **shared host-wide*
 docker compose pull && docker compose up -d
 ```
 
-Pull the new tag and recreate — SIGTERM triggers the graceful flush, `/data` carries the
+Pull the new tag and recreate. SIGTERM triggers the graceful flush, `/data` carries the
 state across. Releases are semver-tagged; breaking changes (env, data layout) are called
 out in the release notes. For production, pin `vX.Y.Z` and move deliberately. Coming from
-4.x: [upgrading-to-5.md](../upgrading-to-5.md) — the image name changed with the rename to
+4.x: [upgrading-to-5.md](../upgrading-to-5.md). The image name changed with the rename to
 designIQ, so `pull` alone does not reach 5.0.
 
 ## Health
 
-`GET /healthz` — liveness plus a deep check: SQLite writability and disk headroom (<5 %
+`GET /healthz`: liveness plus a deep check: SQLite writability and disk headroom (<5 %
 free = degraded). `200` with `status: "ok"`, or `503` with `status: "degraded"`:
 
 ```json
 { "status": "ok", "tenant": null, "liveDocs": 3, "sqlite": "ok", "diskFreeMb": 51234, "diskUsedPct": 37 }
 ```
 
-Standalone (on-prem) the full detail is public — a single-tenant box has nothing to gate.
+Standalone (on-prem) the full detail is public: a single-tenant box has nothing to gate.
 Only in cell mode is the detail reduced to `{ "status": ... }` unless the poller presents
 the cell secret as a bearer token. Point your monitoring at the status code.

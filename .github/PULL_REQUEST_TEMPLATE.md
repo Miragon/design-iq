@@ -6,7 +6,7 @@
 
 <!-- Delete lines and sections that don't apply. -->
 
-- [ ] The local gates pass (lint, arch, format, typecheck, validate, test, build — see `CONTRIBUTING.md`)
+- [ ] The local gates pass (lint, arch, format, typecheck, validate, test, build; see `CONTRIBUTING.md`)
 - [ ] Docs follow the change (`docs/`, `CLAUDE.md`, the README of a touched package)
 
 ### Models (any notation)
@@ -15,7 +15,7 @@
 
 ### BPMN
 
-- [ ] BPMN edits keep semantics (`bpmn:*`) and layout (`bpmndi:*`) in sync — every flow node,
+- [ ] BPMN edits keep semantics (`bpmn:*`) and layout (`bpmndi:*`) in sync: every flow node,
       lane, pool and edge has a `bpmndi:` shape (or the visual editor breaks)
 - [ ] Modeling conventions followed (tasks verb+object, events object+past participle,
       gateways as questions, lanes = team/role labels)

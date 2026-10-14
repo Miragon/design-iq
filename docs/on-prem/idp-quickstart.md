@@ -1,4 +1,4 @@
-# Identity provider quickstart — Keycloak
+# Identity provider quickstart: Keycloak
 
 The Live Host has **one login: your OIDC identity provider**
 ([ADR 0007](../adr/0007-idp-only-login-and-no-auth-mode.md)). This page gets you a working
@@ -7,21 +7,21 @@ everything the Live Host needs. Evaluate with it as is; for production keep the 
 run Keycloak the way you run Keycloak (real database, TLS, `start` instead of `start-dev`).
 
 Evaluating without any login at all? That is `LIVE_AUTH=none`
-([operating modes](./#operating-modes)) — no IdP involved.
+([operating modes](./#operating-modes)), no IdP involved.
 
 ## What the realm carries
 
-`deploy/keycloak/realm-designiq.json` — imported on Keycloak's first start:
+`deploy/keycloak/realm-designiq.json`, imported on Keycloak's first start:
 
-| Item                                     | What / why                                                                                                                                                                                                                                                                                         |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| realm `designiq`                         | one realm for the platform; self-registration off                                                                                                                                                                                                                                                  |
-| client `designiq-web`                    | the browser login — public client, PKCE S256, redirect `http://localhost:8301/auth/oidc/callback`                                                                                                                                                                                                  |
-| client `designiq-mcp`                    | MCP clients — public client, PKCE S256, redirect `http://localhost:8765/callback` (Claude Code: `--client-id designiq-mcp --callback-port 8765`)                                                                                                                                                   |
-| two protocol mappers on each client      | **audience**: a fixed `aud: designiq` (Keycloak does not honor RFC 8707 resource indicators, so the Live Host is told the fixed value: `LIVE_OIDC_AUDIENCE=designiq`) — **`github_login`**: the user attribute as a claim in the access token (the login claim, `LIVE_OIDC_LOGIN_CLAIM`'s default) |
-| user profile attribute `github_login`    | declared, **editable by admins only** — the claim decides which repositories a person may write, so the person must never be able to set it (the Live Host refuses tokens without it, and never falls back to `preferred_username`)                                                                |
-| identity provider `github` (disabled)    | the production path: GitHub as the login method behind Keycloak, with a mapper that copies the verified GitHub `login` into `github_login` at every sign-in (sync mode FORCE) — enable it with your own GitHub OAuth App, see below                                                                |
-| users `petra`/`petra`, `nobody`/`nobody` | demo users: petra carries `github_login = petra`; nobody carries no claim and is refused fail-closed — try both                                                                                                                                                                                    |
+| Item                                     | What / why                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| realm `designiq`                         | one realm for the platform; self-registration off                                                                                                                                                                                                                                                 |
+| client `designiq-web`                    | the browser login: public client, PKCE S256, redirect `http://localhost:8301/auth/oidc/callback`                                                                                                                                                                                                  |
+| client `designiq-mcp`                    | MCP clients: public client, PKCE S256, redirect `http://localhost:8765/callback` (Claude Code: `--client-id designiq-mcp --callback-port 8765`)                                                                                                                                                   |
+| two protocol mappers on each client      | **audience**: a fixed `aud: designiq` (Keycloak does not honor RFC 8707 resource indicators, so the Live Host is told the fixed value: `LIVE_OIDC_AUDIENCE=designiq`); **`github_login`**: the user attribute as a claim in the access token (the login claim, `LIVE_OIDC_LOGIN_CLAIM`'s default) |
+| user profile attribute `github_login`    | declared, **editable by admins only**: the claim decides which repositories a person may write, so the person must never be able to set it (the Live Host refuses tokens without it, and never falls back to `preferred_username`)                                                                |
+| identity provider `github` (disabled)    | the production path: GitHub as the login method behind Keycloak, with a mapper that copies the verified GitHub `login` into `github_login` at every sign-in (sync mode FORCE). Enable it with your own GitHub OAuth App, see below                                                                |
+| users `petra`/`petra`, `nobody`/`nobody` | demo users: petra carries `github_login = petra`; nobody carries no claim and is refused fail-closed. Try both                                                                                                                                                                                    |
 
 ## 1. Start Keycloak
 
@@ -33,11 +33,11 @@ docker compose --profile keycloak up -d keycloak
 Admin console: `http://localhost:8080` (`admin` / `admin`, override with `KEYCLOAK_ADMIN` /
 `KEYCLOAK_ADMIN_PASSWORD`). The realm is imported on the first start; the container keeps
 no state, so a `down -v` gives you a fresh realm. A quickstart set up before 5.0 has other
-realm, client and audience names — see [upgrading-to-5.md](../upgrading-to-5.md#keycloak-quickstart).
+realm, client and audience names: see [upgrading-to-5.md](../upgrading-to-5.md#keycloak-quickstart).
 
 ## 2. Point the Live Host at it
 
-`oidc` mode needs the IdP **and** a GitHub App — per-repo authorization runs on the App's
+`oidc` mode needs the IdP **and** a GitHub App: per-repo authorization runs on the App's
 installation token, an identity alone can write nothing. Register the App first
 ([github-app-setup.md](github-app-setup.md)); to try the login without one, run the stub
 provider the E2E uses (see "Verified" below).
@@ -53,10 +53,10 @@ LIVE_OIDC_LOGIN_LABEL=Keycloak \
 pnpm live-host            # plus GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY_FILE / GITHUB_APP_SLUG
 ```
 
-Both in containers: write `deploy/.env` first — `LIVE_PUBLIC_URL=http://localhost:8301`
+Both in containers: write `deploy/.env` first: `LIVE_PUBLIC_URL=http://localhost:8301`
 (the realm's redirect URI is exactly that; the template's `https://design.example.com`
 placeholder would be refused by Keycloak), the GitHub App values, and the OIDC block from
-`.env.example` uncommented as is — then `docker compose --profile keycloak up -d`. The
+`.env.example` uncommented as is. Then run `docker compose --profile keycloak up -d`. The
 block differs from the source-run values in one respect: the Live Host reaches Keycloak
 over the compose network, so JWKS and the token endpoint go via `http://keycloak:8080`
 (`LIVE_OIDC_JWKS_URL`, `LIVE_OIDC_TOKEN_URL`), while the issuer and the authorize URL
@@ -66,12 +66,12 @@ compose file so a token minted over the container network carries the same issue
 ## 3. Sign in
 
 Open `http://localhost:8301` → **Sign in with Keycloak** → `petra` / `petra`. The overview
-lists the repositories `petra` may write — as decided by your GitHub App, so for real
+lists the repositories `petra` may write, as decided by your GitHub App, so for real
 repositories set `github_login` on your own Keycloak user to your real GitHub login
 (admin console → Users → the user → Attributes; only admins can).
 
 Try `nobody` / `nobody`: Keycloak signs them in, the Live Host refuses the callback with
-`auth/missing-claim` — a person without a verified git-provider login gets no session.
+`auth/missing-claim`: a person without a verified git-provider login gets no session.
 
 ## 4. Connect an MCP client
 
@@ -83,23 +83,23 @@ claude mcp add --transport http designiq http://localhost:8301/mcp \
 The client hits `/mcp` → 401 + `WWW-Authenticate` → reads the protected-resource metadata
 → discovers Keycloak → runs the code+PKCE flow on the pre-registered `designiq-mcp` client →
 presents an access token with `aud: designiq` and `github_login`. Other clients and their
-redirect URIs: [extending/mcp-idp-setup.md](../extending/mcp-idp-setup.md#client-registration-without-dcr-pre-registration)
-— register each client's callback on `designiq-mcp` (or one client per surface).
+redirect URIs: [extending/mcp-idp-setup.md](../extending/mcp-idp-setup.md#client-registration-without-dcr-pre-registration).
+Register each client's callback on `designiq-mcp` (or one client per surface).
 
-## 5. Your real users — GitHub as the login behind Keycloak
+## 5. Your real users: GitHub as the login behind Keycloak
 
 The demo users are local accounts with an admin-set attribute. For real people, make GitHub
 the login method so the claim is populated by GitHub itself:
 
 1. Create a GitHub **OAuth App** (org → Settings → Developer settings → OAuth Apps) with the
    authorization callback `http://localhost:8080/realms/designiq/broker/github/endpoint`
-   (Keycloak's broker endpoint — your Keycloak URL in production).
+   (Keycloak's broker endpoint; your Keycloak URL in production).
 2. Admin console → Identity providers → **GitHub**: paste client id + secret, enable.
 3. The mapper _github_login from the GitHub profile_ is already there: at every sign-in it
-   writes the verified GitHub `login` into the attribute (sync mode FORCE — a renamed
+   writes the verified GitHub `login` into the attribute (sync mode FORCE: a renamed
    GitHub account updates on the next login).
 4. Optionally remove the username/password form from the browser flow (Authentication →
-   browser) so GitHub is the **only** way in — the identity contract the Live Host assumes
+   browser) so GitHub is the **only** way in, the identity contract the Live Host assumes
    ([ADR 0005](../adr/0005-in-process-mcp-and-oidc-resource-server.md)).
 
 This path is configuration; the automated verification below covers the local users
@@ -112,7 +112,7 @@ This path is configuration; the automated verification below covers the local us
 - Compose: `KEYCLOAK_PUBLIC_URL` (the issuer origin every token carries) and
   `KEYCLOAK_ADMIN_PASSWORD` in `.env`; `LIVE_OIDC_ISSUER` / `LIVE_OIDC_AUTHORIZE_URL`
   follow it.
-- Keycloak itself: a database, TLS and `start` — Keycloak's own production guide. The realm
+- Keycloak itself: a database, TLS and `start`, as in Keycloak's own production guide. The realm
   export is yours to keep; nothing in it is specific to dev mode.
 
 ## Verified
@@ -126,7 +126,7 @@ at `/api/me`, `/mcp` and the browser callback.
 
 ## Other identity providers
 
-Any OIDC provider that issues audience-bound JWTs with the login claim works — the Live
+Any OIDC provider that issues audience-bound JWTs with the login claim works. The Live
 Host side is pure configuration. The requirements table and the verified WorkOS AuthKit
 recipe: [extending/mcp-idp-setup.md](../extending/mcp-idp-setup.md); the seam for
 anything beyond OIDC: [extending/sso.md](../extending/sso.md).
