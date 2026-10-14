@@ -241,16 +241,38 @@ test("validator: lint 'warn' reports the errors a change adds instead of refusin
 
 // ── the platform a model is edited as ────────────────────────────────────────
 
-test("a model no process of which is executable is edited as a design model: links unprefixed", async () => {
+test("a model no process of which is executable is edited as a design model: links keep the file's spelling", async () => {
   const link = [
     { op: "add", kind: "businessRuleTask", name: "Rate risk", after: "Task_validate_order", as: "$r" },
     { op: "set", id: "$r", values: { calledDecision: "credit-limit-check" } },
   ];
+  // the file's only link is unprefixed: so is a new one
   const design = memoryIo(EXAMPLE);
   assert.ok((await editProcess(design, PATH, link)).ok);
   assert.match(
     design.doc(),
     /<bpmn:businessRuleTask id="Task_rate_risk" name="Rate risk" calledDecision="credit-limit-check"/,
+  );
+
+  // a link in an engine spelling keeps it, and a new link takes the spelling the file's links share (bpmn-cli 0.7)
+  const camunda = memoryIo(EXAMPLE.replace(' calledDecision="', ' camunda:decisionRef="'));
+  const kept = await editProcess(camunda, PATH, [
+    { op: "set", id: "Task_check_credit", values: { calledDecision: "credit-limit-v2" } },
+    ...link,
+  ]);
+  assert.ok(kept.ok && kept.written);
+  assert.match(
+    camunda.doc(),
+    /<bpmn:businessRuleTask id="Task_check_credit" name="Check credit limit" camunda:decisionRef="credit-limit-v2">/,
+  );
+  assert.match(
+    camunda.doc(),
+    /<bpmn:businessRuleTask id="Task_rate_risk" name="Rate risk" camunda:decisionRef="credit-limit-check"/,
+  );
+  assert.doesNotMatch(camunda.doc(), / calledDecision="/);
+  assert.ok(
+    kept.change.changed.some((c) => /^businessRuleTask Task_check_credit .* \(camunda:decisionRef\)$/.test(c)),
+    kept.change.changed.join("\n"),
   );
 
   const executable = memoryIo(EXAMPLE.replace('isExecutable="false"', 'isExecutable="true"'));

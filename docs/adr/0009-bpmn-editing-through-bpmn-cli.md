@@ -1,8 +1,9 @@
 # ADR 0009 — Semantic BPMN editing through bpmn-cli
 
 - **Status:** accepted (2026-10-12), amended (2026-10-13, #248: the engine has no copy of
-  the save gate — see Consequences); the tools stay opt-in (`LIVE_MCP_BPMN_EDIT=1`) until
-  the A/B gate below has run with this engine
+  the save gate — see Consequences; 2026-10-14, #248: on bpmn-cli 0.7.0 a design model's
+  decision links keep the file's spelling — see decision 4); the tools stay opt-in
+  (`LIVE_MCP_BPMN_EDIT=1`) until the A/B gate below has run with this engine
 - **Context:** issue [#236](https://github.com/Miragon/design-iq/issues/236), the follow-up
   to PR [#218](https://github.com/Miragon/design-iq/pull/218) (`@bpmiq/bpmn-edit`, an editor
   of its own on bpmn-moddle, unmerged; its ADR was numbered 0008, a number main has since
@@ -77,9 +78,15 @@ message flows). One shared engine is cheaper than two parallel BPMN editors.
    is drawn in full. New ids follow the file's style and speak. Text the change did not
    touch keeps its bytes, so the live document's minimal-diff write stays small.
 4. **A model executes nowhere until a process says so.** A document none of whose processes
-   is executable is edited as a design model (`platform: none`): links are written the
-   designIQ way (an unprefixed `calledDecision`), whatever platform the modeler declared. An
-   executable one gets its platform's spelling and the engine's Camunda 7 / 8 warnings.
+   is executable is edited as a design model (`platform: none`), whatever platform the
+   modeler declared, without the engine's Camunda 7 / 8 warnings. An executable one gets
+   its platform's link spelling and those warnings.
+   _Amended 2026-10-14 (#248):_ in a design model a decision link keeps the file's spelling
+   (bpmn-cli 0.7.0, [Miragon/bpmn-cli#42](https://github.com/Miragon/bpmn-cli/issues/42)). A
+   task's own `camunda:decisionRef` or `zeebe:calledDecision` is updated in place, the latter
+   with its `resultVariable`. A new link takes the engine spelling all the file's other links
+   share, else it is the unprefixed `calledDecision`. 0.6 wrote the unprefixed one on every
+   `set` and dropped the others. design-iq reads every spelling.
 5. **The save gate decides, twice.** Inside the engine's transaction design-iq's own
    validator (`checkModel`) runs before and after the change and refuses an error the change
    adds (with `lint: "warn"` it reports it instead). A design-iq finding names no element, so
@@ -117,6 +124,12 @@ prompt keep using `save_bpmn_xml`, which stays.
 - The live host image carries the engine's dependencies: `bpmn-moddle` (the version bpmn-js
   brings already), `bpmn-auto-layout` (loaded only on request) and `@resvg/resvg-wasm`
   (MPL-2.0, used only by the engine's PNG rendering, which the host does not call).
+  _Amended 2026-10-14 (#248):_ since bpmn-cli 0.7.0 also `bpmnlint` and
+  `@miragon/bpmnlint-plugin-rules` (with `bpmnlint-plugin-camunda-compat` and the Camunda
+  moddles; MIT and ISC). The engine's core never imports them. It runs bpmnlint only when
+  a host passes in a bpmnlint validator (`bpmnlintValidator` with bpmnlint's `Linter` and
+  a resolver). The CLI and the engine's `./node` entry load them (the `.bpmnlintrc`
+  lookup, `bpmnlintEngine()`). The live host passes none, so the tools run no bpmnlint.
 - _Amended 2026-10-13 (#248):_ the engine has no copy of the save gate. bpmn-cli 0.7
   removed its design profile, which the live host had switched off (`profile: "none"`),
   and its lookup of the legacy `bpmiq.yml` ([Miragon/bpmn-cli#35](https://github.com/Miragon/bpmn-cli/issues/35)).
@@ -126,5 +139,4 @@ prompt keep using `save_bpmn_xml`, which stays.
   lint warning and a design-iq finding about the same element can both appear in a result.
 - Open: the A/B run; then the "Implement" prompt and the authoring skills (`new-process`,
   `import-process`, `capture-process`, `process-feedback`) on the tools. Upstream in
-  bpmn-cli: keep a file's own link spelling, warn when `ext` adds another platform's
-  extension.
+  bpmn-cli: warn when `ext` adds another platform's extension.

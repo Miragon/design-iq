@@ -226,10 +226,12 @@ const conflict = (attempts: number, message: string): BpmnEditResult => ({
 /**
  * The engine's options for one attempt. The platform follows the document:
  * a model no process of which is executable is a design model whatever
- * platform the modeler declared, so links are written the design way
- * (unprefixed calledDecision) and no engine profile (the Camunda 7 / 8
- * warnings) is reported. The engine has no copy of the save gate: design-iq's
- * validator is the only check of design-iq's rules inside it.
+ * platform the modeler declared, so no engine profile (the Camunda 7 / 8
+ * warnings) is reported, and a decision link keeps the file's spelling: a
+ * task's own camunda:decisionRef or zeebe:calledDecision is updated in place,
+ * a new link takes the engine spelling all the file's other links share, else
+ * it is the unprefixed calledDecision. The engine has no copy of the save
+ * gate: design-iq's validator is the only check of design-iq's rules inside it.
  */
 function engineOptions(
   current: { path: string; content: string },

@@ -649,7 +649,8 @@ add and lists it; errors the document already had are named as such in the save'
 `dryRun` answers `wouldSave` (and why not) without saving. An engine refusal comes back as a tool error
 starting with its code (`E_NOT_FOUND in ops[1]: …`, `E_VALIDATION: …`); a save-gate refusal with the gate's
 verdict. A model whose
-processes are all non-executable is edited as a design model (unprefixed `calledDecision`).
+processes are all non-executable is edited as a design model: a decision link keeps the file's
+spelling, and a new one with no engine spelling to follow is an unprefixed `calledDecision`.
 
 ## Read-only vs. write-capable — which server holds a pen
 
