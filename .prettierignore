@@ -48,6 +48,6 @@ CHANGELOG.md
 # vendored verbatim from Miragon/corporate-identity (re-copied, never edited)
 packages/ui-kit/src/cd-tokens.generated.css
 
-# the docs theme, copied unchanged from Miragon/mcp-toolkit's docs (the shared
-# Miragon docs style; its tokens are miragon-brand's, vendored verbatim)
-docs/.vitepress/theme/
+# the Miragon docs kit, vendored verbatim from Miragon/corporate-identity (skill
+# docs-site); docs/.vitepress/miragon/check.mjs fails on any change to it
+docs/.vitepress/miragon/

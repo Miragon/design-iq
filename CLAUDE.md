@@ -45,7 +45,7 @@ simulation and tests, todos anchored to BPMN elements) and the BPMN/DMN hard rul
 | `packages/live-client/`                 | The ONE live-session implementation (`@designiq/live-client`): `openLiveSession()`, minimal-diff Y.Text writer, the canvas sync bridges (bpmn-sync, dmn-sync, miragon-sync). Consumers: web, vscode, guest-test, live-host (the minimal-diff writer via `@designiq/live-client/text`) — nothing else.                                                        |
 | `packages/validator/`                   | Platform validator (`@miragon/design-iq-validator`, bin `designiq-validate`): designiq.yml discovery (legacy bpmiq.yml still read) + BPMN/DMN structure, BPMNDI+DMNDI coverage, cross-model reference integrity (callActivity, decisions), a parse check for every other notation. Runs against any checkout via `--root`; never executes content-repo code. |
 | `process-documentation/`                | Example content repo (`designiq.yml` + BPMN/DMN example models and an Event Storming board + the AI skills in `.claude/skills`) — the MCP/validator example AND the content-repo contract mirrored to `Miragon/process-documentation-starter`. The Live Host serves any repo with a root `designiq.yml` (legacy `bpmiq.yml` still read), nothing else.       |
-| `docs/`                                 | Platform docs: `platform-concept.md`, `multi-repo-architecture.md`, `mcp-integration.md`, `on-prem/` (self-hosting), `extending/` (connectors, SSO), `adr/`, `upgrading-to-5.md` (the rename release). Also the VitePress docs site (`@designiq/docs`, `pnpm docs:dev`; `docs/.vitepress/config.ts` lists its pages).                                        |
+| `docs/`                                 | Platform docs: `platform-concept.md`, `multi-repo-architecture.md`, `mcp-integration.md`, `on-prem/` (self-hosting), `extending/` (connectors, SSO), `adr/`, `upgrading-to-5.md` (the rename release). Also the VitePress site (`@designiq/docs`, pages in `.vitepress/config.ts`) on the Miragon docs kit (`.vitepress/miragon/`, vendored, never edit).    |
 | `process-documentation/.claude/skills/` | The AI-first toolset (travels with the content repo).                                                                                                                                                                                                                                                                                                        |
 
 ### Inside `process-documentation/` (the example content repo)
@@ -112,10 +112,11 @@ https://raw.githubusercontent.com/Miragon/corporate-identity/main/plugins/mirago
   them. The Live Host's own HTML pages (editor sign-in landing, `create-app`) cannot load
   the SPA sheet: they share the inline CI shell in `apps/live-host/src/http/brand-page.ts`.
 - **brand-lint** (the miragon-brand PostToolUse hook, active via `.miragon/brand.json`) flags
-  colours outside the CI palette in every edit — in CSS also a raw brand hex instead of its
-  `--cd-*` token, and gradient text. It does NOT check fonts, icons, emoji or the AI look:
-  those are review items (`miragon-brand:brand-review`). Its German copy rules are off: UI
-  copy stays English.
+  colours outside the CI palette in every edit, in CSS also a raw brand hex instead of its
+  `--cd-*` token, and gradient text. In text it flags em dashes as connectors (a hard rule)
+  and gives hints on AI patterns. It does NOT check fonts, icons, emoji or the AI look: those
+  are review items (`miragon-brand:brand-review`). Its German-only copy rules are off: UI copy
+  stays English. CI (`validate.yml`, job `brand`) runs its hard rules on `docs/` and `README.md`.
 
 ## Hard rules
 

@@ -25,6 +25,8 @@ minimumReleaseAgeExclude:
 overrides:
   # vitepress 1.6.4 (docs/) is the latest release and still requests vite
   # ^5.4.14, which is stuck below the server.fs.deny bypass fix (>=6.4.3).
-  # Scoped to vitepress, so the vite of apps/web is untouched; the same
-  # override as Miragon/mcp-toolkit's. Revisit when vitepress 2.x leaves alpha.
+  # Scoped to vitepress, so the vite of apps/web is untouched. The pin comes
+  # with the Miragon docs kit (Miragon/corporate-identity, skill docs-site),
+  # whose package.json template has it as npm "overrides"; under pnpm it
+  # lives here. It changes with a CI release of the kit.
   vitepress>vite: 6.4.3

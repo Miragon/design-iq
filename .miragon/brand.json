@@ -1,26 +1,14 @@
 {
-  "_comment": "Activates the miragon-brand brand-lint hook for this repo (CLAUDE.md, Design system). designIQ's UI, docs and code are English, so the German copy rules are off (A*, S*, C5 'UI-Texte auf Deutsch' - a separate decision, see #238). The rest is not switched off, but the hook only lints colours: the palette (B1), in CSS also raw brand hex instead of --cd-* tokens (C1) and gradient text (U5). Logo, fonts, icons and the AI look are review items (miragon-brand:brand-review), not linted.",
-  "ignorieren": ["docs/", "process-documentation/", "CHANGELOG.md", "*.test.ts", "*/test/*"],
-  "aus": [
-    "A1",
-    "A2",
-    "A3",
-    "A4",
-    "A5",
-    "A6",
-    "A7",
-    "A8",
-    "A9",
-    "A10",
-    "A11",
-    "S1",
-    "S2",
-    "S3",
-    "S4",
-    "S5",
-    "S6",
-    "S7",
-    "S8",
-    "C5"
-  ]
+  "_comment": "Activates brand-lint from the miragon-brand plugin (Claude Code hook, and the brand job in validate.yml for the docs site and README.md). designIQ's UI, docs and code are English, so the German-only copy rules are off, as in the CI's template for English repos: du (A1), umlauts (A3), German passive (A4), German claim (A7), gender forms (A11) and German UI texts (C5, a separate decision, see #238). Em dashes as connectors (A2), spellings (A10), the other copy hints (A5, A6, A8, A9), the anti-slop patterns (S*), palette, token and dark-mode rules stay on. Ignored: the docs kit in docs/.vitepress/miragon/ (vendored unchanged, linted at its source in Miragon/corporate-identity); the three notes in docs/ that are not site pages (srcExclude in docs/.vitepress/config.ts: the platform concept, the multi-repo gap analysis and the widget chrome spec the sources cite as 'spec §n'); process-documentation/ (the example content repo, mirrored to Miragon/process-documentation-starter); CHANGELOG.md (written by release-please); tests and their fixtures.",
+  "ignorieren": [
+    "docs/.vitepress/miragon/",
+    "docs/platform-concept.md",
+    "docs/multi-repo-architecture.md",
+    "docs/mcp-app-widget-chrome.md",
+    "process-documentation/",
+    "CHANGELOG.md",
+    "*.test.ts",
+    "*/test/*"
+  ],
+  "aus": ["A1", "A3", "A4", "A7", "A11", "C5"]
 }
