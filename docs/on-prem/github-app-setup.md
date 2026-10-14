@@ -58,7 +58,7 @@ Then:
 
 Org → **Settings → Developer settings → GitHub Apps → New GitHub App** (these values
 mirror the manifest in
-[`apps/live-host/src/tools/create-app.ts`](../../apps/live-host/src/tools/create-app.ts)):
+[`apps/live-host/src/tools/create-app.ts`](https://github.com/Miragon/design-iq/blob/main/apps/live-host/src/tools/create-app.ts)):
 
 | Field                                                      | Value                                                                                                                      |
 | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |

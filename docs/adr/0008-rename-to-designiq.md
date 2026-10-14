@@ -19,7 +19,7 @@ Since ADR 0006 it models BPMN, DMN, Wardley Maps, Team Topologies, Event Stormin
 Context Maps; the name described one notation of six. The GitHub repository was renamed to
 `Miragon/design-iq` first; everything else followed in two releases. The positioning moved with
 the name: collaborative modeling and architecture with AI, with BPMN and DMN as the notations
-with the deepest tooling ([README](../../README.md)).
+with the deepest tooling ([README](https://github.com/Miragon/design-iq#readme)).
 
 The name is not one string. It lives in four kinds of places, and each breaks differently:
 

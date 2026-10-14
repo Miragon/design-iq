@@ -13,4 +13,6 @@ node_modules
 **/*.pem
 apps/web/dist
 process-documentation/.vitepress/dist
+docs/.vitepress/cache
+docs/.vitepress/dist
 apps/vscode/out

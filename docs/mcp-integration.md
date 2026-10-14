@@ -91,7 +91,7 @@ pnpm install        # monorepo root — installs all workspace packages
 
 Requires Node >= 23.6 (runs the TypeScript server directly via built-in type stripping). That is all:
 
-- **Claude Code** reads the repo-root [`.mcp.json`](../.mcp.json) and connects automatically
+- **Claude Code** reads the repo-root [`.mcp.json`](https://github.com/Miragon/design-iq/blob/main/.mcp.json) and connects automatically
   when you open the repository (you approve the server once).
 - **Any other MCP client** — register a stdio server:
 
@@ -201,7 +201,7 @@ served AND the host is not read-only, bound to the first such widget's resource;
 
 Every tool call that touches a model announces the caller's agent in that model's live room
 for a while (60 s after the last call, renewed by every call). People who have the model open
-see an **"AI · <name>"** avatar in the roster (named after the person the agent acts for), and
+see an **"AI · &lt;name&gt;"** avatar in the roster (named after the person the agent acts for), and
 after a save the elements the agent changed are outlined on the canvas in the agent's color,
 with its name pill on the first one — the agent's cursor. Nothing is written into the document:
 the presence is an awareness state the Live Host publishes into a LOADED room

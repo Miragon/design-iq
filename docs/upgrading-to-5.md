@@ -26,7 +26,7 @@ changes are the names the platform publishes and writes. Rationale:
 - The old image name is **no longer published**; 4.3.1 is its last release. A compose file,
   `docker run` or manifest that keeps it raises no error — it silently stays on 4.3.1,
   `:latest` included. Change the `image:` line, or take the new
-  [`deploy/docker-compose.yml`](../deploy/docker-compose.yml).
+  [`deploy/docker-compose.yml`](https://github.com/Miragon/design-iq/blob/main/deploy/docker-compose.yml).
 - The new name starts at 5.0.0; earlier releases exist under the old name only. With the
   new compose file an existing `BPMIQ_VERSION=v4.x` pin asks for a tag the new image does <!-- legacy-name-ok -->
   not have: set `DESIGNIQ_VERSION=v5.0.0` (or later) and delete the old line.

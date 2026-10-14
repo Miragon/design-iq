@@ -30,6 +30,7 @@ export default tseslint.config(
       ".dependency-cruiser.mjs",
       "scripts/oss-split/overlay/**", // export templates — linted in the public repo (ADR 0004)
       ".oss-export/**", // export staging tree
+      "docs/.vitepress/**", // the docs site: VitePress config, build cache, theme copied from Miragon/mcp-toolkit
     ],
   },
   js.configs.recommended,

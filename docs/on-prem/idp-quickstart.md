@@ -7,7 +7,7 @@ everything the Live Host needs. Evaluate with it as is; for production keep the 
 run Keycloak the way you run Keycloak (real database, TLS, `start` instead of `start-dev`).
 
 Evaluating without any login at all? That is `LIVE_AUTH=none`
-([README.md → operating modes](README.md#operating-modes)) — no IdP involved.
+([operating modes](./#operating-modes)) — no IdP involved.
 
 ## What the realm carries
 
@@ -30,7 +30,7 @@ cd deploy
 docker compose --profile keycloak up -d keycloak
 ```
 
-Admin console: http://localhost:8080 (`admin` / `admin`, override with `KEYCLOAK_ADMIN` /
+Admin console: `http://localhost:8080` (`admin` / `admin`, override with `KEYCLOAK_ADMIN` /
 `KEYCLOAK_ADMIN_PASSWORD`). The realm is imported on the first start; the container keeps
 no state, so a `down -v` gives you a fresh realm. A quickstart set up before 5.0 has other
 realm, client and audience names — see [upgrading-to-5.md](../upgrading-to-5.md#keycloak-quickstart).
@@ -65,7 +65,7 @@ compose file so a token minted over the container network carries the same issue
 
 ## 3. Sign in
 
-Open http://localhost:8301 → **Sign in with Keycloak** → `petra` / `petra`. The overview
+Open `http://localhost:8301` → **Sign in with Keycloak** → `petra` / `petra`. The overview
 lists the repositories `petra` may write — as decided by your GitHub App, so for real
 repositories set `github_login` on your own Keycloak user to your real GitHub login
 (admin console → Users → the user → Attributes; only admins can).

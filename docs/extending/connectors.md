@@ -122,7 +122,7 @@ history (`08b6c20` era, pre-`TokenGrant`), and the ports already carry its lesso
   `verifyWebhook` owns the whole verdict instead of the HTTP layer assuming a scheme.
 - Known open item: repo RENAMES change the identity key (rooms, lineage PKs,
   workspace dirs) — the migration path is sketched in
-  [multi-repo-architecture.md](../multi-repo-architecture.md).
+  [multi-repo-architecture.md](https://github.com/Miragon/design-iq/blob/main/docs/multi-repo-architecture.md).
 
 ## Offline development — the stub-provider harness
 

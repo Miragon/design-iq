@@ -1,12 +1,12 @@
 # Configuration reference
 
 Every environment variable the Live Host reads, grouped by concern. Defaults in parentheses
-are the source defaults ([`apps/live-host/src/server.ts`](../../apps/live-host/src/server.ts)
+are the source defaults ([`apps/live-host/src/server.ts`](https://github.com/Miragon/design-iq/blob/main/apps/live-host/src/server.ts)
 is the only place that reads env); the Docker image overrides two of them (`PORT=8080`,
 `LIVE_DATA_DIR=/data`). The annotated deployment template is
-[`deploy/.env.example`](../../deploy/.env.example).
+[`deploy/.env.example`](https://github.com/Miragon/design-iq/blob/main/deploy/.env.example).
 
-See [README.md](README.md) for the install guide and
+See the [install guide](./) and
 [github-app-setup.md](github-app-setup.md) for obtaining the GitHub App values.
 
 ## Core
@@ -36,7 +36,7 @@ current. Setup walkthrough: [github-app-setup.md](github-app-setup.md).
 | `GITHUB_WEBHOOK_SECRET` | —       | Verifies `POST /webhook/github` (HMAC SHA-256). The receiver fails closed: no secret configured = webhooks refused with `503`. |
 
 The **app private key** is resolved by the shared loader
-([`packages/github-app/src/index.ts`](../../packages/github-app/src/index.ts),
+([`packages/github-app/src/index.ts`](https://github.com/Miragon/design-iq/blob/main/packages/github-app/src/index.ts),
 `loadPrivateKey`) — first match wins:
 
 1. `GITHUB_APP_PRIVATE_KEY` — the raw PEM (a double-quoted multi-line `.env` value; must
@@ -109,7 +109,7 @@ and vice versa.
 | `SESSION_ENC_KEY`    | random per boot | HMAC key for the browser-bound login `state`, so a restart or redeploy mid-login keeps in-flight logins valid (the name predates [ADR 0007](../adr/0007-idp-only-login-and-no-auth-mode.md) — nothing is encrypted any more, because no credential is stored). Fallback: `CELL_TOKEN_KEY`. **Set it explicitly in production.** |
 | `LIVE_MAX_DOC_BYTES` | `8000000`       | Per-room document size cap (DoS guard), enforced at ingest and at persist.                                                                                                                                                                                                                                                      |
 | `LIVE_MAX_WS`        | `400`           | Global WebSocket connection ceiling.                                                                                                                                                                                                                                                                                            |
-| `LIVE_MAX_WS_PER_IP` | `40`            | Per-IP WebSocket ceiling. Client IP = `Fly-Client-IP` header, falling back to the socket address — behind a reverse proxy, set the header at the proxy or all users share one bucket (see [README.md](README.md#reverse-proxy--tls)).                                                                                           |
+| `LIVE_MAX_WS_PER_IP` | `40`            | Per-IP WebSocket ceiling. Client IP = `Fly-Client-IP` header, falling back to the socket address — behind a reverse proxy, set the header at the proxy or all users share one bucket (see [Reverse proxy / TLS](./#reverse-proxy--tls)).                                                                                        |
 | `LIVE_SHUTDOWN_MS`   | `25000`         | Graceful-shutdown budget: on SIGTERM/SIGINT the server flushes debounced write-throughs, hard-exiting after this many ms. Keep it below the container runtime's kill timeout (compose sets `stop_grace_period: 30s`).                                                                                                           |
 
 ## Dev/test only — never set in production

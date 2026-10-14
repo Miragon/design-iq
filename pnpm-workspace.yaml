@@ -2,6 +2,8 @@ packages:
   - "apps/*"
   - "apps/*/ui"
   - "packages/*"
+  # the docs site (VitePress), https://miragon.github.io/design-iq/
+  - "docs"
   # process-documentation is example CONTENT (designiq.yml + .bpmn), not a package
   # postinstall build scripts pnpm may run (blocked by default for security)
 allowBuilds:
@@ -20,3 +22,9 @@ minimumReleaseAgeExclude:
   - "@miragon/team-topologies-schema-model@0.8.0"
   # the BPMN editing engine (#236) — 0.6.0 published the day it was adopted
   - "@miragon/bpmn-cli@0.6.0"
+overrides:
+  # vitepress 1.6.4 (docs/) is the latest release and still requests vite
+  # ^5.4.14, which is stuck below the server.fs.deny bypass fix (>=6.4.3).
+  # Scoped to vitepress, so the vite of apps/web is untouched; the same
+  # override as Miragon/mcp-toolkit's. Revisit when vitepress 2.x leaves alpha.
+  vitepress>vite: 6.4.3

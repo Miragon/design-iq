@@ -15,6 +15,10 @@ propose changes.
 BPMN and DMN are the notations with the deepest tooling: derived process and decision
 views, decision simulation and test suites, and todos anchored to BPMN elements.
 
+**Docs:** [miragon.github.io/design-iq](https://miragon.github.io/design-iq/), with
+[getting started](https://miragon.github.io/design-iq/getting-started), self-hosting, the MCP
+integration and the decision records. The site is built from [`docs/`](docs/).
+
 - **Model live** — every model file (`.bpmn`, `.dmn`, `.owm`, `.tt`, `.storm`, `.cm.json`,
   `.vc.json`, `.yaml`, `.md`) syncs as a shared Y.Text document; the web client and VS Code
   bind their editors to it. The browser has a visual modeler for BPMN, DMN, Wardley Maps,
@@ -146,7 +150,7 @@ but the cell mode it drives is. The code you read here is the code the SaaS runs
 | `packages/…`             | —                              | Shared foundations: `http-kit`, `github-app`, `contracts`, `live-client`, `ui-kit`, `api-client` — see `CLAUDE.md` for the full map.                                                                                                                                                                                              |
 | `process-documentation/` | —                              | Example content repo (`designiq.yml` + BPMN/DMN example models and an Event Storming board + the AI skills in `.claude/skills`) — the MCP/validator example AND the content-repo contract, mirrored to [`Miragon/process-documentation-starter`](https://github.com/Miragon/process-documentation-starter) ("Use this template"). |
 | `deploy/`                | —                              | Docker Compose reference for self-hosting.                                                                                                                                                                                                                                                                                        |
-| `docs/`                  | —                              | Platform docs: concept, multi-repo architecture, MCP integration, [ADRs](docs/adr/), [self-hosting](docs/on-prem/), [extending](docs/extending/).                                                                                                                                                                                 |
+| `docs/`                  | —                              | Platform docs: concept, multi-repo architecture, MCP integration, [ADRs](docs/adr/), [self-hosting](docs/on-prem/), [extending](docs/extending/). The [docs site](https://miragon.github.io/design-iq/) is built from here.                                                                                                       |
 
 ## Self-hosting
 

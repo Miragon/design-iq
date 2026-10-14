@@ -36,7 +36,7 @@ Companion documents:
 ## The image
 
 `ghcr.io/miragon/designiq-live-host` — multi-arch (linux/amd64 + linux/arm64), built from
-[`apps/live-host/Dockerfile`](../../apps/live-host/Dockerfile) by the release workflow
+[`apps/live-host/Dockerfile`](https://github.com/Miragon/design-iq/blob/main/apps/live-host/Dockerfile) by the release workflow
 (see [ADR 0004](../adr/0004-open-source-split.md) for the artifact flow — the same image
 serves on-prem installs and Miragon's hosted cells).
 
@@ -61,7 +61,7 @@ policy requires a non-root user, run with `user:` and make `/data` writable for 
 2. Decide on the identity provider — [idp-quickstart.md](idp-quickstart.md): the shipped
    Keycloak (a compose profile, its `LIVE_OIDC_*` values are in `.env.example`) or your
    own, via the `LIVE_OIDC_*` block in
-   [configuration.md](configuration.md#oidc-token-auth-mcp--headless-clients).
+   [configuration.md](configuration.md#oidc--token-auth-mcp--headless--browser-sso).
    Evaluating without an IdP: `LIVE_AUTH=none`, see the operating modes below.
 3. Configure, then start (the Live Host refuses to boot without its login configured —
    write `.env` before the first `up`; `--profile keycloak` adds the shipped Keycloak):
@@ -72,8 +72,8 @@ policy requires a non-root user, run with `user:` and make `/data` writable for 
    docker compose up -d
    ```
 
-   The compose file is [`deploy/docker-compose.yml`](../../deploy/docker-compose.yml); the
-   annotated env template is [`deploy/.env.example`](../../deploy/.env.example). It sets
+   The compose file is [`deploy/docker-compose.yml`](https://github.com/Miragon/design-iq/blob/main/deploy/docker-compose.yml); the
+   annotated env template is [`deploy/.env.example`](https://github.com/Miragon/design-iq/blob/main/deploy/.env.example). It sets
    `stop_grace_period: 30s` so the graceful-shutdown flush (`LIVE_SHUTDOWN_MS`, 25 s) can
    persist debounced write-throughs before the container is killed — keep that headroom if
    you write your own unit files.
@@ -115,7 +115,7 @@ claude mcp add --transport http designiq https://<your-host>/mcp \
 
 The token: in production, an OIDC access token from your identity provider — set the
 `LIVE_OIDC_*` variables
-([configuration.md](configuration.md#oidc-token-auth-mcp--headless-clients)); a
+([configuration.md](configuration.md#oidc--token-auth-mcp--headless--browser-sso)); a
 `LIVE_AUTH=none` host needs no token at all (drop the header). Set `LIVE_MCP_READONLY=1`
 to serve the read tools only, `LIVE_MCP_BPMN_EDIT=1` to add the semantic BPMN tools (ADR 0009).
 Tool list and semantics: [docs/mcp-integration.md](../mcp-integration.md).
