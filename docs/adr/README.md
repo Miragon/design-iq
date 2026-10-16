@@ -2,15 +2,15 @@
 
 Decisions that shape the platform, with the evidence that led to them.
 Format: context → decision → consequences. Superseded ADRs stay in place,
-marked as such — the history is the point.
+marked as such. The history is the point.
 
 Naming: ADRs 0001–0007 predate the rename to designIQ ([ADR 0008](0008-rename-to-designiq.md))
-and keep the names of their time — product, packages, image, repository and VS Code
+and keep the names of their time: product, packages, image, repository and VS Code
 extension appear there under their old names. ADR 0008 lists the new ones.
 
 | ADR                                                       | Title                                                                                      | Status   |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------- |
-| [0001](0001-zero-stored-user-tokens.md)                   | Zero stored user tokens — authorization via installation token                             | accepted |
+| [0001](0001-zero-stored-user-tokens.md)                   | Zero stored user tokens: authorization via installation token                              | accepted |
 | [0002](0002-multi-tenant-cell-architecture.md)            | Multi-tenant SaaS: cell per tenant + thin control plane                                    | accepted |
 | [0003](0003-module-architecture-and-shared-packages.md)   | Module architecture: hexagonal backends, shared packages                                   | accepted |
 | [0004](0004-open-source-split.md)                         | Open-source split: public platform monorepo, private SaaS overlay                          | accepted |
@@ -20,4 +20,4 @@ extension appear there under their old names. ADR 0008 lists the new ones.
 | [0008](0008-rename-to-designiq.md)                        | Rename to designIQ: readers before writers, stored identifiers frozen                      | accepted |
 | [0009](0009-bpmn-editing-through-bpmn-cli.md)             | Semantic BPMN editing through bpmn-cli: outline, operations, layout on /mcp                | accepted |
 
-Operational: the SaaS activation runbook lives with the control plane (`apps/control-plane/docs/saas-activation.md`) — turning ADR 0002 from code-complete into a running SaaS.
+Operational: the SaaS activation runbook lives with the control plane (`apps/control-plane/docs/saas-activation.md`). It turns ADR 0002 from code-complete into a running SaaS.

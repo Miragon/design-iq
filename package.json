@@ -23,6 +23,9 @@
     "arch:graph": "depcruise apps packages --output-type dot",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "docs:dev": "pnpm --filter @designiq/docs run dev",
+    "docs:build": "pnpm --filter @designiq/docs run build",
+    "docs:preview": "pnpm --filter @designiq/docs run preview",
     "prepare": "husky"
   },
   "devDependencies": {

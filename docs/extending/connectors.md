@@ -1,6 +1,6 @@
 # Extending designIQ: git connectors
 
-A connector teaches the Live Host a new git vendor — GitLab is the worked example
+A connector teaches the Live Host a new git vendor. GitLab is the worked example
 throughout. The seam is three ports in `apps/live-host/src/ports/`; GitHub is one
 implementation of each, a new vendor is a second implementation, not a rewrite
 ([ADR 0003](../adr/0003-module-architecture-and-shared-packages.md),
@@ -10,17 +10,17 @@ implementation of each, a new vendor is a second implementation, not a rewrite
 
 The provider abstraction is deliberately split by **whose credential acts**:
 
-- `GitProvider` — the USER-credentialed half (the person's OAuth grant).
-- `RepoConnectionSource` — the PLATFORM-credentialed half (the instance's own credential).
-- `IssueTracker` — model-anchored todos as first-class items in the customer's own tracker.
+- `GitProvider`: the USER-credentialed half (the person's OAuth grant).
+- `RepoConnectionSource`: the PLATFORM-credentialed half (the instance's own credential).
+- `IssueTracker`: model-anchored todos as first-class items in the customer's own tracker.
 
 A complete connector implements the first two; `IssueTracker` enables the todo feature
 (the `/todos` API answers 501 without it).
 
-### `GitProvider` — `apps/live-host/src/ports/git-provider.ts`
+### `GitProvider`: `apps/live-host/src/ports/git-provider.ts`
 
 The release half of the seam: what the host does on a git host with the PLATFORM's
-credential once a release is due — the authenticated push URL and PR/MR creation. The
+credential once a release is due: the authenticated push URL and PR/MR creation. The
 release flow never mentions a concrete provider. There is no user-credentialed half:
 people sign in at the IdP, and authorization is the connection source's job
 ([ADR 0007](../adr/0007-idp-only-login-and-no-auth-mode.md)).
@@ -37,22 +37,22 @@ export interface GitProvider {
 }
 ```
 
-| Member                                 | One line                                                                                                                                  |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                                   | Provider id — `"gitlab"`; names the release's noreply attribution domain.                                                                 |
-| `pushUrl(token, repo)`                 | HTTPS remote URL carrying the platform credential, consumed by `git push`.                                                                |
-| `createPullRequest(token, repo, args)` | Open a pull/merge request with the platform credential on the given repo — GitLab returns the MR's `web_url` + `iid` as `PullRequestRef`. |
+| Member                                 | One line                                                                                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                   | Provider id (`"gitlab"`); names the release's noreply attribution domain.                                                                |
+| `pushUrl(token, repo)`                 | HTTPS remote URL carrying the platform credential, consumed by `git push`.                                                               |
+| `createPullRequest(token, repo, args)` | Open a pull/merge request with the platform credential on the given repo. GitLab returns the MR's `web_url` + `iid` as `PullRequestRef`. |
 
-Every repo-scoped capability takes the target repo's full path per call — the provider
+Every repo-scoped capability takes the target repo's full path per call: the provider
 represents the CONNECTION to a git host, not a repository.
 
-### `RepoConnectionSource` — `apps/live-host/src/ports/connection-source.ts`
+### `RepoConnectionSource`: `apps/live-host/src/ports/connection-source.ts`
 
 Where the set of connected repositories comes from and how the server clones them.
 GitHub implements it with App mechanics (installations, installation tokens, install
-picker, HMAC webhooks). GitLab has none of those concepts — its source will be an
+picker, HMAC webhooks). GitLab has none of those concepts: its source will be an
 OAuth application + explicit project selection (or group access tokens) and
-`X-Gitlab-Token` webhooks — but the registry and the API only ever talk to this interface.
+`X-Gitlab-Token` webhooks. Still, the registry and the API only ever talk to this interface.
 
 ```ts
 export interface RepoConnectionSource {
@@ -74,18 +74,18 @@ export interface RepoConnectionSource {
 | `cloneToken(connectionRef)`                       | Short-lived credential for server-side `git clone`/`fetch` of ONE repo.                                                                                       |
 | `connectUrl()`                                    | Where a user connects more repos (GitHub: the app's install picker; GitLab: your project-selection page).                                                     |
 | `verifyWebhook(headers, rawBody)`                 | Verify + classify an incoming webhook (`authentic`? `membershipChanged`?); undefined = webhooks not configured. The HTTP layer FAILS CLOSED on your verdict.  |
-| `checkUserPermission?(connectionRef, user, repo)` | A user's effective `RepoPermission` resolved with the PLATFORM credential — no user token needed (ADR 0001); undefined = fall back to the user-token path.    |
+| `checkUserPermission?(connectionRef, user, repo)` | A user's effective `RepoPermission` resolved with the PLATFORM credential, no user token needed (ADR 0001); undefined = fall back to the user-token path.     |
 
-`SourceRepo.fullName` is the provider-unique full path — multi-segment GitLab paths
+`SourceRepo.fullName` is the provider-unique full path. Multi-segment GitLab paths
 (`group/sub/project`) are supported end to end (rooms, API routes and the registry
 match the repo as a greedy prefix; the route shape never assumes `owner/name`).
 
-### `IssueTracker` — `apps/live-host/src/ports/issue-tracker.ts`
+### `IssueTracker`: `apps/live-host/src/ports/issue-tracker.ts`
 
 The third port carries model-anchored **todos**: work items that live in the customer's
 OWN tracker, never in a platform database. GitHub implements it with repo issues +
 labels; GitLab maps 1:1 onto project issues; Jira maps a repo to a project via adapter
-config — which is why `Todo.id` is an opaque string and nothing in the contract assumes
+config, which is why `Todo.id` is an opaque string and nothing in the contract assumes
 numbers, labels, or markdown. The anchor codec (which process, which BPMN elements) is
 platform domain (`domain/todo-anchor.ts`); an adapter only decides WHERE the encoded
 block is stored (GitHub: the issue body).
@@ -94,7 +94,7 @@ block is stored (GitHub: the issue body).
 
 A new vendor is **one new folder**: `apps/live-host/src/adapters/<vendor>/`
 (mirror `adapters/github/`: `provider.ts` for `GitProvider`, a source module for
-`RepoConnectionSource`). Zero changes to `domain/` and `application/` — they only
+`RepoConnectionSource`). Zero changes to `domain/` and `application/`; they only
 see the ports. `server.ts` is the ONLY place that reads env and wires adapters;
 follow the existing pattern there: construct the adapter behind its env detection
 (`GITLAB_*` set → construct), add the provider to the `providers` map (the
@@ -103,33 +103,33 @@ follow the existing pattern there: construct the adapter behind its env detectio
 
 These boundaries are CI-enforced: `pnpm arch` (dependency-cruiser) rejects adapter
 imports from `application/`, cross-vendor imports, and I/O outside designated
-adapters — so maintainers can review connector PRs **structurally**, not by reading
+adapters, so maintainers can review connector PRs **structurally**, not by reading
 every line. A connector that ships standalone graduates to
 `@designiq/connector-<vendor>` against the same ports (follow-up ADR, per ADR 0003).
 
 ## GitLab specifics
 
 From the live-host README (GitLab section): the architecture carries GitLab, the
-implementation was **deliberately deferred** — a full GitLab draft exists in git
+implementation was **deliberately deferred**. A full GitLab draft exists in git
 history (`08b6c20` era, pre-`TokenGrant`), and the ports already carry its lessons:
 
 - People sign in at the IdP, not at GitLab ([ADR 0007](../adr/0007-idp-only-login-and-no-auth-mode.md)):
   GitLab is a social connection behind it, and the login claim carries the GitLab
   username. The connection source holds the platform credential (a group access token)
   and answers `checkUserPermission` from a member's access level.
-- `createPullRequest` opens a **merge request** — same `PullRequestRef` shape.
-- Webhook verification is token-compare (`X-Gitlab-Token`), not HMAC — that is why
+- `createPullRequest` opens a **merge request**, with the same `PullRequestRef` shape.
+- Webhook verification is token-compare (`X-Gitlab-Token`), not HMAC. That is why
   `verifyWebhook` owns the whole verdict instead of the HTTP layer assuming a scheme.
 - Known open item: repo RENAMES change the identity key (rooms, lineage PKs,
-  workspace dirs) — the migration path is sketched in
-  [multi-repo-architecture.md](../multi-repo-architecture.md).
+  workspace dirs); the migration path is sketched in
+  [multi-repo-architecture.md](https://github.com/Miragon/design-iq/blob/main/docs/multi-repo-architecture.md).
 
-## Offline development — the stub-provider harness
+## Offline development: the stub-provider harness
 
 You never need real credentials (or internet) to develop a connector.
 `apps/live-host/test/stub-provider.ts` is a GitHub-shaped fake of the whole vendor
-surface — App installations + installation tokens, collaborator permissions, PR
-creation — plus a `POST /_control` endpoint that flips the permission gate, edits the
+surface (App installations + installation tokens, collaborator permissions, PR
+creation) plus a `POST /_control` endpoint that flips the permission gate, edits the
 installation directory, and records PR payloads for assertions.
 
 `apps/live-host/test/release-e2e.sh` shows the full pattern (run:
@@ -146,7 +146,7 @@ installation directory, and records PR payloads for assertions.
    `bpmiq.yml`).
 
 A GitLab connector gets a sibling `test/stub-gitlab.ts` shaped like GitLab's API and
-its own e2e script on the same skeleton — the whole repo-gate → session →
+its own e2e script on the same skeleton. The whole repo-gate → session →
 release path runs fully offline.
 
 ## What a connector PR must include
@@ -156,6 +156,6 @@ release path runs fully offline.
 - A vendor-shaped stub + stub-based tests (unit tests for the adapter, an e2e on the
   `release-e2e.sh` skeleton).
 - Env var documentation: `deploy/.env.example` + the live-host README.
-- **No new dependencies** in `domain/`/`application/` — and ideally none at all
+- **No new dependencies** in `domain/`/`application/`, and ideally none at all
   (the GitHub adapters are plain `fetch`).
 - `pnpm arch`, `pnpm -r test`, lint and typecheck green.

@@ -48,3 +48,47 @@ jobs:
             echo "::error::stale pre-monorepo path references found (collab/ or integrations/mcp)"
             exit 1
           fi
+
+  brand:
+    name: Brand (docs kit + brand-lint)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # Read access to the private Miragon/corporate-identity. Without the secret (not set up
+      # yet, or a fork PR) the job warns and skips; the docs workflow still checks the kit
+      # against its own manifest.
+      CI_SOURCE_TOKEN: ${{ secrets.CORPORATE_IDENTITY_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: No access to Miragon/corporate-identity
+        if: env.CI_SOURCE_TOKEN == ''
+        run: echo "::warning title=Brand checks skipped::CORPORATE_IDENTITY_READ_TOKEN is not set, so the docs kit is not compared with Miragon/corporate-identity and brand-lint does not run. Add the secret (contents:read on Miragon/corporate-identity)."
+
+      # Keep ref on the release in docs/.vitepress/miragon/manifest.json.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.CI_SOURCE_TOKEN != ''
+        with:
+          repository: Miragon/corporate-identity
+          ref: v1.10.0
+          token: ${{ env.CI_SOURCE_TOKEN }}
+          path: .ci-source
+          sparse-checkout: plugins/miragon-brand
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: env.CI_SOURCE_TOKEN != ''
+        with:
+          node-version: 24
+
+      - name: The docs kit equals its source in the CI
+        if: env.CI_SOURCE_TOKEN != ''
+        run: node docs/.vitepress/miragon/check.mjs --ci .ci-source
+
+      # Rules and exceptions come from .miragon/brand.json.
+      - name: brand-lint (hard rules) on the docs site and the README
+        if: env.CI_SOURCE_TOKEN != ''
+        run: node .ci-source/plugins/miragon-brand/scripts/brand-lint.mjs --nur-hart docs README.md

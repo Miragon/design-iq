@@ -1,4 +1,4 @@
-# ADR 0002 — Multi-tenant SaaS: cell per tenant + thin control plane
+# ADR 0002. Multi-tenant SaaS: cell per tenant + thin control plane
 
 - **Status:** accepted (2026-07-10)
 - **Context:** SaaS-on-GitHub product direction; design adversarially reviewed
@@ -12,7 +12,7 @@ The Live Host is deliberately a **single-writer process**: Hocuspocus (Yjs
 collab, in-memory docs) + REST API + web app on one port, state in SQLite
 (sessions, Yjs lineages, repo registry) + git workspaces on a local Fly volume.
 As a _shared_ multi-tenant system this is a liability (scaling ceiling, noisy
-neighbours, blast radius). As **one cell per tenant** it is an asset — today's
+neighbours, blast radius). As **one cell per tenant** it is an asset: today's
 code already is almost the cell, and the GitHub App **installation (org) is the
 natural tenant boundary**. GitHub's per-installation rate limits, one-webhook-
 per-app model, and exact-match OAuth callback constraint all push toward the
@@ -27,7 +27,7 @@ exact pattern (subdomain router + `fly-replay` + volume-backed stateful cells).
 
 - Login (central GitHub App OAuth), tenant discovery via `GET /user/installations`,
   marketing, Stripe billing.
-- **Tenant directory** in _managed_ Postgres (not self-hosted Fly PG — it is the
+- **Tenant directory** in _managed_ Postgres (not self-hosted Fly PG: it is the
   fleet's availability keystone; Neon/Supabase/Fly Managed PG).
 - **Provisioner** (Fly Machines API) modelled as a **state machine** keyed on
   `installation_id`: `provisioning → ready → suspending → destroying`. Fly
@@ -36,11 +36,11 @@ exact pattern (subdomain router + `fly-replay` + volume-backed stateful cells).
   `X-GitHub-Delivery`. A **reconciler** diffs `GET /app/installations` and the
   Fly org's apps/volumes against the directory both ways (missing → provision,
   orphaned → alert/GC).
-- **Token-minting service** — the GitHub App **private key lives ONLY here**.
+- **Token-minting service**: the GitHub App **private key lives ONLY here**.
   Cells call `POST /internal/token` with their per-cell secret; the plane mints
   a 1h installation token **for that tenant's installation only**. This one
   component is **redundant** (2+ machines, stateless bar a directory read).
-- **Webhook receiver** (the app's single webhook URL) — verifies HMAC, routes
+- **Webhook receiver** (the app's single webhook URL): verifies HMAC, routes
   lifecycle events, forwards repo events to cells **re-signed with the per-cell
   secret** (cells never learn the app webhook secret). Webhooks are treated as
   an _optimization_, not the source of truth (see blocker W below).
@@ -70,48 +70,48 @@ exact pattern (subdomain router + `fly-replay` + volume-backed stateful cells).
   `collaborators/{username}/permission` (ADR 0001). Control plane routes; the
   cell authorizes and fails closed. A stale routing hint cannot grant access.
 
-## The load-bearing rules (from the adversarial review — do not skip)
+## The load-bearing rules (from the adversarial review, do not skip)
 
-**Blocker T — degraded mode must be explicit.** Token and authz caches are
+**Blocker T: degraded mode must be explicit.** Token and authz caches are
 in-memory today; auto-stop kills them. Persist the last installation token
 (encrypted) and last-known permission answers in the cell's SQLite so a woken
 cell serves existing users during a control-plane blip; refresh proactively at
 ~30 min; make the mint endpoint redundant. SLO: an N-minute control-plane
 outage must not disconnect active editors or lock out live sessions.
 
-**Blocker W — webhooks are lossy; the reconciler is the truth.** GitHub does
+**Blocker W: webhooks are lossy; the reconciler is the truth.** GitHub does
 NOT auto-retry failed deliveries. A missed `installation.created` = a paying
 customer never provisioned. Reconcile by polling `GET /app/installations`;
 replay `GET /app/hook/deliveries` on recovery; keep the cells' existing
 pull-based self-heal (`requestSync` on `/setup/installed` and `?refresh`).
 
-**Blocker U — per-cell SQLite needs a rollback path.** Introduce
+**Blocker U: per-cell SQLite needs a rollback path.** Introduce
 `PRAGMA user_version` schema versioning with expand/contract (version N+1 stays
 readable by N); deploy by image **digest**; volume snapshot before every
 migrating rollout; canary tenants first; orchestrator records image digest +
 schema version per tenant in the directory.
 
-**Major — `kill_timeout`.** Fly SIGKILLs 5 s after SIGTERM; our flush allows
+**Major: `kill_timeout`.** Fly SIGKILLs 5 s after SIGTERM; our flush allows
 itself 8 s. Set `kill_timeout = 30` in the cell fly.toml (fixed already, ADR-
-independent — it's a live data-loss bug today). Emit a "flush complete" metric
+independent: it's a live data-loss bug today). Emit a "flush complete" metric
 and alert on exit without it.
 
-**Major — durability.** A Fly volume is one NVMe slice on one host (daily
+**Major: durability.** A Fly volume is one NVMe slice on one host (daily
 snapshots, ~5-day retention). Stream-replicate each cell's live.db off-host
 (Litestream → Tigris/S3, per-tenant prefix); workspaces are reconstructible
 from lineages + a fresh clone. Provision volumes at 3–5 GB, alert at 80%.
 
-**Major — cost floor.** A forgotten browser tab holds a websocket → machine
+**Major: cost floor.** A forgotten browser tab holds a websocket → machine
 billed 24/7. Server-side idle disconnect after N minutes without edits;
 downsize cell VM; meter machine-seconds per tenant; keep a **shared cell as the
-permanent free tier**, dedicated cells for paid — turns the cost floor into an
+permanent free tier**, dedicated cells for paid; this turns the cost floor into an
 upgrade incentive.
 
-**Major — provisioning is non-transactional.** See the state-machine +
+**Major: provisioning is non-transactional.** See the state-machine +
 idempotency + reconciler decision above; reinstall-during-grace must cancel the
 pending destroy, not race it.
 
-**Major — observability before ~10 tenants.** Deep `/healthz` (SQLite write,
+**Major: observability before ~10 tenants.** Deep `/healthz` (SQLite write,
 disk free, token freshness); logs to one sink tagged by tenant; fleet dashboard
 from the directory; alerts (unhealthy-while-subscribed, mint failures,
 provisioning stuck, disk >80%, exit without flush); one synthetic canary tenant
@@ -125,7 +125,7 @@ auto-starts). Optionally isolate each cell on its own custom private network.
 Get Fly's per-org app quota (~20 default) raised before launch. Keep service
 concurrency type `connections` (not `requests`) so websockets keep cells awake.
 
-**Security nuance:** by default all apps in a Fly org share one 6PN network — a
+**Security nuance:** by default all apps in a Fly org share one 6PN network, so a
 compromised cell can reach other cells' ports. Either per-cell custom networks,
 or require the per-cell secret on every internal endpoint. The app key and
 other tenants' tokens are never exposed (they live only in the control plane).
@@ -134,19 +134,19 @@ other tenants' tokens are never exposed (they live only in the control plane).
 
 Built + tested offline (no GitHub, no Fly, no Stripe):
 
-- **Phase 1 — cell-ification:** done (tenant filter, app-side authz, TokenService
+- **Phase 1, cell-ification:** done (tenant filter, app-side authz, TokenService
   local/remote + degraded-mode persistence, handoff login).
-- **Phase 2 — control plane:** token minting (derived per-cell secrets), OAuth
+- **Phase 2, control plane:** token minting (derived per-cell secrets), OAuth
   login + `/user/installations` discovery + handoff, webhook receiver **+
   forwarding to cells** (re-signed per-cell), reconciler diff, **provisioner
   state machine** (Fly Machines `FlyProvisioner` env-gated + `FakeProvisioner`;
   `driveReconcile` idempotent + retry-safe) and a **reconciler loop**
   (`RECONCILE_INTERVAL_MS`).
-- **Phase 3 — auth-model migration:** done — **bot-authored releases** (ADR
+- **Phase 3, auth-model migration:** done; **bot-authored releases** (ADR
   0001), zero stored user tokens end to end.
-- **Phase 4 — ops:** deep `/healthz` (SQLite write + disk) on cell + control
+- **Phase 4, ops:** deep `/healthz` (SQLite write + disk) on cell + control
   plane. Litestream / fleet dashboard / synthetic canary: not yet.
-- **Phase 5 — commerce:** onboarding "setting up your workspace" page +
+- **Phase 5, commerce:** onboarding "setting up your workspace" page +
   `/api/tenant-state`; plan per tenant + entitlements map; Stripe webhook seam
   with real signature verification, **inert without `STRIPE_WEBHOOK_SECRET`**.
 
@@ -164,23 +164,23 @@ full offline E2E (`apps/control-plane/test/e2e.sh`) exercises the wire.
   workspace migrates by provisioning a fresh cell and reseeding lineages from
   git (the reconcile/dropState mechanism already embodies this). Tooling blocks
   migration while live docs or dirty diffs exist.
-- **Phase 1 — cell-ification (small, testable against today's image):**
+- **Phase 1, cell-ification (small, testable against today's image):**
   `TENANT_INSTALLATION_ID` filter, token-mint client, handoff-token login.
   Everything env-gated: with no new env, the cell behaves exactly as today.
-- **Phase 2 — control-plane MVP:** directory (managed PG), provisioner state
+- **Phase 2, control-plane MVP:** directory (managed PG), provisioner state
   machine, reconciler, router, redundant token minting.
-- **Phase 3 — auth-model migration (own milestone, ADR 0001):** drop
+- **Phase 3, auth-model migration (own milestone, ADR 0001):** drop
   `provider_token`, installation-token authz, bot-authored releases +
   attribution; grow the release-e2e harness a bot-authored variant first.
-- **Phase 4 — ops:** deep health, log sink, fleet dashboard, canary probe,
+- **Phase 4, ops:** deep health, log sink, fleet dashboard, canary probe,
   Litestream.
-- **Phase 5 — commerce:** Stripe, entitlements, self-service onboarding
+- **Phase 5, commerce:** Stripe, entitlements, self-service onboarding
   ("setting up your workspace" page polls cell health, then redirects).
 
 ## Consequences
 
 - Hard isolation per tenant (process, filesystem, DB, network optional),
-  clean deletion, per-region residency — strong enterprise/GDPR posture.
+  clean deletion, per-region residency: strong enterprise/GDPR posture.
 - Cost scales with _activity_, not tenant count; free tier is feasible via a
   shared cell.
 - The control plane becomes availability-critical for minting/login/webhooks;

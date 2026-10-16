@@ -1,15 +1,15 @@
-# ADR 0009 — Semantic BPMN editing through bpmn-cli
+# ADR 0009. Semantic BPMN editing through bpmn-cli
 
 - **Status:** accepted (2026-10-12), amended (2026-10-13, #248: the engine has no copy of
-  the save gate — see Consequences; 2026-10-14, #248: on bpmn-cli 0.7.0 a design model's
-  decision links keep the file's spelling — see decision 4); the tools stay opt-in
+  the save gate, see Consequences; 2026-10-14, #248: on bpmn-cli 0.7.0 a design model's
+  decision links keep the file's spelling, see decision 4); the tools stay opt-in
   (`LIVE_MCP_BPMN_EDIT=1`) until the A/B gate below has run with this engine
 - **Context:** issue [#236](https://github.com/Miragon/design-iq/issues/236), the follow-up
   to PR [#218](https://github.com/Miragon/design-iq/pull/218) (`@bpmiq/bpmn-edit`, an editor
   of its own on bpmn-moddle, unmerged; its ADR was numbered 0008, a number main has since
-  given the rename — #236 calls the A/B gate below "the ADR 0008 gate")
+  given the rename; #236 calls the A/B gate below "the ADR 0008 gate")
 - **Related:** [0003](0003-module-architecture-and-shared-packages.md) (the use-case sits in
-  `application/` with its I/O injected; the engine needs none — it is a function of the text),
+  `application/` with its I/O injected; the engine needs none: it is a function of the text),
   [0005](0005-in-process-mcp-and-oidc-resource-server.md) (the in-process `/mcp` the tools
   extend), [0006](0006-notation-plugins-and-structured-doc-shape.md) (BPMN stays a text room)
 
@@ -18,8 +18,8 @@
 An agent that changes a process through `save_bpmn_xml` rewrites the whole XML, BPMNDI
 included: it must compute coordinates, keep lanes, shapes and edges in sync, and send the
 file back in full. That costs tokens, fails often on the save gate (missing DI, dead ends)
-and moves shapes a person drew by hand. PR #218 proposed semantic tools instead — an
-outline without XML, operations on element ids, geometry computed by the platform — and an
+and moves shapes a person drew by hand. PR #218 proposed semantic tools instead (an
+outline without XML, operations on element ids, geometry computed by the platform) and an
 editor of its own to back them.
 
 Miragon's [bpmn-cli](https://github.com/Miragon/bpmn-cli) (`@miragon/bpmn-cli`, MIT) started
@@ -44,18 +44,18 @@ message flows). One shared engine is cheaper than two parallel BPMN editors.
 
 ## Decision
 
-1. **The engine is `@miragon/bpmn-cli`, an exactly pinned npm dependency of the live host**
-   — not a copy in this monorepo. Its core (`applyToXml`, `layoutXml`, `showXml`) is a
+1. **The engine is `@miragon/bpmn-cli`, an exactly pinned npm dependency of the live host**,
+   not a copy in this monorepo. Its core (`applyToXml`, `layoutXml`, `showXml`) is a
    browser-safe function of the text; a version bump is how fixes arrive (Dependabot opens
-   each bump as its own PR: a 0.x minor can change what agents see). Only the core is used —
+   each bump as its own PR: a 0.x minor can change what agents see). Only the core is used:
    `pnpm arch` (`bpmn-cli-core-only`) keeps out its `./node` entry, which writes files past
    the save gate. No `@designiq/bpmn-edit` package: the glue is live-host specific (content
    I/O, the save gate, error mapping), and a browser consumer would import the engine
    directly.
 2. **Three opt-in tools on `/mcp`** (`apps/live-host/src/application/bpmn-edit.ts`, wired in
    `http/mcp.ts`, registered with `LIVE_MCP_BPMN_EDIT=1`):
-   - `get_process_outline` (read; also on read-only hosts): the model as compact text — ids,
-     kinds, names, lanes, links, flows, problems — or one view of it (the neighbourhood of an
+   - `get_process_outline` (read; also on read-only hosts): the model as compact text (ids,
+     kinds, names, lanes, links, flows, problems) or one view of it (the neighbourhood of an
      element, an element in its context, one scope, a text search), plus the save gate's
      findings. No XML, no geometry.
    - `edit_process` (write): bpmn-cli's batch of operations (`add`, `connect`, `set`,
@@ -71,7 +71,7 @@ message flows). One shared engine is cheaper than two parallel BPMN editors.
    The tools are registered inline in `createLiveMcpServer`, not through its
    `LiveToolContribution` hook: a contribution runs after the server instructions are fixed
    and gets none of the presence-aware read and write, the path resolution or the shared
-   argument shapes the save tools use — the hook would have to grow all of them first.
+   argument shapes the save tools use. The hook would have to grow all of them first.
 
 3. **A hand-made diagram is kept.** bpmn-cli places new elements next to their neighbours
    and makes room like the modeler's space tool; a drawing the engine made itself, or none,
@@ -97,7 +97,7 @@ message flows). One shared engine is cheaper than two parallel BPMN editors.
    refusal for errors the document already had says so and how to go on (repair them in the
    same call, or `lint: "warn"`). A dry run asks the same gate (`checkContent`), so it never
    says ok to a save the gate refuses.
-6. **A concurrent change is re-applied, not returned** — the operations are semantic. The
+6. **A concurrent change is re-applied, not returned.** The operations are semantic. The
    tool takes the newer text, applies the operations again (three attempts in all) and notes
    it in the result; operations the co-editor's change made inapplicable come back as a
    conflict that says so. A call that must not apply twice (a retry after a timeout) pins
@@ -111,7 +111,7 @@ message flows). One shared engine is cheaper than two parallel BPMN editors.
 
 **Gate:** the tools stay opt-in until #218's A/B run (30 tasks, 5 repetitions: no loss in
 success, +20 pp success on large models, −50 % tokens on medium and large ones, no extra
-collateral, 0 hard defects) has run with this engine as its arm — arm A on a host without
+collateral, 0 hard defects) has run with this engine as its arm: arm A on a host without
 the flag, since the server instructions name the tools. #218's harness
 (`packages/bpmn-edit/bench/agent`) is not taken over; it moves next to the tools when the run
 is due. Until the gate passes the content repo's skills and the web app's "Implement" todo

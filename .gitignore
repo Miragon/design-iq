@@ -22,5 +22,7 @@ apps/vscode/out/
 apps/vscode/.vscode-test/
 process-documentation/.vitepress/cache/
 process-documentation/.vitepress/dist/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
 .oss-export
 .claude/logs/

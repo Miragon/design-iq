@@ -1,6 +1,6 @@
-# ADR 0005 — AI write access in-process: /mcp + content REST on the Live Host, OIDC resource server, no self-built AS
+# ADR 0005. AI write access in-process: /mcp + content REST on the Live Host, OIDC resource server, no self-built AS
 
-- **Status:** accepted (2026-07-24), amended (2026-08-03, 2026-08-04 and 2026-09-04 — see below);
+- **Status:** accepted (2026-07-24), amended (2026-08-03, 2026-08-04 and 2026-09-04, see below);
   the consequence "the web app's GitHub-OAuth login is untouched" is superseded by
   [ADR 0007](0007-idp-only-login-and-no-auth-mode.md) (2026-09-12): the IdP is the one login
 - **Context:** adversarially reviewed against a fully built alternative (a
@@ -13,23 +13,23 @@
 ## Context
 
 Agents need WRITE access to the live platform state: read a process, edit it,
-release it as a PR — the read-only `packages/mcp` server only covers checkouts.
+release it as a PR; the read-only `packages/mcp` server only covers checkouts.
 The first iteration was a **separate MCP server** (`apps/live-mcp`, never
 merged) built around two properties of the Live Host that were treated as
 immutable: _no REST for current content_ (read/edit only via the Hocuspocus
 Yjs room) and _a session id as the only credential_. Designing around them
 forced, in the separate process: a client-side Yjs session cache (per-principal
-warm WebSockets — with confirmed concurrency leaks, a ~10-minute authz
+warm WebSockets, with confirmed concurrency leaks, a ~10-minute authz
 staleness window, success-acks before the socket flush, and socket-budget
 collisions), plus a **session-mint endpoint** gated by a static broker secret
-so the MCP server could obtain downstream credentials — an identity-assertion
+so the MCP server could obtain downstream credentials: an identity-assertion
 oracle weaker than the platform's own signed handoff machinery, and a second
 credential system to operate.
 
 Both "immutable" properties are our own code. The MCP spec forbids forwarding
 the client's token downstream (token passthrough); GitHub cannot act as the
 authorization server for our API (opaque tokens, no audience binding, no DCR);
-and the user decision stands: **no self-built SSO/authorization server —
+and the user decision stands: **no self-built SSO/authorization server,
 anywhere**.
 
 ## Decision
@@ -45,7 +45,7 @@ anywhere**.
    **resource server**: it verifies `iss`/`aud`/`exp`/signature against the
    IdP's JWKS (`src/auth/oidc.ts`, `LIVE_OIDC_*` env) and maps the **login
    claim** (default `github_login`) to an identity. The claim must carry the
-   IdP-verified git-provider login; a token without it is refused — **fail
+   IdP-verified git-provider login; a token without it is refused: **fail
    closed**, deliberately no `preferred_username`/`sub` fallback (those are
    user-editable in many IdPs; a fallback would turn an IdP misconfiguration
    into impersonation of an arbitrary GitHub identity). RFC 9728 metadata +
@@ -53,20 +53,20 @@ anywhere**.
 
 3. **Content REST via server-side direct connections.** The Live Host exposes
    `GET/PUT /api/repos/:repo/content?path=` over the **same live Y.Doc** the
-   collaborative rooms edit (Hocuspocus `openDirectConnection` — no second
+   collaborative rooms edit (Hocuspocus `openDirectConnection`: no second
    data path, no second truth). PUT is validation-gated and **compare-and-set**
    on a content-derived token (a state-vector token would be blind to
    delete-only edits AND die on every doc unload/reseed; the ABA objection to
-   a content hash is neutralized by the minimal-diff writer — overwriting
+   a content hash is neutralized by the minimal-diff writer, as overwriting
    identical bytes is a no-op): a stale token returns the current content
    instead of overwriting. Authorization runs **per request** through the same
-   `canWrite` gate as every repo route — strictly stronger than the ws model's
+   `canWrite` gate as every repo route, which is strictly stronger than the ws model's
    authorize-once-at-socket-open.
 
 4. **/mcp lives in the Live Host process.** A stateless Streamable-HTTP
    endpoint on the official `@modelcontextprotocol/sdk`, one server instance
    per request, tools calling the application use-cases **in-process** with the
-   caller's session. No second deployable, no downstream hop — and therefore
+   caller's session. No second deployable, no downstream hop, and therefore
    **no session mint, no broker secret, no token exchange**: the passthrough
    problem dissolves because no downstream credential exists. In the cloud each
    cell serves its tenant's /mcp under the tenant URL (ADR 0002 isolation
@@ -75,7 +75,7 @@ anywhere**.
 
 5. **Authorization stays provider-native.** The JWT only authenticates. Whether
    an identity may touch a repository is still decided per (user, repo) against
-   real git-provider permissions (`AccessCache`, app-side installation check —
+   real git-provider permissions (`AccessCache`, app-side installation check;
    ADR 0001 unchanged); releases remain PRs whose merge rights live at the
    provider.
 
@@ -86,18 +86,18 @@ anywhere**.
   web app's GitHub-OAuth login is untouched; platform SSO for the _browser_
   (login via the same IdP) is the designated next step on the existing seam
   (docs/extending/sso.md).
-- The content REST surface benefits every future integration, not just MCP —
+- The content REST surface benefits every future integration, not just MCP,
   and eliminates the entire warm-socket client machinery class of defects.
 - **OIDC identities require the app-side authz path** (GitHub App connection
   source): a JWT session holds no user token, so the user-token fallback is
   structurally closed.
-- **Known cost — account linking:** identity mapping rides on the login claim.
+- **Known cost, account linking:** identity mapping rides on the login claim.
   An enterprise-SSO user _without_ a linked git-provider identity
   authenticates but sees no writable repositories until an explicit linking
   step exists (IdP account linking). Deliberately deferred; documented in
   docs/extending/sso.md step 4.
 - The Live Host absorbs JWT verification and the MCP protocol surface (larger
-  single-process blast radius) — bounded by the pinned official SDK, `jose`,
+  single-process blast radius), bounded by the pinned official SDK, `jose`,
   and per-request statelessness.
 - **Rejected alternatives:** the separate broker service (`apps/live-mcp`:
   second deployable, mint endpoint + static broker secret as a parallel
@@ -112,7 +112,7 @@ Re-evaluated after two facts changed:
 
 1. **The MCP spec deprecated DCR.** Revision 2026-07-28 orders client
    registration as: pre-registered client information first, Client ID
-   Metadata Documents second, DCR as a deprecated fallback — and states MCP
+   Metadata Documents second, DCR as a deprecated fallback. It also states MCP
    clients SHOULD accept static client credentials. Real customers run IdPs
    without DCR; that is now the spec's normal case, not a gap.
 2. **mcp-use re-checked (2026-07-31)** against its shipped server SDK: its
@@ -126,7 +126,7 @@ Re-evaluated after two facts changed:
 
 - **Pre-registration is the supported registration path** for DCR-less IdPs: a
   statically registered public client (PKCE, no secret) at the customer's IdP,
-  handed to clients out of band (`--client-id`, connector settings —
+  handed to clients out of band (`--client-id`, connector settings; see
   docs/extending/mcp-idp-setup.md). CIMD needs no Live Host work at any point:
   it is purely AS-side; capable clients adopt it on their own when the IdP
   does.
@@ -138,10 +138,10 @@ Re-evaluated after two facts changed:
 - **The resource-server surface was hardened for exact-match clients**
   (per-resource RFC 9728 metadata for `/mcp`, audience literal-set with
   trailing-slash twins, optional challenge scopes, CORS on the public auth
-  surface) — resource-server work, consistent with this ADR.
+  surface): resource-server work, consistent with this ADR.
 - **"No self-built AS — anywhere" is narrowed from an absolute to a
   conditional.** It holds because every known client×IdP combination is served
-  by pre-registration, CIMD, or a broker — and because a `/register`/token
+  by pre-registration, CIMD, or a broker, and because a `/register`/token
   endpoint would re-import the SSRF/confused-deputy attack class into the
   single-writer multi-tenant process this ADR shrank. **Trigger to revisit:**
   a named customer whose MCP client offers no static `client_id`, whose IdP
@@ -155,13 +155,13 @@ Re-evaluated after two facts changed:
 ## Amendment (2026-08-04): single-use ws tickets for the MCP-App widget
 
 The embedded modeler (MCP App, `open_modeler`) gained a live Hocuspocus/Yjs
-mode. The iframe holds no credential — bridge tool calls ride the host's
-authenticated backend, the OAuth token never reaches it — so the ws
+mode. The iframe holds no credential (bridge tool calls ride the host's
+authenticated backend, the OAuth token never reaches it), so the ws
 `onAuthenticate` gate (session id / dev token) was unreachable. Decision: a
 `mint_ws_ticket` tool issues a **single-use, room-bound ticket with a 60s
 TTL** (`application/ws-tickets.ts`), redeemed once in `onAuthenticate`.
 
-This is a deliberate, narrow exception to "no session mint" — and NOT the
+This is a deliberate, narrow exception to "no session mint", and NOT the
 broker mint this ADR rejected. The differences are the decision:
 
 | Rejected broker mint (`apps/live-mcp`) | ws ticket                                     |
@@ -177,21 +177,21 @@ window is far shorter than the AccessCache TTL, so no re-check on redeem. The
 tool is app-visibility, absent under `LIVE_MCP_READONLY=1`. The widget treats
 the whole path as progressive enhancement: if the host CSP does not honour
 `connectDomains` (claude.ai's enforcement is partially buggy as of 2026-08),
-it stays on the bridge-autosave fallback (`lint:"warn"` saves — the ws rooms'
+it stays on the bridge-autosave fallback (`lint:"warn"` saves: the ws rooms'
 trust level, which never gated live edits).
 
 Single-use stays single-use across reconnects: the provider's automatic
 reconnect re-sends the consumed ticket and can never re-authenticate, so the
 widget treats ANY post-upgrade ws drop as the death of the session. It then
-reconciles over the bridge — server still byte-equal to the session's last
+reconciles over the bridge. Server still byte-equal to the session's last
 replica: re-mint (the mint tool re-runs the write check) and resume live;
 diverged: a banner hands the choice to the user. The server never widens a
 ticket's lifetime to accommodate reconnects.
 
 _2026-09-04 (#156):_ the ticket tool is registered ONCE for the live-capable
 modeler widgets the web dist carries (bpmn, wardley, team-topology,
-event-storming — the DMN widget never mints), no longer inside the BPMN
-widget's block — bound, as before, to the first such widget's resource (bpmn
-when its bundle is present) — so a dist without the BPMN bundle still lets the
+event-storming; the DMN widget never mints), no longer inside the BPMN
+widget's block (bound, as before, to the first such widget's resource, bpmn
+when its bundle is present), so a dist without the BPMN bundle still lets the
 other widgets go live. Still app-visibility, still absent under
 `LIVE_MCP_READONLY=1` and without a served live-capable widget.

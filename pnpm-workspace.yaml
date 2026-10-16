@@ -2,6 +2,8 @@ packages:
   - "apps/*"
   - "apps/*/ui"
   - "packages/*"
+  # the docs site (VitePress), https://miragon.github.io/design-iq/
+  - "docs"
   # process-documentation is example CONTENT (designiq.yml + .bpmn), not a package
   # postinstall build scripts pnpm may run (blocked by default for security)
 allowBuilds:
@@ -22,3 +24,11 @@ minimumReleaseAgeExclude:
   - "@miragon/bpmn-cli@0.7.0"
   # its bpmnlint plugin, an exact dependency of 0.7.0 — 0.12.1 published the evening before
   - "@miragon/bpmnlint-plugin-rules@0.12.1"
+overrides:
+  # vitepress 1.6.4 (docs/) is the latest release and still requests vite
+  # ^5.4.14, which is stuck below the server.fs.deny bypass fix (>=6.4.3).
+  # Scoped to vitepress, so the vite of apps/web is untouched. The pin comes
+  # with the Miragon docs kit (Miragon/corporate-identity, skill docs-site),
+  # whose package.json template has it as npm "overrides"; under pnpm it
+  # lives here. It changes with a CI release of the kit.
+  vitepress>vite: 6.4.3

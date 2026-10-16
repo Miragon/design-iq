@@ -1,0 +1,80 @@
+name: Docs
+
+# The docs (docs/) as a VitePress site on GitHub Pages: https://miragon.github.io/design-iq/.
+# A pull request that touches docs/ checks the vendored Miragon docs kit and builds the site
+# (VitePress fails the build on a dead link). A push to main also deploys it.
+# Template from Miragon/corporate-identity (skill docs-site), with the pnpm steps of this
+# workspace: docs/ is the package @designiq/docs.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+# No permissions by default; each job asks for what it needs.
+permissions: {}
+
+jobs:
+  build:
+    name: Build the docs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The full history: VitePress reads "last updated" from git.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The kit in docs/.vitepress/miragon/ and the logos in docs/public/logo/ come unchanged
+      # from the corporate identity. Fails when someone edited them in this repo.
+      - name: Check the Miragon docs kit
+        run: node .vitepress/miragon/check.mjs
+        working-directory: docs
+
+      - run: pnpm --filter @designiq/docs build
+        env:
+          # Project pages are served under /<repo>/; the kit sets VitePress' base from it.
+          DOCS_BASE: /design-iq/
+
+      - if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    # One deploy at a time; a queued deploy finishes instead of being cancelled.
+    # Builds of pull requests never wait for it.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

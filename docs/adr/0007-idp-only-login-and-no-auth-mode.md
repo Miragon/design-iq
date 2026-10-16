@@ -1,17 +1,17 @@
-# ADR 0007 — One login: the IdP everywhere, an explicit no-auth mode, GitHub OAuth login and the dev token retired
+# ADR 0007. One login: the IdP everywhere, an explicit no-auth mode, GitHub OAuth login and the dev token retired
 
 - **Status:** accepted (2026-09-12); implemented 2026-09-13 in the three stacked
-  PRs of the Rollout (#175, #176, #177) — the exit criterion is met by
+  PRs of the Rollout (#175, #176, #177); the exit criterion is met by
   `apps/live-host/test/keycloak-e2e.sh` (16/16 against the shipped realm)
 - **Context:** an inventory of every credential the Live Host accepts (verified
   against `main` at c232f7c, 2026-09-12), the product decision to keep ONE
   login, and two months of operating ADR 0005's two-entrance design
 - **Related:** [0001](0001-zero-stored-user-tokens.md) (zero stored user
-  tokens — reaches its target state here), [0005](0005-in-process-mcp-and-oidc-resource-server.md)
-  (OIDC resource server — its consequence "the web app's GitHub-OAuth login is
+  tokens, which reaches its target state here), [0005](0005-in-process-mcp-and-oidc-resource-server.md)
+  (OIDC resource server; its consequence "the web app's GitHub-OAuth login is
   untouched" is superseded), [0002](0002-multi-tenant-cell-architecture.md)
   (cells already run OIDC-only; unchanged), [0004](0004-open-source-split.md)
-  (one artifact — the on-prem quickstart changes)
+  (one artifact: the on-prem quickstart changes)
 
 ## Context
 
@@ -20,15 +20,15 @@
 One funnel (`sessionOf` in `http/api.ts`, `onAuthenticate` in
 `application/collab.ts`) resolves a principal from seven credentials:
 
-| Credential                                                                 | Presented by                            | Why it exists                                                         |
-| -------------------------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
-| session id — cookie `bpm_live_sid`, `Authorization: Bearer <id>`, ws token | browser, VS Code, ws rooms              | the credential every login ends in; one value, three transports       |
-| OIDC access token (JWT bearer)                                             | MCP clients, CI                         | ADR 0005: GitHub cannot be the authorization server for our API       |
-| dev token (`LIVE_DEV_TOKEN`, default `demo` when nothing is configured)    | tests, guest-test, the VS Code default  | bootstrap shortcut; bypasses per-repo authorization                   |
-| ws ticket (single-use, 60 s, one room)                                     | the MCP-App widget iframe               | the iframe holds no cookie and no JWT (ADR 0005 amendment 2026-08-04) |
-| login code (single-use, 60 s, `POST /auth/exchange`)                       | editor sign-in                          | the browser callback cannot set a cookie in the editor (#170)         |
-| pasted session token                                                       | VS Code against cells on an older image | deploy workaround (#173)                                              |
-| `CELL_SECRET` as health bearer, webhook HMAC, token-mint credential        | control plane, GitHub                   | machine-to-machine; out of scope here                                 |
+| Credential                                                                | Presented by                            | Why it exists                                                         |
+| ------------------------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
+| session id: cookie `bpm_live_sid`, `Authorization: Bearer <id>`, ws token | browser, VS Code, ws rooms              | the credential every login ends in; one value, three transports       |
+| OIDC access token (JWT bearer)                                            | MCP clients, CI                         | ADR 0005: GitHub cannot be the authorization server for our API       |
+| dev token (`LIVE_DEV_TOKEN`, default `demo` when nothing is configured)   | tests, guest-test, the VS Code default  | bootstrap shortcut; bypasses per-repo authorization                   |
+| ws ticket (single-use, 60 s, one room)                                    | the MCP-App widget iframe               | the iframe holds no cookie and no JWT (ADR 0005 amendment 2026-08-04) |
+| login code (single-use, 60 s, `POST /auth/exchange`)                      | editor sign-in                          | the browser callback cannot set a cookie in the editor (#170)         |
+| pasted session token                                                      | VS Code against cells on an older image | deploy workaround (#173)                                              |
+| `CELL_SECRET` as health bearer, webhook HMAC, token-mint credential       | control plane, GitHub                   | machine-to-machine; out of scope here                                 |
 
 And two ways a session comes into existence, both OAuth 2 authorization-code
 flows: **GitHub OAuth** (`/auth/github`, GitHub App user-to-server tokens) and
@@ -41,12 +41,12 @@ multiplicity is not in the logins. It comes from three sources:
    `GitProvider.checkRepoAccess` (`AccessCache` path 2); an OIDC session is
    identity-only and can only be authorized app-side (installation token,
    path 1). ADR 0001 named the token-less session as the target state two
-   months ago; the GitHub login is why it was never reached — `release.ts`
+   months ago; the GitHub login is why it was never reached: `release.ts`
    still falls back to `session.providerToken`, `access.ts` still refreshes
    user grants.
 2. **Boundaries a cookie cannot cross** (iframe, editor URI scheme) produced two
    one-time-code stores of the same shape (`ws-tickets.ts`, `login-codes.ts`).
-   These are transport, not authentication — they stay.
+   These are transport, not authentication. They stay.
 3. **Bootstrap shortcuts that stuck.** The dev token was the M0 spike's
    identity. It is still the VS Code extension's default
    (`bpmLive.token: "demo"`), the guest script's default, and the credential of
@@ -57,7 +57,7 @@ multiplicity is not in the logins. It comes from three sources:
 
 With nothing configured the server already runs without authentication: the
 dev token defaults to `demo` and every headless client gets all-repos access.
-The web app, however, is locked out — `/api/me` answers 401 without a cookie
+The web app, however, is locked out: `/api/me` answers 401 without a cookie
 and the login page has no button ("This instance is not connected to GitHub
 yet"). The mode exists for machines only, and it is entered _implicitly_: the
 guard against "GitHub App configured, login pending, private repos exposed"
@@ -67,7 +67,7 @@ inferred from what is missing.
 ### What the IdP requirement already implies
 
 ADR 0005 made an IdP the operating prerequisite for remote AI clients. Every
-deployment that talks to an agent — the product's reason to exist — runs an
+deployment that talks to an agent (the product's reason to exist) runs an
 IdP already. The GitHub login therefore only serves deployments that never
 connect an AI client, at the price of the second session shape, the stored
 user tokens, a second OAuth client to register and rotate, and
@@ -91,19 +91,19 @@ host kept it for the zero-prerequisite quickstart.
      the error. This replaces the implicit dev-token default and the guard
      around it.
 
-2. **`none` mode is one principal, not a token.** Every request — cookie or
-   not, bearer or not, any ws token — resolves to the local principal: login
+2. **`none` mode is one principal, not a token.** Every request (cookie or
+   not, bearer or not, any ws token) resolves to the local principal: login
    `LIVE_LOCAL_USER`, else the OS user name; provider `local`; no avatar.
    `canWrite` is true for every repository the registry knows: the static
    `GITHUB_REPO` checkout, or the App's installations when an App is configured
-   (allowed — a trusted-network single-team host; releases are then
+   (allowed: a trusted-network single-team host; releases are then
    bot-authored with the local principal as git author, so `LIVE_LOCAL_USER`
    should be the person's GitHub login). `/mcp` answers without a bearer; no
    protected-resource metadata, no `WWW-Authenticate`. `/api/config` reports
    `auth: "none" | "oidc"`; the web client never renders the login page and
    hides logout; the VS Code extension probes `/api/me` unauthenticated and
    skips sign-in when it answers. Clients keep sending the `wsToken` from
-   `/api/me` unchanged — in `none` mode it is an opaque constant and the ws
+   `/api/me` unchanged; in `none` mode it is an opaque constant and the ws
    join accepts any value. Startup logs one loud line.
 
 3. **The dev token is retired.** `LIVE_DEV_TOKEN`, `devUser`, the `demo`
@@ -114,7 +114,7 @@ host kept it for the zero-prerequisite quickstart.
    as a second entrance.
 
 4. **GitHub OAuth login is removed.** `/auth/:provider` and its callback,
-   including the install-initiated branch — `request_oauth_on_install` goes to
+   including the install-initiated branch; `request_oauth_on_install` goes to
    `false` in the manifest; `/setup/installed` already is the login-free
    post-install landing. `GitProvider` loses `label`, `authorizeUrl`,
    `exchangeCode`, `refreshGrant`, `fetchUser`, `checkRepoAccess` and keeps
@@ -123,7 +123,7 @@ host kept it for the zero-prerequisite quickstart.
    `LIVE_PUSH_URL_OVERRIDE` test hatch stays). `GITHUB_CLIENT_ID` /
    `GITHUB_CLIENT_SECRET` are no longer read; `create-app` stops writing them
    (installation tokens use the App id + private key). `@bpmiq/github-app/oauth`
-   loses its last consumer and is deleted — the control plane dropped it in
+   loses its last consumer and is deleted. The control plane dropped it in
    cloud PR #24; confirm before the vendor bump.
 
 5. **Sessions are identity-only, everywhere.** `provider_token`,
@@ -149,22 +149,22 @@ host kept it for the zero-prerequisite quickstart.
   the injected local principal (`auth/none.ts`) and otherwise run the OIDC
   contract (`auth/oidc.ts`). A future trusted-proxy mode (`X-Forwarded-User`
   behind oauth2-proxy) would be a third source of the principal behind the
-  same two seams — deferred until a customer asks.
+  same two seams. It is deferred until a customer asks.
 - **`none` mode is gated against the browser's other tabs.** A none-mode host
   on a developer's machine is reachable from every page that browser visits,
   so a request a browser labels as coming from another site (Fetch Metadata
   `Sec-Fetch-Site: cross-site`, or an `Origin` that is not the host's) is
-  nobody, not the local principal — at the REST routes, `/mcp` and the
+  nobody, not the local principal. This holds at the REST routes, `/mcp` and the
   websocket join (a widget ticket still lets the MCP-App iframe in). Non-browser
   clients send neither header and are unaffected; same-site pages (another
   port of the same host) are allowed on purpose.
-- **`none` mode has one identity — literally.** Every human and every agent
+- **`none` mode has one identity, literally.** Every human and every agent
   is the same login, so what keys on the login collapses: room presence marks
   every peer as `you`, and agent-presence leases (one per room and login)
   merge concurrent MCP clients into one marker. Inherent to the mode, not a
   defect to fix; a team that needs told-apart people runs `oidc`. The same
   holds for the start page's favorites and recently opened repositories
-  (#213): keyed on the login, they are shared host-wide in `none` mode — and
+  (#213): keyed on the login, they are shared host-wide in `none` mode, and
   kept apart from an IdP login of the same name by the `local:` provider prefix.
 - **The on-prem quickstart changes hands.** Today: register a GitHub App,
   paste five values, sign in with GitHub. Tomorrow: the same App **plus** an
@@ -175,7 +175,7 @@ host kept it for the zero-prerequisite quickstart.
   a public PKCE client for the web login with redirect
   `<LIVE_PUBLIC_URL>/auth/oidc/callback`, a client for MCP), verified
   end-to-end before the docs claim it. Evaluation without any IdP is
-  `LIVE_AUTH=none` — what the bare spike was for, now with the web app
+  `LIVE_AUTH=none`, what the bare spike was for, now with the web app
   included.
 - **Breaking release.** Removed env vars (`LIVE_DEV_TOKEN`,
   `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`), removed routes
@@ -190,14 +190,14 @@ host kept it for the zero-prerequisite quickstart.
   with `LIVE_AUTH=none`; `session-crypt.test.ts` goes; `access.test.ts` loses
   its path-2 cases; tests that need a named, authenticated identity use the
   in-process OIDC test IdP already in `oidc.test.ts` (local JWKS + `SignJWT`).
-  `oauth-state.test.ts` stays — the state HMAC guards the OIDC flow.
+  `oauth-state.test.ts` stays: the state HMAC guards the OIDC flow.
 - **Cloud.** Cells already run `oidc` mode by construction; `GITHUB_CLIENT_*`
   in the cell env become dead values to clean up in the provisioner
   (bpm-iq-cloud, later). `LIVE_AUTH` defaults to `oidc`, so the switch needs
   no cell env change.
 - **Attribution.** Release commits keep deriving the noreply address from the
   git provider (`<login>@users.noreply.github.com`), not from the session's
-  provider — unchanged. In `none` mode the login is whatever
+  provider (unchanged). In `none` mode the login is whatever
   `LIVE_LOCAL_USER` says; in a container the OS fallback is `root`/`node`, so
   the variable is documented as expected, not optional.
 
@@ -205,7 +205,7 @@ host kept it for the zero-prerequisite quickstart.
 
 - **Keep GitHub OAuth as a third mode ("login without IdP").** Keeps two
   session shapes, two authorization paths, stored user tokens and a second
-  OAuth client — for deployments that by ADR 0005 cannot connect an AI client.
+  OAuth client, for deployments that by ADR 0005 cannot connect an AI client.
   The IdP requirement is already the product's shape; the third mode only
   postponed it.
 - **Keep the dev token next to `none` mode.** An unverified bearer is theater
@@ -222,18 +222,18 @@ host kept it for the zero-prerequisite quickstart.
 
 Three stacked PRs on `main`, one major release:
 
-1. **`none` mode replaces the dev token** — `LIVE_AUTH`, the principal
+1. **`none` mode replaces the dev token:** `LIVE_AUTH`, the principal
    resolver, `/api/config.auth`, web + VS Code adaptation, tests and scripts on
    `LIVE_AUTH=none`, `LIVE_DEV_TOKEN` removed. BREAKING for dev-token users.
-2. **GitHub OAuth login and stored user tokens removed** — routes, port,
+2. **GitHub OAuth login and stored user tokens removed:** routes, port,
    `AccessCache` path 2, session columns + cipher, client credentials,
    `github-app/oauth`, manifest flag, `oidc` mode prerequisites. BREAKING.
-3. **Docs + Keycloak quickstart** — `deploy/keycloak/`,
+3. **Docs + Keycloak quickstart:** `deploy/keycloak/`,
    `docs/on-prem/idp-quickstart.md`, rewritten modes/config/README/sso pages,
    `.env.example`.
 
 PR 3's end-to-end verification (fresh host, Keycloak realm import, browser
-login, MCP bearer, one release) is the exit criterion for the release — met
+login, MCP bearer, one release) is the exit criterion for the release. It was met
 2026-09-13: `apps/live-host/test/keycloak-e2e.sh` proves the prerequisite
 check, the browser login through Keycloak's form, an MCP bearer at `/api/me`
 and `/mcp`, a release with human attribution, and fail-closed refusal of a

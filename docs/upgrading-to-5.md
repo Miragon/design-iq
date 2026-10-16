@@ -1,4 +1,4 @@
-# Upgrading to 5.0 — the rename to designIQ
+# Upgrading to 5.0: the rename to designIQ
 
 5.0 renames the product to **designIQ** (repository
 [Miragon/design-iq](https://github.com/Miragon/design-iq)); the server keeps its name, the
@@ -10,7 +10,7 @@ changes are the names the platform publishes and writes. Rationale:
 ## Order
 
 1. Bring every Live Host, CI validator and read-only MCP server that works on the same
-   repositories to **4.3.1 or later** first — 4.3.x already reads the contract file and the
+   repositories to **4.3.1 or later** first: 4.3.x already reads the contract file and the
    todo wording 5.0 writes. A host that shares its repositories with no other host can go
    from any 4.x straight to 5.0.
 2. Upgrade to 5.0 (below).
@@ -24,9 +24,9 @@ changes are the names the platform publishes and writes. Rationale:
 | version variable (compose) | `BPMIQ_VERSION` <!-- legacy-name-ok -->                   | `DESIGNIQ_VERSION` (`BPMIQ_VERSION` is still read; `DESIGNIQ_VERSION` wins) <!-- legacy-name-ok --> |
 
 - The old image name is **no longer published**; 4.3.1 is its last release. A compose file,
-  `docker run` or manifest that keeps it raises no error — it silently stays on 4.3.1,
+  `docker run` or manifest that keeps it raises no error; it silently stays on 4.3.1,
   `:latest` included. Change the `image:` line, or take the new
-  [`deploy/docker-compose.yml`](../deploy/docker-compose.yml).
+  [`deploy/docker-compose.yml`](https://github.com/Miragon/design-iq/blob/main/deploy/docker-compose.yml).
 - The new name starts at 5.0.0; earlier releases exist under the old name only. With the
   new compose file an existing `BPMIQ_VERSION=v4.x` pin asks for a tag the new image does <!-- legacy-name-ok -->
   not have: set `DESIGNIQ_VERSION=v5.0.0` (or later) and delete the old line.
@@ -40,7 +40,7 @@ changes are the names the platform publishes and writes. Rationale:
 The browser session and login cookies are renamed (`bpm_live_sid`, `bpm_live_oauth`, <!-- legacy-name-ok -->
 `bpm_live_pkce`, `bpm_live_editor` → `designiq_sid`, `designiq_oauth`, `designiq_pkce`, <!-- legacy-name-ok -->
 `designiq_editor`), and 5.0 reads only the new names: every browser is signed out once. A
-sign-in that is in flight during the deploy fails its state check — start it again. Bearer
+sign-in that is in flight during the deploy fails its state check. Start it again. Bearer
 tokens (MCP clients, CI) are not affected.
 
 ## Keycloak quickstart
@@ -55,16 +55,16 @@ The realm shipped in `deploy/keycloak/` is renamed:
 | MCP client     | `bpmiq-mcp` <!-- legacy-name-ok -->        | `designiq-mcp`        |
 | audience       | `bpmiq` <!-- legacy-name-ok -->            | `designiq`            |
 
-The Live Host does not care what the realm is called — it only reads `LIVE_OIDC_*`. Choose:
+The Live Host does not care what the realm is called; it only reads `LIVE_OIDC_*`. Choose:
 
 - **Keep your realm** (do this when it holds real users): leave `.env` as it is and keep
-  importing your own realm file — mount it where the compose file now mounts
+  importing your own realm file: mount it where the compose file now mounts
   `realm-designiq.json`, or stop importing if your Keycloak keeps a database.
 - **Move to the new realm:** in `.env`, point `LIVE_OIDC_ISSUER`, `LIVE_OIDC_JWKS_URL`,
   `LIVE_OIDC_AUTHORIZE_URL` and `LIVE_OIDC_TOKEN_URL` at `…/realms/designiq/…`, set
   `LIVE_OIDC_AUDIENCE=designiq` and `LIVE_OIDC_CLIENT_ID=designiq-web`, and re-add MCP
   clients with `--client-id designiq-mcp`. The shipped dev-mode Keycloak keeps no state, so
-  it imports the new realm on restart with the demo users only — set `github_login` on your
+  it imports the new realm on restart with the demo users only. Set `github_login` on your
   own users again, and repeat your realm edits: the redirect URI and web origin of
   `designiq-web` and the MCP callbacks of `designiq-mcp`
   ([idp-quickstart §6](on-prem/idp-quickstart.md#6-beyond-localhost)), and the GitHub
@@ -75,10 +75,10 @@ The Live Host does not care what the realm is called — it only reads `LIVE_OID
 ## Content repos: `designiq.yml`
 
 - `designiq.yml` is now the documented contract file. The legacy name `bpmiq.yml` stays
-  readable for good, and so does the key `processes:` — nothing breaks if you keep it.
+  readable for good, and so does the key `processes:`; nothing breaks if you keep it.
 - To rename, finish the [order](#order) above first (older versions read only the legacy
   name), then `git mv bpmiq.yml designiq.yml` and add `/designiq.yml` to `CODEOWNERS`
-  wherever `/bpmiq.yml` is listed — the file decides what the platform serves. Do not keep
+  wherever `/bpmiq.yml` is listed, because the file decides what the platform serves. Do not keep
   both files naming different folders: `designiq.yml` wins and the validator warns.
 - The validator warns on a repo that carries only the legacy name:
   `[WARN] bpmiq.yml: legacy contract file name — rename it to designiq.yml (git mv bpmiq.yml designiq.yml); still read`.
@@ -97,11 +97,11 @@ The Live Host does not care what the realm is called — it only reads `LIVE_OID
 
 Run them as `npx @miragon/design-iq-validator --root .` and `npx @miragon/design-iq-mcp --root <path>`. The
 old env names are still read; when both are set, `DESIGNIQ_*` wins. The MCP bin is
-`designiq-mcp-server`, not `designiq-mcp` — that bare name belongs to an unrelated npm
+`designiq-mcp-server`, not `designiq-mcp`; that bare name belongs to an unrelated npm
 package.
 
 `@bpmiq/validator` and `@bpmiq/mcp` get no release after 4.3.1 and are deprecated with a <!-- legacy-name-ok -->
-pointer to the new names. An unpinned `npx @bpmiq/…` raises no error — it silently stays on <!-- legacy-name-ok -->
+pointer to the new names. An unpinned `npx @bpmiq/…` raises no error; it silently stays on <!-- legacy-name-ok -->
 4.3.1, so change the package name in CI and MCP client configs.
 
 ## MCP connectors
@@ -121,16 +121,16 @@ the suggested Live Host alias `designiq`, so a local `claude mcp add … designi
 
 The extension (side-loaded, never on the Marketplace) is renamed:
 
-- id `miragon-gmbh.design-iq` (was `miragon-gmbh.bpm-live`) — uninstall the old build; <!-- legacy-name-ok -->
-- documents `designiq:/<owner>/<repo>/<path>` (was `bpm-live:/…`) — editors restored with <!-- legacy-name-ok -->
+- id `miragon-gmbh.design-iq` (was `miragon-gmbh.bpm-live`): uninstall the old build; <!-- legacy-name-ok -->
+- documents `designiq:/<owner>/<repo>/<path>` (was `bpm-live:/…`): editors restored with <!-- legacy-name-ok -->
   the old scheme no longer open; reopen them with **designIQ: Open Live Model**;
-- setting `designiq.serverUrl` — a `bpmLive.serverUrl` value in user or workspace settings <!-- legacy-name-ok -->
+- setting `designiq.serverUrl`: a `bpmLive.serverUrl` value in user or workspace settings <!-- legacy-name-ok -->
   is copied once on the first start (never over a value already set); delete the old key
   afterwards;
 - commands `designiq.*`, shown as **designIQ: …** in the palette.
 
 Sign in again: the stored session belongs to the old extension id. The browser sign-in needs
-a 5.0 host **and** a 5.0 extension — the host sends the callback to the extension id it
+a 5.0 host **and** a 5.0 extension: the host sends the callback to the extension id it
 knows. Against a mixed pair, use **designIQ: Sign in with a session token…**.
 
 ## GitHub App
@@ -144,13 +144,13 @@ unique across all of GitHub). Existing apps, their names and slugs are untouched
 - **Todos** filed by 5.0 end with "_Created from the designIQ live model by @…_" (close
   comments: "_Closed from …_"). Hosts from 4.3.1 on read both wordings; an older host on the
   same repo shows the line as part of the todo text. Labels the host creates get designIQ
-  descriptions; existing `todo` and `process:*` labels keep theirs — edit them in GitHub if
+  descriptions; existing `todo` and `process:*` labels keep theirs; edit them in GitHub if
   you like.
 - **Release PRs** say "opened by designIQ on behalf of the releaser".
 - **"Not a content repo"** now reads
   `<repo> has no usable designiq.yml (or legacy bpmiq.yml) at its root — not a content repo`
   in the Live Host's API and MCP errors and its boot line; the read-only MCP server and the
-  CLIs (`pnpm validate`) word it alike. Codes and statuses are unchanged — match on the code
+  CLIs (`pnpm validate`) word it alike. Codes and statuses are unchanged: match on the code
   (`content/not-a-content-repo`, …), not on the text.
 - **Web app**: the product name reads designIQ, the BPMN header toggle for t.BPM workshop
   mode is labelled "Workshop" (files are unchanged), and the cached repo list reloads once.
