@@ -1,0 +1,177 @@
+/**
+ * The Markdown view's pure renderer (src/notations/markdown/render.ts):
+ * CommonMark plus the GFM extensions, heading anchors, the escaping of
+ * untrusted content, links between the models of a repository and the fence
+ * hook a diagram renderer plugs into. The DOM half (DOMPurify, clicks,
+ * scrolling) lives in markdown-view.ts.
+ */
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  anchorId,
+  classifyHref,
+  type FenceInfo,
+  modelRoute,
+  renderMarkdown,
+  resolveRepoPath,
+  slugify,
+} from "../src/notations/markdown/render.ts";
+
+const REPO = "acme/models";
+const DOC = "docs/use-cases/bike-leasing/feature-map/feature-map.md";
+const render = (source: string, fences = {}) => renderMarkdown(source, { repo: REPO, docPath: DOC, fences });
+
+test("headings get GitHub-style slugs as prefixed anchor ids, numbered when repeated", () => {
+  const html = render("# Bike Leasing: the Process\n\n## Open `items`?\n\n## Intro\n\n## Intro\n\n## Über uns");
+  assert.match(html, /<h1 id="md-bike-leasing-the-process">Bike Leasing: the Process<\/h1>/);
+  assert.match(html, /<h2 id="md-open-items">Open <code>items<\/code>\?<\/h2>/);
+  assert.match(html, /<h2 id="md-intro">Intro<\/h2>/);
+  assert.match(html, /<h2 id="md-intro-1">Intro<\/h2>/);
+  assert.match(html, /<h2 id="md-über-uns">/);
+  assert.equal(slugify("  Rules & Gateways (v2)  "), "rules--gateways-v2");
+  assert.equal(anchorId("intro"), "md-intro");
+});
+
+test("GFM tables render with a header row and alignment as a class, never a style", () => {
+  const html = render("| Step | Owner | Days |\n|:--|:-:|--:|\n| Check | Sales | 2 |");
+  assert.match(html, /<table>\s*<thead>\s*<tr>\s*<th class="align-left">Step<\/th>/);
+  assert.match(html, /<th class="align-center">Owner<\/th>/);
+  assert.match(html, /<tbody>\s*<tr>\s*<td class="align-left">Check<\/td>/);
+  assert.match(html, /<td class="align-right">2<\/td>/);
+  assert.doesNotMatch(html, /style=/);
+});
+
+test("task lists, strikethrough and autolinks follow GFM", () => {
+  const html = render(
+    "- [ ] open\n- [x] done\n- plain\n\n~~gone~~ https://example.com www.miragon.io mail@example.com",
+  );
+  assert.match(html, /<ul class="contains-task-list">/);
+  assert.match(
+    html,
+    /<li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled> open<\/li>/,
+  );
+  assert.match(html, /<input type="checkbox" class="task-list-item-checkbox" disabled checked> done/);
+  assert.match(html, /<li>plain<\/li>/);
+  assert.match(html, /<s>gone<\/s>/);
+  assert.match(html, /<a href="https:\/\/example.com" target="_blank" rel="noopener noreferrer">/);
+  assert.match(html, /<a href="http:\/\/www.miragon.io" target="_blank" rel="noopener noreferrer">www.miragon.io<\/a>/);
+  assert.match(html, /<a href="mailto:mail@example.com">mail@example.com<\/a>/);
+});
+
+test("file names are not autolinked although their extension reads as a top-level domain", () => {
+  const html = render("Edit README.md and feature-map.md, then run setup.sh.");
+  assert.doesNotMatch(html, /<a /);
+});
+
+test("raw HTML is escaped, never passed through", () => {
+  const html = render(
+    '<script>alert(1)</script>\n\nText <img src=x onerror="alert(1)"> and <a href="javascript:alert(1)">x</a>',
+  );
+  assert.doesNotMatch(html, /<script|<img|<a /);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(html, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
+});
+
+test("javascript:, vbscript: and data: links are neutralised", () => {
+  const html = render(
+    "[a](javascript:alert(1)) [b](JAVASCRIPT:alert(1)) [c](vbscript:msgbox) [d](data:text/html;base64,PHNjcmlwdD4=)\n\n" +
+      "![e](javascript:alert(1)) <javascript:alert(1)>",
+  );
+  assert.doesNotMatch(html, /href=|src=/);
+  assert.match(html, /\[a\]\(javascript:alert\(1\)\)/);
+});
+
+test("a relative link to another model becomes its in-app route, #section included", () => {
+  const html = render(
+    "[process](../process/executable-process.md#Gateway-rules) [map](./bike-leasing-feature-map.bpmn) " +
+      "[root](/docs/glossary.md) [spaced](../process/my%20notes.md)",
+  );
+  assert.match(
+    html,
+    /<a href="\/r\/acme\/models\/f\/docs\/use-cases\/bike-leasing\/process\/executable-process.md#Gateway-rules" data-model-path="docs\/use-cases\/bike-leasing\/process\/executable-process.md">process<\/a>/,
+  );
+  assert.match(
+    html,
+    /href="\/r\/acme\/models\/f\/docs\/use-cases\/bike-leasing\/feature-map\/bike-leasing-feature-map.bpmn" data-model-path="[^"]+">map</,
+  );
+  assert.match(html, /href="\/r\/acme\/models\/f\/docs\/glossary.md"/);
+  assert.match(html, /href="\/r\/acme\/models\/f\/docs\/use-cases\/bike-leasing\/process\/my%20notes.md"/);
+  assert.match(html, /data-model-path="docs\/use-cases\/bike-leasing\/process\/my notes.md"/);
+  assert.doesNotMatch(html, /target=/);
+});
+
+test("in-page anchors stay anchors, a link to the document itself too", () => {
+  const html = render("[up](#scope) [self](./feature-map.md#open-points) [top](feature-map.md)");
+  assert.match(html, /<a href="#scope">up<\/a>/);
+  assert.match(html, /<a href="#open-points">self<\/a>/);
+  assert.match(html, /<a href="#">top<\/a>/);
+});
+
+test("a link to a file designIQ does not open is marked text, not a dead link", () => {
+  const html = render("[source](../../../../service/App.kt) [adrs](../../../adr/) [escape](../../../../../../x.md)");
+  assert.doesNotMatch(html, /<a /);
+  assert.match(
+    html,
+    /<span class="md-link-unavailable" title="service\/App.kt is not a model, so it does not open in designIQ">source<\/span>/,
+  );
+  assert.match(html, /title="docs\/adr\/ is not a model, so it does not open in designIQ">adrs</);
+  assert.match(html, /title="This link points outside the repository">escape</);
+});
+
+test("link targets classify and resolve against the document's folder", () => {
+  assert.deepEqual(classifyHref("../process/x.md#a", DOC), {
+    kind: "model",
+    path: "docs/use-cases/bike-leasing/process/x.md",
+    fragment: "a",
+  });
+  assert.deepEqual(classifyHref("#%C3%BCber", DOC), { kind: "anchor", fragment: "über" });
+  assert.deepEqual(classifyHref("//cdn.example.com/x", DOC), { kind: "external" });
+  assert.deepEqual(classifyHref("mailto:a@b.c", DOC), { kind: "other" });
+  assert.equal(resolveRepoPath("./a/../b.md", "docs/x.md"), "docs/b.md");
+  assert.equal(resolveRepoPath("/top.md", "docs/deep/x.md"), "top.md");
+  assert.equal(resolveRepoPath("../../x.md", "docs/x.md"), undefined);
+  assert.equal(modelRoute("acme/models", "a b/c.md", "Sec 1"), "/r/acme/models/f/a%20b/c.md#Sec%201");
+});
+
+test("https and inline images load without a referrer; repository images show a placeholder", () => {
+  const html = render("![CI badge](https://img.example.com/ci.svg) ![Process map](../assets/map.png) ![](./plain.png)");
+  assert.match(
+    html,
+    /<img src="https:\/\/img.example.com\/ci.svg" alt="CI badge" loading="lazy" referrerpolicy="no-referrer">/,
+  );
+  assert.match(
+    html,
+    /<span class="md-image-placeholder" title="docs\/use-cases\/bike-leasing\/assets\/map.png">Image not shown: Process map<\/span>/,
+  );
+  assert.match(html, />Image not shown: plain.png<\/span>/);
+  assert.match(render("![x](http://example.com/a.png)"), /title="http:\/\/example.com\/a.png">Image not shown: x</);
+  assert.match(
+    render("![dot](data:image/png;base64,iVBORw0KGgo=)"),
+    /<img src="data:image\/png;base64,iVBORw0KGgo=" alt="dot"/,
+  );
+});
+
+test("fences render through the hook keyed by language, every other fence as code", () => {
+  const calls: Array<[string, FenceInfo]> = [];
+  const fences = {
+    mermaid: (content: string, info: FenceInfo) => {
+      calls.push([content, info]);
+      return '<div class="diagram">rendered</div>';
+    },
+  };
+  const html = render(
+    "```Mermaid theme=dark\ngraph TD\n  A-->B\n```\n\n```ts\nconst a = 1 < 2;\n```\n\n```\nplain\n```",
+    fences,
+  );
+  assert.deepEqual(calls, [["graph TD\n  A-->B\n", { lang: "mermaid", info: "Mermaid theme=dark" }]]);
+  assert.match(html, /<div class="diagram">rendered<\/div>/);
+  assert.match(html, /<pre class="md-code"><code class="language-ts">const a = 1 &lt; 2;\n<\/code><\/pre>/);
+  assert.match(html, /<pre class="md-code"><code>plain\n<\/code><\/pre>/);
+});
+
+test("without a hook a mermaid fence stays code, and prototype keys never act as one", () => {
+  const html = render("```mermaid\ngraph TD\n```\n\n```constructor\n<b>x</b>\n```", {});
+  assert.match(html, /<code class="language-mermaid">graph TD\n<\/code>/);
+  assert.match(html, /<code class="language-constructor">&lt;b&gt;x&lt;\/b&gt;\n<\/code>/);
+});

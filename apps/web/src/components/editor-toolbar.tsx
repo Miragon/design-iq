@@ -9,7 +9,8 @@
  *              the personal tools, and read as "on" when they are
  *   presence   who else is here — capped, the rest collapse into +N
  *   view       what you are looking at — a segmented Diagram | Source switch
- *              that states the CURRENT view (the old lone "XML" button did not)
+ *              that states the CURRENT view (the old lone "XML" button did not);
+ *              a plugin may name its canvas layer (Markdown: Preview)
  *   panels     what is docked beside the canvas — ONE cluster of toggles that
  *              show their open state. A notation plugin joins the cluster; it
  *              no longer grows the bar by another labelled button.
@@ -57,7 +58,7 @@ import {
 import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { safeAvatarUrl, safePresenceColor } from "@/lib/presence-format";
-import type { EditorToolbarAction } from "@/notations/registry";
+import type { CanvasViewLabel, EditorToolbarAction } from "@/notations/registry";
 
 export type EditorStatus = "connecting" | "slow" | "live" | "error";
 
@@ -110,8 +111,14 @@ export function EditorToolbar({
   presence: PresenceUser[];
   /** document modes contributed by the mounted editor engine */
   modeActions: EditorToolbarAction[];
-  /** the Diagram | Source switch — absent when the doc has no visual editor */
-  view?: { sourceLabel: string; showSource: boolean; onChange(showSource: boolean): void };
+  /** the Diagram | Source switch, absent when the doc has no visual editor;
+   *  `canvas` renames the canvas side (absent = Diagram) */
+  view?: {
+    canvas?: CanvasViewLabel;
+    sourceLabel: string;
+    showSource: boolean;
+    onChange(showSource: boolean): void;
+  };
   panels: ToolbarPanelItem[];
   /** panel toggles living in the ⋯ overflow menu instead of the cluster */
   menuPanels: ToolbarPanelItem[];
@@ -405,26 +412,31 @@ function PeerAvatar({ user }: { user: PresenceUser }) {
   );
 }
 
+/** the canvas side of the switch unless the plugin names it */
+const DIAGRAM_VIEW: CanvasViewLabel = { label: "Diagram", buttonTitle: "Show the visual editor", icon: Shapes };
+
 /** Diagram | Source. A segmented control states which view is CURRENT — the
  *  single "XML" button it replaces read the same in both. */
 function ViewSwitch({
+  canvas = DIAGRAM_VIEW,
   sourceLabel,
   showSource,
   onChange,
 }: {
+  canvas?: CanvasViewLabel;
   sourceLabel: string;
   showSource: boolean;
   onChange(showSource: boolean): void;
 }) {
   const options = [
-    { label: "Diagram", title: "Show the visual editor", icon: Shapes, active: !showSource, source: false },
+    { label: canvas.label, title: canvas.buttonTitle, icon: canvas.icon, active: !showSource, source: false },
     { label: sourceLabel, title: `Show the ${sourceLabel} source`, icon: Code, active: showSource, source: true },
   ];
   return (
     <div role="group" aria-label="Editor view" className="bg-muted flex h-8 items-center gap-0.5 rounded-md p-0.5">
       {options.map((o) => (
         <button
-          key={o.label}
+          key={o.source ? "source" : "canvas"}
           type="button"
           aria-pressed={o.active}
           aria-label={o.label}

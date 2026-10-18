@@ -55,13 +55,14 @@ export const isReferenceable = (notation: string): boolean => notation === "bpmn
  * /f/<path>. The process route resolves the id against the CACHED process
  * list, so a model that was just created or renamed is fetched first — and
  * when the list does not have it yet (a peer following a rename that is still
- * being written), the file route opens it all the same.
+ * being written), the file route opens it all the same. `hash` lands on a
+ * section of the model (a link from a document).
  */
 export function useOpenModel(repo: string) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [owner = "", name = ""] = repo.split("/");
-  return async (path: string, opts: { replace?: boolean } = {}): Promise<void> => {
+  return async (path: string, opts: { replace?: boolean; hash?: string } = {}): Promise<void> => {
     if (byExtension(path)?.id === "bpmn") {
       const id = modelStem(path);
       const processes = await qc
@@ -71,12 +72,18 @@ export function useOpenModel(repo: string) {
         await navigate({
           to: "/r/$owner/$repo/p/$processId",
           params: { owner, repo: name, processId: id },
+          hash: opts.hash,
           replace: opts.replace,
         });
         return;
       }
     }
-    await navigate({ to: "/r/$owner/$repo/f/$", params: { owner, repo: name, _splat: path }, replace: opts.replace });
+    await navigate({
+      to: "/r/$owner/$repo/f/$",
+      params: { owner, repo: name, _splat: path },
+      hash: opts.hash,
+      replace: opts.replace,
+    });
   };
 }
 

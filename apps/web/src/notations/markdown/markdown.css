@@ -1,0 +1,246 @@
+/* The Markdown view (./markdown-view.ts): document typography from the Miragon CI.
+   Loaded with the view's lazy chunk, so the eager bundle carries none of it;
+   every rule is scoped under the view's own classes. Colours are the
+   @designiq/ui-kit aliases, sizes the CI type scale (body 16/1.6, h1 40,
+   h2 28, h3 21), spacing the 8-point grid. */
+
+.markdown-canvas {
+  background: var(--background);
+}
+
+.markdown-view {
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+}
+.markdown-view:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.markdown-body {
+  box-sizing: border-box;
+  /* a comfortable measure: about 75 characters of Geist per line */
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: var(--cd-space-5) var(--cd-space-4) var(--cd-space-7);
+  color: var(--foreground);
+  font-family: var(--designiq-font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body pre,
+.markdown-body table {
+  margin: 0 0 var(--cd-space-3);
+}
+
+/* headings: the CI scale, with room above to separate sections */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: var(--cd-space-5) 0 var(--cd-space-3);
+  font-weight: 600;
+  scroll-margin-top: var(--cd-space-3);
+}
+.markdown-body h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.markdown-body h2 {
+  padding-bottom: var(--cd-space-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.markdown-body h3 {
+  font-size: 1.3125rem;
+  line-height: 1.3;
+}
+.markdown-body h4 {
+  font-size: 1.0625rem;
+  line-height: 1.4;
+}
+.markdown-body h5,
+.markdown-body h6 {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.markdown-body h6 {
+  color: var(--muted-foreground);
+}
+
+/* links: interactive text is blue-link, underlined so colour is never the only signal */
+.markdown-body a {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-body a:hover {
+  text-decoration-thickness: 2px;
+}
+.markdown-body a:focus-visible {
+  border-radius: var(--cd-radius-sm);
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+/* a link to a repository file designIQ does not open: readable, marked, inert */
+.markdown-body .md-link-unavailable {
+  color: var(--muted-foreground);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
+/* lists, task lists included */
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: var(--cd-space-4);
+}
+.markdown-body ul {
+  list-style: disc;
+}
+.markdown-body ol {
+  list-style: decimal;
+}
+.markdown-body li + li,
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin-top: var(--cd-space-1);
+}
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin-bottom: 0;
+}
+.markdown-body li > p {
+  margin-bottom: var(--cd-space-2);
+}
+.markdown-body .contains-task-list {
+  padding-left: var(--cd-space-4);
+  list-style: none;
+}
+.markdown-body .task-list-item-checkbox {
+  appearance: none;
+  position: relative;
+  width: 1rem;
+  height: 1rem;
+  margin: 0 var(--cd-space-2) 0 calc(-1 * var(--cd-space-4));
+  border: 1px solid var(--input);
+  border-radius: var(--cd-radius-sm);
+  background: var(--background);
+  vertical-align: -0.15em;
+}
+.markdown-body .task-list-item-checkbox:checked {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+.markdown-body .task-list-item-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--primary-foreground);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.markdown-body blockquote {
+  padding: 0 var(--cd-space-3);
+  border-left: 3px solid var(--input);
+  color: var(--muted-foreground);
+}
+
+.markdown-body hr {
+  margin: var(--cd-space-5) 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* code: Geist Mono, inline on a quiet tint, blocks on the calm surface */
+.markdown-body code {
+  padding: 0.15em 0.35em;
+  border-radius: var(--cd-radius-sm);
+  background: var(--muted);
+  font-family: var(--designiq-font-mono);
+  font-size: 0.875em;
+}
+.markdown-body pre {
+  padding: var(--cd-space-3);
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--cd-radius-md);
+  background: var(--secondary);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.markdown-body pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: inherit;
+  white-space: pre;
+}
+
+/* tables: bordered, a tinted header row; wide tables scroll on their own */
+.markdown-body table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+.markdown-body th,
+.markdown-body td {
+  padding: var(--cd-space-2) var(--cd-space-3);
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.markdown-body th {
+  background: var(--secondary);
+  font-weight: 600;
+}
+.markdown-body .align-center {
+  text-align: center;
+}
+.markdown-body .align-right {
+  text-align: right;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+}
+/* an image with no route to load from: its name in place of the picture */
+.markdown-body .md-image-placeholder {
+  display: inline-block;
+  padding: var(--cd-space-1) var(--cd-space-2);
+  border: 1px dashed var(--input);
+  border-radius: var(--cd-radius-sm);
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.markdown-body .md-empty {
+  color: var(--muted-foreground);
+}
