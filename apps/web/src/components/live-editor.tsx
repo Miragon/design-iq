@@ -44,6 +44,7 @@ import {
   type TodoElementWire,
   type TodoWire,
 } from "@/lib/api";
+import { keepKeysFromCanvas } from "@/lib/canvas-keys";
 import { modelTarget, useOpenModel, wasExpected } from "@/lib/model-target";
 import { installMonacoTheme, MONACO_OPTIONS } from "@/lib/monaco-theme";
 import type { PresenceSurface, RemotePresence } from "@/lib/presence-canvas";
@@ -489,6 +490,12 @@ export function LiveEditor({
     canvasShownRef.current = !sourceActive;
     for (const cb of canvasShownListenersRef.current) cb();
   }, [sourceActive]);
+  // the canvas engine stays mounted behind the source layer and the dialogs:
+  // one that takes its shortcuts from document hears keys only while in front
+  // (lib/canvas-keys)
+  const dialogOpen = diff !== null || todoCreateOpen || releaseOpen || renameOpen || duplicateOpen;
+  const holdKeys = plugin?.documentKeys === true && (sourceActive || dialogOpen);
+  useEffect(() => (holdKeys ? keepKeysFromCanvas(document) : undefined), [holdKeys]);
 
   // the notation plugin's panels and the shell's own (todos, history) are the
   // same KIND of thing to the user, so they render the same way and carry the
