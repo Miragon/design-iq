@@ -64,36 +64,56 @@ test("checkModelBaseline: json parses or errors, dsl stays lenient", () => {
   assert.match(xml[0]?.message ?? "", /not well-formed XML/);
 });
 
-test("checkModelBaseline: a Mermaid diagram names its type on its first line", () => {
-  const mermaid = (raw: string) => checkModelBaseline(raw, { file: "models/flow.mmd", notation: "mermaid" });
-  assert.deepEqual(mermaid("flowchart LR\n  A --> B\n"), []);
-  assert.deepEqual(mermaid(templateFor("mermaid", "flow", "Flow") ?? ""), []);
+test("checkModelBaseline: every ```mermaid fence of a document names its type first", () => {
+  const doc = (raw: string) => checkModelBaseline(raw, { file: "models/flow.md", notation: "markdown" });
+  assert.deepEqual(doc("# Flow\n\n```mermaid\nflowchart LR\n  A --> B\n```\n"), []);
+  assert.deepEqual(doc(templateFor("markdown", "flow", "Flow") ?? ""), []);
   // the front matter, the directives and the comments come before it
-  assert.deepEqual(mermaid('---\ntitle: "Flow"\n---\n%%{init: {}}%%\n%% notes\nsequenceDiagram\n  A->>B: hi\n'), []);
+  assert.deepEqual(doc('```mermaid\n---\ntitle: "Flow"\n---\n%%{init: {}}%%\n%% notes\nsequenceDiagram\n```\n'), []);
   // light on purpose: the grammar is the renderer's (mermaid needs a DOM),
-  // so a broken body behind a valid header passes here
-  assert.deepEqual(mermaid("flowchart LR\n  A -->\n"), []);
+  // so a broken body behind a valid header passes here; other fences and
+  // the prose are not the check's
+  assert.deepEqual(doc("```mermaid\nflowchart LR\n  A -->\n```\n\n```ts\nflowchrt\n```\nflowchrt\n"), []);
 
-  // a WARN: a .mmd snippet a content repo already keeps never fails its CI
-  for (const empty of ["", "  \n\n", "%% only a note\n", '---\ntitle: "Flow"\n---\n']) {
-    const findings = mermaid(empty);
-    assert.equal(findings.length, 1, JSON.stringify(empty));
-    assert.equal(findings[0]?.severity, "WARN");
-    assert.equal(findings[0]?.ruleId, "mermaid/diagram-type");
-    assert.equal(findings[0]?.file, "models/flow.mmd");
-    assert.match(findings[0]?.message ?? "", /^empty Mermaid diagram: the first line must name a diagram type/);
-  }
-  // the line is the SOURCE line, front matter included
-  const typo = mermaid('---\ntitle: "Flow"\n---\nflowchrt LR\n  A --> B\n');
-  assert.equal(typo.length, 1);
-  assert.equal(typo[0]?.severity, "WARN");
-  assert.match(
-    typo[0]?.message ?? "",
-    /^line 4: 'flowchrt' is not a Mermaid diagram type \(flowchart, sequenceDiagram/,
+  // a WARN with the DOCUMENT's line: the line of the fence's first line
+  // that names no type (front matter included), the fence's own when empty
+  const findings = doc(
+    [
+      "# Flow", // 1
+      "", // 2
+      "```mermaid", // 3
+      "---", // 4
+      'title: "Flow"', // 5
+      "---", // 6
+      "flowchrt LR", // 7
+      "```", // 8
+      "", // 9
+      "~~~ Mermaid", // 10
+      "%% only a note", // 11
+      "~~~", // 12
+      "", // 13
+      "- step", // 14
+      "", // 15
+      "  ```mermaid", // 16
+      "  zenuml", // 17
+      "  ```", // 18
+    ].join("\n"),
   );
+  assert.deepEqual(
+    findings.map((f) => [f.severity, f.ruleId, f.file]),
+    Array.from({ length: 3 }, () => ["WARN", "mermaid/diagram-type", "models/flow.md"]),
+  );
+  assert.match(
+    findings[0]?.message ?? "",
+    /^line 7: 'flowchrt' is not a Mermaid diagram type \(flowchart, sequenceDiagram/,
+  );
+  assert.match(findings[1]?.message ?? "", /^line 10: empty Mermaid diagram: the first line must name a diagram type/);
   // zenuml is a plugin mermaid does not bundle: it does not draw here either
-  assert.match(mermaid("zenuml\n  A.method()\n")[0]?.message ?? "", /'zenuml' is not a Mermaid diagram type/);
-  // the other DSLs keep no header rule
+  assert.match(findings[2]?.message ?? "", /^line 17: 'zenuml' is not a Mermaid diagram type/);
+  // an unclosed fence is checked to the end of the document
+  assert.match(doc("text\n```mermaid\n")[0]?.message ?? "", /^line 2: empty Mermaid diagram/);
+  // a commented-out diagram is no fence, and the DSLs keep no header rule
+  assert.deepEqual(doc("<!--\n```mermaid\nflowchrt\n```\n-->\n"), []);
   assert.deepEqual(checkModelBaseline("", { notation: "wardley" }), []);
 });
 
@@ -109,16 +129,20 @@ test("a broken .tt fails the run; valid non-BPMN models are counted", () => {
   assert.match(green.out, /2 other model\(s\) checked/);
 });
 
-test("an empty Mermaid diagram warns but passes the run; one under either extension is counted", () => {
-  const dir = repoWith({ "flow.mmd": "" });
+test("a document with a broken diagram warns but passes the run; a standalone .mmd is no model", () => {
+  const dir = repoWith({ "flow.md": "# Flow\n\n```mermaid\n```\n" });
   const { status, out } = run(["--root", dir]);
   assert.equal(status, 0, out);
-  assert.match(out, /\[WARN\] models\/flow\.mmd: empty Mermaid diagram/);
+  assert.match(out, /\[WARN\] models\/flow\.md: line 3: empty Mermaid diagram/);
+  assert.match(out, /0 error\(s\), 1 warning\(s\) — OK \(0 process\(es\), 1 other model\(s\) checked\)/);
 
-  const ok = repoWith({ "flow.mmd": "flowchart LR\n  A --> B\n", "states.mermaid": "stateDiagram-v2\n  [*] --> A\n" });
-  const green = run(["--root", ok]);
+  // diagram files of their own (withdrawn in 5.5) are plain files: not
+  // counted, not checked
+  const plain = repoWith({ "flow.mmd": "", "states.mermaid": "flowchrt", "notes.md": "# Notes\n" });
+  const green = run(["--root", plain]);
   assert.equal(green.status, 0, green.out);
-  assert.match(green.out, /2 other model\(s\) checked/);
+  assert.doesNotMatch(green.out, /\.mmd|\.mermaid/);
+  assert.match(green.out, /0 error\(s\), 0 warning\(s\) — OK \(0 process\(es\), 1 other model\(s\) checked\)/);
 });
 
 test("the single-model filter reaches non-BPMN models", () => {

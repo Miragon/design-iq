@@ -15,10 +15,9 @@
  */
 
 /** the web modules that only ever load in a lazy chunk (ADR 0006): the
- *  Markdown view, and the Mermaid viewer that draws through its mermaid fence
- *  (no quantifier inside a quantified group: the safe-regex check refuses it) */
+ *  Markdown view with its mermaid fence (no quantifier inside a quantified
+ *  group: the safe-regex check refuses it) */
 const MARKDOWN_VIEW = "markdown/(markdown-view|view|render|sanitize|fences|mermaid-fence)";
-const MERMAID_VIEWER = "mermaid/(mermaid-viewer|viewer|preview-panel)";
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 export default {
@@ -154,10 +153,12 @@ export default {
         "apps/web (the SPA value-imports processIdFromName, derive types, " +
         "hasTemplate for the New menu, repoCountsLine for the repo cards and the " +
         "Mermaid source lines for the diagram errors) and " +
-        "apps/vscode (repoCountsLine in the repo picker) — no fs, no yaml, no fast-xml-parser " +
+        "apps/vscode (repoCountsLine in the repo picker); markdown.ts, the validator's fence " +
+        "scanner, is held to the same rule so any browser surface can read a document the way " +
+        "the gate does — no fs, no yaml, no fast-xml-parser " +
         "there; those live behind ./content and ./extract. " +
         "This was an unenforced header comment in both files until it mattered.",
-      from: { path: "^packages/notations/(index|derive|templates|counts|mermaid)\\.ts$" },
+      from: { path: "^packages/notations/(index|derive|templates|counts|mermaid|markdown)\\.ts$" },
       to: {
         dependencyTypesNot: ["type-only"],
         path: ["^(node:)?(fs|fs/promises|path|child_process)$", "(^|/)node_modules/(yaml|fast-xml-parser)/"],
@@ -192,17 +193,13 @@ export default {
       severity: "error",
       comment:
         "ADR 0006: markdown-it and DOMPurify ship in the Markdown view's own chunk. Only the " +
-        "view's modules (MARKDOWN_VIEW, and MERMAID_VIEWER: it draws through the " +
-        "view's mermaid fence) import them, and each other, statically; everything else reaches " +
-        "them through import() (the manifests, notations/markdown/plugin.ts and " +
-        "notations/mermaid/plugin.ts). One static import from an eager module would pull the " +
-        "engine into the main bundle with a green build.",
+        "view's modules (MARKDOWN_VIEW) import them, and each other, statically; everything else " +
+        "reaches the view through import() (the manifest, notations/markdown/plugin.ts). One " +
+        "static import from an eager module would pull the engine into the main bundle with a " +
+        "green build.",
       from: {
         path: "^apps/web/src/",
-        pathNot: [
-          `^apps/web/src/notations/${MARKDOWN_VIEW}\\.ts$`,
-          `^apps/web/src/notations/${MERMAID_VIEWER}\\.tsx?$`,
-        ],
+        pathNot: [`^apps/web/src/notations/${MARKDOWN_VIEW}\\.ts$`],
       },
       to: {
         dynamic: false,
@@ -210,10 +207,8 @@ export default {
         path: [
           "(^|/)node_modules/(markdown-it|dompurify)/",
           `^apps/web/src/notations/${MARKDOWN_VIEW}\\.ts$`,
-          `^apps/web/src/notations/${MERMAID_VIEWER}\\.tsx?$`,
           // the SPA's "@/" alias does not resolve in this cruise: match the import as written
           `^@/notations/${MARKDOWN_VIEW}(\\.ts)?$`,
-          `^@/notations/${MERMAID_VIEWER}(\\.ts|\\.tsx)?$`,
         ],
       },
     },

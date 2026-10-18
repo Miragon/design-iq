@@ -27,6 +27,7 @@ import {
   requirementHref,
   XMLValidator,
 } from "@designiq/notations/extract";
+import { markdownFences } from "@designiq/notations/markdown";
 import { mermaidHeader } from "@designiq/notations/mermaid";
 import { hasRefs, type ModelRef, refsOf } from "@designiq/notations/refs";
 
@@ -376,27 +377,22 @@ const COMMON_MERMAID_TYPES =
 
 /**
  * Mermaid's own first step (its type detection, @designiq/notations/mermaid
- * mirrors it): after the front matter, directives and comments, the first
- * line must start with a diagram type. Light on purpose: the grammar itself
- * needs mermaid and a DOM, which the validator never loads; the web viewer
- * shows those errors live. A WARN, not an ERROR: .mmd files a content repo
- * already keeps (snippets, a zenuml diagram mermaid does not bundle) turn
- * up as models with this notation, and must neither fail its CI nor block a
- * save.
+ * mirrors it) for a ```mermaid fence opening on document line `line`: after
+ * the front matter, directives and comments, the diagram's first line must
+ * start with a diagram type. Light on purpose: the grammar itself needs
+ * mermaid and a DOM, which the validator never loads; the Markdown view
+ * shows those errors live. The message names the document's line (a Finding
+ * has no line of its own).
  */
-function mermaidHeaderProblem(raw: string): string | undefined {
-  const header = mermaidHeader(raw);
-  if (!header) return `empty Mermaid diagram: the first line must name a diagram type (${COMMON_MERMAID_TYPES}, …)`;
+function mermaidFenceProblem(content: string, line: number): string | undefined {
+  const header = mermaidHeader(content);
+  if (!header) {
+    return `line ${line}: empty Mermaid diagram: the first line must name a diagram type (${COMMON_MERMAID_TYPES}, …)`;
+  }
   if (header.diagramType) return undefined;
   const word = header.text.split(/[\s:;]/, 1)[0];
-  return `line ${header.line}: '${word}' is not a Mermaid diagram type (${COMMON_MERMAID_TYPES}, …)`;
+  return `line ${line + header.line}: '${word}' is not a Mermaid diagram type (${COMMON_MERMAID_TYPES}, …)`;
 }
-
-/** notation id → the check of its DSL's header line (a WARN under its own
- *  rule id); a DSL without one stays as lenient as its extractor */
-const DSL_HEADER_CHECKS: Record<string, { ruleId: string; problem: (raw: string) => string | undefined }> = {
-  mermaid: { ruleId: "mermaid/diagram-type", problem: mermaidHeaderProblem },
-};
 
 /**
  * Baseline parse gate for models WITHOUT a dedicated checker (any registered
@@ -433,7 +429,7 @@ export function checkModelBaseline(raw: string, opts: { file?: string; notation:
       if (wf !== true) err(`not well-formed XML: ${wf.err.msg}`);
       break;
     }
-    case "dsl": {
+    case "dsl":
       // DSL extractors are lenient by design (unknown lines are ignored) —
       // the gate only catches a parser that throws outright
       try {
@@ -441,13 +437,18 @@ export function checkModelBaseline(raw: string, opts: { file?: string; notation:
       } catch (e) {
         err(`not parseable: ${(e as Error).message}`);
       }
-      // a DSL whose first line names what it is: without that line its
-      // renderer draws nothing at all
-      const header = DSL_HEADER_CHECKS[opts.notation];
-      const problem = header?.problem(raw);
-      if (header && problem) findings.push({ severity: "WARN", ruleId: header.ruleId, file, message: problem });
       break;
-    }
+    case "markdown":
+      // every text parses; a document's diagrams are its ```mermaid fences,
+      // and one whose first line names no diagram type draws nothing. A
+      // WARN, never an ERROR: a fence may be a deliberate snippet (a syntax
+      // example, a zenuml diagram mermaid does not bundle), and must neither
+      // fail a repo's CI nor make a save refuse the document
+      for (const fence of markdownFences(raw)) {
+        const problem = fence.lang === "mermaid" ? mermaidFenceProblem(fence.content, fence.line) : undefined;
+        if (problem) findings.push({ severity: "WARN", ruleId: "mermaid/diagram-type", file, message: problem });
+      }
+      break;
   }
   return findings;
 }

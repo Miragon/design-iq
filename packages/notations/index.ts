@@ -12,9 +12,12 @@
  *   - ./templates  blank-model file content (templateFor)
  *   - ./counts     a repo's model-count line (repoCountsLine) — web cards + VS Code picker
  *   - ./content    content-repo discovery over any checkout (Node-only)
+ *   - ./markdown   the fenced code blocks of a Markdown document, as
+ *                  CommonMark reads them (the validator's fence check)
  *   - ./mermaid    how Mermaid reads a diagram (its diagram types, the code
- *                  its parser sees): the validator's header check and the
- *                  web viewer's error lines
+ *                  its parser sees): the check of a ```mermaid fence and the
+ *                  web renderer's error lines. A diagram is no notation of
+ *                  its own: it lives as a fence in a Markdown document
  *   - @miragon/design-iq-validator  checkModel — the platform check per notation (the
  *                  checkers stay OUT of this package: the published
  *                  designiq-validate binary owns them)
@@ -127,6 +130,8 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
     monacoLanguage: "json",
   },
   {
+    // a document, and the home of every diagram-as-code: a ```mermaid fence
+    // next to the prose that explains it, never a file of its own
     id: "markdown",
     label: "Markdown",
     noun: { singular: "document", plural: "documents" },
@@ -134,20 +139,6 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
     mediaKind: "markdown",
     docShape: "text",
     monacoLanguage: "markdown",
-  },
-  {
-    // diagrams as code: the text IS the model, a DSL like OWM and .storm.
-    // .mmd is what the Mermaid tooling writes, .mermaid the long spelling
-    // GitHub and the editors also recognise. Monaco has no Mermaid language
-    // and the source stays plain text like the other DSLs; the diagram is the
-    // web plugin's viewer and Preview panel. Its syntax helpers: ./mermaid.ts
-    id: "mermaid",
-    label: "Mermaid",
-    noun: { singular: "diagram", plural: "diagrams" },
-    extensions: [".mmd", ".mermaid"],
-    mediaKind: "dsl",
-    docShape: "text",
-    monacoLanguage: "plaintext",
   },
 ];
 

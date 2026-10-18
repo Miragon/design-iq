@@ -7,12 +7,12 @@ Desktop, ChatGPT).
 
 ## Scripts
 
-| Script                                  | What it does                                                                                                                                                                                                             |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                          |
-| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                              |
-| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer) and, under jsdom, the Markdown view, the Mermaid viewer and the mermaid engine's configuration. |
-| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                  |
+| Script                                  | What it does                                                                                                                                                                                                                                  |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                                               |
+| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                                                   |
+| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer and the fence parity) and, under jsdom, the Markdown view, its Mermaid fences and the mermaid engine's configuration. |
+| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                       |
 
 ## Theming
 
@@ -86,26 +86,15 @@ as their own chunk when a document opens (ADR 0006). `pnpm arch` holds every oth
   keeps its drawing until the new one is drawn. A diagram mermaid cannot read shows a notice
   with the error and its line (counted within the diagram) under its code, or under its last
   good drawing, dimmed. `test/markdown-mermaid.test.ts` covers it under jsdom with a fake
-  renderer.
-
-## The Mermaid viewer
-
-A Mermaid model (`.mmd`, `.mermaid`) opens as its diagram, read-only; the view switch's
-**Text** side is the Monaco source, and the **Preview** panel draws the diagram beside it
-while you type. `src/notations/mermaid/plugin.ts` is the light manifest; its lazy entry
-`mermaid-viewer.ts` loads the viewer and the Markdown view's stylesheet, and mermaid loads
-behind `src/lib/mermaid-render.ts` as for a fence.
-
-- `viewer.ts` draws a file as a document with ONE diagram, through the Markdown view's
-  `mermaid-fence.ts`: one drawing path for the fence, the viewer and the Preview panel (the
-  renderer, the CI look, the page-side sanitizer and link policy, the drawing cache, the
-  last good diagram under the error notice). Like the Markdown view it draws nothing while
-  the Text view is up and catches up when it shows. `test/mermaid-viewer.test.ts` covers it
-  under jsdom with a fake renderer.
+  renderer. A Mermaid diagram is no model of its own: it lives as such a fence in a document.
 - `@designiq/notations/mermaid` holds the reading of a diagram's text the validator and the
   renderer share (the diagram types, the code mermaid's parser sees, the error lines). It
   mirrors mermaid `MERMAID_VERSION`; `test/mermaid-engine.test.ts` fails on a mermaid bump
   until it is re-read, and checks every listed type against mermaid's own detection.
+- `@designiq/notations/markdown` is the validator's reading of a document's fences, a
+  zero-dep scanner: the `mermaid/diagram-type` check of every `mermaid` fence stands on it and
+  names the document's line. `test/markdown-fences.test.ts` holds it against the markdown-it
+  this view renders with, so a markdown-it bump that reads fences differently fails there.
 
 ## The MCP-App widgets
 

@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 
-import { READ } from "@designiq/mcp-kit";
+import { DIAGRAMS_IN_DOCUMENTS, READ } from "@designiq/mcp-kit";
 import { toolNamesIn, toolText } from "@designiq/mcp-kit/testing";
 import { NOTATIONS } from "@designiq/notations";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
@@ -137,6 +137,9 @@ test("instructions: present with a title, and every tool they name is registered
       }
       assert.equal(mentioned.includes("list_todos"), todos !== undefined, `${mode}: list_todos only when registered`);
       for (const n of NOTATIONS) assert.ok(instructions.includes(n.label), `${mode}: names ${n.label}`);
+      // where a diagram goes: the ONE sentence both servers send, never a file of its own
+      assert.ok(instructions.includes(DIAGRAMS_IN_DOCUMENTS), `${mode}: says where a diagram goes`);
+      assert.doesNotMatch(instructions, /\.mmd|\.mermaid/, `${mode}: no standalone diagram files`);
     } finally {
       await c.close();
       await s.close();

@@ -16,8 +16,12 @@ answer in them.**
   file name without the extension. `.bpmn` is a process, `.dmn` a decision; the
   folder can also hold Wardley Maps (`.owm`, `.wmap`), Team Topologies (`.tt`,
   `.ttm.json`), Event Storming boards (`.storm`), Context Maps (`.cm.json`),
-  Value Chains (`.vc.json`), Markdown documents (`.md`) and Mermaid diagrams
-  (`.mmd`, `.mermaid`).
+  Value Chains (`.vc.json`) and Markdown documents (`.md`).
+- A Mermaid diagram (a diagram as code) is no model of its own: it is a
+  `mermaid` fence in a Markdown document, next to the prose that explains it. A
+  process, a decision, a Wardley Map or any other model above is a model of its
+  own: a document links it (`[Order to cash](order-to-cash.bpmn)`), a model not
+  there yet is created as one, and none is redrawn in Mermaid.
 - There is NO `process.yaml` — the process view (name, roles from lanes, steps,
   flow, sub-process calls) is derived from the BPMN.
 - Sub-processes are separate `.bpmn` files, called via `callActivity`

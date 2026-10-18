@@ -329,8 +329,6 @@ test("listRepos: modelCount/modelCounts cover every notation, keyed by registry 
   // the sorted file order (storm, value chain, context map, bpmn …) is NOT the
   // registry order — the counts must follow the registry; no wardley map here
   writeFileSync(join(ws, "models", "readme.md"), "# notes");
-  writeFileSync(join(ws, "models", "flow.mmd"), "flowchart LR");
-  writeFileSync(join(ws, "models", "states.mermaid"), "stateDiagram-v2"); // the notation's second extension
   writeFileSync(join(ws, "models", "chain.vc.json"), "{}"); // compound suffix — a value chain, not a .json
   writeFileSync(join(ws, "models", "contexts.cm.json"), "{}");
   writeFileSync(join(ws, "models", "board", "order-to-cash.storm"), "");
@@ -341,12 +339,15 @@ test("listRepos: modelCount/modelCounts cover every notation, keyed by registry 
   writeFileSync(join(ws, "models", "order.bpmn"), "<bpmn/>");
   writeFileSync(join(ws, "models", "rabatt.tests.yaml"), "cases: []"); // not a model
   writeFileSync(join(ws, "models", "data.json"), "{}"); // no registered extension → not a model
+  // nor a standalone diagram (5.4.0 counted them; a diagram is a fence in a .md now)
+  writeFileSync(join(ws, "models", "flow.mmd"), "flowchart LR");
+  writeFileSync(join(ws, "models", "states.mermaid"), "stateDiagram-v2");
   const { deps } = setup({
     workspaces: { dir: () => ws, changedPaths: async () => [], changedFiles: async () => [] },
   });
   const [r] = await listRepos(deps, session("s1"));
   assert.ok(r);
-  assert.equal(r.modelCount, 11);
+  assert.equal(r.modelCount, 9);
   assert.deepEqual(r.modelCounts, {
     bpmn: 1,
     dmn: 1,
@@ -355,7 +356,6 @@ test("listRepos: modelCount/modelCounts cover every notation, keyed by registry 
     "context-map": 1,
     "value-chain": 1,
     markdown: 1,
-    mermaid: 2,
   });
   assert.deepEqual(
     Object.keys(r.modelCounts ?? {}),

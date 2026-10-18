@@ -16,6 +16,7 @@
     "./retarget": "./retarget.ts",
     "./templates": "./templates.ts",
     "./counts": "./counts.ts",
+    "./markdown": "./markdown.ts",
     "./mermaid": "./mermaid.ts",
     "./content": "./content.ts",
     "./cli": "./cli.ts",

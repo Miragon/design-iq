@@ -34,7 +34,7 @@ import type { ContentConflictWire, RoomPresenceWire, TodoWire, WidgetBootWire } 
 import { mcpAppToolName } from "@designiq/contracts/mcp-app";
 import { analyzeDecision, simulateDecision } from "@designiq/decisions";
 import { parseTestSuite, type TestCase, testsPathFor } from "@designiq/decisions/tests";
-import { fail, ok, READ, safe, WRITE } from "@designiq/mcp-kit";
+import { DIAGRAMS_IN_DOCUMENTS, fail, ok, READ, safe, WRITE } from "@designiq/mcp-kit";
 import { mountStatelessMcp } from "@designiq/mcp-kit/mount";
 import { byExtension, byId, modelStem, NOTATIONS } from "@designiq/notations";
 import { deriveDecision, deriveProcess, deriveView, hasDeriver } from "@designiq/notations/derive";
@@ -354,6 +354,7 @@ function liveInstructions(on: {
     "designIQ is a Git-native workspace where teams model their business and their architecture together, live; " +
       `through these tools you ${write ? "read, check and change" : "read and check"} the same models they work on.`,
     `Each connected repository keeps its models as files, one model per file with the file stem as its id, in these notations: ${NOTATION_FILES}.`,
+    DIAGRAMS_IN_DOCUMENTS,
     "Start with `list_repos`, then `list_models` to see which models a repository holds.",
     `These tools are notation-neutral: ${andList(neutralTools)}.`,
     `BPMN and DMN have deeper tooling: for processes ${named(["get_process", ...(on.bpmnEdit ? ["get_process_outline"] : []), "get_bpmn_xml", "validate_bpmn"])}; ` +
@@ -1331,7 +1332,8 @@ export function createLiveMcpServer(
           `Create a new model of ANY template-capable notation (${CREATABLE_IDS}) from its blank template. ` +
           "Returns its ModelInfo incl. the path for get_model_content/save_model_content. A notation without " +
           "a template answers with an error: its files arrive via git only. create_process / create_decision " +
-          "are the BPMN- and DMN-specific variants.",
+          "are the BPMN- and DMN-specific variants. A Mermaid diagram is no model of its own: it goes as a " +
+          "```mermaid fence into a markdown document.",
         inputSchema: z.object({
           repo: repoArg,
           notation: z.string().describe(`registry notation id — one of: ${CREATABLE_IDS}`),

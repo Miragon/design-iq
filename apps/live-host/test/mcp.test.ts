@@ -18,6 +18,7 @@ import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
 
 import { presenceColor } from "@designiq/contracts/live";
+import { DIAGRAMS_IN_DOCUMENTS } from "@designiq/mcp-kit";
 import { toolNamesIn, toolText } from "@designiq/mcp-kit/testing";
 import { NOTATIONS } from "@designiq/notations";
 import { Server as HocuspocusServer } from "@hocuspocus/server";
@@ -401,6 +402,9 @@ test("instructions: present with a title, and every tool they name is registered
     }
     // every registered notation is listed with its extensions
     for (const n of NOTATIONS) assert.ok(instructions.includes(n.label), `${mode}: names ${n.label}`);
+    // where a diagram goes: the ONE sentence both servers send, never a file of its own
+    assert.ok(instructions.includes(DIAGRAMS_IN_DOCUMENTS), `${mode}: says where a diagram goes`);
+    assert.doesNotMatch(instructions, /\.mmd|\.mermaid/, `${mode}: no standalone diagram files`);
     // …and every served modeler widget is offered for showing models to people
     for (const name of registered) {
       if (/^open_.*modeler$/.test(name)) assert.ok(mentioned.includes(name), `${mode}: instructions name ${name}`);
@@ -1287,30 +1291,38 @@ test("generic model tools: get/save ANY notation with CAS, validate_model, creat
   assert.match(ticket.room, /strategy\.owm$/);
 });
 
-test("generic model tools: a Mermaid diagram is created, checked and saved like any notation", async () => {
-  const { callJson } = await connect(deps());
-  const created = await callJson("create_model", { repo: REPO.fullName, notation: "mermaid", name: "Order Flow" });
-  assert.equal(created.model.path, "processes/order-flow.mmd");
-  const got = await callJson("get_model_content", { repo: REPO.fullName, id: "order-flow", notation: "mermaid" });
-  assert.match(got.content, /^---\ntitle: "Order Flow"\n---\nflowchart LR\n/);
+test("generic model tools: a diagram is a mermaid fence in a document, its WARN never refuses a save", async () => {
+  const { call, callJson } = await connect(deps());
+  // no notation of its own (withdrawn in 5.5): the generic unknown-notation error
+  const mermaid = await call("create_model", { repo: REPO.fullName, notation: "mermaid", name: "Order Flow" });
+  assert.ok(mermaid.isError && /unknown notation 'mermaid'/.test(mermaid.text), mermaid.text);
 
-  // validate_model: the header line is the check, by extension or by notation id
-  const valid = await callJson("validate_model", { content: got.content, path: created.model.path });
+  const created = await callJson("create_model", { repo: REPO.fullName, notation: "markdown", name: "Order Flow" });
+  assert.equal(created.model.path, "processes/order-flow.md");
+  const got = await callJson("get_model_content", { repo: REPO.fullName, id: "order-flow" });
+
+  // validate_model: every fence names its type first, the line is the document's
+  const DOC = "# Order Flow\n\n```mermaid\nflowchart LR\n  A --> B\n```\n";
+  const valid = await callJson("validate_model", { content: DOC, path: created.model.path });
   assert.equal(valid.ok, true);
   assert.deepEqual(valid.findings, []);
-  const empty = await callJson("validate_model", { content: "%% nothing yet\n", notation: "mermaid" });
-  assert.equal(empty.ok, true, "a WARN, never a failed check");
-  assert.equal(empty.findings[0]?.severity, "WARN");
-  assert.match(empty.findings[0]?.message ?? "", /empty Mermaid diagram/);
+  const TYPO = DOC.replace("flowchart", "flowchrt");
+  const typo = await callJson("validate_model", { content: TYPO, notation: "markdown" });
+  assert.equal(typo.ok, true, "a WARN, never a failed check");
+  assert.equal(typo.findings[0]?.severity, "WARN");
+  assert.equal(typo.findings[0]?.ruleId, "mermaid/diagram-type");
+  assert.match(typo.findings[0]?.message ?? "", /^line 4: 'flowchrt' is not a Mermaid diagram type/);
 
-  // the save gate warns on a diagram without a type, it does not refuse it
+  // the save gate warns on it, it does not refuse the document
   const saved = await callJson("save_model_content", {
     repo: REPO.fullName,
     path: created.model.path,
-    content: "flowchrt LR\n  A --> B\n",
+    content: TYPO,
     baseVersion: got.baseVersion,
   });
   assert.equal(saved.ok, true);
+  assert.deepEqual(saved.warnings, [typo.findings[0]?.message]);
+  assert.equal((await callJson("get_model_content", { repo: REPO.fullName, path: created.model.path })).content, TYPO);
 });
 
 // ── #156: the widget registry — one row per single-file bundle ───────────────
