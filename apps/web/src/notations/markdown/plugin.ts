@@ -6,8 +6,9 @@
  *
  * A Markdown document opens RENDERED: the canvas layer shows the formatted,
  * read-only document, live with every edit, and the shell's view switch
- * flips to the Monaco source to write. No assist handoff: there is no
- * Markdown MCP-App widget to hand over to.
+ * flips to the Monaco source to write, or shows both side by side (Split)
+ * to see each edit land. No assist handoff: there is no Markdown MCP-App
+ * widget to hand over to.
  */
 import { Eye } from "lucide-react";
 
@@ -17,6 +18,7 @@ export const markdownPlugin: WebNotationPlugin = {
   id: "markdown",
   canvasClassName: "markdown-canvas",
   canvasView: { label: "Preview", buttonTitle: "Show the formatted document", icon: Eye },
+  splitView: true,
   mountEditor: async (container, ctx) => {
     const { mountMarkdownView } = await import("./markdown-view");
     return mountMarkdownView(container, ctx);

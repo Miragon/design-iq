@@ -53,8 +53,9 @@ export interface EditorContext {
    *  as one to a model */
   models?: ModelDirectory;
   /** whether the editor's layer is on screen (the shell's view switch shows
-   *  it or the Monaco source): a read-only view skips its renders while
-   *  hidden and catches up when it shows. Optional: absent = always shown */
+   *  it, the Monaco source, or both side by side): a read-only view skips
+   *  its renders while hidden and catches up when it shows. Optional:
+   *  absent = always shown */
   visibility?: LayerVisibility;
   /** live presence (#115) — publish the local cursor/selection, subscribe to
    *  remote peers; the additive awareness surface promised on #124. Engines
@@ -160,13 +161,27 @@ export interface WebNotationPlugin {
   canvasClassName: string;
   /** the canvas layer's name in the view switch (absent = "Diagram") */
   canvasView?: CanvasViewLabel;
+  /** the view switch gets a third view, Split: the Monaco source on the
+   *  left, the canvas layer on the right, a divider between them, for a
+   *  canvas that follows the text as it is typed (the Markdown view). The
+   *  shell remembers the view per notation (lib/editor-view), and holds the
+   *  keys typed in the source from a `documentKeys` engine. The engine must
+   *  follow its host's size: the divider and the view switch resize the
+   *  mounted canvas layer. No diagram-js engine of the SPA does yet (it
+   *  takes a ResizeObserver calling canvas.resized(); without it
+   *  keepDiagramViewbox restores a stale viewbox on the next import and
+   *  rescales the canvas), so the Miragon renderers wait for that. Absent =
+   *  the canvas or the source, one at a time; BPMN and DMN never opt in
+   *  (their panels dock over the canvas edge) */
+  splitView?: boolean;
   /** mount the visual editor — the engine chunk loads HERE, not before;
    *  absent = collaborative Monaco (a plugin may contribute only panels/diff) */
   mountEditor?(container: HTMLElement, ctx: EditorContext): Promise<MountedEditor>;
   /** the engine takes its shortcuts from a keydown listener on document,
    *  wherever the focus is: the shell holds the keys from it while the canvas
-   *  is behind the source layer or a dialog (lib/canvas-keys). Absent = the
-   *  engine binds its keys to its own canvas (bpmn-js, dmn-js) */
+   *  is behind the source layer or a dialog, and in the split view those
+   *  typed in the source (lib/canvas-keys). Absent = the engine binds its
+   *  keys to its own canvas (bpmn-js, dmn-js) */
   documentKeys?: boolean;
   panels?: PanelSpec[];
   /** notation id of the Analyse-with-AI handoff — absent = no assist menu */

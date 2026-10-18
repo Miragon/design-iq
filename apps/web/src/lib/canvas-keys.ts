@@ -25,6 +25,10 @@
  * and any other with them. A shortcut the app needs in the source view or a
  * dialog listens in the capture phase, or passes here.
  *
+ * In the split view the canvas is in front, beside the Monaco source: the
+ * shell holds only the keys typed in the source (`within`), and the canvas
+ * hears every other key as in its own view.
+ *
  * Not held: the draw tools of Wardley and Event Storming listen in the
  * capture phase while drawing, and take Enter and Escape before anything
  * else. That needs the renderers' fix (keys scoped to their own canvas).
@@ -44,11 +48,12 @@ function passes(e: KeyboardEvent): boolean {
   );
 }
 
-/** hold the keydowns of `doc` from its document and window listeners; returns the release */
-export function keepKeysFromCanvas(doc: Document): () => void {
+/** hold the keydowns of `doc` from its document and window listeners, only those from inside `within` when given; returns the release */
+export function keepKeysFromCanvas(doc: Document, within?: Node): () => void {
   const root = doc.documentElement;
   const onKeyDown = (e: KeyboardEvent) => {
-    if (!passes(e)) e.stopPropagation();
+    if (passes(e) || (within && !within.contains(e.target as Node | null))) return;
+    e.stopPropagation();
   };
   root.addEventListener("keydown", onKeyDown);
   return () => root.removeEventListener("keydown", onKeyDown);

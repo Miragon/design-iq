@@ -1,8 +1,9 @@
 /**
  * The Markdown VIEW: the live document rendered read-only as formatted HTML
  * in the canvas layer. Editing stays in the shell's Monaco source layer, one
- * click away; every change to the shared Y.Text, a collaborator's included,
- * re-renders the view after a short debounce.
+ * click away or beside the view (the split view); every change to the shared
+ * Y.Text, a collaborator's included, re-renders the view after a short
+ * debounce.
  *
  * The HTML comes from ./render.ts (raw HTML already escaped there) and is
  * sanitized again (./sanitize.ts) before it reaches the page. Links to other
@@ -17,9 +18,10 @@
  * Every render replaces the whole article. Simple and correct, but a reader's
  * text selection and keyboard focus inside the view reset whenever a
  * co-editor pauses typing: patching only the changed blocks is a follow-up.
- * While the shell shows the source instead (ctx.visibility), the view does
- * not render at all and catches up when it shows again: an author typing in
- * Monaco never pays for a hidden document's diagrams.
+ * While the shell shows only the source (ctx.visibility), the view does not
+ * render at all, not even a document that opens that way, and catches up
+ * when it shows again: an author typing in Monaco never pays for a hidden
+ * document's diagrams.
  */
 import type { EditorContext, MountedEditor } from "../registry.ts";
 import { FENCE_EXTENSIONS, type FenceExtension } from "./fences.ts";
@@ -94,7 +96,8 @@ export function mountMarkdownView(
     if (source.trim() === "") {
       const empty = doc.createElement("p");
       empty.className = "md-empty";
-      empty.textContent = "This document is empty. Switch to Markdown to write it.";
+      // true beside the source (the split view) as much as one click from it
+      empty.textContent = "This document is empty. Write it in the Markdown source.";
       article.replaceChildren(empty);
     } else {
       article.replaceChildren(sanitize(html));
@@ -145,12 +148,12 @@ export function mountMarkdownView(
   };
   article.addEventListener("click", onClick);
 
-  render();
-  // opened through a link with a #section: land on it
-  if (win.location.hash.length > 1) scrollToFragment(win.location.hash.slice(1));
-
+  // opened through a link with a #section: land on it once the document is
+  // on screen
+  let landing = win.location.hash.length > 1 ? win.location.hash.slice(1) : undefined;
   // hidden behind the source layer: a change only marks the view behind, and
-  // it renders once it shows again
+  // it renders once it shows again. So does the first render of a document
+  // that opens on its source (the view switch remembers it)
   const hidden = (): boolean => ctx.visibility?.visible() === false;
   let behind = false;
   const update = (): void => {
@@ -160,7 +163,12 @@ export function mountMarkdownView(
     }
     behind = false;
     render();
+    if (landing !== undefined && rendered) {
+      scrollToFragment(landing);
+      landing = undefined;
+    }
   };
+  update();
 
   // trailing debounce with a maximum wait
   let timer: ReturnType<typeof setTimeout> | undefined;

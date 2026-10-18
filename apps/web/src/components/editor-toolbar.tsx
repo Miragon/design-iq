@@ -10,7 +10,8 @@
  *   presence   who else is here — capped, the rest collapse into +N
  *   view       what you are looking at — a segmented Diagram | Source switch
  *              that states the CURRENT view (the old lone "XML" button did not);
- *              a plugin may name its canvas layer (Markdown: Preview)
+ *              a plugin may name its canvas layer (Markdown: Preview) and add
+ *              Split between the two, the source beside the canvas
  *   panels     what is docked beside the canvas — ONE cluster of toggles that
  *              show their open state. A notation plugin joins the cluster; it
  *              no longer grows the bar by another labelled button.
@@ -46,6 +47,7 @@ import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Code,
+  Columns2,
   Copy,
   Ellipsis,
   GitPullRequest,
@@ -57,6 +59,7 @@ import {
 } from "lucide-react";
 import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
 
+import type { EditorView } from "@/lib/editor-view";
 import { safeAvatarUrl, safePresenceColor } from "@/lib/presence-format";
 import type { CanvasViewLabel, EditorToolbarAction } from "@/notations/registry";
 
@@ -111,14 +114,10 @@ export function EditorToolbar({
   presence: PresenceUser[];
   /** document modes contributed by the mounted editor engine */
   modeActions: EditorToolbarAction[];
-  /** the Diagram | Source switch, absent when the doc has no visual editor;
+  /** the view switch (Diagram | Source, or Preview | Split | Markdown for a
+   *  plugin with the split view), absent when the doc has no visual editor;
    *  `canvas` renames the canvas side (absent = Diagram) */
-  view?: {
-    canvas?: CanvasViewLabel;
-    sourceLabel: string;
-    showSource: boolean;
-    onChange(showSource: boolean): void;
-  };
+  view?: ViewSwitchProps;
   panels: ToolbarPanelItem[];
   /** panel toggles living in the ⋯ overflow menu instead of the cluster */
   menuPanels: ToolbarPanelItem[];
@@ -415,43 +414,67 @@ function PeerAvatar({ user }: { user: PresenceUser }) {
 /** the canvas side of the switch unless the plugin names it */
 const DIAGRAM_VIEW: CanvasViewLabel = { label: "Diagram", buttonTitle: "Show the visual editor", icon: Shapes };
 
-/** Diagram | Source. A segmented control states which view is CURRENT — the
- *  single "XML" button it replaces read the same in both. */
-function ViewSwitch({
-  canvas = DIAGRAM_VIEW,
-  sourceLabel,
-  showSource,
-  onChange,
-}: {
+interface ViewSwitchProps {
   canvas?: CanvasViewLabel;
   sourceLabel: string;
-  showSource: boolean;
-  onChange(showSource: boolean): void;
-}) {
-  const options = [
-    { label: canvas.label, title: canvas.buttonTitle, icon: canvas.icon, active: !showSource, source: false },
-    { label: sourceLabel, title: `Show the ${sourceLabel} source`, icon: Code, active: showSource, source: true },
+  /** the view on screen */
+  shown: EditorView;
+  /** the Split segment: for a plugin with the split view while the editor
+   *  has room for it. Without the room it leaves the switch, the preview
+   *  shows, and a chosen Split comes back with the room */
+  split?: boolean;
+  onChange(view: EditorView): void;
+}
+
+interface ViewOption {
+  view: EditorView;
+  label: string;
+  title: string;
+  icon: ComponentType<{ className?: string }>;
+}
+
+/** Diagram | Source, or Preview | Split | Markdown. A segmented control
+ *  states which view is CURRENT — the single "XML" button it replaces read
+ *  the same in both. */
+function ViewSwitch({ canvas = DIAGRAM_VIEW, sourceLabel, shown, split, onChange }: ViewSwitchProps) {
+  const canvasName = canvas.label.toLowerCase();
+  const options: ViewOption[] = [
+    { view: "canvas", label: canvas.label, title: canvas.buttonTitle, icon: canvas.icon },
+    ...(split
+      ? [
+          {
+            view: "split" as const,
+            label: "Split",
+            title: `Show the ${sourceLabel} source and the ${canvasName} side by side`,
+            icon: Columns2,
+          },
+        ]
+      : []),
+    { view: "source", label: sourceLabel, title: `Show the ${sourceLabel} source`, icon: Code },
   ];
   return (
     <div role="group" aria-label="Editor view" className="bg-muted flex h-8 items-center gap-0.5 rounded-md p-0.5">
-      {options.map((o) => (
-        <button
-          key={o.source ? "source" : "canvas"}
-          type="button"
-          aria-pressed={o.active}
-          aria-label={o.label}
-          title={o.title}
-          onClick={() => onChange(o.source)}
-          className={cn(
-            "flex h-7 cursor-pointer items-center gap-1.5 rounded-sm px-2 text-xs font-medium transition-colors",
-            focusRing,
-            o.active ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <o.icon className="size-3.5" />
-          <span className="@max-4xl:hidden">{o.label}</span>
-        </button>
-      ))}
+      {options.map((o) => {
+        const active = shown === o.view;
+        return (
+          <button
+            key={o.view}
+            type="button"
+            aria-pressed={active}
+            aria-label={o.label}
+            title={o.title}
+            onClick={() => onChange(o.view)}
+            className={cn(
+              "flex h-7 cursor-pointer items-center gap-1.5 rounded-sm px-2 text-xs font-medium transition-colors",
+              focusRing,
+              active ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <o.icon className="size-3.5" />
+            <span className="@max-4xl:hidden">{o.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

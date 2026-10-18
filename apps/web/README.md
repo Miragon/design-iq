@@ -44,11 +44,13 @@ colour comes from `@designiq/ui-kit`:
 
 ## The Markdown view
 
-A Markdown model (`.md`) opens as the rendered document; the view switch's **Markdown** side
-is the Monaco source to edit it in. `src/notations/markdown/plugin.ts` is the light manifest;
-its lazy entry `markdown-view.ts` loads markdown-it, DOMPurify, the view and its stylesheet
-as their own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module to
-`import()` (rule `web-markdown-engine-loads-lazily`).
+A Markdown model (`.md`) opens as the rendered document. The view switch has three sides:
+**Preview** (the document), **Split** (the Monaco source on the left, the document on the
+right, each edit landing as you type) and **Markdown** (the source alone).
+`src/notations/markdown/plugin.ts` is the light manifest; its lazy entry `markdown-view.ts`
+loads markdown-it, DOMPurify, the view and its stylesheet as their own chunk when a document
+opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
+`web-markdown-engine-loads-lazily`).
 
 - `render.ts` is pure, node-tested in `test/markdown-render.test.ts`: CommonMark plus the GFM
   tables, strikethrough, task lists and autolinks, and GitHub-style heading anchors (the ids
@@ -62,9 +64,20 @@ as their own chunk when a document opens (ADR 0006). `pnpm arch` holds every oth
 - `view.ts` mounts the document in the canvas layer. It re-renders 200 ms after the last
   change of the shared Y.Text (a collaborator's included), at least once a second while the
   changes keep coming, scrolls in-page `#anchors` and hands a link to another model to the
-  shell, which opens it on its own route. While the shell shows the Markdown source instead
+  shell, which opens it on its own route. While the shell shows only the Markdown source
   (`EditorContext.visibility`), it does not render and catches up when it shows again.
   `test/markdown-view.test.ts` covers the sanitizer and the view under jsdom.
+- The split view is the shell's, for a plugin that opts in (`WebNotationPlugin.splitView`, so
+  far only Markdown). It narrows the same two layers the single views stack, so neither engine
+  remounts, and puts the divider between them (`src/components/split-divider.tsx`): drag it,
+  or focus it and use the arrow keys, Home and End; a double-click puts it back in the middle.
+  Neither pane gets narrower than 20rem. Split needs an editor at least 48rem wide and stays
+  on down to 45rem; narrower, the switch drops Split and the preview shows, and a chosen Split
+  comes back once there is room. The view and the divider's position are remembered per
+  notation in the browser (`src/lib/editor-view.ts`, localStorage): the first visit opens the
+  preview, the fallback to the source when the view fails to load is never remembered, and
+  neither is a click on the divider that does not move it. Monaco wraps long lines in a
+  Markdown document. `test/editor-view.test.ts` and `test/split-ratio.test.ts` cover the rules.
 - A relative link to a model of the repository (the shell's model list) is that model's
   in-app route (`/r/<owner>/<repo>/f/<path>#<section>`); a link to any other repository file,
   a document outside the models folder included, is marked, inert text. So is a link with a

@@ -5,7 +5,8 @@
  *   plugin       → its visual editor (bpmn-js / dmn-js / …) or read-only
  *                  view (the Markdown preview) mounted on the shared Y.Text,
  *                  plus its side panels, assist handoff and history diff —
- *                  the ENGINE chunks load lazily on mount
+ *                  the ENGINE chunks load lazily on mount; a plugin with the
+ *                  split view shows its canvas beside the Monaco source too
  *   no plugin    → Monaco text editor on the shared Y.Text, language from the
  *                  registry (Value Chains and YAML live-edit as text)
  *
@@ -21,7 +22,7 @@ import { cn } from "@designiq/ui-kit/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { History, ListTodo } from "lucide-react";
 import * as monaco from "monaco-editor";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { type CSSProperties, Suspense, useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { MonacoBinding } from "y-monaco";
 import type * as Y from "yjs";
@@ -33,6 +34,7 @@ import { HistoryDiffDialog } from "@/components/history-diff-dialog";
 import { HistoryPanel } from "@/components/history-panel";
 import { ReleaseDialog } from "@/components/release-dialog";
 import { RenameModelDialog } from "@/components/rename-model-dialog";
+import { SPLIT_PANES, SplitDivider, useSplitRoom } from "@/components/split-divider";
 import { TodoCreateDialog } from "@/components/todo-create-dialog";
 import { TodoPanel } from "@/components/todo-panel";
 import {
@@ -45,11 +47,21 @@ import {
   type TodoWire,
 } from "@/lib/api";
 import { keepKeysFromCanvas } from "@/lib/canvas-keys";
+import {
+  editorLayers,
+  type EditorView,
+  editorViews,
+  heldCanvasKeys,
+  readViewChoice,
+  rememberViewChoice,
+  type ViewChoice,
+} from "@/lib/editor-view";
 import { modelTarget, useOpenModel, wasExpected } from "@/lib/model-target";
 import { installMonacoTheme, MONACO_OPTIONS } from "@/lib/monaco-theme";
 import type { PresenceSurface, RemotePresence } from "@/lib/presence-canvas";
 import { invalidateModelLists, useFileHistory, useModels, useTodos } from "@/lib/queries";
 import { createRemoteCaretStyles } from "@/lib/remote-carets";
+import { clampRatio, DEFAULT_RATIO, ratioBounds } from "@/lib/split-ratio";
 import type { TodoCanvas } from "@/lib/todo-canvas";
 import { type EditorToolbarAction, type MountedEditor, webPlugin } from "@/notations/registry";
 
@@ -92,12 +104,24 @@ export function LiveEditor({
   // badge stays hidden and the title shows the process id alone
   const isBpmn = notation?.id === "bpmn";
   const fileName = docPath.split("/").pop() ?? docPath;
+  const sourceLabel = notation ? SOURCE_LABEL[notation.mediaKind] : "Text";
+  // the view switch's third view: the source beside the canvas layer
+  const splitView = isVisual && !structuredDoc && plugin?.splitView === true;
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const sourceRef = useRef<HTMLDivElement>(null);
+  const layersRef = useRef<HTMLDivElement>(null);
+  const sourcePaneId = useId();
   const [status, setStatus] = useState<"connecting" | "slow" | "live" | "error">("connecting");
   const [error, setError] = useState<string | null>(null);
-  const [showSource, setShowSource] = useState(!isVisual);
+  // the view a person chose (lib/editor-view): a notation with the split view
+  // opens the way its last document was left, the others on their canvas.
+  // The shell's own fallbacks set it too, but only a choice is remembered.
+  const [remembered] = useState<ViewChoice>(() => (splitView && notation ? readViewChoice(notation.id) : {}));
+  const [view, setView] = useState<EditorView>(isVisual ? (remembered.view ?? "canvas") : "source");
+  const views = editorViews(setView, splitView ? notation?.id : undefined);
+  /** the divider's position: the source pane's share of the width */
+  const [ratio, setRatio] = useState(remembered.ratio ?? DEFAULT_RATIO);
   const [presence, setPresence] = useState<PresenceUser[]>([]);
   /** the mounted editor exposed an element surface (selection, reveal) */
   const [hasElements, setHasElements] = useState(false);
@@ -130,7 +154,7 @@ export function LiveEditor({
   const modelListenersRef = useRef(new Set<() => void>());
   // whether the canvas layer is on screen, for the mounted editor: a
   // read-only view (the Markdown view and its diagrams) skips its renders
-  // while the source layer is up
+  // while only the source layer shows (not in the split view)
   const canvasShownRef = useRef(true);
   const canvasShownListenersRef = useRef(new Set<() => void>());
 
@@ -260,7 +284,7 @@ export function LiveEditor({
             onImportFailed: (msg) => {
               if (cancelled) return; // an in-flight first import can settle after unmount
               toast.error(`${notation?.label ?? "Model"} import failed: ${msg}`);
-              setShowSource(true);
+              views.fallBack(); // not a choice: never remembered
             },
             onBadgeClick: (elementId) => {
               setTodoFilter(elementId);
@@ -289,7 +313,7 @@ export function LiveEditor({
             toast.error(
               `${notation?.label ?? "Model"} editor failed to load (${e instanceof Error ? e.message : String(e)}) — falling back to the text view.`,
             );
-            setShowSource(true);
+            views.fallBack(); // not a choice: never remembered
           }
         }
         if (cancelled) {
@@ -319,6 +343,9 @@ export function LiveEditor({
           model: sourceModel,
           automaticLayout: true,
           minimap: { enabled: false },
+          // prose: a paragraph is one line, and half the width (the split
+          // view) must not scroll it sideways
+          wordWrap: sourceModel.getLanguageId() === "markdown" ? "on" : "off",
         });
         monacoBinding = new MonacoBinding(ytext, sourceModel, new Set([sourceEditor]), session.awareness ?? undefined);
       }
@@ -483,19 +510,30 @@ export function LiveEditor({
       ? (restore.variables?.sha ?? null)
       : null;
 
-  const sourceActive = (showSource || !isVisual) && !structuredDoc;
+  // Split needs room (lib/editor-view): without it the canvas shows, and the
+  // choice stays for when the window is wide again
+  const room = useSplitRoom(layersRef, splitView);
+  const splitAvailable = splitView && room.fits;
+  const layers = editorLayers(view, { visual: isVisual, structured: structuredDoc, splitAvailable });
+  const { shown, split, sourceShown, canvasShown } = layers;
+  const bounds = ratioBounds(room.width, room.rem);
+  const shownRatio = clampRatio(ratio, bounds);
   const ActivePanel = activePanelSpec?.component;
   // the mounted editor follows the view switch (see canvasShownRef)
   useEffect(() => {
-    canvasShownRef.current = !sourceActive;
+    canvasShownRef.current = canvasShown;
     for (const cb of canvasShownListenersRef.current) cb();
-  }, [sourceActive]);
+  }, [canvasShown]);
   // the canvas engine stays mounted behind the source layer and the dialogs:
   // one that takes its shortcuts from document hears keys only while in front
-  // (lib/canvas-keys)
+  // (lib/canvas-keys), and in the split view not those typed in the source
+  // beside it (Monaco and its widgets live inside the source layer)
   const dialogOpen = diff !== null || todoCreateOpen || releaseOpen || renameOpen || duplicateOpen;
-  const holdKeys = plugin?.documentKeys === true && (sourceActive || dialogOpen);
-  useEffect(() => (holdKeys ? keepKeysFromCanvas(document) : undefined), [holdKeys]);
+  const keysHeld = heldCanvasKeys(layers, { documentKeys: plugin?.documentKeys === true, dialogOpen });
+  useEffect(() => {
+    if (keysHeld === "none") return undefined;
+    return keepKeysFromCanvas(document, keysHeld === "source" ? (sourceRef.current ?? undefined) : undefined);
+  }, [keysHeld]);
 
   // the notation plugin's panels and the shell's own (todos, history) are the
   // same KIND of thing to the user, so they render the same way and carry the
@@ -542,9 +580,10 @@ export function LiveEditor({
           isVisual && !structuredDoc
             ? {
                 canvas: plugin?.canvasView,
-                sourceLabel: notation ? SOURCE_LABEL[notation.mediaKind] : "Text",
-                showSource: showSource,
-                onChange: setShowSource,
+                sourceLabel,
+                shown,
+                split: splitAvailable,
+                onChange: views.choose,
               }
             : undefined
         }
@@ -570,19 +609,42 @@ export function LiveEditor({
         onDuplicate={() => setDuplicateOpen(true)}
       />
       {error && <div className="bg-destructive-soft text-destructive border-b px-4 py-2 text-sm">{error}</div>}
-      <div className="relative min-h-0 flex-1">
+      <div
+        ref={layersRef}
+        className="relative min-h-0 flex-1"
+        style={split ? ({ "--split": `${shownRatio * 100}%` } as CSSProperties) : undefined}
+      >
         {/* both layers stay mounted and laid out (the engines measure their
             host), the hidden one inert: out of the Tab order — a Tab into an
-            invisible Monaco would type indentation into the shared model */}
-        <div
-          ref={canvasRef}
-          inert={sourceActive}
-          className={cn(plugin?.canvasClassName, "absolute inset-0", sourceActive && "pointer-events-none opacity-0")}
-        />
+            invisible Monaco would type indentation into the shared model.
+            The split view only narrows the SAME two nodes: moved into another
+            tree, React would make new ones, and the engines mounted once per
+            session would stay on the old. The source comes first, so the Tab
+            order follows the screen: source, divider, canvas */}
         <div
           ref={sourceRef}
-          inert={!sourceActive}
-          className={cn("monaco-host absolute inset-0", !sourceActive && "pointer-events-none opacity-0")}
+          id={sourcePaneId}
+          inert={!sourceShown}
+          className={cn("monaco-host absolute inset-0", !sourceShown && "pointer-events-none opacity-0")}
+          style={split ? SPLIT_PANES.source : undefined}
+        />
+        {split && (
+          <SplitDivider
+            ratio={shownRatio}
+            bounds={bounds}
+            labels={[sourceLabel, plugin?.canvasView?.label ?? "Diagram"]}
+            controls={sourcePaneId}
+            onChange={setRatio}
+            onCommit={(next) => {
+              if (notation) rememberViewChoice(notation.id, { ratio: next });
+            }}
+          />
+        )}
+        <div
+          ref={canvasRef}
+          inert={!canvasShown}
+          className={cn(plugin?.canvasClassName, "absolute inset-0", !canvasShown && "pointer-events-none opacity-0")}
+          style={split ? SPLIT_PANES.canvas : undefined}
         />
         {ActivePanel && (
           <Suspense fallback={null}>
@@ -594,7 +656,8 @@ export function LiveEditor({
                 hasElements
                   ? (elementId) => {
                       const found = todoCanvasRef.current?.reveal(elementId) ?? false;
-                      if (found) setShowSource(false); // a reveal must be VISIBLE, not on the hidden canvas
+                      // a reveal must be VISIBLE, not on the hidden canvas
+                      if (found) views.reveal();
                       return found;
                     }
                   : undefined
