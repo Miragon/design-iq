@@ -165,6 +165,11 @@ export interface WebNotationPlugin {
   /** mount the visual editor — the engine chunk loads HERE, not before;
    *  absent = collaborative Monaco (a plugin may contribute only panels/diff) */
   mountEditor?(container: HTMLElement, ctx: EditorContext): Promise<MountedEditor>;
+  /** the engine takes its shortcuts from a keydown listener on document,
+   *  wherever the focus is: the shell holds the keys from it while the canvas
+   *  is behind the source layer or a dialog (lib/canvas-keys). Absent = the
+   *  engine binds its keys to its own canvas (bpmn-js, dmn-js) */
+  documentKeys?: boolean;
   panels?: PanelSpec[];
   /** notation id of the Analyse-with-AI handoff — absent = no assist menu */
   assistNotation?: string;
