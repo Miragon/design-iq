@@ -11,7 +11,7 @@ Desktop, ChatGPT).
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base). |
 | `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).     |
-| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts` — the DOM-free widget-core suites (lifecycle, live upgrade, engines).                              |
+| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer).       |
 | `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                         |
 
 ## Theming
@@ -41,6 +41,29 @@ colour comes from `@designiq/ui-kit`:
 - **Icons** are Lucide only: `lucide-react` in the SPA; the React-free widgets inline the
   same icon nodes from `src/mcp-app/icons.ts` (`test/widget-icons.test.ts` holds them to
   the package).
+
+## The Markdown view
+
+A Markdown model (`.md`) opens as the rendered document; the view switch's **Markdown** side
+is the Monaco source to edit it in. `src/notations/markdown/plugin.ts` is the light manifest:
+markdown-it, DOMPurify, the view and its stylesheet load as their own chunk when a document
+opens (ADR 0006).
+
+- `render.ts` is pure, node-tested in `test/markdown-render.test.ts`: CommonMark plus the GFM
+  tables, strikethrough, task lists and autolinks, and GitHub-style heading anchors (the ids
+  carry an `md-` prefix, URL fragments stay bare). Raw HTML is escaped, and `javascript:`,
+  `vbscript:`, `file:` and non-image `data:` URLs never become a link or an image.
+- `markdown-view.ts` sanitizes that HTML once more with DOMPurify, against an allowlist of
+  exactly the markup the renderer emits. It re-renders 200 ms after the last change of the
+  shared Y.Text (a collaborator's included), scrolls in-page `#anchors` and hands a link to
+  another model to the shell, which opens it on its own route.
+- A relative link to a file with a registered notation extension is that model's in-app route
+  (`/r/<owner>/<repo>/f/<path>#<section>`); a link to any other repository file is marked,
+  inert text. Images load from `https:` and inline `data:image/` URLs; an image of the
+  repository shows a placeholder with its alt text, because the Live Host serves no raw files.
+- A fenced code block renders as code, unless `fences.ts` registers its language: `render`
+  returns its HTML inside the render pass, `hydrate` upgrades it in the DOM afterwards. That
+  is the slot a Mermaid renderer (#254) plugs into, without a change to the view.
 
 ## The MCP-App widgets
 
