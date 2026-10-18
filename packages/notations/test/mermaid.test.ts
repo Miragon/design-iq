@@ -2,16 +2,17 @@
  * The Mermaid text conventions (../mermaid.ts): the code mermaid 11.17's
  * parser reads after its preprocess, the way back from a line of that code to
  * the source line (parse errors count code lines), and the header that names
- * the diagram type. The validator's header check and the web viewer's error
- * notice both stand on these.
+ * the diagram type. The validator's check of a ```mermaid fence and the web
+ * renderer's error notice both stand on these.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { MERMAID_DIAGRAM_TYPES, mermaidCode, mermaidHeader, mermaidSourceLine } from "../mermaid.ts";
-import { newMermaidText } from "../templates.ts";
 
 const FRONT_MATTER = '---\ntitle: "Order Flow"\nconfig:\n  look: classic\n---\n';
+/** a titled flowchart, its title in the front matter */
+const FLOW = '---\ntitle: "Flow"\n---\nflowchart LR\n  start([Start]) --> work[Do the work]\n  work --> done([Done])\n';
 
 test("mermaidCode: front matter, directives and comment lines go, like in mermaid's preprocess", () => {
   assert.equal(mermaidCode(`${FRONT_MATTER}flowchart LR\n  A --> B\n`), "flowchart LR\n  A --> B\n");
@@ -26,10 +27,9 @@ test("mermaidCode: front matter, directives and comment lines go, like in mermai
 });
 
 test("mermaidSourceLine: a line of the parsed code back in the source", () => {
-  // the template: line 3 of the code (work --> done) is line 6 of the file
-  const template = newMermaidText("flow", "Flow");
-  assert.equal(mermaidSourceLine(template, 1), 4);
-  assert.equal(mermaidSourceLine(template, 3), 6);
+  // after a front matter: line 3 of the code (work --> done) is line 6 of the text
+  assert.equal(mermaidSourceLine(FLOW, 1), 4);
+  assert.equal(mermaidSourceLine(FLOW, 3), 6);
   // comment lines anywhere shift the count, and repeated lines stay in order
   const source = "%% header\nflowchart LR\n  A --> B\n  %% one\n  %% two\n  A --> B\n  B -->\n";
   assert.equal(mermaidSourceLine(source, 1), 2);
@@ -47,7 +47,7 @@ test("mermaidSourceLine: a line of the parsed code back in the source", () => {
 });
 
 test("mermaidHeader: the first meaningful line names the diagram type", () => {
-  assert.deepEqual(mermaidHeader(newMermaidText("flow", "Flow")), {
+  assert.deepEqual(mermaidHeader(FLOW), {
     line: 4,
     text: "flowchart LR",
     diagramType: "flowchart",

@@ -12,7 +12,6 @@ import {
   newCmJson,
   newDmnXml,
   newMarkdownText,
-  newMermaidText,
   newOwmText,
   newStormText,
   newTtJson,
@@ -27,26 +26,18 @@ test("templateFor: dispatches to the notation's builder, undefined without one",
   assert.equal(templateFor("event-storming", "board", "Board"), newStormText("board", "Board"));
   assert.equal(templateFor("context-map", "map", "Map"), newCmJson("map", "Map"));
   assert.equal(templateFor("markdown", "notes", "Notes"), newMarkdownText("notes", "Notes"));
-  assert.equal(templateFor("mermaid", "flow", "Flow"), newMermaidText("flow", "Flow"));
   // value-chain stays git-only until it has a mounted editor (#139 decision)
   assert.equal(templateFor("value-chain", "x", "X"), undefined);
   assert.equal(templateFor("no-such", "x", "X"), undefined);
 });
 
 test("hasTemplate mirrors templateFor — it drives the New menu and the create route", () => {
-  for (const id of [
-    "bpmn",
-    "dmn",
-    "wardley",
-    "team-topology",
-    "event-storming",
-    "context-map",
-    "markdown",
-    "mermaid",
-  ]) {
+  for (const id of ["bpmn", "dmn", "wardley", "team-topology", "event-storming", "context-map", "markdown"]) {
     assert.equal(hasTemplate(id), true, id);
   }
-  for (const id of ["value-chain", "no-such"]) assert.equal(hasTemplate(id), false, id);
+  // mermaid: withdrawn in 5.5, not in the New menu nor create_model (a
+  // diagram is a fence in a Markdown document)
+  for (const id of ["value-chain", "mermaid", "no-such"]) assert.equal(hasTemplate(id), false, id);
   // prototype members are NOT templates (the `in`/bare-index bug class):
   // templateFor("toString") used to return "[object Object]" as file content
   for (const id of ["toString", "constructor", "__proto__"]) {
@@ -95,17 +86,6 @@ test("template names are forced onto one line — control chars would break OWM 
   assert.equal(newOwmText("x", "A\u2029B"), "title A B\n");
   assert.equal((JSON.parse(newTtJson("x", "A\nB")) as { title: string }).title, "A B");
   assert.equal(newMarkdownText("x", "A\rB"), "# A B\n");
-});
-
-test("the mermaid template is a small flowchart, titled in its front matter", () => {
-  assert.equal(
-    newMermaidText("order-flow", "Order Flow"),
-    '---\ntitle: "Order Flow"\n---\nflowchart LR\n  start([Start]) --> work[Do the work]\n  work --> done([Done])\n',
-  );
-  // the title is a double-quoted YAML scalar: ":" and "#" stay text, a quote
-  // is escaped, and a line break cannot close the front matter early
-  const title = newMermaidText("x", 'Q&A: "Flow" #1\n---\ngraph TD').split("\n")[1];
-  assert.equal(title, 'title: "Q&A: \\"Flow\\" #1 --- graph TD"');
 });
 
 test("newDmnXml keeps the frozen DMN namespace base", () => {

@@ -4,8 +4,7 @@
  * (live-editor.tsx) looks its plugin up by descriptor id and mounts through
  * this contract — a notation WITHOUT a plugin opens in collaborative Monaco.
  * The "visual editor" may also be a read-only rendering: Markdown mounts a
- * live preview, Mermaid a live diagram, and their source is edited in the
- * shell's Monaco layer.
+ * live preview, and its source is edited in the shell's Monaco layer.
  *
  * Boundary rule, mirrored from ADR 0006: a plugin MANIFEST (this module +
  * the per-notation manifests it imports) is light, eager data — the editor
@@ -25,7 +24,6 @@ import type { TodoCanvas } from "@/lib/todo-canvas";
 import { bpmnPlugin } from "./bpmn";
 import { dmnPlugin } from "./dmn";
 import { markdownPlugin } from "./markdown/plugin";
-import { mermaidPlugin } from "./mermaid/plugin";
 import { MIRAGON_RENDERERS } from "./miragon";
 import { miragonPlugin } from "./miragon/plugin";
 
@@ -183,7 +181,6 @@ const WEB_PLUGINS: Record<string, WebNotationPlugin> = {
   bpmn: bpmnPlugin,
   dmn: dmnPlugin,
   markdown: markdownPlugin,
-  mermaid: mermaidPlugin,
   ...Object.fromEntries(MIRAGON_RENDERERS.map((spec) => [spec.id, miragonPlugin(spec)])),
 };
 

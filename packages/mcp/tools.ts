@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 
 import { parseAnchor } from "@designiq/contracts/todo-anchor";
 import { type GitHubIssueRow, isPullRequestRow, todoLabelQuery } from "@designiq/github-app/todos";
-import { fail, ok, READ, safe as kitSafe, type ToolResult } from "@designiq/mcp-kit";
+import { DIAGRAMS_IN_DOCUMENTS, fail, ok, READ, safe as kitSafe, type ToolResult } from "@designiq/mcp-kit";
 import { byId, NOTATIONS } from "@designiq/notations";
 import {
   buildRepoIndex,
@@ -190,6 +190,7 @@ function readOnlyInstructions(on: { todos: boolean }): string {
       "this server reads one checkout of such a repository and never writes.",
     "The repository keeps its models as files under the folder its designiq.yml names, one model per file with " +
       `the file stem as its id, in these notations: ${NOTATION_FILES}.`,
+    DIAGRAMS_IN_DOCUMENTS,
     "Start with `list_models` to see which models it holds.",
     "These tools are notation-neutral: `get_view` (the derived structure), `get_model` (the raw graph of " +
       "nodes and edges), `enumerate_paths` and `find_cycles` (flow analysis where the notation has flow " +

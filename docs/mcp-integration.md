@@ -5,14 +5,24 @@ them, check them and propose changes. This page covers the ways tools _outside_ 
 repo's skill layer consume the models.
 
 The MCP tools start with the models of **any** notation (`@designiq/notations`: BPMN, DMN,
-Wardley Map, Team Topology, Event Storming, Context Map, Value Chain, Markdown, Mermaid). On
-both surfaces below, `list_models` covers every notation and `get_view` every one but Markdown
-and Mermaid; the read-only server adds graph analysis across notations (`get_model`,
-`enumerate_paths`, `find_cycles`, `which_models_use`); the Live Host reads, validates and
-saves any model's source text (`get_model_content`, `validate_model`, `save_model_content`,
-`create_model`) and renders six of the notations as modelers inline in the chat. BPMN and DMN have extra tools on top: the
+Wardley Map, Team Topology, Event Storming, Context Map, Value Chain, Markdown). On both
+surfaces below, `list_models` covers every notation and `get_view` every one but Markdown; the
+read-only server adds graph analysis across notations (`get_model`, `enumerate_paths`,
+`find_cycles`, `which_models_use`); the Live Host reads, validates and saves any model's source
+text (`get_model_content`, `validate_model`, `save_model_content`, `create_model`) and renders
+six of the notations as modelers inline in the chat. BPMN and DMN have extra tools on top: the
 derived process and decision views, the XML round-trip, roles from lanes, decision simulation,
 analysis and tests, and todos anchored to BPMN elements.
+
+Diagrams as code are no notation of their own: a diagram is a `mermaid` code fence in a
+Markdown document, next to the prose that explains it, and a document links the models it talks
+about instead of redrawing them. `validate_model`, the save gate and `pnpm validate` check the
+diagram type of every such fence (a WARN, `mermaid/diagram-type`, naming the document's line),
+and a WARN never refuses a save. A standalone `.mmd` or `.mermaid` file is a plain repository
+file again (5.4.0 listed it as a model; from 5.5 the app no longer lists, opens, renames or
+deletes it). Move it in Git, `git mv flow.mmd flow.md`, then wrap its text in a `mermaid` code
+fence. On a Live Host, release any unreleased edits of such a file before the upgrade: from 5.5
+nobody can open them in the app.
 
 The platform has **two MCP surfaces**:
 
@@ -23,9 +33,10 @@ The platform has **two MCP surfaces**:
 Rule of thumb: talk _about_ released models → `packages/mcp`; read or **edit**
 work-in-progress → the Live Host endpoint.
 
-Both servers send MCP server instructions at initialize: the registered notations, the tools
-that work for every notation (start with `list_models`; on the Live Host, `list_repos` first),
-and where BPMN and DMN go deeper.
+Both servers send MCP server instructions at initialize: the registered notations, where a
+Mermaid diagram goes (a `mermaid` fence in a document; a model of any notation is linked or
+created, never redrawn in Mermaid), the tools that work for every notation (start with
+`list_models`; on the Live Host, `list_repos` first), and where BPMN and DMN go deeper.
 
 ## MCP server (`packages/mcp/`)
 
@@ -181,15 +192,15 @@ the tool name. `test/mcp.test.ts` pins that every registered tool has one and no
 
 `get_model_content`, `save_model_content`, `create_model` and `validate_model` are ONE tool
 set for the whole notation registry (`@designiq/notations`: bpmn, dmn, wardley, team-topology,
-event-storming, context-map, value-chain, markdown, mermaid) beside the wire-pinned BPMN/DMN twins. They address a
+event-storming, context-map, value-chain, markdown) beside the wire-pinned BPMN/DMN twins. They address a
 model as `{repo, id | path, notation?}`: `id` is the file stem `list_models` shows; a stem
 shared across notations resolves bpmn-first unless `notation` picks another. The text travels
-as `content` in the notation's own format (XML, the OWM/`.storm`/Mermaid DSL, JSON, Markdown). The save
+as `content` in the notation's own format (XML, the OWM/`.storm` DSL, JSON, Markdown). The save
 runs the same `checkModel` gate as `pnpm validate` and the REST PUT (ERROR findings refuse the
 save under the default `lint:"block"` and are reported under `"warn"`) and is compare-and-set
 like `save_bpmn_xml`: a stale `baseVersion` answers `{conflict: true, currentContent, baseVersion}`.
 `create_model` scaffolds every notation with a template (bpmn, dmn, wardley, team-topology,
-event-storming, context-map, markdown, mermaid); a notation without one (value-chain) arrives via git only.
+event-storming, context-map, markdown); a notation without one (value-chain) arrives via git only.
 `LIVE_MCP_READONLY=1` keeps the two read tools and drops the writes. The embedded modelers'
 `mint_ws_ticket` takes the same ref, so the Wardley, Team Topology, Event Storming and Context Map widgets
 (below) upgrade to live co-editing exactly like the BPMN one. (`mint_ws_ticket` itself is

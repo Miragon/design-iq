@@ -5,7 +5,8 @@
  * loud): packages/mcp, the Live Host's /mcp, and the widget bridge's decoder.
  *
  * Browser-safe on purpose (zero imports): the widget bundles value-import this
- * entry. The node-only transport mount lives behind ./mount.
+ * entry. The node-only transport mount lives behind ./mount. The instruction
+ * text both servers send lives here too (DIAGRAMS_IN_DOCUMENTS, below).
  */
 
 export type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
@@ -70,3 +71,18 @@ export const isMissingTool = (err: unknown, tool: string): boolean => {
   const message = err instanceof Error ? err.message : String(err);
   return message.includes(tool) && /not found/i.test(message);
 };
+
+/**
+ * Where a diagram goes: ONE text in both servers' instructions (the Live
+ * Host's and the read-only server's), so the two never steer an assistant two
+ * ways. A Mermaid diagram is a fence in a Markdown document; a process, a
+ * decision or a model of any other notation is a model of its own (the
+ * instructions list the notations just before this). It names no tool, so it
+ * holds in every mode the instructions' drift tests run.
+ */
+export const DIAGRAMS_IN_DOCUMENTS =
+  "A Mermaid diagram (a diagram as code) goes into a Markdown document as a ```mermaid fence, next to the " +
+  "prose that explains it, never into a file of its own. A process, a decision, a Wardley Map or a model in " +
+  "any other notation above is a model of its own: link it from the document when the repository holds it " +
+  "(a relative link such as [Order to cash](order-to-cash.bpmn)), create it as a model when it does not, " +
+  "and never redraw it in Mermaid.";

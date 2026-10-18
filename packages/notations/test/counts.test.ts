@@ -23,9 +23,9 @@ test("notationCount: the registry noun, counted and qualified by its notation", 
   assert.equal(notationCount("wardley", 2), "2 Wardley Maps");
   assert.equal(notationCount("team-topology", 1), "1 Team Topology");
   assert.equal(notationCount("markdown", 3), "3 Markdown documents");
-  assert.equal(notationCount("mermaid", 1), "1 Mermaid diagram");
-  assert.equal(notationCount("mermaid", 2), "2 Mermaid diagrams");
   assert.equal(notationCount("archimate", 2), "2 archimate models", "an id from a newer host still counts");
+  // and one an older host still sends: 5.4.0 counted standalone Mermaid diagrams
+  assert.equal(notationCount("mermaid", 1), "1 mermaid model");
 });
 
 test("notationCount: every registered notation reads as count + words, never a doubled name", () => {

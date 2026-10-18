@@ -20,29 +20,18 @@ test("modelStem: strips the FULL registered compound extension", () => {
   assert.equal(modelStem("maps/conference.cm.json"), "conference");
 });
 
-test("mermaid: a text DSL under .mmd and .mermaid, edited as plain text", () => {
-  assert.deepEqual(byId("mermaid"), {
-    id: "mermaid",
-    label: "Mermaid",
-    noun: { singular: "diagram", plural: "diagrams" },
-    extensions: [".mmd", ".mermaid"],
-    mediaKind: "dsl",
-    docShape: "text",
-    monacoLanguage: "plaintext",
-  });
-  assert.equal(byExtension("diagrams/order-flow.mmd")?.id, "mermaid");
-  assert.equal(byExtension("diagrams/order-flow.mermaid")?.id, "mermaid");
-  assert.equal(modelStem("diagrams/order-flow.mmd"), "order-flow");
-  assert.equal(modelStem("diagrams/order-flow.mermaid"), "order-flow");
-  // the longest-suffix rule: ".md" is no suffix of ".mmd", and a compound
-  // name ends in the suffix that decides ("notes.mmd.md" is markdown)
-  assert.equal(byExtension("notes.md")?.id, "markdown");
+test("a diagram is no notation of its own: .mmd and .mermaid are plain repository files", () => {
+  // withdrawn in 5.5: a diagram lives as a ```mermaid fence in a document
+  assert.equal(byId("mermaid"), undefined);
+  assert.equal(byExtension("diagrams/flow.mmd"), undefined);
+  assert.equal(byExtension("diagrams/flow.mermaid"), undefined);
+  // no live document either: the Live Host opens no room for them
+  for (const ext of [".mmd", ".mermaid"]) assert.ok(!EDITABLE_EXTENSIONS.includes(ext), ext);
+  // the file that holds diagrams now: a compound name ends in ".md" or it is none
+  assert.equal(byExtension("diagrams/flow.md")?.id, "markdown");
   assert.equal(byExtension("notes.mmd.md")?.id, "markdown");
-  assert.equal(byExtension("flow.md.mmd")?.id, "mermaid");
-  assert.equal(modelStem("flow.md.mmd"), "flow.md");
-  assert.equal(byExtension("flow.mermaid.json"), undefined);
-  // a live document like every notation file
-  for (const ext of [".mmd", ".mermaid"]) assert.ok(EDITABLE_EXTENSIONS.includes(ext), ext);
+  assert.equal(byExtension("flow.md.mmd"), undefined);
+  assert.equal(modelStem("diagrams/flow.mmd"), "flow", "an unregistered suffix: the final dot-suffix goes");
 });
 
 test("modelStem: unknown extensions fall back to the final dot-suffix", () => {

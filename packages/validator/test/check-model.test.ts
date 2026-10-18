@@ -88,14 +88,17 @@ test("checkModel: other notations run the baseline, non-models are undefined", (
     checkModel("{ broken", { path: "teams/t.tt" }),
     checkModelBaseline("{ broken", { file: "teams/t.tt", notation: "team-topology" }),
   );
-  assert.deepEqual(checkModel("# notes", { path: "docs/notes.md" }), []); // markdown: registered, no gate
-  // mermaid: the dsl baseline plus its header line, under both extensions
-  assert.deepEqual(checkModel("graph TD\n  A --> B", { path: "docs/flow.mmd" }), []);
+  // markdown: no parse gate, its ```mermaid fences warn
+  assert.deepEqual(checkModel("# notes", { path: "docs/notes.md" }), []);
+  const fence = "# Flow\n\n```mermaid\nflowchrt LR\n```\n";
   assert.deepEqual(
-    checkModel("", { path: "docs/flow.mermaid" }),
-    checkModelBaseline("", { file: "docs/flow.mermaid", notation: "mermaid" }),
+    checkModel(fence, { path: "docs/flow.md" }),
+    checkModelBaseline(fence, { file: "docs/flow.md", notation: "markdown" }),
   );
-  assert.equal(checkModel("", { path: "docs/flow.mermaid" })?.[0]?.severity, "WARN");
+  assert.equal(checkModel(fence, { path: "docs/flow.md" })?.[0]?.severity, "WARN");
+  // a standalone diagram is no model (withdrawn in 5.5), so there is nothing to check
+  assert.equal(checkModel("", { path: "docs/flow.mmd" }), undefined);
+  assert.equal(checkModel("flowchrt", { path: "docs/flow.mermaid" }), undefined);
   assert.equal(checkModel("cases: []", { path: "p.tests.yaml" }), undefined);
   assert.equal(checkModel("anything", { path: "no-extension" }), undefined);
 });

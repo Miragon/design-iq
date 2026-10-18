@@ -11,7 +11,6 @@ import {
   ChevronsRight,
   FileText,
   type LucideIcon,
-  Network,
   Shapes,
   StickyNote,
   Table2,
@@ -28,7 +27,6 @@ const NOTATION_ICONS = new Map<string, LucideIcon>([
   ["context-map", Boxes],
   ["value-chain", ChevronsRight],
   ["markdown", FileText],
-  ["mermaid", Network],
 ]);
 
 /** the icon of a notation registry id */

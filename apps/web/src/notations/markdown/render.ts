@@ -377,3 +377,11 @@ export function renderMarkdown(source: string, options: RenderOptions): string {
   };
   return md.render(source, env);
 }
+
+/** the tokens renderMarkdown renders a document from (its links resolved as
+ *  in a document at the repository root): test/markdown-fences.test.ts holds
+ *  the validator's fence scanner against their fences */
+export function parseMarkdown(source: string): Token[] {
+  const env: RenderEnv = { repo: "", docPath: "", fences: {}, models: undefined };
+  return md.parse(source, env);
+}

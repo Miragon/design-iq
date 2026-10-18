@@ -2,6 +2,7 @@
  * Every blank template ships validator-clean (#139): a model created from the
  * platform must never open with baseline findings — the create path and the
  * quality gate would contradict each other on a file the PLATFORM authored.
+ * The Markdown one runs the ```mermaid fence check too (its baseline case).
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
