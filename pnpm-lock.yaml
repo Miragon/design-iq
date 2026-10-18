@@ -253,6 +253,9 @@ importers:
       markdown-it:
         specifier: 15.0.3
         version: 15.0.3
+      mermaid:
+        specifier: 11.17.2
+        version: 11.17.2
       monaco-editor:
         specifier: 0.55.1
         version: 0.55.1

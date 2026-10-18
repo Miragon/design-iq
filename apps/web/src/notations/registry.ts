@@ -4,7 +4,8 @@
  * (live-editor.tsx) looks its plugin up by descriptor id and mounts through
  * this contract — a notation WITHOUT a plugin opens in collaborative Monaco.
  * The "visual editor" may also be a read-only rendering: Markdown mounts a
- * live preview, and its source is edited in the shell's Monaco layer.
+ * live preview, Mermaid a live diagram, and their source is edited in the
+ * shell's Monaco layer.
  *
  * Boundary rule, mirrored from ADR 0006: a plugin MANIFEST (this module +
  * the per-notation manifests it imports) is light, eager data — the editor
@@ -24,6 +25,7 @@ import type { TodoCanvas } from "@/lib/todo-canvas";
 import { bpmnPlugin } from "./bpmn";
 import { dmnPlugin } from "./dmn";
 import { markdownPlugin } from "./markdown/plugin";
+import { mermaidPlugin } from "./mermaid/plugin";
 import { MIRAGON_RENDERERS } from "./miragon";
 import { miragonPlugin } from "./miragon/plugin";
 
@@ -52,6 +54,10 @@ export interface EditorContext {
    *  Optional: without it a link to a file with a notation extension counts
    *  as one to a model */
   models?: ModelDirectory;
+  /** whether the editor's layer is on screen (the shell's view switch shows
+   *  it or the Monaco source): a read-only view skips its renders while
+   *  hidden and catches up when it shows. Optional: absent = always shown */
+  visibility?: LayerVisibility;
   /** live presence (#115) — publish the local cursor/selection, subscribe to
    *  remote peers; the additive awareness surface promised on #124. Engines
    *  hand it to attachPresenceCanvas; optional keeps them mountable without
@@ -65,6 +71,13 @@ export interface ModelDirectory {
   /** the repo-relative paths of the repository's models; undefined while the list loads */
   paths(): ReadonlySet<string> | undefined;
   /** subscribe to list changes; returns the unsubscribe */
+  onChange(cb: () => void): () => void;
+}
+
+/** the editor layer's visibility as the shell has it */
+export interface LayerVisibility {
+  visible(): boolean;
+  /** subscribe to visibility changes; returns the unsubscribe */
   onChange(cb: () => void): () => void;
 }
 
@@ -165,6 +178,7 @@ const WEB_PLUGINS: Record<string, WebNotationPlugin> = {
   bpmn: bpmnPlugin,
   dmn: dmnPlugin,
   markdown: markdownPlugin,
+  mermaid: mermaidPlugin,
   ...Object.fromEntries(MIRAGON_RENDERERS.map((spec) => [spec.id, miragonPlugin(spec)])),
 };
 

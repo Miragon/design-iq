@@ -36,6 +36,7 @@ suggests `git mv bpmiq.yml designiq.yml`), and so does the legacy key `processes
   | Context Map    | `.cm.json`         | a Context Map           |
   | Value Chain    | `.vc.json`         | a Value Chain           |
   | Markdown       | `.md`              | a document              |
+  | Mermaid        | `.mmd`, `.mermaid` | a diagram               |
 
 - A model's **id** is its file name without the extension
   (`processes/order-to-cash.bpmn` → `order-to-cash`).

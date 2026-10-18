@@ -64,6 +64,39 @@ test("checkModelBaseline: json parses or errors, dsl stays lenient", () => {
   assert.match(xml[0]?.message ?? "", /not well-formed XML/);
 });
 
+test("checkModelBaseline: a Mermaid diagram names its type on its first line", () => {
+  const mermaid = (raw: string) => checkModelBaseline(raw, { file: "models/flow.mmd", notation: "mermaid" });
+  assert.deepEqual(mermaid("flowchart LR\n  A --> B\n"), []);
+  assert.deepEqual(mermaid(templateFor("mermaid", "flow", "Flow") ?? ""), []);
+  // the front matter, the directives and the comments come before it
+  assert.deepEqual(mermaid('---\ntitle: "Flow"\n---\n%%{init: {}}%%\n%% notes\nsequenceDiagram\n  A->>B: hi\n'), []);
+  // light on purpose: the grammar is the renderer's (mermaid needs a DOM),
+  // so a broken body behind a valid header passes here
+  assert.deepEqual(mermaid("flowchart LR\n  A -->\n"), []);
+
+  // a WARN: a .mmd snippet a content repo already keeps never fails its CI
+  for (const empty of ["", "  \n\n", "%% only a note\n", '---\ntitle: "Flow"\n---\n']) {
+    const findings = mermaid(empty);
+    assert.equal(findings.length, 1, JSON.stringify(empty));
+    assert.equal(findings[0]?.severity, "WARN");
+    assert.equal(findings[0]?.ruleId, "mermaid/diagram-type");
+    assert.equal(findings[0]?.file, "models/flow.mmd");
+    assert.match(findings[0]?.message ?? "", /^empty Mermaid diagram: the first line must name a diagram type/);
+  }
+  // the line is the SOURCE line, front matter included
+  const typo = mermaid('---\ntitle: "Flow"\n---\nflowchrt LR\n  A --> B\n');
+  assert.equal(typo.length, 1);
+  assert.equal(typo[0]?.severity, "WARN");
+  assert.match(
+    typo[0]?.message ?? "",
+    /^line 4: 'flowchrt' is not a Mermaid diagram type \(flowchart, sequenceDiagram/,
+  );
+  // zenuml is a plugin mermaid does not bundle: it does not draw here either
+  assert.match(mermaid("zenuml\n  A.method()\n")[0]?.message ?? "", /'zenuml' is not a Mermaid diagram type/);
+  // the other DSLs keep no header rule
+  assert.deepEqual(checkModelBaseline("", { notation: "wardley" }), []);
+});
+
 test("a broken .tt fails the run; valid non-BPMN models are counted", () => {
   const dir = repoWith({ "teams.tt": "{ this is not json" });
   const { status, out } = run(["--root", dir]);
@@ -71,6 +104,18 @@ test("a broken .tt fails the run; valid non-BPMN models are counted", () => {
   assert.match(out, /\[ERROR\] models\/teams\.tt: not parseable as JSON/);
 
   const ok = repoWith({ "teams.tt": "{}", "tea.owm": "component Tea [0.5, 0.5]" });
+  const green = run(["--root", ok]);
+  assert.equal(green.status, 0, green.out);
+  assert.match(green.out, /2 other model\(s\) checked/);
+});
+
+test("an empty Mermaid diagram warns but passes the run; one under either extension is counted", () => {
+  const dir = repoWith({ "flow.mmd": "" });
+  const { status, out } = run(["--root", dir]);
+  assert.equal(status, 0, out);
+  assert.match(out, /\[WARN\] models\/flow\.mmd: empty Mermaid diagram/);
+
+  const ok = repoWith({ "flow.mmd": "flowchart LR\n  A --> B\n", "states.mermaid": "stateDiagram-v2\n  [*] --> A\n" });
   const green = run(["--root", ok]);
   assert.equal(green.status, 0, green.out);
   assert.match(green.out, /2 other model\(s\) checked/);

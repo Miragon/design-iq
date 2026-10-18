@@ -9,6 +9,8 @@
  *
  * The static HTML names its icons declaratively (`<button data-icon="x">`);
  * mountIcons fills them once at boot, so each geometry lives here only.
+ * The SPA's Markdown view, plain DOM like the widgets, borrows circle-alert
+ * for the error notice under a mermaid fence.
  * Phase 2 adds git-pull-request (Release → PR) and undo-2 / redo-2 (touch).
  */
 export const LUCIDE_ICONS = {
@@ -99,9 +101,11 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** a Lucide icon as a DOM node — decorative (aria-hidden): the control that
  *  carries it owns the accessible name (its text, title or aria-label).
- *  `cls` joins "icon" (chrome.css `.icon.spin` rotates a loader-circle). */
-export function icon(name: IconName, size = 16, cls?: string): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, "svg");
+ *  `cls` joins "icon" (chrome.css `.icon.spin` rotates a loader-circle).
+ *  `doc` is the document to create it in: the SPA's Markdown view, which
+ *  builds its DOM without React, passes its own (it runs under jsdom too). */
+export function icon(name: IconName, size = 16, cls?: string, doc: Document = document): SVGSVGElement {
+  const svg = doc.createElementNS(SVG_NS, "svg");
   const attrs: Array<[string, string]> = [
     ["viewBox", "0 0 24 24"],
     ["width", String(size)],

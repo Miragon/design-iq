@@ -80,6 +80,7 @@ test("docCodecFor: the registry is EMPTY (dark launch) — no shipped notation i
     "context-map",
     "value-chain",
     "markdown",
+    "mermaid",
   ]) {
     assert.equal(docCodecFor(id), undefined);
   }

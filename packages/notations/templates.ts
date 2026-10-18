@@ -165,6 +165,25 @@ export function newMarkdownText(_id: string, name: string): string {
   return `# ${oneLine(name)}\n`;
 }
 
+/**
+ * The initial content of a new Mermaid diagram — a small flowchart that
+ * renders at once and shows the syntax to build on. The title rides in the
+ * front matter (Mermaid draws it above the diagram) as a double-quoted YAML
+ * scalar: a JSON string is one, so a name with ":" or "#" cannot break the
+ * YAML, and the one-line rule keeps it from closing the front matter.
+ */
+export function newMermaidText(_id: string, name: string): string {
+  return [
+    "---",
+    `title: ${JSON.stringify(oneLine(name))}`,
+    "---",
+    "flowchart LR",
+    "  start([Start]) --> work[Do the work]",
+    "  work --> done([Done])",
+    "",
+  ].join("\n");
+}
+
 const TEMPLATES: Record<string, (id: string, name: string) => string> = {
   bpmn: newBpmnXml,
   dmn: newDmnXml,
@@ -173,6 +192,7 @@ const TEMPLATES: Record<string, (id: string, name: string) => string> = {
   "event-storming": newStormText,
   "context-map": newCmJson,
   markdown: newMarkdownText,
+  mermaid: newMermaidText,
 };
 
 /** whether a notation can be CREATED from the platform (drives the web

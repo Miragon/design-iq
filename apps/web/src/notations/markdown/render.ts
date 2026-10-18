@@ -312,6 +312,9 @@ md.core.ruler.push("designiq_links", links);
 
 const { escapeHtml, unescapeAll } = md.utils;
 
+/** text as HTML text: what a fence renderer wraps its source in */
+export const escapeText = (text: string): string => escapeHtml(text);
+
 // raw HTML never reaches the page: comments are dropped (GitHub hides them
 // too: authoring notes, lint and toc directives), everything else is escaped
 // and shows as the text it is. An unclosed comment runs to the end, as in a

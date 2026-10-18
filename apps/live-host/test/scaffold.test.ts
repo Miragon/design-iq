@@ -12,6 +12,7 @@ import { test } from "node:test";
 
 import { CONTENT_KEY } from "@designiq/contracts/live";
 import { AppError } from "@designiq/http-kit";
+import { newMermaidText } from "@designiq/notations/templates";
 import * as Y from "yjs";
 
 import {
@@ -341,6 +342,14 @@ test("createNotationModel: markdown documents are creatable (a first-class notat
   const created = await createNotationModel(REPO, ws, { notation: "markdown", name: "Architecture Notes" });
   assert.equal(created.path, "processes/architecture-notes.md");
   assert.equal(readFileSync(join(ws, created.path), "utf8"), "# Architecture Notes\n");
+});
+
+test("createNotationModel: a Mermaid diagram starts as the template flowchart", async () => {
+  const ws = workspace();
+  const created = await createNotationModel(REPO, ws, { notation: "mermaid", name: "Order Flow" });
+  assert.equal(created.path, "processes/order-flow.mmd", "the first registered extension");
+  assert.equal(created.notation, "mermaid");
+  assert.equal(readFileSync(join(ws, created.path), "utf8"), newMermaidText("order-flow", "Order Flow"));
 });
 
 // ── moveModels (#182) ───────────────────────────────────────────────────────
