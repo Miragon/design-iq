@@ -44,6 +44,7 @@ test("hasRefs: true exactly for notations with an emitter — the save/check ski
   assert.ok(hasRefs("bpmn"));
   assert.ok(!hasRefs("dmn"));
   assert.ok(!hasRefs("markdown"));
+  assert.ok(!hasRefs("mermaid"));
   assert.ok(!hasRefs(""));
 });
 

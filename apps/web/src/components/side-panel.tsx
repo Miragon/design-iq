@@ -4,8 +4,11 @@
  * times, and the third copy had already drifted (a full-foreground, shrinkable
  * icon). The badge slot is a ReactNode on purpose: the three panels' badges
  * are not one shape (count, analysis verdict, none-while-loading).
+ * `className` is for a panel that needs more room than a list (the Mermaid
+ * Preview draws a diagram): it overrides the width, nothing else.
  */
 import { Button } from "@designiq/ui-kit/components/button";
+import { cn } from "@designiq/ui-kit/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
@@ -14,18 +17,25 @@ export function SidePanel({
   icon: Icon,
   title,
   badge,
+  className,
   onClose,
   children,
 }: {
   icon: LucideIcon;
   title: string;
   badge?: ReactNode;
+  className?: string;
   onClose: () => void;
   children: ReactNode;
 }) {
   // docked over the canvas: a card surface with the card elevation (CI §6)
   return (
-    <aside className="bg-card text-card-foreground absolute inset-y-0 right-0 z-10 flex w-80 flex-col border-l shadow-md">
+    <aside
+      className={cn(
+        "bg-card text-card-foreground absolute inset-y-0 right-0 z-10 flex w-80 flex-col border-l shadow-md",
+        className,
+      )}
+    >
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <Icon className="text-muted-foreground size-4 shrink-0" />
         <span className="text-sm font-semibold">{title}</span>

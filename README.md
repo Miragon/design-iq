@@ -6,11 +6,11 @@
 
 designIQ is a Git-native workspace where teams model their business and their architecture
 together, live: processes (BPMN), decisions (DMN), Wardley Maps, Team Topologies,
-Event Storming boards, Context Maps, Value Chains and plain Markdown. Every model is a file
-in your repository; edits sync in real time in the browser and in VS Code, and a release is
-a pull request, so review and governance stay where engineering already works. AI
-assistants join through MCP: they read the same live models, explain them, check them and
-propose changes.
+Event Storming boards, Context Maps, Value Chains, plain Markdown and Mermaid diagrams.
+Every model is a file in your repository; edits sync in real time in the browser and in
+VS Code, and a release is a pull request, so review and governance stay where engineering
+already works. AI assistants join through MCP: they read the same live models, explain
+them, check them and propose changes.
 
 BPMN and DMN are the notations with the deepest tooling: derived process and decision
 views, decision simulation and test suites, and todos anchored to BPMN elements.
@@ -20,11 +20,12 @@ views, decision simulation and test suites, and todos anchored to BPMN elements.
 integration and the decision records. The site is built from [`docs/`](docs/).
 
 - **Model live**: every model file (`.bpmn`, `.dmn`, `.owm`, `.tt`, `.storm`, `.cm.json`,
-  `.vc.json`, `.yaml`, `.md`) syncs as a shared Y.Text document; the web client and VS Code
-  bind their editors to it. The browser has a visual modeler for BPMN, DMN, Wardley Maps,
+  `.vc.json`, `.yaml`, `.md`, `.mmd`) syncs as a shared Y.Text document; the web client and
+  VS Code bind their editors to it. The browser has a visual modeler for BPMN, DMN, Wardley Maps,
   Team Topologies, Event Storming boards and Context Maps, a rendered view for Markdown
   documents (links between models open inside designIQ, `mermaid` fences drawn as
-  diagrams), and a text view for every file.
+  diagrams), draws Mermaid diagrams with a live preview beside their text, and has a text
+  view for every file.
   Login authenticates, **repos authorize**: what you see and edit follows your git write
   permission.
 - **Release as PR**: one click cuts a branch from `origin/<default>`, pushes and opens
@@ -144,7 +145,7 @@ but the cell mode it drives is. The code you read here is the code the SaaS runs
 | Path                     | Package                        | What it is                                                                                                                                                                                                                                                                                                                       |
 | ------------------------ | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/live-host/`        | `@designiq/live-host`          | The platform server: Hocuspocus (Yjs) sync + REST API + web app on **one port**. Multi-repo, per-(user,repo) authz, release-as-PR. Published as `ghcr.io/miragon/designiq-live-host`.                                                                                                                                            |
-| `apps/web/`              | `@designiq/web`                | Collaborative web client: visual modelers (bpmn-js, dmn-js, the Miragon renderers) and the rendered Markdown view (Mermaid fences drawn as diagrams) + Monaco on a shared Y.Text, repo overview, and the MCP-App widgets.                                                                                                        |
+| `apps/web/`              | `@designiq/web`                | Collaborative web client: visual modelers (bpmn-js, dmn-js, the Miragon renderers), the rendered Markdown view (Mermaid fences drawn as diagrams) and a Mermaid viewer + Monaco on a shared Y.Text, repo overview, and the MCP-App widgets.                                                                                      |
 | `apps/vscode/`           | `design-iq`                    | VS Code extension: opens `designiq://` model documents synced through the Live Host; signs in through the host's own login (editor sign-in).                                                                                                                                                                                     |
 | `packages/mcp/`          | `@miragon/design-iq-mcp`       | Read-only MCP server exposing a content repo's models of every notation (discovered from `designiq.yml`; the process views derived from BPMN), over stdio + Streamable HTTP, `npx @miragon/design-iq-mcp --root <path>`. Read-only, against a checkout; the live, writable MCP endpoint lives in the Live Host (`/mcp`).         |
 | `packages/notations/`    | `@designiq/notations`          | Notation registry + model analysis: one descriptor per notation (extensions, editor language), `extract` (file→graph), `derive` (graph→view, incl. the rich process and decision views), and the `designiq.yml` content discovery (legacy `bpmiq.yml` still read).                                                               |

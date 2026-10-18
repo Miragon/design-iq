@@ -13,11 +13,11 @@
  * The rest is pure (config, ids, error wording) and runs under node --test:
  * mermaid itself needs a DOM to measure text.
  */
+import { mermaidHeader, mermaidSourceLine } from "@designiq/notations/mermaid";
 import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
 import type { Mermaid, MermaidConfig } from "mermaid";
 
 import { canvasFontReady } from "./canvas-theme.ts";
-import { mermaidHeader, mermaidSourceLine } from "./mermaid-syntax.ts";
 
 /**
  * The Miragon CI as Mermaid's "base" theme. Literal colours from the tokens
@@ -135,8 +135,8 @@ function codeLineOf(error: unknown, message: string): number | undefined {
 /**
  * What a failed mermaid parse or render means for the person typing: the
  * source line (mermaid counts lines AFTER dropping the front matter and the
- * comments, ./mermaid-syntax.ts maps them back) and the message. A missing
- * or unknown diagram type names the line that should have named one.
+ * comments, @designiq/notations/mermaid maps them back) and the message. A
+ * missing or unknown diagram type reads like the validator's header check.
  */
 export function describeMermaidError(error: unknown, source: string): MermaidRenderError {
   const raw = (error instanceof Error ? error.message : String(error)).trim();

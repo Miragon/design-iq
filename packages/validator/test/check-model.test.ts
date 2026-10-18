@@ -89,6 +89,13 @@ test("checkModel: other notations run the baseline, non-models are undefined", (
     checkModelBaseline("{ broken", { file: "teams/t.tt", notation: "team-topology" }),
   );
   assert.deepEqual(checkModel("# notes", { path: "docs/notes.md" }), []); // markdown: registered, no gate
+  // mermaid: the dsl baseline plus its header line, under both extensions
+  assert.deepEqual(checkModel("graph TD\n  A --> B", { path: "docs/flow.mmd" }), []);
+  assert.deepEqual(
+    checkModel("", { path: "docs/flow.mermaid" }),
+    checkModelBaseline("", { file: "docs/flow.mermaid", notation: "mermaid" }),
+  );
+  assert.equal(checkModel("", { path: "docs/flow.mermaid" })?.[0]?.severity, "WARN");
   assert.equal(checkModel("cases: []", { path: "p.tests.yaml" }), undefined);
   assert.equal(checkModel("anything", { path: "no-extension" }), undefined);
 });

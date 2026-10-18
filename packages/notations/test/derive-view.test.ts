@@ -182,5 +182,6 @@ test("deriveView(context-map): title as name, per-subdomain + per-pattern stats,
 
 test("deriveView: a notation without a deriver yields undefined (the caller keeps the bare row)", () => {
   assert.equal(deriveView({ notation: "markdown", nodes: [], edges: [] }), undefined);
+  assert.equal(deriveView({ notation: "mermaid", nodes: [], edges: [] }), undefined);
   assert.equal(deriveView({ notation: "no-such", nodes: [], edges: [] }), undefined);
 });

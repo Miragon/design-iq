@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { modelStem, processIdFromName } from "../index.ts";
+import { byExtension, byId, EDITABLE_EXTENSIONS, modelStem, processIdFromName } from "../index.ts";
 
 test("modelStem: the file stem is the model id", () => {
   assert.equal(modelStem("processes/order.bpmn"), "order");
@@ -18,6 +18,31 @@ test("modelStem: strips the FULL registered compound extension", () => {
   assert.equal(modelStem("maps/tea-shop.owm"), "tea-shop");
   assert.equal(modelStem("boards/order-checkout.storm"), "order-checkout");
   assert.equal(modelStem("maps/conference.cm.json"), "conference");
+});
+
+test("mermaid: a text DSL under .mmd and .mermaid, edited as plain text", () => {
+  assert.deepEqual(byId("mermaid"), {
+    id: "mermaid",
+    label: "Mermaid",
+    noun: { singular: "diagram", plural: "diagrams" },
+    extensions: [".mmd", ".mermaid"],
+    mediaKind: "dsl",
+    docShape: "text",
+    monacoLanguage: "plaintext",
+  });
+  assert.equal(byExtension("diagrams/order-flow.mmd")?.id, "mermaid");
+  assert.equal(byExtension("diagrams/order-flow.mermaid")?.id, "mermaid");
+  assert.equal(modelStem("diagrams/order-flow.mmd"), "order-flow");
+  assert.equal(modelStem("diagrams/order-flow.mermaid"), "order-flow");
+  // the longest-suffix rule: ".md" is no suffix of ".mmd", and a compound
+  // name ends in the suffix that decides ("notes.mmd.md" is markdown)
+  assert.equal(byExtension("notes.md")?.id, "markdown");
+  assert.equal(byExtension("notes.mmd.md")?.id, "markdown");
+  assert.equal(byExtension("flow.md.mmd")?.id, "mermaid");
+  assert.equal(modelStem("flow.md.mmd"), "flow.md");
+  assert.equal(byExtension("flow.mermaid.json"), undefined);
+  // a live document like every notation file
+  for (const ext of [".mmd", ".mermaid"]) assert.ok(EDITABLE_EXTENSIONS.includes(ext), ext);
 });
 
 test("modelStem: unknown extensions fall back to the final dot-suffix", () => {

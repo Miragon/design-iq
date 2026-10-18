@@ -2,9 +2,9 @@
 
 **designIQ** is collaborative modeling and architecture with AI: a Git-native workspace where
 teams model processes (BPMN), decisions (DMN), Wardley Maps, Team Topologies, Event Storming
-boards, Context Maps, Value Chains and Markdown together, live. Every model is a file in a
-content repo, a release is a pull request, and AI clients read, check and edit the same live
-models through MCP. It is a **pnpm monorepo**. For any question about a model, the
+boards, Context Maps, Value Chains, Markdown and Mermaid diagrams together, live. Every model
+is a file in a content repo, a release is a pull request, and AI clients read, check and edit
+the same live models through MCP. It is a **pnpm monorepo**. For any question about a model, the
 model files are the source of truth (here: the example content under `process-documentation/`)
 — **ground every answer in the models.**
 
@@ -22,12 +22,14 @@ Registered in `packages/notations/index.ts` (id = the `notation` argument of the
 | Context Map    | `context-map`    | `.cm.json`         |
 | Value Chain    | `value-chain`    | `.vc.json`         |
 | Markdown       | `markdown`       | `.md`              |
+| Mermaid        | `mermaid`        | `.mmd`, `.mermaid` |
 
 Every notation gets live sync, the generic MCP model tools, validation and release-as-PR.
 In the web client a notation's plugin (`apps/web/src/notations/registry.ts`) decides what a
 model opens in: a visual modeler (BPMN, DMN, the Miragon renderers), a rendered, live read
-view (Markdown, `apps/web/src/notations/markdown/`, its `mermaid` fences drawn as diagrams) or
-Monaco alone (Value Chain). The Monaco source is one click away for every one of them.
+view (Markdown, `apps/web/src/notations/markdown/`, its `mermaid` fences drawn as diagrams), a
+read-only diagram viewer (Mermaid, drawn like such a fence) or Monaco alone (Value Chain). The
+Monaco source is one click away for every one of them.
 BPMN and DMN have the deepest tooling (derived process and decision views, decision
 simulation and tests, todos anchored to BPMN elements) and the BPMN/DMN hard rules below.
 
@@ -36,7 +38,7 @@ simulation and tests, todos anchored to BPMN elements) and the BPMN/DMN hard rul
 | Path                                    | What it is                                                                                                                                                                                                                                                                                                                                                   |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `apps/live-host/`                       | The platform server (`@designiq/live-host`): Hocuspocus sync + REST API + web app on one port, plus `/mcp` (official MCP SDK) + REST content routes for AI clients (OIDC-JWT auth). Multi-repo, per-(user,repo) authz, release-as-PR. Cell mode: env-gated, see ADR 0002/0004; leave unset when self-hosting. Opt-in semantic BPMN edit tools: ADR 0009.     |
-| `apps/web/`                             | The collaborative web client (`@designiq/web`): visual modelers (bpmn-js, dmn-js, the Miragon renderers) and the rendered Markdown view + Monaco on a shared Y.Text, repo overview, the MCP-App widgets. The DMN editor carries the simulation add-on + a Checks panel (`@designiq/decisions`, in-browser).                                                  |
+| `apps/web/`                             | The collaborative web client (`@designiq/web`): visual modelers (bpmn-js, dmn-js, the Miragon renderers), the rendered Markdown view, a Mermaid viewer + Monaco on a shared Y.Text, repo overview, the MCP-App widgets. The DMN editor carries the simulation add-on + a Checks panel (`@designiq/decisions`, in-browser).                                   |
 | `apps/vscode/`                          | VS Code extension (`design-iq`, id `miragon-gmbh.design-iq`): open `designiq://` model docs synced through the Live Host; editor sign-in via the host's login routes.                                                                                                                                                                                        |
 | `packages/mcp/`                         | Read-only MCP server (`@miragon/design-iq-mcp`, bin `designiq-mcp-server`) exposing a content repo's models of every notation (discovered from `designiq.yml`; process views derived from BPMN) to any MCP client — read-only, against a checkout; the live, writable MCP endpoint lives in `apps/live-host`.                                                |
 | `packages/notations/`                   | Notation registry (`@designiq/notations`): one descriptor per notation (extensions, media kind, editor language). Adding a notation to the platform starts here — live-host, validator and web derive from it.                                                                                                                                               |

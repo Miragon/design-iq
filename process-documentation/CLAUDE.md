@@ -16,7 +16,8 @@ answer in them.**
   file name without the extension. `.bpmn` is a process, `.dmn` a decision; the
   folder can also hold Wardley Maps (`.owm`, `.wmap`), Team Topologies (`.tt`,
   `.ttm.json`), Event Storming boards (`.storm`), Context Maps (`.cm.json`),
-  Value Chains (`.vc.json`) and Markdown documents (`.md`).
+  Value Chains (`.vc.json`), Markdown documents (`.md`) and Mermaid diagrams
+  (`.mmd`, `.mermaid`).
 - There is NO `process.yaml` — the process view (name, roles from lanes, steps,
   flow, sub-process calls) is derived from the BPMN.
 - Sub-processes are separate `.bpmn` files, called via `callActivity`

@@ -1,10 +1,12 @@
-/* The Markdown view (./view.ts): document typography from the Miragon CI.
+/* The Markdown view (./view.ts), and the Mermaid viewer drawn as a one-diagram
+   document (../mermaid/viewer.ts): document typography from the Miragon CI.
    Loaded with the view's lazy chunk, so the eager bundle carries none of it;
    every rule is scoped under the view's own classes. Colours are the
    @designiq/ui-kit aliases, sizes the CI type scale (body 16/1.6, h1 40,
    h2 28, h3 21), spacing the 8-point grid. */
 
-.markdown-canvas {
+.markdown-canvas,
+.mermaid-canvas {
   background: var(--background);
 }
 
@@ -29,6 +31,10 @@
   font-size: 1rem;
   line-height: 1.6;
   overflow-wrap: break-word;
+}
+/* a Mermaid file (../mermaid/viewer.ts): one diagram, the whole width */
+.markdown-body.mermaid-body {
+  max-width: none;
 }
 .markdown-body > :first-child {
   margin-top: 0;

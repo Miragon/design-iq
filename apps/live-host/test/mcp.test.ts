@@ -1287,6 +1287,32 @@ test("generic model tools: get/save ANY notation with CAS, validate_model, creat
   assert.match(ticket.room, /strategy\.owm$/);
 });
 
+test("generic model tools: a Mermaid diagram is created, checked and saved like any notation", async () => {
+  const { callJson } = await connect(deps());
+  const created = await callJson("create_model", { repo: REPO.fullName, notation: "mermaid", name: "Order Flow" });
+  assert.equal(created.model.path, "processes/order-flow.mmd");
+  const got = await callJson("get_model_content", { repo: REPO.fullName, id: "order-flow", notation: "mermaid" });
+  assert.match(got.content, /^---\ntitle: "Order Flow"\n---\nflowchart LR\n/);
+
+  // validate_model: the header line is the check, by extension or by notation id
+  const valid = await callJson("validate_model", { content: got.content, path: created.model.path });
+  assert.equal(valid.ok, true);
+  assert.deepEqual(valid.findings, []);
+  const empty = await callJson("validate_model", { content: "%% nothing yet\n", notation: "mermaid" });
+  assert.equal(empty.ok, true, "a WARN, never a failed check");
+  assert.equal(empty.findings[0]?.severity, "WARN");
+  assert.match(empty.findings[0]?.message ?? "", /empty Mermaid diagram/);
+
+  // the save gate warns on a diagram without a type, it does not refuse it
+  const saved = await callJson("save_model_content", {
+    repo: REPO.fullName,
+    path: created.model.path,
+    content: "flowchrt LR\n  A --> B\n",
+    baseVersion: got.baseVersion,
+  });
+  assert.equal(saved.ok, true);
+});
+
 // ── #156: the widget registry — one row per single-file bundle ───────────────
 
 const uiMeta = (tool: { _meta?: unknown } | undefined) =>

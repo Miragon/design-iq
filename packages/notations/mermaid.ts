@@ -1,7 +1,7 @@
 /**
  * How Mermaid reads a diagram's text: the conventions of the pinned renderer
- * (mermaid 11.17.2, this app's exact version), so an error line points at the
- * line the author typed without loading mermaid to find it:
+ * (MERMAID_VERSION, apps/web's exact version), so the validator and the web
+ * app agree on ONE reading without either loading mermaid:
  *
  *   - mermaidCode        the text mermaid's diagram parsers see: its
  *                        preprocess drops the front matter, the %%{…}%%
@@ -11,15 +11,83 @@
  *                        in the front matter would shift every error line
  *   - mermaidHeader      the first line, the one that names the diagram type
  *
- * Syntax knowledge, not a checker: lib/mermaid-render.ts words its errors
- * with it. Pure string logic, no DOM (test/mermaid-syntax.test.ts). Bumping
- * mermaid means re-reading its src/preprocess.ts against this file.
+ * Syntax knowledge, not a checker: the validator turns an unknown header
+ * into a finding, the web renderer (apps/web/src/lib/mermaid-render.ts) words
+ * its errors with it. Pure string logic, zero-dep and browser-safe like the
+ * package index (the SPA imports it). A mermaid bump fails apps/web's
+ * test/mermaid-engine.test.ts until MERMAID_VERSION follows it: re-read
+ * mermaid's src/preprocess.ts and its detectors against this file first.
  */
+
+/** the mermaid release this file mirrors: apps/web's exact pin */
+export const MERMAID_VERSION = "11.17.2";
+
+/**
+ * Every diagram type MERMAID_VERSION renders, spelled as its header keyword
+ * (its diagram detectors, minus the spellings the detector matches but the
+ * grammar then refuses: a bare `architecture` or `requirement`). zenuml is
+ * an external plugin mermaid does not bundle, so it is not here.
+ */
+export const MERMAID_DIAGRAM_TYPES: readonly string[] = [
+  "flowchart",
+  "flowchart-elk",
+  "graph",
+  "sequenceDiagram",
+  "classDiagram",
+  "classDiagram-v2",
+  "stateDiagram",
+  "stateDiagram-v2",
+  "erDiagram",
+  "journey",
+  "gantt",
+  "pie",
+  "quadrantChart",
+  "requirementDiagram",
+  "gitGraph",
+  "C4Context",
+  "C4Container",
+  "C4Component",
+  "C4Dynamic",
+  "C4Deployment",
+  "mindmap",
+  "timeline",
+  "sankey",
+  "sankey-beta",
+  "xychart",
+  "xychart-beta",
+  "block",
+  "block-beta",
+  "packet",
+  "packet-beta",
+  "kanban",
+  "architecture-beta",
+  "radar-beta",
+  "treemap",
+  "treemap-beta",
+  "info",
+  "swimlane-beta",
+  "treeView-beta",
+  "eventmodeling",
+  "ishikawa",
+  "ishikawa-beta",
+  "venn-beta",
+  "wardley-beta",
+  "cynefin-beta",
+  "railroad-beta",
+  "railroad-ebnf-beta",
+  "railroad-abnf-beta",
+  "railroad-peg-beta",
+];
 
 // mermaid's own patterns (src/diagram-api/regexes.ts, src/diagram-api/comments.ts)
 const FRONT_MATTER = /^([^\S\n\r]*)-{3}\s*[\n\r](.*?)[\n\r]\1-{3}\s*[\n\r]+/s;
 const DIRECTIVE = /%{2}{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%{2}).|\r?\n)*))?\s*(?:}%{2})?/gi;
 const COMMENT_LINE = /^\s*%%(?!{)[^\n]+\n?/gm;
+
+/** a header keyword, followed by the end of the line, a space, ":" or ";" */
+const HEADER = new RegExp(
+  `^(?:${MERMAID_DIAGRAM_TYPES.map((t) => t.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")).join("|")})(?=$|[\\s:;])`,
+);
 
 /** mermaid's cleanupText: line breaks to \n, tag attributes single-quoted;
  *  the line structure stays, so the source lines can be matched against it */
@@ -70,6 +138,8 @@ export interface MermaidHeader {
   line: number;
   /** the header line's text, trimmed */
   text: string;
+  /** the MERMAID_DIAGRAM_TYPES keyword it starts with, undefined when none */
+  diagramType: string | undefined;
 }
 
 /**
@@ -82,5 +152,6 @@ export function mermaidHeader(source: string): MermaidHeader | undefined {
   const lines = mermaidCode(source).split("\n");
   const index = lines.findIndex((l) => l.trim() !== "" && !l.trim().startsWith("%%"));
   if (index < 0) return undefined;
-  return { line: mermaidSourceLine(source, index + 1), text: lines[index]!.trim() };
+  const text = lines[index]!.trim();
+  return { line: mermaidSourceLine(source, index + 1), text, diagramType: HEADER.exec(text)?.[0] };
 }
