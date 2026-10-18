@@ -180,6 +180,29 @@ export default {
       from: { path: "^apps/web/" },
       to: { path: "^apps/(live-host|vscode)/src/" },
     },
+    {
+      name: "web-markdown-engine-loads-lazily",
+      severity: "error",
+      comment:
+        "ADR 0006: markdown-it and DOMPurify ship in the Markdown view's own chunk. Only the " +
+        "view's modules import them, and each other, statically; everything else reaches the " +
+        "view through import() (the manifest, notations/markdown/plugin.ts). One static import " +
+        "from an eager module would pull the engine into the main bundle with a green build.",
+      from: {
+        path: "^apps/web/src/",
+        pathNot: ["^apps/web/src/notations/markdown/(markdown-view|view|render|sanitize|fences)\\.ts$"],
+      },
+      to: {
+        dynamic: false,
+        dependencyTypesNot: ["type-only"],
+        path: [
+          "(^|/)node_modules/(markdown-it|dompurify)/",
+          "^apps/web/src/notations/markdown/(markdown-view|view|render|sanitize|fences)\\.ts$",
+          // the SPA's "@/" alias does not resolve in this cruise: match the import as written
+          "^@/notations/markdown/(markdown-view|view|render|sanitize|fences)(\\.ts)?$",
+        ],
+      },
+    },
 
     /* ── D. hexagonal layer rules (inert until the folders exist) ──────── */
     {

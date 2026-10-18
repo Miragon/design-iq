@@ -2,11 +2,12 @@
  * The collaborative editor shell — the EDITOR a notation gets comes from the
  * web plugin registry (@/notations/registry, epic #118 step 6):
  *
- *   plugin       → its visual editor (bpmn-js / dmn-js / …) mounted on the
- *                  shared Y.Text, plus its side panels, assist handoff and
- *                  history diff — the ENGINE chunks load lazily on mount
+ *   plugin       → its visual editor (bpmn-js / dmn-js / …) or read-only
+ *                  view (the Markdown preview) mounted on the shared Y.Text,
+ *                  plus its side panels, assist handoff and history diff —
+ *                  the ENGINE chunks load lazily on mount
  *   no plugin    → Monaco text editor on the shared Y.Text, language from the
- *                  registry (OWM/TT/VC/Markdown live-edit as text)
+ *                  registry (Value Chains and YAML live-edit as text)
  *
  * React owns the shell (toolbar, presence, release); the editor ENGINES stay
  * imperative — the mounted plugin / Monaco / Yjs live in refs inside one effect
@@ -15,7 +16,7 @@
 import { type MovedNotice, type PresenceUser, roomName } from "@designiq/contracts/live";
 import { openLiveSession } from "@designiq/live-client";
 import { updateText } from "@designiq/live-client/text";
-import { byExtension, modelStem } from "@designiq/notations";
+import { byExtension, type MediaKind, modelStem } from "@designiq/notations";
 import { cn } from "@designiq/ui-kit/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { History, ListTodo } from "lucide-react";
@@ -50,6 +51,9 @@ import { invalidateModelLists, useFileHistory, useModels, useTodos } from "@/lib
 import { createRemoteCaretStyles } from "@/lib/remote-carets";
 import type { TodoCanvas } from "@/lib/todo-canvas";
 import { type EditorToolbarAction, type MountedEditor, webPlugin } from "@/notations/registry";
+
+/** the view switch's name for the source layer, by the notation's media kind */
+const SOURCE_LABEL: Record<MediaKind, string> = { xml: "XML", json: "JSON", dsl: "Text", markdown: "Markdown" };
 
 function monacoLanguage(docPath: string): string {
   const notation = byExtension(docPath);
@@ -114,6 +118,15 @@ export function LiveEditor({
 
   // plugin side panels — fed the debounced live text while open
   const [panelContent, setPanelContent] = useState("");
+
+  // a link to another model of this repository (the Markdown view): the
+  // session effect mounts once, the handler behind this ref follows the
+  // current model list and router (assigned below, once both exist)
+  const openLinkedModelRef = useRef<(path: string, fragment: string) => void>(() => undefined);
+  // the repository's model paths for the mounted editor (links between
+  // models): the list arrives after the mount and changes with the repository
+  const modelPathsRef = useRef<ReadonlySet<string> | undefined>(undefined);
+  const modelListenersRef = useRef(new Set<() => void>());
 
   // the ONE open side panel — the panels are mutually exclusive, and the rule
   // lives here instead of being hand-written into every toggle (one of the
@@ -233,6 +246,7 @@ export function LiveEditor({
           editor = await plugin.mountEditor(canvasRef.current, {
             ytext,
             doc: session.doc,
+            repo,
             docPath,
             onSyncError: (msg) => {
               if (!cancelled) toast.error(msg);
@@ -247,6 +261,14 @@ export function LiveEditor({
               setPanel("todos");
             },
             onSelectionChanged: setSelectedElements,
+            onOpenModel: (path, fragment) => openLinkedModelRef.current(path, fragment),
+            models: {
+              paths: () => modelPathsRef.current,
+              onChange: (cb) => {
+                modelListenersRef.current.add(cb);
+                return () => modelListenersRef.current.delete(cb);
+              },
+            },
             presence: presenceSurface,
           });
         } catch (e) {
@@ -356,6 +378,27 @@ export function LiveEditor({
   const takenIds = new Set((models.data ?? []).filter((m) => m.notation === self.notation).map((m) => m.id));
   const openModel = useOpenModel(repo);
   const qc = useQueryClient();
+  const knownModels = models.data;
+  // the mounted editor's model paths follow the list
+  useEffect(() => {
+    modelPathsRef.current = knownModels ? new Set(knownModels.map((m) => m.path)) : undefined;
+    for (const cb of modelListenersRef.current) cb();
+  }, [knownModels]);
+  // a linked model opens on its own route (#section included); a link to a
+  // path the repository has no model at says so, instead of opening an
+  // editor whose room never syncs. Once the list has loaded the view renders
+  // such a link as text: this check covers a click before that.
+  useEffect(() => {
+    openLinkedModelRef.current = (path, fragment) => {
+      if (knownModels && !knownModels.some((m) => m.path === path)) {
+        toast(`There is no model at ${path}`, {
+          description: "The link points at a file that is not a model of this repository.",
+        });
+        return;
+      }
+      void openModel(path, fragment ? { hash: fragment } : {});
+    };
+  }, [knownModels, openModel]);
   // the document moved (a rename — ours or a colleague's): follow it. The
   // notice arrives exactly once per session; the ref keeps StrictMode's
   // double-run from navigating (and announcing) twice
@@ -474,7 +517,8 @@ export function LiveEditor({
         view={
           isVisual && !structuredDoc
             ? {
-                sourceLabel: notation?.mediaKind === "xml" ? "XML" : notation?.mediaKind === "json" ? "JSON" : "Text",
+                canvas: plugin?.canvasView,
+                sourceLabel: notation ? SOURCE_LABEL[notation.mediaKind] : "Text",
                 showSource: showSource,
                 onChange: setShowSource,
               }

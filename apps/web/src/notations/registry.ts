@@ -3,6 +3,8 @@
  * side panels, assist handoff and history diff a notation gets. The shell
  * (live-editor.tsx) looks its plugin up by descriptor id and mounts through
  * this contract — a notation WITHOUT a plugin opens in collaborative Monaco.
+ * The "visual editor" may also be a read-only rendering: Markdown mounts a
+ * live preview, and its source is edited in the shell's Monaco layer.
  *
  * Boundary rule, mirrored from ADR 0006: a plugin MANIFEST (this module +
  * the per-notation manifests it imports) is light, eager data — the editor
@@ -21,6 +23,7 @@ import type { TodoCanvas } from "@/lib/todo-canvas";
 
 import { bpmnPlugin } from "./bpmn";
 import { dmnPlugin } from "./dmn";
+import { markdownPlugin } from "./markdown/plugin";
 import { MIRAGON_RENDERERS } from "./miragon";
 import { miragonPlugin } from "./miragon/plugin";
 
@@ -29,6 +32,9 @@ export interface EditorContext {
   /** the ONE shared live document (text shape) */
   ytext: Y.Text;
   doc: Y.Doc;
+  /** repository full name, "owner/name" */
+  repo: string;
+  /** repo-relative path of the document */
   docPath: string;
   /** a sync round-trip failed mid-session — surfaced, session keeps running */
   onSyncError(message: string): void;
@@ -38,11 +44,28 @@ export interface EditorContext {
   onBadgeClick(elementId: string): void;
   /** canvas selection changed — feeds todo creation and the assist handoff */
   onSelectionChanged(elements: TodoElementWire[]): void;
+  /** open another model of the same repository inside designIQ (a link in a
+   *  document); `fragment` is a section of it ("" = the top). Optional: an
+   *  editor mounted without the shell leaves the navigation to its hrefs */
+  onOpenModel?(path: string, fragment: string): void;
+  /** the repository's models, for links between them (a document view).
+   *  Optional: without it a link to a file with a notation extension counts
+   *  as one to a model */
+  models?: ModelDirectory;
   /** live presence (#115) — publish the local cursor/selection, subscribe to
    *  remote peers; the additive awareness surface promised on #124. Engines
    *  hand it to attachPresenceCanvas; optional keeps them mountable without
    *  a live session (tests, previews). */
   presence?: PresenceSurface;
+}
+
+/** the model list as the shell has it: it may arrive after the editor
+ *  mounts, and changes when a model is created, renamed or deleted */
+export interface ModelDirectory {
+  /** the repo-relative paths of the repository's models; undefined while the list loads */
+  paths(): ReadonlySet<string> | undefined;
+  /** subscribe to list changes; returns the unsubscribe */
+  onChange(cb: () => void): () => void;
 }
 
 /** a toolbar action the mounted editor contributes to the SHELL header
@@ -111,11 +134,21 @@ export interface DiffSpec {
   legend: ReadonlyArray<{ label: string; color: string }>;
 }
 
+/** how the shell's view switch names the canvas layer */
+export interface CanvasViewLabel {
+  /** the switch's label, e.g. "Preview" */
+  label: string;
+  buttonTitle: string;
+  icon: ComponentType<{ className?: string }>;
+}
+
 export interface WebNotationPlugin {
   /** must match a NotationDescriptor.id (@designiq/notations) */
   id: string;
   /** css class of the canvas host (engine styling) */
   canvasClassName: string;
+  /** the canvas layer's name in the view switch (absent = "Diagram") */
+  canvasView?: CanvasViewLabel;
   /** mount the visual editor — the engine chunk loads HERE, not before;
    *  absent = collaborative Monaco (a plugin may contribute only panels/diff) */
   mountEditor?(container: HTMLElement, ctx: EditorContext): Promise<MountedEditor>;
@@ -126,10 +159,12 @@ export interface WebNotationPlugin {
 }
 
 // bpmn and dmn are bespoke plugins (stickies, todos, the differ; the Checks
-// panel); every Miragon renderer derives its plugin from its spec
+// panel), markdown a read-only preview; every Miragon renderer derives its
+// plugin from its spec
 const WEB_PLUGINS: Record<string, WebNotationPlugin> = {
   bpmn: bpmnPlugin,
   dmn: dmnPlugin,
+  markdown: markdownPlugin,
   ...Object.fromEntries(MIRAGON_RENDERERS.map((spec) => [spec.id, miragonPlugin(spec)])),
 };
 
