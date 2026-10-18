@@ -62,8 +62,9 @@ as their own chunk when a document opens (ADR 0006). `pnpm arch` holds every oth
 - `view.ts` mounts the document in the canvas layer. It re-renders 200 ms after the last
   change of the shared Y.Text (a collaborator's included), at least once a second while the
   changes keep coming, scrolls in-page `#anchors` and hands a link to another model to the
-  shell, which opens it on its own route. `test/markdown-view.test.ts` covers the sanitizer
-  and the view under jsdom.
+  shell, which opens it on its own route. While the shell shows the Markdown source instead
+  (`EditorContext.visibility`), it does not render and catches up when it shows again.
+  `test/markdown-view.test.ts` covers the sanitizer and the view under jsdom.
 - A relative link to a model of the repository (the shell's model list) is that model's
   in-app route (`/r/<owner>/<repo>/f/<path>#<section>`); a link to any other repository file,
   a document outside the models folder included, is marked, inert text. So is a link with a
@@ -76,8 +77,10 @@ as their own chunk when a document opens (ADR 0006). `pnpm arch` holds every oth
   on.
 - Mermaid diagrams: a `mermaid` fence (`mermaid-fence.ts`) draws through the app's one
   Mermaid renderer, `src/lib/mermaid-render.ts` (strict security level, the CI theme,
-  Geist). The renderer and mermaid load on the first document that has such a fence, never
-  for any other. The drawn SVG is sanitized once more (`createDiagramSanitizer` in
+  Geist). The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
+  theme, palette, CSS or font (`MERMAID_SECURE_KEYS`, checked against mermaid itself in
+  `test/mermaid-engine.test.ts`); layout options stay the author's. The renderer and
+  mermaid load on the first document that has such a fence, never for any other. The drawn SVG is sanitized once more (`createDiagramSanitizer` in
   `sanitize.ts`, the profile mermaid applies itself) and cached by source: a re-render for an
   edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram
   keeps its drawing until the new one is drawn. A diagram mermaid cannot read shows a notice

@@ -26,6 +26,14 @@ test("the mermaid config: strict, never auto-started, its own errors drawn by th
   assert.equal(MERMAID_CONFIG.suppressErrorRendering, true);
   assert.equal(MERMAID_CONFIG.theme, "base");
   assert.equal(MERMAID_CONFIG.themeVariables, MERMAID_THEME_VARIABLES);
+  // a diagram's front matter or %%{init}%% sets none of these (mermaid-engine.test.ts
+  // checks it against mermaid itself): its own secure list, then the look
+  for (const key of ["secure", "securityLevel", "startOnLoad", "maxTextSize", "suppressErrorRendering", "maxEdges"]) {
+    assert.ok(MERMAID_CONFIG.secure.includes(key), key);
+  }
+  for (const key of ["theme", "themeVariables", "themeCSS", "darkMode", "fontFamily", "altFontFamily"]) {
+    assert.ok(MERMAID_CONFIG.secure.includes(key), key);
+  }
 });
 
 test("the mermaid theme: Geist and literal colours from the CI tokens, nothing else", () => {

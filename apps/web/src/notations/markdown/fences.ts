@@ -11,10 +11,12 @@
  * both) renders a placeholder there and upgrades it in `hydrate`.
  *
  * The contract an extension builds on:
- * - `hydrate` runs after a render only when that document has a fence of its
- *   language, with the document root. Load the engine there, behind
- *   `import()`, never at the top of this module: the fences load with every
- *   Markdown document (ADR 0006).
+ * - `hydrate` runs after a render when that document has a fence of its
+ *   language, with the document root, and once more after the first render
+ *   that has none (no block then): drop what was kept for the document
+ *   there. Load the engine in `hydrate` for a block, behind `import()`, never
+ *   at the top of this module: the fences load with every Markdown document
+ *   (ADR 0006).
  * - A placeholder carries its source as TEXT (`<pre class="md-mermaid">`
  *   with the escaped source). The sanitizer drops every data-* attribute but
  *   data-model-path, and admits no style and no SVG.

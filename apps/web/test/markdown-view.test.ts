@@ -15,7 +15,7 @@ import * as Y from "yjs";
 import type { FenceExtension } from "../src/notations/markdown/fences.ts";
 import { createSanitizer } from "../src/notations/markdown/sanitize.ts";
 import { mountMarkdownView, RENDER_DEBOUNCE_MS, RENDER_MAX_WAIT_MS } from "../src/notations/markdown/view.ts";
-import type { EditorContext, ModelDirectory } from "../src/notations/registry.ts";
+import type { EditorContext, LayerVisibility, ModelDirectory } from "../src/notations/registry.ts";
 
 const DOC_URL = "https://designiq.test/r/acme/models/f/docs/guide.md";
 
@@ -41,9 +41,31 @@ function modelList(initial?: string[]) {
   return { directory, listeners, set };
 }
 
+/** the shell's view switch, as the test drives it */
+function layer(shown = true) {
+  const listeners = new Set<() => void>();
+  const visibility: LayerVisibility = {
+    visible: () => shown,
+    onChange: (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+  };
+  const show = (next: boolean): void => {
+    shown = next;
+    for (const cb of listeners) cb();
+  };
+  return { visibility, listeners, show };
+}
+
 function mount(
   source: string,
-  opts: { url?: string; models?: ModelDirectory; fences?: Record<string, FenceExtension> } = {},
+  opts: {
+    url?: string;
+    models?: ModelDirectory;
+    visibility?: LayerVisibility;
+    fences?: Record<string, FenceExtension>;
+  } = {},
 ) {
   const win = newWindow(opts.url);
   // no layout in jsdom: record what the view scrolls to
@@ -67,6 +89,7 @@ function mount(
     onSelectionChanged: () => undefined,
     onOpenModel: (path, fragment) => opened.push([path, fragment]),
     models: opts.models,
+    visibility: opts.visibility,
   };
   const container = win.document.createElement("div");
   win.document.body.append(container);
@@ -214,6 +237,62 @@ test("a fence extension hydrates only a document with its language, and a new re
 
   v.view.destroy();
   assert.equal(signals[1]?.aborted, true);
+});
+
+test("a fence extension hydrates once more after its last fence is gone, with no block", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const hydrated: number[] = [];
+  const fences: Record<string, FenceExtension> = {
+    demo: {
+      render: (content) => `<pre class="md-demo">${content.trim()}</pre>`,
+      hydrate: (root) => void hydrated.push(root.querySelectorAll(".md-demo").length),
+    },
+  };
+  const v = mount("```demo\nA\n```\n", { fences });
+  await settle();
+  v.ytext.delete(0, v.ytext.length);
+  v.append("No fence now.");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await settle();
+  v.append(" Still none.");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await settle();
+  assert.deepEqual(hydrated, [1, 0], "once with no block, to forget the document; then not at all");
+  v.view.destroy();
+});
+
+test("behind the source layer the view does not render; it catches up when it shows", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const hydrated: string[] = [];
+  const fences: Record<string, FenceExtension> = {
+    demo: {
+      render: (content) => `<pre class="md-demo">${content.trim()}</pre>`,
+      hydrate: (root) => void hydrated.push(root.querySelector(".md-demo")?.textContent ?? ""),
+    },
+  };
+  const view = layer();
+  const v = mount("# One\n\n```demo\nA\n```\n", { fences, visibility: view.visibility });
+  await settle();
+  assert.deepEqual(hydrated, ["A"]);
+
+  view.show(false); // the author switched to the Markdown source
+  v.append("\n```demo\nB\n```\n");
+  t.mock.timers.tick(RENDER_MAX_WAIT_MS);
+  await settle();
+  assert.doesNotMatch(v.article.textContent, /B/, "nothing rendered while hidden");
+  assert.deepEqual(hydrated, ["A"], "and no fence hydrated");
+
+  view.show(true);
+  assert.match(v.article.textContent, /B/, "shown again: the latest text at once");
+  await settle();
+  assert.deepEqual(hydrated, ["A", "A"]);
+
+  view.show(false);
+  view.show(true); // nothing changed meanwhile: nothing to render
+  await settle();
+  assert.equal(hydrated.length, 2);
+  v.view.destroy();
+  assert.equal(view.listeners.size, 0);
 });
 
 test("destroy leaves nothing behind: no pending render, no observer, no listener", (t) => {

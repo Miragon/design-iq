@@ -54,14 +54,37 @@ export const MERMAID_THEME_VARIABLES = {
 } as const;
 
 /**
+ * The keys a diagram's own front matter (`config:`) or %%{init}%% directive
+ * may NOT set: mermaid's own secure list, plus everything that makes up the
+ * look. A diagram copied from a repo that draws it dark would otherwise get
+ * a hybrid (mermaid merges the CI variables into the other theme's palette:
+ * near-black boxes with near-black labels), and `themeCSS` would let any
+ * collaborator inject CSS (a `url()` in it is a request from every reader's
+ * browser). Layout options (direction, curve, wrap, look) stay the author's.
+ */
+export const MERMAID_SECURE_KEYS = [
+  "secure",
+  "securityLevel",
+  "startOnLoad",
+  "maxTextSize",
+  "suppressErrorRendering",
+  "maxEdges",
+  "theme",
+  "themeVariables",
+  "themeCSS",
+  "darkMode",
+  "fontFamily",
+  "altFontFamily",
+];
+
+/**
  * mermaid.initialize's options. `strict` sanitises every label and the whole
  * SVG (DOMPurify) and turns click handlers off: the source is whatever any
  * collaborator typed. HTML labels (mermaid's default, set here on purpose)
  * wrap long labels and stay inert under `strict`. `suppressErrorRendering`
  * keeps mermaid from drawing its own error picture; the caller shows the
- * error and keeps the last good diagram instead. A diagram's own front
- * matter or %%{init}%% may still pick another theme: that is its author's
- * choice, the CI look is the default.
+ * error and keeps the last good diagram instead. The CI look is not a
+ * default but fixed: see MERMAID_SECURE_KEYS.
  */
 export const MERMAID_CONFIG = {
   startOnLoad: false,
@@ -71,6 +94,7 @@ export const MERMAID_CONFIG = {
   fontFamily: FONT_SANS,
   htmlLabels: true,
   suppressErrorRendering: true,
+  secure: MERMAID_SECURE_KEYS,
 } as const satisfies MermaidConfig;
 
 let renderSeq = 0;

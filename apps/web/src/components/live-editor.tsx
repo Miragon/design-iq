@@ -127,6 +127,11 @@ export function LiveEditor({
   // models): the list arrives after the mount and changes with the repository
   const modelPathsRef = useRef<ReadonlySet<string> | undefined>(undefined);
   const modelListenersRef = useRef(new Set<() => void>());
+  // whether the canvas layer is on screen, for the mounted editor: a
+  // read-only view (the Markdown view and its diagrams) skips its renders
+  // while the source layer is up
+  const canvasShownRef = useRef(true);
+  const canvasShownListenersRef = useRef(new Set<() => void>());
 
   // the ONE open side panel — the panels are mutually exclusive, and the rule
   // lives here instead of being hand-written into every toggle (one of the
@@ -267,6 +272,13 @@ export function LiveEditor({
               onChange: (cb) => {
                 modelListenersRef.current.add(cb);
                 return () => modelListenersRef.current.delete(cb);
+              },
+            },
+            visibility: {
+              visible: () => canvasShownRef.current,
+              onChange: (cb) => {
+                canvasShownListenersRef.current.add(cb);
+                return () => canvasShownListenersRef.current.delete(cb);
               },
             },
             presence: presenceSurface,
@@ -472,6 +484,11 @@ export function LiveEditor({
 
   const sourceActive = (showSource || !isVisual) && !structuredDoc;
   const ActivePanel = activePanelSpec?.component;
+  // the mounted editor follows the view switch (see canvasShownRef)
+  useEffect(() => {
+    canvasShownRef.current = !sourceActive;
+    for (const cb of canvasShownListenersRef.current) cb();
+  }, [sourceActive]);
 
   // the notation plugin's panels and the shell's own (todos, history) are the
   // same KIND of thing to the user, so they render the same way and carry the

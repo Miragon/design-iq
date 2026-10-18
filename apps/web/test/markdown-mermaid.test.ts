@@ -125,7 +125,7 @@ test("the renderer loads only for a document with a mermaid fence, and draws it 
   assert.deepEqual(fake.calls, ["flowchart LR\n  A --> B\n"]);
   assert.deepEqual(v.drawn(), ["flowchart LR"]);
   assert.equal(v.article.querySelector("pre.md-mermaid"), null, "the drawing replaces the code block");
-  assert.match(v.article.querySelector(".md-mermaid-diagram svg")!.id, /^md-mermaid-\d+$/);
+  assert.match(v.article.querySelector(".md-mermaid-diagram svg")!.id, /^md-Mermaid-\d+$/);
   assert.match(v.article.textContent, /After\./);
   assert.deepEqual(v.errors, []);
   v.view.destroy();
@@ -199,6 +199,62 @@ test("a diagram added or removed is never shown with another diagram's drawing",
   v.view.destroy();
 });
 
+test("a deleted diagram is never taken for the next new one", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const fake = fakeRenderer();
+  const v = mount("# Notes\n\n" + fence("flowchart OLD"), fake);
+  await settle();
+  assert.deepEqual(v.drawn(), ["flowchart OLD"]);
+
+  v.setText("# Notes\n\nNo diagram now.\n");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await settle();
+  assert.deepEqual(v.drawn(), []);
+
+  // another diagram, still drawing: its code shows, not the deleted drawing
+  fake.state.hold = true;
+  v.setText("# Notes\n\n" + fence("sequenceDiagram\n  A->>B: hi"));
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await settle();
+  assert.deepEqual(v.drawn(), []);
+  assert.equal(v.article.querySelector("pre.md-mermaid")?.textContent, "sequenceDiagram\n  A->>B: hi\n");
+
+  // and one that cannot be drawn has no last version to keep
+  fake.state.hold = false;
+  v.setText("");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await settle();
+  v.setText(fence("flowchart broken\n  A -->"));
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await settle();
+  assert.deepEqual(v.drawn(), []);
+  assert.equal(v.article.querySelector(".md-mermaid-notice-hint"), null);
+  assert.ok(v.article.querySelector(".md-mermaid-notice"));
+  v.view.destroy();
+});
+
+test("a render id is never a heading anchor: mermaid removes the element it names first", async () => {
+  const page: { doc?: Document } = {};
+  const fake = fakeRenderer((source, id) => {
+    // what mermaid.render does before it draws (removeExistingElements)
+    page.doc?.getElementById(id)?.remove();
+    return `<svg id="${id}"><text>${source.split("\n")[0]}</text></svg>`;
+  });
+  const v = mount("## Mermaid 1\n\n## Mermaid\n\n## Mermaid\n\n" + fence("flowchart A") + fence("flowchart B"), fake);
+  page.doc = v.win.document;
+  await settle();
+  assert.deepEqual(v.drawn(), ["flowchart A", "flowchart B"]);
+  const headings = [...v.article.querySelectorAll("h2")].map((h) => [h.id, h.textContent]);
+  assert.deepEqual(headings, [
+    ["md-mermaid-1", "Mermaid 1"],
+    ["md-mermaid", "Mermaid"],
+    ["md-mermaid-2", "Mermaid"],
+  ]);
+  const ids = [...v.article.querySelectorAll("[id]")].map((el) => el.id);
+  assert.equal(new Set(ids).size, ids.length, "every id on the page once");
+  v.view.destroy();
+});
+
 test("a source mermaid cannot read: its code, or its last drawing dimmed, under a notice", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   const fake = fakeRenderer();
@@ -264,7 +320,7 @@ test("the drawn SVG is sanitized again: no script, no handler, links leave in a 
   const svg = v.article.querySelector(".md-mermaid-diagram svg")!;
   const markup = svg.outerHTML;
   assert.doesNotMatch(markup, /<script|onload|onmouseover|javascript:/);
-  assert.match(markup, /<style>#md-mermaid-1 \.node\{fill:red\}<\/style>/, "the diagram keeps its scoped styles");
+  assert.match(markup, /<style>#md-Mermaid-1 \.node\{fill:red\}<\/style>/, "the diagram keeps its scoped styles");
   assert.equal(svg.querySelector("foreignObject span.nodeLabel p")?.textContent, "label", "HTML labels stay");
   const web = svg.querySelector('a[href="https://example.com"]');
   assert.equal(web?.getAttribute("target"), "_blank");

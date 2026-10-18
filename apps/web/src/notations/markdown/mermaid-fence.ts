@@ -37,8 +37,11 @@ export type RenderMermaid = (source: string, idPrefix: string) => Promise<Mermai
 export const MERMAID_BLOCK_CLASS = "md-mermaid";
 /** drawings kept by source: a long document's diagrams and their recent edits */
 export const DRAWING_CACHE_SIZE = 64;
-/** the drawn SVGs' id prefix: md- like every id of the view */
-const ID_PREFIX = "md-mermaid";
+/** the drawn SVGs' id prefix: md- like every id of the view, and never a
+ *  heading anchor (render.ts slugs are lower-case). mermaid starts a render
+ *  by removing the element its id names, and scopes the diagram's styles to
+ *  it: "md-mermaid-1" would take the heading "Mermaid 1" with it */
+const ID_PREFIX = "md-Mermaid";
 
 /** the notice's heading: a fence counts its lines from the diagram's first,
  *  not the document's */
@@ -125,7 +128,8 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
       if (!win) return;
       const blocks = [...root.querySelectorAll<HTMLElement>(`pre.${MERMAID_BLOCK_CLASS}`)];
       // the n-th block takes over what the n-th showed, unless a diagram was
-      // added or removed: then the n-th is another diagram
+      // added or removed: then the n-th is another diagram. A render without
+      // a block (the view hydrates once more then) leaves nothing to take over
       const before = settledByView.get(root);
       const settled: Settled[] = blocks.map((_, i) => (before?.length === blocks.length ? before[i]! : {}));
       settledByView.set(root, settled);

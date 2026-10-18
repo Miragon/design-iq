@@ -17,6 +17,9 @@
  * Every render replaces the whole article. Simple and correct, but a reader's
  * text selection and keyboard focus inside the view reset whenever a
  * co-editor pauses typing: patching only the changed blocks is a follow-up.
+ * While the shell shows the source instead (ctx.visibility), the view does
+ * not render at all and catches up when it shows again: an author typing in
+ * Monaco never pays for a hidden document's diagrams.
  */
 import type { EditorContext, MountedEditor } from "../registry.ts";
 import { FENCE_EXTENSIONS, type FenceExtension } from "./fences.ts";
@@ -56,6 +59,8 @@ export function mountMarkdownView(
   let lastModels: ReadonlySet<string> | undefined;
   let rendered = false;
   let hydration: AbortController | undefined;
+  /** the fence languages the last render hydrated */
+  let hydrated = new Set<string>();
 
   const render = (): void => {
     const source = ctx.ytext.toString();
@@ -91,13 +96,17 @@ export function mountMarkdownView(
       empty.className = "md-empty";
       empty.textContent = "This document is empty. Switch to Markdown to write it.";
       article.replaceChildren(empty);
-      return;
+    } else {
+      article.replaceChildren(sanitize(html));
     }
-    article.replaceChildren(sanitize(html));
-    if (seen.size === 0) return;
+    // this document's fence languages, and once more the ones the last
+    // render had: with no block left, their extension forgets this document
+    const languages = new Set([...seen, ...hydrated]);
+    hydrated = seen;
+    if (languages.size === 0) return;
     hydration = new AbortController();
     const signal = hydration.signal;
-    for (const lang of seen) {
+    for (const lang of languages) {
       Promise.resolve()
         .then(() => fences[lang]?.hydrate?.(article, signal))
         .catch((e: unknown) => {
@@ -140,15 +149,32 @@ export function mountMarkdownView(
   // opened through a link with a #section: land on it
   if (win.location.hash.length > 1) scrollToFragment(win.location.hash.slice(1));
 
+  // hidden behind the source layer: a change only marks the view behind, and
+  // it renders once it shows again
+  const hidden = (): boolean => ctx.visibility?.visible() === false;
+  let behind = false;
+  const update = (): void => {
+    if (hidden()) {
+      behind = true;
+      return;
+    }
+    behind = false;
+    render();
+  };
+
   // trailing debounce with a maximum wait
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pendingSince: number | undefined;
   const flush = (): void => {
     timer = undefined;
     pendingSince = undefined;
-    render();
+    update();
   };
   const onChange = (): void => {
+    if (hidden()) {
+      behind = true;
+      return;
+    }
     const now = Date.now();
     pendingSince ??= now;
     clearTimeout(timer);
@@ -156,13 +182,17 @@ export function mountMarkdownView(
   };
   ctx.ytext.observe(onChange);
   // the model list arrived or changed: links to models re-classify
-  const offModels = ctx.models?.onChange(render);
+  const offModels = ctx.models?.onChange(update);
+  const offVisibility = ctx.visibility?.onChange(() => {
+    if (behind && !hidden()) update();
+  });
 
   return {
     destroy: () => {
       clearTimeout(timer);
       ctx.ytext.unobserve(onChange);
       offModels?.();
+      offVisibility?.();
       hydration?.abort();
       article.removeEventListener("click", onClick);
       scroller.remove();

@@ -52,6 +52,10 @@ export interface EditorContext {
    *  Optional: without it a link to a file with a notation extension counts
    *  as one to a model */
   models?: ModelDirectory;
+  /** whether the editor's layer is on screen (the shell's view switch shows
+   *  it or the Monaco source): a read-only view skips its renders while
+   *  hidden and catches up when it shows. Optional: absent = always shown */
+  visibility?: LayerVisibility;
   /** live presence (#115) — publish the local cursor/selection, subscribe to
    *  remote peers; the additive awareness surface promised on #124. Engines
    *  hand it to attachPresenceCanvas; optional keeps them mountable without
@@ -65,6 +69,13 @@ export interface ModelDirectory {
   /** the repo-relative paths of the repository's models; undefined while the list loads */
   paths(): ReadonlySet<string> | undefined;
   /** subscribe to list changes; returns the unsubscribe */
+  onChange(cb: () => void): () => void;
+}
+
+/** the editor layer's visibility as the shell has it */
+export interface LayerVisibility {
+  visible(): boolean;
+  /** subscribe to visibility changes; returns the unsubscribe */
   onChange(cb: () => void): () => void;
 }
 
