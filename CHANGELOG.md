@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.4.0](https://github.com/Miragon/design-iq/compare/v5.3.0...v5.4.0) (2026-10-18)
+
+
+### Features
+
+* Mermaid diagrams, viewer and editor ([#256](https://github.com/Miragon/design-iq/issues/256)) ([0ff05ef](https://github.com/Miragon/design-iq/commit/0ff05ef1e8af91285c0fa70d3ab41f46e3e6034a))
+* **web:** render Markdown documents in a live read view ([#255](https://github.com/Miragon/design-iq/issues/255)) ([c1540c5](https://github.com/Miragon/design-iq/commit/c1540c556e8fa200bf52a9ff1c3f471e041ac2a9))
+
 ## [5.3.0](https://github.com/Miragon/design-iq/compare/v5.2.0...v5.3.0) (2026-10-13)
 
 
