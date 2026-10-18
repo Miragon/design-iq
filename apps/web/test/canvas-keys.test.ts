@@ -59,7 +59,7 @@ function page() {
     target.dispatchEvent(event);
     return event;
   };
-  return { document, canvas, button, editContext, heard, press };
+  return { document, canvas, button, host, editContext, heard, press };
 }
 
 test("in front, the engine hears every key, Monaco's EditContext div included (the bug behind the source layer)", () => {
@@ -124,6 +124,19 @@ test("held, a key Monaco binds still stops at its container, as before", () => {
   p.press(p.editContext, "Backspace");
   assert.deepEqual(p.heard.monaco, ["Backspace"]);
   assert.deepEqual(p.heard.react, []);
+});
+
+test("held from the source alone (the split view), a key typed in Monaco never reaches the engine, any other key does", () => {
+  const p = page();
+  keepKeysFromCanvas(p.document, p.host);
+  for (const key of ["l", "c"]) p.press(p.editContext, key);
+  p.press(p.editContext, "v", { metaKey: true });
+  assert.deepEqual(p.heard.monaco, ["l", "c", "v"]);
+  assert.deepEqual(p.heard.engine, []);
+  // the canvas is in front beside the source: its own keys and the toolbar's are its
+  p.press(p.canvas, "l");
+  p.press(p.button, "Backspace");
+  assert.deepEqual(p.heard.engine, ["l", "Backspace"]);
 });
 
 test("the release puts the canvas back in front", () => {

@@ -160,7 +160,7 @@ test("the view renders the live text, after a pause and at least once a second",
 
   v.ytext.delete(0, v.ytext.length);
   t.mock.timers.tick(RENDER_DEBOUNCE_MS);
-  assert.equal(v.article.textContent, "This document is empty. Switch to Markdown to write it.");
+  assert.equal(v.article.textContent, "This document is empty. Write it in the Markdown source.");
   assert.deepEqual(v.errors, []);
   v.view.destroy();
 });
@@ -293,6 +293,37 @@ test("behind the source layer the view does not render; it catches up when it sh
   assert.equal(hydrated.length, 2);
   v.view.destroy();
   assert.equal(view.listeners.size, 0);
+});
+
+test("opened behind the source layer, the view renders nothing until it shows: no fence hydrates, no section is landed on", async () => {
+  const hydrated: string[] = [];
+  const fences: Record<string, FenceExtension> = {
+    demo: {
+      render: (content) => `<pre class="md-demo">${content.trim()}</pre>`,
+      hydrate: (root) => void hydrated.push(root.querySelector(".md-demo")?.textContent ?? ""),
+    },
+  };
+  const view = layer(false); // the view switch remembered the Markdown source
+  const v = mount("# Guide\n\n## Scope\n\n```demo\nA\n```\n", {
+    url: `${DOC_URL}#Scope`,
+    fences,
+    visibility: view.visibility,
+  });
+  await settle();
+  assert.equal(v.article.childElementCount, 0, "nothing rendered");
+  assert.deepEqual(hydrated, [], "the diagram engine never loads for a hidden document");
+  assert.deepEqual(v.scrolled, []);
+
+  view.show(true);
+  assert.equal(v.article.querySelector("h2")?.id, "md-scope");
+  assert.deepEqual(v.scrolled, ["md-scope"], "the link's section, once the document is on screen");
+  await settle();
+  assert.deepEqual(hydrated, ["A"]);
+
+  view.show(false);
+  view.show(true);
+  assert.deepEqual(v.scrolled, ["md-scope"], "landed once");
+  v.view.destroy();
 });
 
 test("destroy leaves nothing behind: no pending render, no observer, no listener", (t) => {
