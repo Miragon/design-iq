@@ -3,7 +3,7 @@
  * CommonMark plus the GFM extensions, heading anchors, the escaping of
  * untrusted content, links between the models of a repository and the fence
  * hook a diagram renderer plugs into. The DOM half (DOMPurify, clicks,
- * scrolling) lives in markdown-view.ts.
+ * scrolling) has its own suite, markdown-view.test.ts.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -59,6 +59,21 @@ test("task lists, strikethrough and autolinks follow GFM", () => {
   assert.match(html, /<a href="mailto:mail@example.com">mail@example.com<\/a>/);
 });
 
+test("an escaped task marker is text, not a checkbox", () => {
+  const html = render("- \\[ ] not a task\n- [x] a task");
+  assert.match(html, /<li>\[ \] not a task<\/li>/);
+  assert.match(html, /<li class="task-list-item"><input [^>]+ checked> a task<\/li>/);
+  assert.equal(html.match(/<input /g)?.length, 1);
+});
+
+test("footnotes are not rendered yet, but their text never goes missing", () => {
+  const html = render("Text[^1] and more.\n\n[^1]: The note.\n\n[ref]: https://example.com\n\nSee [ref].");
+  assert.match(html, /<p>Text\[\^1\] and more.<\/p>/);
+  assert.match(html, /<p>\[\^1\]: The note.<\/p>/);
+  // an ordinary reference definition still works
+  assert.match(html, /<a href="https:\/\/example.com" target="_blank" rel="noopener noreferrer">ref<\/a>/);
+});
+
 test("file names are not autolinked although their extension reads as a top-level domain", () => {
   const html = render("Edit README.md and feature-map.md, then run setup.sh.");
   assert.doesNotMatch(html, /<a /);
@@ -66,11 +81,36 @@ test("file names are not autolinked although their extension reads as a top-leve
 
 test("raw HTML is escaped, never passed through", () => {
   const html = render(
-    '<script>alert(1)</script>\n\nText <img src=x onerror="alert(1)"> and <a href="javascript:alert(1)">x</a>',
+    '<script>alert(1)</script>\n\nText <img src=x onerror="alert(1)"> and <a href="javascript:alert(1)">x</a>\n\n' +
+      '<div align="center">\n<b>logo</b>\n</div>\n\n| a | b |\n|---|---|\n| one<br>two | x |',
   );
-  assert.doesNotMatch(html, /<script|<img|<a /);
+  assert.doesNotMatch(html, /<script|<img|<a |<div|<b>|<br>/);
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(html, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
+  assert.match(html, /<p>&lt;div align=&quot;center&quot;&gt;\n&lt;b&gt;logo&lt;\/b&gt;\n&lt;\/div&gt;<\/p>/);
+  assert.match(html, /<td>one&lt;br&gt;two<\/td>/);
+});
+
+test("HTML comments stay hidden, as on GitHub, and their lines are not Markdown", () => {
+  const html = render(
+    "# ADR <!-- number -->\n\nIntro\n\n<!--\nHow to use this template:\n- delete this note\n-->\n\n" +
+      "Text <!-- inline --> after\n\n<!-- markdownlint-disable MD013 -->\n\nTail\n\n<!-- never closed\n\n- gone",
+  );
+  assert.match(html, /<h1 id="md-adr">ADR <\/h1>/);
+  assert.match(html, /<p>Text {2}after<\/p>/);
+  assert.match(html, /<p>Tail<\/p>/);
+  assert.doesNotMatch(html, /&lt;!--|--&gt;|How to use|delete this note|markdownlint|never closed|gone/);
+  assert.doesNotMatch(html, /<ul>/);
+});
+
+test("a link with a scheme but http(s), mailto: and tel: is marked text, not a dead link", () => {
+  const html = render(
+    "[d](data:image/png;base64,AAAA) [open](vscode://file/x) [doc](ms-word:ofe|u|x) [m](mailto:a@b.c) [t](tel:+4989)",
+  );
+  assert.match(html, /<span class="md-link-unavailable" title="A data: link does not open from designIQ">d<\/span>/);
+  assert.match(html, /title="A vscode: link does not open from designIQ">open<\/span>/);
+  assert.match(html, /title="A ms-word: link does not open from designIQ">doc<\/span>/);
+  assert.match(html, /<a href="mailto:a@b.c">m<\/a> <a href="tel:\+4989">t<\/a>/);
 });
 
 test("javascript:, vbscript: and data: links are neutralised", () => {
@@ -113,10 +153,27 @@ test("a link to a file designIQ does not open is marked text, not a dead link", 
   assert.doesNotMatch(html, /<a /);
   assert.match(
     html,
-    /<span class="md-link-unavailable" title="service\/App.kt is not a model, so it does not open in designIQ">source<\/span>/,
+    /<span class="md-link-unavailable" title="service\/App.kt is not a model of this repository, so it does not open in designIQ">source<\/span>/,
   );
-  assert.match(html, /title="docs\/adr\/ is not a model, so it does not open in designIQ">adrs</);
+  assert.match(html, /title="docs\/adr\/ is not a model of this repository, so it does not open in designIQ">adrs</);
   assert.match(html, /title="This link points outside the repository">escape</);
+});
+
+test("with the model list, only a model of the repository is a link", () => {
+  const models = new Set(["docs/use-cases/bike-leasing/process/executable-process.md"]);
+  const html = renderMarkdown(
+    "[process](../process/executable-process.md) [contributing](../../../../CONTRIBUTING.md) [gone](../process/old.bpmn)",
+    { repo: REPO, docPath: DOC, models },
+  );
+  assert.match(html, /<a href="[^"]+executable-process.md" data-model-path="[^"]+">process<\/a>/);
+  assert.match(
+    html,
+    /<span class="md-link-unavailable" title="CONTRIBUTING.md is not a model of this repository, so it does not open in designIQ">contributing<\/span>/,
+  );
+  assert.match(html, /title="docs\/use-cases\/bike-leasing\/process\/old.bpmn is not a model[^"]*">gone<\/span>/);
+  assert.deepEqual(classifyHref("../../../../CONTRIBUTING.md", DOC, models), { kind: "file", path: "CONTRIBUTING.md" });
+  // without the list (still loading) the extension decides
+  assert.equal(classifyHref("../../../../CONTRIBUTING.md", DOC).kind, "model");
 });
 
 test("link targets classify and resolve against the document's folder", () => {
@@ -127,7 +184,8 @@ test("link targets classify and resolve against the document's folder", () => {
   });
   assert.deepEqual(classifyHref("#%C3%BCber", DOC), { kind: "anchor", fragment: "über" });
   assert.deepEqual(classifyHref("//cdn.example.com/x", DOC), { kind: "external" });
-  assert.deepEqual(classifyHref("mailto:a@b.c", DOC), { kind: "other" });
+  assert.deepEqual(classifyHref("mailto:a@b.c", DOC), { kind: "contact" });
+  assert.deepEqual(classifyHref("VSCode://file/x", DOC), { kind: "scheme", scheme: "vscode:" });
   assert.equal(resolveRepoPath("./a/../b.md", "docs/x.md"), "docs/b.md");
   assert.equal(resolveRepoPath("/top.md", "docs/deep/x.md"), "top.md");
   assert.equal(resolveRepoPath("../../x.md", "docs/x.md"), undefined);

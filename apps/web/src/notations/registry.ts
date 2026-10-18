@@ -48,11 +48,24 @@ export interface EditorContext {
    *  document); `fragment` is a section of it ("" = the top). Optional: an
    *  editor mounted without the shell leaves the navigation to its hrefs */
   onOpenModel?(path: string, fragment: string): void;
+  /** the repository's models, for links between them (a document view).
+   *  Optional: without it a link to a file with a notation extension counts
+   *  as one to a model */
+  models?: ModelDirectory;
   /** live presence (#115) — publish the local cursor/selection, subscribe to
    *  remote peers; the additive awareness surface promised on #124. Engines
    *  hand it to attachPresenceCanvas; optional keeps them mountable without
    *  a live session (tests, previews). */
   presence?: PresenceSurface;
+}
+
+/** the model list as the shell has it: it may arrive after the editor
+ *  mounts, and changes when a model is created, renamed or deleted */
+export interface ModelDirectory {
+  /** the repo-relative paths of the repository's models; undefined while the list loads */
+  paths(): ReadonlySet<string> | undefined;
+  /** subscribe to list changes; returns the unsubscribe */
+  onChange(cb: () => void): () => void;
 }
 
 /** a toolbar action the mounted editor contributes to the SHELL header

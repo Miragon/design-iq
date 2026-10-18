@@ -123,6 +123,10 @@ export function LiveEditor({
   // session effect mounts once, the handler behind this ref follows the
   // current model list and router (assigned below, once both exist)
   const openLinkedModelRef = useRef<(path: string, fragment: string) => void>(() => undefined);
+  // the repository's model paths for the mounted editor (links between
+  // models): the list arrives after the mount and changes with the repository
+  const modelPathsRef = useRef<ReadonlySet<string> | undefined>(undefined);
+  const modelListenersRef = useRef(new Set<() => void>());
 
   // the ONE open side panel — the panels are mutually exclusive, and the rule
   // lives here instead of being hand-written into every toggle (one of the
@@ -258,6 +262,13 @@ export function LiveEditor({
             },
             onSelectionChanged: setSelectedElements,
             onOpenModel: (path, fragment) => openLinkedModelRef.current(path, fragment),
+            models: {
+              paths: () => modelPathsRef.current,
+              onChange: (cb) => {
+                modelListenersRef.current.add(cb);
+                return () => modelListenersRef.current.delete(cb);
+              },
+            },
             presence: presenceSurface,
           });
         } catch (e) {
@@ -367,10 +378,16 @@ export function LiveEditor({
   const takenIds = new Set((models.data ?? []).filter((m) => m.notation === self.notation).map((m) => m.id));
   const openModel = useOpenModel(repo);
   const qc = useQueryClient();
+  const knownModels = models.data;
+  // the mounted editor's model paths follow the list
+  useEffect(() => {
+    modelPathsRef.current = knownModels ? new Set(knownModels.map((m) => m.path)) : undefined;
+    for (const cb of modelListenersRef.current) cb();
+  }, [knownModels]);
   // a linked model opens on its own route (#section included); a link to a
   // path the repository has no model at says so, instead of opening an
-  // editor whose room never syncs
-  const knownModels = models.data;
+  // editor whose room never syncs. Once the list has loaded the view renders
+  // such a link as text: this check covers a click before that.
   useEffect(() => {
     openLinkedModelRef.current = (path, fragment) => {
       if (knownModels && !knownModels.some((m) => m.path === path)) {

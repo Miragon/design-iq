@@ -2,24 +2,26 @@
  * The Markdown view's renderer, PURE: Markdown source in, an HTML string out.
  * markdown-it renders CommonMark plus the GFM extensions the content repos
  * use (tables, strikethrough, task lists, autolinks) and gives every heading
- * an anchor. The DOM side (sanitizing, mounting, clicks, scrolling) is
- * ./markdown-view.ts.
+ * an anchor. The DOM side is ./sanitize.ts (DOMPurify) and ./view.ts
+ * (mounting, clicks, scrolling).
  *
  * Node-loadable on purpose (test/markdown-render.test.ts): relative `.ts`
  * imports, no "@/" alias, nothing DOM-bound.
  *
- * Content-repo Markdown is untrusted. Raw HTML is escaped, never passed
- * through (`html: false`, and the two html render rules escape as well);
+ * Content-repo Markdown is untrusted. Raw HTML is never passed through: the
+ * parser recognises it (so an HTML comment stays hidden, as on GitHub), and
+ * the two html render rules drop comments and escape everything else.
  * markdown-it's validateLink keeps javascript:, vbscript:, file: and
- * non-image data: URLs from becoming a link or an image; the view sanitizes
+ * non-image data: URLs from becoming a link or an image; a link with any
+ * scheme but http(s), mailto: and tel: renders as text; the view sanitizes
  * the result once more (DOMPurify) before it reaches the page.
  *
  * Links between models: a relative link resolves against the document's
  * folder (a leading "/" against the repository root, as on GitHub). A target
- * with a registered notation extension becomes its in-app route; any other
- * repository file (a folder, an image, source code) is not something
- * designIQ opens, so it renders as plain, marked text instead of a link that
- * would lead nowhere.
+ * the repository has a model at becomes its in-app route; any other
+ * repository file (a folder, an image, source code, a document outside the
+ * models folder) is not something designIQ opens, so it renders as plain,
+ * marked text instead of a link that would lead nowhere.
  */
 import { byExtension } from "@designiq/notations";
 import MarkdownIt, { type Env, type StateCore, type Token } from "markdown-it";
@@ -46,6 +48,9 @@ export interface RenderOptions {
   docPath: string;
   /** fence renderers by language (lower-case); a language without one renders as code */
   fences?: Readonly<Record<string, FenceRenderer>>;
+  /** the repo-relative paths of the repository's models; absent (the list
+   *  is still loading) = every path with a notation extension counts as one */
+  models?: ReadonlySet<string>;
 }
 
 /** what a link in the document points at */
@@ -58,8 +63,10 @@ export type LinkTarget =
   | { kind: "file"; path: string | undefined }
   /** a web address: opens in a new tab */
   | { kind: "external" }
-  /** any other scheme markdown-it lets through (mailto:, tel:): left to the browser */
-  | { kind: "other" };
+  /** a mailto: or tel: address: left to the browser */
+  | { kind: "contact" }
+  /** any other scheme markdown-it lets through (vscode:, ms-word:, data:image/): not followed */
+  | { kind: "scheme"; scheme: string };
 
 /** heading ids carry a prefix, so document content can never clobber a
  *  global (window.<id>) or another id of the app; URL fragments stay bare
@@ -117,10 +124,16 @@ export function resolveRepoPath(href: string, docPath: string): string | undefin
   return out.join("/") + (href.endsWith("/") && out.length > 0 ? "/" : "");
 }
 
-/** where a link of the document at `docPath` points */
-export function classifyHref(href: string, docPath: string): LinkTarget {
+/**
+ * Where a link of the document at `docPath` points. `models` are the
+ * repository's model paths; without them a target with a notation extension
+ * counts as a model (the shell checks again when the link is clicked).
+ */
+export function classifyHref(href: string, docPath: string, models?: ReadonlySet<string>): LinkTarget {
   if (href.startsWith("//") || /^https?:/i.test(href)) return { kind: "external" };
-  if (SCHEME.test(href)) return { kind: "other" };
+  if (/^(mailto|tel):/i.test(href)) return { kind: "contact" };
+  const scheme = SCHEME.exec(href)?.[0];
+  if (scheme) return { kind: "scheme", scheme: scheme.toLowerCase() };
   const hashAt = href.indexOf("#");
   const fragment = hashAt < 0 ? "" : safeDecode(href.slice(hashAt + 1));
   const pathPart = (hashAt < 0 ? href : href.slice(0, hashAt)).replace(/\?.*$/, "");
@@ -128,8 +141,8 @@ export function classifyHref(href: string, docPath: string): LinkTarget {
   const path = resolveRepoPath(pathPart, docPath);
   if (path === undefined) return { kind: "file", path: undefined };
   if (path === docPath) return { kind: "anchor", fragment };
-  if (!path.endsWith("/") && byExtension(path)) return { kind: "model", path, fragment };
-  return { kind: "file", path };
+  const isModel = models ? models.has(path) : !path.endsWith("/") && byExtension(path) !== undefined;
+  return isModel ? { kind: "model", path, fragment } : { kind: "file", path };
 }
 
 /** what the core rules read from markdown-it's env */
@@ -137,6 +150,7 @@ interface RenderEnv extends Env {
   repo: string;
   docPath: string;
   fences: Readonly<Record<string, FenceRenderer>>;
+  models: ReadonlySet<string> | undefined;
 }
 
 const TASK_MARKER = /^\[([ xX])\](?:[ \t]+|$)/;
@@ -151,6 +165,9 @@ function taskLists(state: StateCore): void {
     if (inline.type !== "inline" || tokens[i - 1]!.type !== "paragraph_open" || item.type !== "list_item_open") {
       continue;
     }
+    // the SOURCE decides: an escaped marker ("\[ ]") is text, although by
+    // now its backslash is gone from the merged text token
+    if (!TASK_MARKER.test(inline.content)) continue;
     const first = inline.children?.[0];
     const match = first?.type === "text" ? TASK_MARKER.exec(first.content) : null;
     if (!first || !match) continue;
@@ -223,9 +240,18 @@ function links(state: StateCore): void {
   }
 }
 
+/** a link rendered as marked, inert text: its title says why it does not open */
+function unavailable(token: Token, title: string): void {
+  token.tag = "span";
+  token.attrs = [
+    ["class", "md-link-unavailable"],
+    ["title", title],
+  ];
+}
+
 function rewriteLink(token: Token, env: RenderEnv): void {
   const href = String(token.attrGet("href") ?? "");
-  const target = classifyHref(href, env.docPath);
+  const target = classifyHref(href, env.docPath, env.models);
   switch (target.kind) {
     case "external":
       token.attrSet("target", "_blank");
@@ -239,23 +265,26 @@ function rewriteLink(token: Token, env: RenderEnv): void {
       token.attrSet("data-model-path", target.path);
       return;
     case "file":
-      token.tag = "span";
-      token.attrs = [
-        ["class", "md-link-unavailable"],
-        [
-          "title",
-          target.path === undefined
-            ? "This link points outside the repository"
-            : `${target.path} is not a model, so it does not open in designIQ`,
-        ],
-      ];
+      unavailable(
+        token,
+        target.path === undefined
+          ? "This link points outside the repository"
+          : `${target.path} is not a model of this repository, so it does not open in designIQ`,
+      );
       return;
-    case "other":
+    case "scheme":
+      unavailable(token, `A ${target.scheme} link does not open from designIQ`);
+      return;
+    case "contact":
       return;
   }
 }
 
-const md = new MarkdownIt({ html: false, linkify: true, typographer: false });
+// `html: true` only lets the parser RECOGNISE raw HTML: the html render rules
+// below drop comments and escape the rest, so no markup of the document's own
+// reaches the page. (With `html: false` a comment would show as text, and its
+// lines would render as Markdown.)
+const md = new MarkdownIt({ html: true, linkify: true, typographer: false });
 
 // GFM autolinks: URLs with a scheme, e-mail addresses and www. hosts. linkify-it
 // finds bare domains only as "fuzzy" links, which would also turn every file
@@ -266,6 +295,16 @@ md.linkify.add("//", null);
 const linkifyMatch = md.linkify.match.bind(md.linkify);
 md.linkify.match = (text) => linkifyMatch(text)?.filter((m) => m.schema !== "" || /^www\./i.test(m.raw)) ?? null;
 
+// GFM footnotes are not rendered (yet). Without this a footnote definition
+// ("[^1]: note") would be taken for a link reference definition, and its text
+// would vanish from the document: keep it, and every "[^1]", as plain text.
+const referenceRule = md.block.ruler.__rules__.find((rule) => rule.name === "reference")!.fn;
+md.block.ruler.at("reference", (state, startLine, endLine, silent) =>
+  state.src.startsWith("[^", state.bMarks[startLine]! + state.tShift[startLine]!)
+    ? false
+    : referenceRule(state, startLine, endLine, silent),
+);
+
 md.core.ruler.push("designiq_task_lists", taskLists);
 md.core.ruler.push("designiq_heading_anchors", headingAnchors);
 md.core.ruler.push("designiq_table_alignment", tableAlignment);
@@ -273,9 +312,16 @@ md.core.ruler.push("designiq_links", links);
 
 const { escapeHtml, unescapeAll } = md.utils;
 
-// raw HTML never reaches the page, even if a future option let the parser emit it
-md.renderer.rules.html_block = (tokens, idx) => `<p>${escapeHtml(tokens[idx]!.content)}</p>\n`;
-md.renderer.rules.html_inline = (tokens, idx) => escapeHtml(tokens[idx]!.content);
+// raw HTML never reaches the page: comments are dropped (GitHub hides them
+// too: authoring notes, lint and toc directives), everything else is escaped
+// and shows as the text it is. An unclosed comment runs to the end, as in a
+// browser.
+const HTML_COMMENT = /<!--[\s\S]*?(?:-->|$)/g;
+md.renderer.rules.html_block = (tokens, idx) => {
+  const text = tokens[idx]!.content.replace(HTML_COMMENT, "").trim();
+  return text === "" ? "" : `<p>${escapeHtml(text)}</p>\n`;
+};
+md.renderer.rules.html_inline = (tokens, idx) => escapeHtml(tokens[idx]!.content.replace(HTML_COMMENT, ""));
 
 md.renderer.rules.task_checkbox = (tokens, idx) =>
   `<input type="checkbox" class="task-list-item-checkbox" disabled${tokens[idx]!.meta?.checked ? " checked" : ""}> `;
@@ -295,9 +341,11 @@ md.renderer.rules.fence = (tokens, idx, _options, env) => {
 md.renderer.rules.code_block = (tokens, idx) =>
   `<pre class="md-code"><code>${escapeHtml(tokens[idx]!.content)}</code></pre>\n`;
 
-// images: https and inline data images load (lazily, without a referrer);
-// anything else, the repository's own relative images included, has no
-// route to load from yet and shows as a placeholder naming the image
+// images: https and inline data images load (lazily, without a referrer).
+// An https image loads straight from its host, which sees the reader's
+// address, as it would outside GitHub's image proxy: a deliberate default
+// for now. Anything else, the repository's own relative images included, has
+// no route to load from yet and shows as a placeholder naming the image
 md.renderer.rules.image = (tokens, idx, options, env, self) => {
   const token = tokens[idx]!;
   const src = String(token.attrGet("src") ?? "");
@@ -318,6 +366,11 @@ md.renderer.rules.image = (tokens, idx, options, env, self) => {
 
 /** render a Markdown document to (unsanitized, but escaped) HTML */
 export function renderMarkdown(source: string, options: RenderOptions): string {
-  const env: RenderEnv = { repo: options.repo, docPath: options.docPath, fences: options.fences ?? {} };
+  const env: RenderEnv = {
+    repo: options.repo,
+    docPath: options.docPath,
+    fences: options.fences ?? {},
+    models: options.models,
+  };
   return md.render(source, env);
 }

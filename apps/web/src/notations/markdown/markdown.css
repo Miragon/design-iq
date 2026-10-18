@@ -1,4 +1,4 @@
-/* The Markdown view (./markdown-view.ts): document typography from the Miragon CI.
+/* The Markdown view (./view.ts): document typography from the Miragon CI.
    Loaded with the view's lazy chunk, so the eager bundle carries none of it;
    every rule is scoped under the view's own classes. Colours are the
    @designiq/ui-kit aliases, sizes the CI type scale (body 16/1.6, h1 40,
@@ -226,9 +226,13 @@
   text-align: right;
 }
 
+/* inline, as on GitHub: Tailwind's preflight makes every img a block, which
+   would stack a row of README badges one per line */
 .markdown-body img {
+  display: inline;
   max-width: 100%;
   height: auto;
+  vertical-align: middle;
 }
 /* an image with no route to load from: its name in place of the picture */
 .markdown-body .md-image-placeholder {

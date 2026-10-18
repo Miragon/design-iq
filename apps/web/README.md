@@ -7,12 +7,12 @@ Desktop, ChatGPT).
 
 ## Scripts
 
-| Script                                  | What it does                                                                                                                    |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base). |
-| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).     |
-| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer).       |
-| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                         |
+| Script                                  | What it does                                                                                                                                                |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                             |
+| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                 |
+| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer) and the Markdown view under jsdom. |
+| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                     |
 
 ## Theming
 
@@ -45,25 +45,35 @@ colour comes from `@designiq/ui-kit`:
 ## The Markdown view
 
 A Markdown model (`.md`) opens as the rendered document; the view switch's **Markdown** side
-is the Monaco source to edit it in. `src/notations/markdown/plugin.ts` is the light manifest:
-markdown-it, DOMPurify, the view and its stylesheet load as their own chunk when a document
-opens (ADR 0006).
+is the Monaco source to edit it in. `src/notations/markdown/plugin.ts` is the light manifest;
+its lazy entry `markdown-view.ts` loads markdown-it, DOMPurify, the view and its stylesheet
+as their own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module to
+`import()` (rule `web-markdown-engine-loads-lazily`).
 
 - `render.ts` is pure, node-tested in `test/markdown-render.test.ts`: CommonMark plus the GFM
   tables, strikethrough, task lists and autolinks, and GitHub-style heading anchors (the ids
-  carry an `md-` prefix, URL fragments stay bare). Raw HTML is escaped, and `javascript:`,
-  `vbscript:`, `file:` and non-image `data:` URLs never become a link or an image.
-- `markdown-view.ts` sanitizes that HTML once more with DOMPurify, against an allowlist of
-  exactly the markup the renderer emits. It re-renders 200 ms after the last change of the
-  shared Y.Text (a collaborator's included), scrolls in-page `#anchors` and hands a link to
-  another model to the shell, which opens it on its own route.
-- A relative link to a file with a registered notation extension is that model's in-app route
-  (`/r/<owner>/<repo>/f/<path>#<section>`); a link to any other repository file is marked,
-  inert text. Images load from `https:` and inline `data:image/` URLs; an image of the
-  repository shows a placeholder with its alt text, because the Live Host serves no raw files.
+  carry an `md-` prefix, URL fragments stay bare). Raw HTML never reaches the page: HTML
+  comments are hidden, as on GitHub, everything else is escaped and shows as text.
+  `javascript:`, `vbscript:`, `file:` and non-image `data:` URLs never become a link or an
+  image. GFM footnotes do not render yet; their text stays in the document.
+- `sanitize.ts` sanitizes that HTML once more with DOMPurify, against an allowlist of exactly
+  the markup the renderer emits (no style, no SVG, no data-\* but `data-model-path`, ids only
+  with the `md-` prefix).
+- `view.ts` mounts the document in the canvas layer. It re-renders 200 ms after the last
+  change of the shared Y.Text (a collaborator's included), at least once a second while the
+  changes keep coming, scrolls in-page `#anchors` and hands a link to another model to the
+  shell, which opens it on its own route. `test/markdown-view.test.ts` covers the sanitizer
+  and the view under jsdom.
+- A relative link to a model of the repository (the shell's model list) is that model's
+  in-app route (`/r/<owner>/<repo>/f/<path>#<section>`); a link to any other repository file,
+  a document outside the models folder included, is marked, inert text. So is a link with a
+  scheme other than `http(s):`, `mailto:` and `tel:`. Images load from `https:` and inline
+  `data:image/` URLs, directly from their host; an image of the repository shows a
+  placeholder with its alt text, because the Live Host serves no raw files.
 - A fenced code block renders as code, unless `fences.ts` registers its language: `render`
-  returns its HTML inside the render pass, `hydrate` upgrades it in the DOM afterwards. That
-  is the slot a Mermaid renderer (#254) plugs into, without a change to the view.
+  returns its HTML inside the render pass, `hydrate` upgrades it in the DOM afterwards, only
+  for a document that has such a fence. That is the slot a Mermaid renderer (#254) plugs
+  into, without a change to the view; `fences.ts` states the contract it builds on.
 
 ## The MCP-App widgets
 
