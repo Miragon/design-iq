@@ -8,7 +8,8 @@
  *
  * Widening it is a security decision: a fence extension that inserts richer
  * markup (a Mermaid SVG) sanitizes that output in its own `hydrate`, with its
- * own profile, instead of loosening this list for every document.
+ * own profile (createDiagramSanitizer below), instead of loosening this list
+ * for every document.
  */
 import DOMPurify, { type Config, type WindowLike } from "dompurify";
 
@@ -91,4 +92,31 @@ export function createSanitizer(win: WindowLike): Sanitize {
     if (id !== null && !id.startsWith(ANCHOR_PREFIX)) node.removeAttribute("id");
   });
   return (html) => purify.sanitize(html, SANITIZE);
+}
+
+/**
+ * The profile for a diagram a fence extension draws (./mermaid-fence.ts):
+ * exactly the one mermaid applies to its own output under securityLevel
+ * "strict" (DOMPurify's defaults plus the foreignObject its HTML labels sit
+ * in), run once more on the page's side. The diagram reaches the view as a
+ * DOM node, never through innerHTML: no script, no event handler, no
+ * javascript: URL. It keeps its own <style>, which mermaid scopes to the
+ * SVG's id. A link in a diagram opens a new tab without an opener, like
+ * every other link of the view that leaves designIQ.
+ */
+const DIAGRAM: Config & { RETURN_DOM_FRAGMENT: true } = {
+  ADD_TAGS: ["foreignobject"],
+  ADD_ATTR: ["dominant-baseline"],
+  HTML_INTEGRATION_POINTS: { foreignobject: true },
+  RETURN_DOM_FRAGMENT: true,
+};
+
+export function createDiagramSanitizer(win: WindowLike): Sanitize {
+  const purify = DOMPurify(win);
+  purify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.nodeName.toLowerCase() !== "a") return;
+    node.setAttribute("target", "_blank");
+    node.setAttribute("rel", "noopener noreferrer");
+  });
+  return (svg) => purify.sanitize(svg, DIAGRAM);
 }

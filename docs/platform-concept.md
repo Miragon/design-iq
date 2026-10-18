@@ -155,7 +155,8 @@ Vite + TypeScript SPA:
 - **YAML/Markdown editing**: Monaco bound per file (the `open-collaboration-monaco` package
   covers exactly this; multi-file needs the raw-connection escape hatch it exposes).
   _As built (#253): a Markdown model opens as the rendered document, live with every edit,
-  with links between models opening inside the app; its Monaco source is one click away._
+  with links between models opening inside the app and `mermaid` fences drawn as diagrams
+  (#254); its Monaco source is one click away._
 - **Presence**: OCT awareness → avatars per file, remote cursors in Monaco, remote-change
   highlighting on the BPMN canvas (color-flash per changed element via `bpmn-js-differ`).
 - **Release button** per process → Live Host release API → shows PR link.

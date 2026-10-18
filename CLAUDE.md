@@ -26,8 +26,8 @@ Registered in `packages/notations/index.ts` (id = the `notation` argument of the
 Every notation gets live sync, the generic MCP model tools, validation and release-as-PR.
 In the web client a notation's plugin (`apps/web/src/notations/registry.ts`) decides what a
 model opens in: a visual modeler (BPMN, DMN, the Miragon renderers), a rendered, live read
-view (Markdown, `apps/web/src/notations/markdown/`) or Monaco alone (Value Chain). The Monaco
-source is one click away for every one of them.
+view (Markdown, `apps/web/src/notations/markdown/`, its `mermaid` fences drawn as diagrams) or
+Monaco alone (Value Chain). The Monaco source is one click away for every one of them.
 BPMN and DMN have the deepest tooling (derived process and decision views, decision
 simulation and tests, todos anchored to BPMN elements) and the BPMN/DMN hard rules below.
 

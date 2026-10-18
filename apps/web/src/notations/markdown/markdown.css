@@ -199,6 +199,70 @@
   white-space: pre;
 }
 
+/* a mermaid fence drawn as its diagram (./mermaid-fence.ts): centred, as
+   wide as the measure up to its natural size (mermaid caps the SVG with a
+   max-width), a wider one scrolls on its own. Dimmed while a newer source
+   of it cannot be drawn */
+.markdown-body .md-mermaid-block {
+  margin: 0 0 var(--cd-space-3);
+}
+.markdown-body .md-mermaid-block > pre {
+  margin: 0;
+}
+.markdown-body .md-mermaid-diagram {
+  overflow-x: auto;
+  transition: opacity var(--cd-motion-fast) var(--cd-ease);
+}
+.markdown-body .md-mermaid-diagram > svg {
+  display: block;
+  margin-inline: auto;
+}
+.markdown-body .md-mermaid-diagram.is-stale {
+  opacity: 0.4;
+}
+/* the error notice of a diagram mermaid cannot read, in the flow of the
+   document under its block: the destructive aliases, Geist Mono for a
+   parser's excerpt (its caret points at a column) */
+.markdown-body .md-mermaid-notice {
+  display: flex;
+  gap: var(--cd-space-2);
+  margin-top: var(--cd-space-2);
+  padding: var(--cd-space-2) var(--cd-space-3);
+  border: 1px solid var(--destructive);
+  border-radius: var(--cd-radius-md);
+  background: var(--destructive-soft);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.markdown-body .md-mermaid-notice-icon {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  color: var(--destructive);
+}
+.markdown-body .md-mermaid-notice-body {
+  min-width: 0;
+  flex: 1;
+}
+.markdown-body .md-mermaid-notice-title {
+  color: var(--destructive);
+  font-weight: 500;
+}
+.markdown-body .md-mermaid-notice-hint {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+.markdown-body .md-mermaid-notice-message {
+  max-height: 8rem;
+  margin-top: var(--cd-space-1);
+  overflow: auto;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+}
+.markdown-body .md-mermaid-notice-message.is-mono {
+  font-family: var(--designiq-font-mono);
+}
+
 /* tables: bordered, a tinted header row; wide tables scroll on their own */
 .markdown-body table {
   display: block;

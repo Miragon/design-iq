@@ -190,18 +190,28 @@ export default {
         "from an eager module would pull the engine into the main bundle with a green build.",
       from: {
         path: "^apps/web/src/",
-        pathNot: ["^apps/web/src/notations/markdown/(markdown-view|view|render|sanitize|fences)\\.ts$"],
+        pathNot: ["^apps/web/src/notations/markdown/(markdown-view|view|render|sanitize|fences|mermaid-fence)\\.ts$"],
       },
       to: {
         dynamic: false,
         dependencyTypesNot: ["type-only"],
         path: [
           "(^|/)node_modules/(markdown-it|dompurify)/",
-          "^apps/web/src/notations/markdown/(markdown-view|view|render|sanitize|fences)\\.ts$",
+          "^apps/web/src/notations/markdown/(markdown-view|view|render|sanitize|fences|mermaid-fence)\\.ts$",
           // the SPA's "@/" alias does not resolve in this cruise: match the import as written
-          "^@/notations/markdown/(markdown-view|view|render|sanitize|fences)(\\.ts)?$",
+          "^@/notations/markdown/(markdown-view|view|render|sanitize|fences|mermaid-fence)(\\.ts)?$",
         ],
       },
+    },
+    {
+      name: "mermaid-loads-lazily",
+      severity: "error",
+      comment:
+        "ADR 0006: an editor engine loads behind a dynamic import, never in the eager bundle or " +
+        "the repo overview. mermaid is the largest of them, so the web app reaches it only " +
+        "through import() (lib/mermaid-render.ts); an `import type` is erased and free.",
+      from: { path: "^apps/web/" },
+      to: { path: "(^|/)node_modules/mermaid/", dependencyTypesNot: ["type-only"], dynamic: false },
     },
 
     /* ── D. hexagonal layer rules (inert until the folders exist) ──────── */

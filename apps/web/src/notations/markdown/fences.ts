@@ -1,9 +1,9 @@
 /**
  * The fence extension point of the Markdown view, keyed by language: a fenced
  * code block whose language has an entry here renders through it, every other
- * fence stays a plain code block. Empty in this release (a ```mermaid fence
- * shows its source); a diagram renderer plugs in as one entry, and the view
- * needs no change for it.
+ * fence stays a plain code block. One entry so far: ```mermaid fences draw as
+ * diagrams (./mermaid-fence.ts). Another renderer plugs in as one more entry,
+ * and the view needs no change for it.
  *
  * `render` runs synchronously inside the Markdown render and returns HTML,
  * sanitized with the rest of the document (./sanitize.ts: markup, never
@@ -22,8 +22,11 @@
  * - Every render replaces the whole document, placeholders included, and
  *   aborts the previous `signal`. Cache the drawn output by source, so a
  *   document re-rendered for an edit elsewhere does not draw every diagram
- *   again.
+ *   again, and put it back in the synchronous part of `hydrate`, before the
+ *   first `await`: the view calls `hydrate` in a microtask right after the
+ *   render, so what is back by then is on screen without a flash of code.
  */
+import { createMermaidFence } from "./mermaid-fence.ts";
 import type { FenceRenderer } from "./render.ts";
 
 export interface FenceExtension {
@@ -32,4 +35,6 @@ export interface FenceExtension {
 }
 
 /** language (lower-case, the fence's first info word) → its extension */
-export const FENCE_EXTENSIONS: Readonly<Record<string, FenceExtension>> = {};
+export const FENCE_EXTENSIONS: Readonly<Record<string, FenceExtension>> = {
+  mermaid: createMermaidFence(),
+};

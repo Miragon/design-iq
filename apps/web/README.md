@@ -72,8 +72,18 @@ as their own chunk when a document opens (ADR 0006). `pnpm arch` holds every oth
   placeholder with its alt text, because the Live Host serves no raw files.
 - A fenced code block renders as code, unless `fences.ts` registers its language: `render`
   returns its HTML inside the render pass, `hydrate` upgrades it in the DOM afterwards, only
-  for a document that has such a fence. That is the slot a Mermaid renderer (#254) plugs
-  into, without a change to the view; `fences.ts` states the contract it builds on.
+  for a document that has such a fence. `fences.ts` states the contract an extension builds
+  on.
+- Mermaid diagrams: a `mermaid` fence (`mermaid-fence.ts`) draws through the app's one
+  Mermaid renderer, `src/lib/mermaid-render.ts` (strict security level, the CI theme,
+  Geist). The renderer and mermaid load on the first document that has such a fence, never
+  for any other. The drawn SVG is sanitized once more (`createDiagramSanitizer` in
+  `sanitize.ts`, the profile mermaid applies itself) and cached by source: a re-render for an
+  edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram
+  keeps its drawing until the new one is drawn. A diagram mermaid cannot read shows a notice
+  with the error and its line (counted within the diagram) under its code, or under its last
+  good drawing, dimmed. `test/markdown-mermaid.test.ts` covers it under jsdom with a fake
+  renderer.
 
 ## The MCP-App widgets
 
