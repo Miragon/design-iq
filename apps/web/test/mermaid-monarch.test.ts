@@ -675,39 +675,54 @@ test("odd text never throws, always moves on, never stacks up", () => {
 });
 
 test("long and odd lines finish at once: no pattern backtracks out of hand", () => {
-  // up to Monaco's tokenization limit (20 000 characters), each line timed on
-  // its own (the best of three, from the state the line before left): a
-  // linear read takes a few ms, a pattern gone quadratic many times that (a
-  // dotted link's text read on from every -. to the line's end: ≈ 75 ms)
-  const long = [
-    `A -- ${"x ".repeat(9000)}`,
-    "-- x ".repeat(3800),
-    "== x ".repeat(3800),
-    "-. x ".repeat(3800),
-    ".".repeat(19_000),
-    `${"-".repeat(19_000)}a`,
-    `a${" ".repeat(19_000)}`,
-    `"${"a ".repeat(9000)}`,
-    `A[${"b".repeat(19_000)}`,
-    `${"a ".repeat(9000)}:`,
-    "<<a".repeat(6000),
-    "|a".repeat(9000),
-    `%%{${'"a": '.repeat(3000)}`,
+  // up to Monaco's tokenization limit (20 000 characters). Each line is read
+  // at its full length and at an eighth of it, the best of three from the
+  // state the line before left: a linear read takes about eight times as
+  // long, a pattern gone quadratic about 64 times (a dotted link's text read
+  // on from every -. to the line's end). A ratio, not a budget in ms, so a
+  // slow or busy CI runner does not fail a linear grammar
+  const long: Array<(n: number) => string> = [
+    (n) => `A -- ${"x ".repeat(n)}`,
+    (n) => "-- x ".repeat(n),
+    (n) => "== x ".repeat(n),
+    (n) => "-. x ".repeat(n),
+    (n) => ".".repeat(n),
+    (n) => `${"-".repeat(n)}a`,
+    (n) => `a${" ".repeat(n)}`,
+    (n) => `"${"a ".repeat(n)}`,
+    (n) => `A[${"b".repeat(n)}`,
+    (n) => `${"a ".repeat(n)}:`,
+    (n) => "<<a".repeat(n),
+    (n) => "|a".repeat(n),
+    (n) => `%%{${'"a": '.repeat(n)}`,
   ];
+  type State = Parameters<typeof mermaid.tokenize>[2];
+  const timed = (line: string, state: State): number => {
+    let best = Infinity;
+    for (let run = 0; run < 3; run++) {
+      const started = performance.now();
+      mermaid.tokenize(line, true, state);
+      best = Math.min(best, performance.now() - started);
+    }
+    return best;
+  };
   // every family's first header
   const headers = Object.entries(language)
     .filter(([key]) => key.endsWith("Headers"))
     .map(([, list]) => (list as string[])[0] ?? "pie");
   for (const header of headers) {
     let state = mermaid.tokenize(header, true, mermaid.getInitialState()).endState;
-    for (const line of long) {
-      let best = Infinity;
-      for (let run = 0; run < 3; run++) {
-        const started = performance.now();
-        mermaid.tokenize(line, true, state);
-        best = Math.min(best, performance.now() - started);
-      }
-      assert.ok(best < 40, `${header}, ${JSON.stringify(line.slice(0, 10))}…: ${Math.round(best)} ms`);
+    for (const make of long) {
+      const unit = make(1).length;
+      const n = Math.floor(19_000 / unit);
+      const line = make(n);
+      const full = timed(line, state);
+      const eighth = timed(make(Math.floor(n / 8)), state);
+      // a floor for lines too fast to time: well under a quadratic read of 19 000 characters
+      assert.ok(
+        full < Math.max(24 * eighth, 10),
+        `${header}, ${JSON.stringify(line.slice(0, 10))}…: ${full.toFixed(1)} ms in full, ${eighth.toFixed(1)} ms at an eighth`,
+      );
       state = mermaid.tokenize(line, true, state).endState;
     }
   }
