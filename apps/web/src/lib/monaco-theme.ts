@@ -40,7 +40,8 @@ const tint = (color: string, pct: number): string => mix(color, pct, "transparen
 // names and #0000FF values are the loudest thing on a BPMN XML screen; the CI
 // blues lead instead, green reads as data.
 const SYNTAX = {
-  /** tags, keywords, headings — the structure: the CI's interactive blue */
+  /** tags, keywords, headings, a diagram's arrows — the structure: the CI's
+   *  interactive blue */
   structure: CD.blauLink,
   /** attribute names, JSON/YAML keys — blue deepened toward schwarz: the tag's
    *  family, told apart from it by depth */
@@ -86,6 +87,9 @@ export const designiqTheme: editor.IStandaloneThemeData = {
     { token: "keyword", foreground: fg(SYNTAX.structure) },
     { token: "keyword.json", foreground: fg(SYNTAX.structure) },
     { token: "keyword.flow", foreground: fg(SYNTAX.structure) },
+    // Mermaid's arrows and links only: a bare `operator` would recolour every
+    // fence language's too (a ```rust fence's)
+    { token: "operator.mermaid", foreground: fg(SYNTAX.structure) },
     { token: "variable.predefined", foreground: fg(SYNTAX.structure) },
     { token: "string.link", foreground: fg(SYNTAX.structure) },
     { token: "attribute.name", foreground: fg(SYNTAX.name) },

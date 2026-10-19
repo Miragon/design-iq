@@ -222,6 +222,21 @@ export default {
       from: { path: "^apps/web/" },
       to: { path: "(^|/)node_modules/mermaid/", dependencyTypesNot: ["type-only"], dynamic: false },
     },
+    {
+      name: "mermaid-grammar-loads-lazily",
+      severity: "error",
+      comment:
+        "ADR 0006, the way Monaco ships its own languages: lib/monaco-languages.ts registers the " +
+        "`mermaid` id up front and reaches the grammar (lib/mermaid-monarch.ts, with the diagram " +
+        "types it is built from) only through import(), the first time a ```mermaid fence is " +
+        "highlighted. A static import would put it in the main bundle with a green build.",
+      from: { path: "^apps/web/src/" },
+      to: {
+        dynamic: false,
+        dependencyTypesNot: ["type-only"],
+        path: ["^apps/web/src/lib/mermaid-monarch\\.ts$", "^@/lib/mermaid-monarch(\\.ts)?$"],
+      },
+    },
 
     /* ── D. hexagonal layer rules (inert until the folders exist) ──────── */
     {

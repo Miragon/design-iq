@@ -57,6 +57,7 @@ import {
   type ViewChoice,
 } from "@/lib/editor-view";
 import { modelTarget, useOpenModel, wasExpected } from "@/lib/model-target";
+import { installMonacoLanguages } from "@/lib/monaco-languages";
 import { installMonacoTheme, MONACO_OPTIONS } from "@/lib/monaco-theme";
 import type { PresenceSurface, RemotePresence } from "@/lib/presence-canvas";
 import { invalidateModelLists, useFileHistory, useModels, useTodos } from "@/lib/queries";
@@ -336,6 +337,8 @@ export function LiveEditor({
       }
       if (cancelled) return;
       if (sourceRef.current && !structuredDoc) {
+        // before the model: a Markdown source tokenizes its fences in the languages it names
+        installMonacoLanguages(monaco.languages);
         sourceModel = monaco.editor.createModel(ytext.toString(), monacoLanguage(docPath));
         installMonacoTheme(monaco.editor);
         sourceEditor = monaco.editor.create(sourceRef.current, {
