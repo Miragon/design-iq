@@ -18,6 +18,9 @@
  *  Markdown view with its mermaid fence (no quantifier inside a quantified
  *  group: the safe-regex check refuses it) */
 const MARKDOWN_VIEW = "markdown/(markdown-view|view|render|sanitize|fences|mermaid-fence)";
+/** ... and the Markdown source's tooling (Insert diagram), attached to the
+ *  shell's Monaco through WebNotationPlugin.attachSource */
+const MARKDOWN_SOURCE = "markdown/(source-tools|insert-diagram|diagram-starters)";
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 export default {
@@ -196,10 +199,11 @@ export default {
         "view's modules (MARKDOWN_VIEW) import them, and each other, statically; everything else " +
         "reaches the view through import() (the manifest, notations/markdown/plugin.ts). One " +
         "static import from an eager module would pull the engine into the main bundle with a " +
-        "green build.",
+        "green build. The Markdown source's tooling (MARKDOWN_SOURCE) is held to the same rule: " +
+        "it reads the view's own parse, and the manifest's attachSource reaches it through import().",
       from: {
         path: "^apps/web/src/",
-        pathNot: [`^apps/web/src/notations/${MARKDOWN_VIEW}\\.ts$`],
+        pathNot: [`^apps/web/src/notations/${MARKDOWN_VIEW}\\.ts$`, `^apps/web/src/notations/${MARKDOWN_SOURCE}\\.ts$`],
       },
       to: {
         dynamic: false,
@@ -207,8 +211,10 @@ export default {
         path: [
           "(^|/)node_modules/(markdown-it|dompurify)/",
           `^apps/web/src/notations/${MARKDOWN_VIEW}\\.ts$`,
+          `^apps/web/src/notations/${MARKDOWN_SOURCE}\\.ts$`,
           // the SPA's "@/" alias does not resolve in this cruise: match the import as written
           `^@/notations/${MARKDOWN_VIEW}(\\.ts)?$`,
+          `^@/notations/${MARKDOWN_SOURCE}(\\.ts)?$`,
         ],
       },
     },

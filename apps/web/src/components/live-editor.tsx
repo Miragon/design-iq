@@ -6,7 +6,9 @@
  *                  view (the Markdown preview) mounted on the shared Y.Text,
  *                  plus its side panels, assist handoff and history diff —
  *                  the ENGINE chunks load lazily on mount; a plugin with the
- *                  split view shows its canvas beside the Monaco source too
+ *                  split view shows its canvas beside the Monaco source too,
+ *                  and its source tooling (Markdown: Insert diagram) attaches
+ *                  to that Monaco, its chunk loading once the session is live
  *   no plugin    → Monaco text editor on the shared Y.Text, language from the
  *                  registry (Value Chains and YAML live-edit as text)
  *
@@ -64,7 +66,13 @@ import { invalidateModelLists, useFileHistory, useModels, useTodos } from "@/lib
 import { createRemoteCaretStyles } from "@/lib/remote-carets";
 import { clampRatio, DEFAULT_RATIO, ratioBounds } from "@/lib/split-ratio";
 import type { TodoCanvas } from "@/lib/todo-canvas";
-import { type EditorToolbarAction, type MountedEditor, webPlugin } from "@/notations/registry";
+import {
+  type AttachedSource,
+  type EditorToolbarAction,
+  type MountedEditor,
+  type SourceMenu,
+  webPlugin,
+} from "@/notations/registry";
 
 /** the view switch's name for the source layer, by the notation's media kind */
 const SOURCE_LABEL: Record<MediaKind, string> = { xml: "XML", json: "JSON", dsl: "Text", markdown: "Markdown" };
@@ -128,6 +136,8 @@ export function LiveEditor({
   const [hasElements, setHasElements] = useState(false);
   /** header actions the mounted editor contributes (e.g. the t.BPM toggle) */
   const [editorActions, setEditorActions] = useState<EditorToolbarAction[]>([]);
+  /** header menus the source tooling contributes (Markdown: Insert diagram) */
+  const [sourceMenus, setSourceMenus] = useState<SourceMenu[]>([]);
   /** where a rename moved this document (#208) — set by the session's notice */
   const [movedTo, setMovedTo] = useState<MovedNotice | null>(null);
 
@@ -256,6 +266,7 @@ export function LiveEditor({
     let monacoBinding: MonacoBinding | undefined;
     let sourceEditor: monaco.editor.IStandaloneCodeEditor | undefined;
     let sourceModel: monaco.editor.ITextModel | undefined;
+    let sourceTools: AttachedSource | undefined;
     let offPresence: (() => void) | undefined;
     let attached = false;
 
@@ -354,6 +365,28 @@ export function LiveEditor({
       }
       offPresence = session.onPresence(setPresence);
       setStatus("live");
+      // the plugin's source tooling: its chunk loads HERE, once the session
+      // is live (a slow chunk never holds the editor back). A failed load
+      // costs the tools, not the editor, which works without them
+      if (plugin?.attachSource && sourceEditor) {
+        let tools: AttachedSource | undefined;
+        try {
+          tools = await plugin.attachSource(sourceEditor, { monaco });
+        } catch (e) {
+          if (!cancelled) {
+            toast.error(
+              `The ${notation?.label ?? "source"} tools failed to load (${e instanceof Error ? e.message : String(e)}). Editing works without them.`,
+            );
+          }
+        }
+        if (cancelled) {
+          // unmounted while the chunk loaded: take the late tools back off
+          tools?.dispose();
+          return;
+        }
+        sourceTools = tools;
+        setSourceMenus(tools?.menus ?? []);
+      }
     };
     const offSynced = session.onSynced(() => {
       if (cancelled) return;
@@ -381,7 +414,9 @@ export function LiveEditor({
       contentRef.current = null;
       todoCanvasRef.current = null;
       setEditorActions([]);
+      setSourceMenus([]);
       mounted?.destroy();
+      sourceTools?.dispose();
       monacoBinding?.destroy();
       sourceEditor?.dispose();
       sourceModel?.dispose();
@@ -579,6 +614,7 @@ export function LiveEditor({
         status={status}
         presence={presence}
         modeActions={editorActions}
+        sourceMenus={sourceShown ? sourceMenus : []}
         view={
           isVisual && !structuredDoc
             ? {

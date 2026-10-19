@@ -4,7 +4,8 @@
  * (live-editor.tsx) looks its plugin up by descriptor id and mounts through
  * this contract — a notation WITHOUT a plugin opens in collaborative Monaco.
  * The "visual editor" may also be a read-only rendering: Markdown mounts a
- * live preview, and its source is edited in the shell's Monaco layer.
+ * live preview, and its source is edited in the shell's Monaco layer, where
+ * a plugin may attach tooling of its own (Markdown: Insert diagram).
  *
  * Boundary rule, mirrored from ADR 0006: a plugin MANIFEST (this module +
  * the per-notation manifests it imports) is light, eager data — the editor
@@ -14,6 +15,7 @@
  * hand-written manifests: ./miragon holds ONE spec per renderer, and
  * miragonPlugin derives the manifest from it.
  */
+import type * as Monaco from "monaco-editor";
 import type { ComponentType, LazyExoticComponent } from "react";
 import type * as Y from "yjs";
 
@@ -146,6 +148,45 @@ export interface DiffSpec {
   legend: ReadonlyArray<{ label: string; color: string }>;
 }
 
+/** what the shell hands the tooling it attaches to its Monaco source */
+export interface SourceContext {
+  /** the Monaco API the editor runs on (Range, Selection, …): handed in, so
+   *  the tooling's chunk never imports the editor itself */
+  monaco: typeof Monaco;
+}
+
+/** an entry of a SourceMenu */
+export interface SourceMenuItem {
+  id: string;
+  label: string;
+  /** a line under the label: what the entry does */
+  description?: string;
+}
+
+/** a menu the source tooling contributes to the SHELL header (Markdown:
+ *  Insert diagram), shown while the source is on screen: React renders the
+ *  trigger and the entries, the tooling runs them. An entry edits the
+ *  source and gives the editor the focus back */
+export interface SourceMenu {
+  id: string;
+  /** the trigger's label, e.g. "Insert diagram" */
+  label: string;
+  buttonTitle: string;
+  icon: ComponentType<{ className?: string }>;
+  /** a line over the entries; absent = none */
+  heading?: string;
+  items: readonly SourceMenuItem[];
+  run(itemId: string): void;
+}
+
+/** the tooling attached to the shell's Monaco source */
+export interface AttachedSource {
+  /** header menus it contributes (rendered by the shell) */
+  menus?: SourceMenu[];
+  /** take back everything it added to the editor (actions, listeners) */
+  dispose(): void;
+}
+
 /** how the shell's view switch names the canvas layer */
 export interface CanvasViewLabel {
   /** the switch's label, e.g. "Preview" */
@@ -177,6 +218,12 @@ export interface WebNotationPlugin {
   /** mount the visual editor — the engine chunk loads HERE, not before;
    *  absent = collaborative Monaco (a plugin may contribute only panels/diff) */
   mountEditor?(container: HTMLElement, ctx: EditorContext): Promise<MountedEditor>;
+  /** tooling for the shell's Monaco source: editor actions, header menus
+   *  (SourceMenu). Attached once the editor exists and the session is live,
+   *  disposed with the session; its chunk loads HERE, as an engine's does in
+   *  mountEditor, so the manifest stays light. Works for a plugin with or
+   *  without a visual editor. Absent = the plain editor */
+  attachSource?(editor: Monaco.editor.IStandaloneCodeEditor, ctx: SourceContext): Promise<AttachedSource>;
   /** the engine takes its shortcuts from a keydown listener on document,
    *  wherever the focus is: the shell holds the keys from it while the canvas
    *  is behind the source layer or a dialog, and in the split view those

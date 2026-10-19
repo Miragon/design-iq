@@ -7,12 +7,12 @@ Desktop, ChatGPT).
 
 ## Scripts
 
-| Script                                  | What it does                                                                                                                                                                                                                                  |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                                               |
-| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                                                   |
-| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer and the fence parity) and, under jsdom, the Markdown view, its Mermaid fences and the mermaid engine's configuration. |
-| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                       |
+| Script                                  | What it does                                                                                                                                                                                                                                                                        |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                                                                                     |
+| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                                                                                         |
+| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams and the mermaid engine's configuration. |
+| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                             |
 
 ## Theming
 
@@ -100,6 +100,25 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   with the error and its line (counted within the diagram) under its code, or under its last
   good drawing, dimmed. `test/markdown-mermaid.test.ts` covers it under jsdom with a fake
   renderer. A Mermaid diagram is no model of its own: it lives as such a fence in a document.
+- **Insert diagram** starts a diagram from the source. While the source is on screen (Split and
+  Markdown), the toolbar's Insert diagram menu, and the F1 palette (`Insert diagram: Flowchart`
+  and so on), insert a small, valid starter: a flowchart, a sequence, class, state, entity
+  relationship or Gantt diagram, a C4 context or a mindmap (`diagram-starters.ts`). It goes in
+  as a `mermaid` fence of its own at the cursor, between the document's blocks and never into
+  one: after the block the cursor is in, before it when the cursor is at its start, with blank
+  lines around it. A block is one as the view reads it: a paragraph over several lines, a fence
+  (the cursor in one puts the diagram after it), a table, a setext heading, raw HTML, indented
+  code, a quote. In a list it goes after the cursor's item with everything nested in it (child
+  lists, fences, further lines, indented however far), and a numbered list goes on at its
+  number. The result is read back: the diagram must read as one, and every other block as it
+  did (`insert-diagram.ts`, `test/insert-diagram.test.ts`). Until the source has had the focus,
+  it shows no cursor, so the diagram goes to the document's end. The insertion is one edit, so
+  one undo step, synced to everyone like typing; then the cursor selects the label to edit
+  first (each starter names it). `test/diagram-starters.test.ts` parses every starter with
+  the pinned mermaid and runs the validator's check over it. The tooling comes through the
+  plugin's source slot, `WebNotationPlugin.attachSource`: a lazy chunk (`source-tools.ts`) the
+  shell attaches to its Monaco once the session is live and disposes with it, its menus shown in
+  the toolbar while the source is; `pnpm arch` holds it to `import()` like the view.
 - In the source and in the history diff, a ` ```mermaid ` fence is highlighted as Mermaid,
   and in the source `%%` toggles a comment in it: `src/lib/monaco-languages.ts` registers the
   language before Monaco makes a model, its grammar (`src/lib/mermaid-monarch.ts`) loads with

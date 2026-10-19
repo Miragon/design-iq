@@ -2,7 +2,8 @@
  * The Markdown web plugin MANIFEST: light, eager data. The view (markdown-it,
  * DOMPurify, the renderer and its stylesheet) loads behind the dynamic
  * import on mount, as its own chunk, so the repo overview and every other
- * editor never load it (ADR 0006).
+ * editor never load it (ADR 0006). So does the source's tooling (Insert
+ * diagram), once the shell's Monaco source exists.
  *
  * A Markdown document opens RENDERED: the canvas layer shows the formatted,
  * read-only document, live with every edit, and the shell's view switch
@@ -22,5 +23,9 @@ export const markdownPlugin: WebNotationPlugin = {
   mountEditor: async (container, ctx) => {
     const { mountMarkdownView } = await import("./markdown-view");
     return mountMarkdownView(container, ctx);
+  },
+  attachSource: async (editor, ctx) => {
+    const { attachMarkdownSource } = await import("./source-tools");
+    return attachMarkdownSource(editor, ctx);
   },
 };
