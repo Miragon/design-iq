@@ -380,7 +380,8 @@ export function renderMarkdown(source: string, options: RenderOptions): string {
 
 /** the tokens renderMarkdown renders a document from (its links resolved as
  *  in a document at the repository root): test/markdown-fences.test.ts holds
- *  the validator's fence scanner against their fences */
+ *  the validator's fence scanner against their fences, and ./insert-diagram.ts
+ *  reads from them the blocks a diagram must not be inserted into */
 export function parseMarkdown(source: string): Token[] {
   const env: RenderEnv = { repo: "", docPath: "", fences: {}, models: undefined };
   return md.parse(source, env);

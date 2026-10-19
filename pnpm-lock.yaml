@@ -281,6 +281,9 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
     devDependencies:
+      '@miragon/design-iq-validator':
+        specifier: workspace:*
+        version: link:../../packages/validator
       '@types/jsdom':
         specifier: 30.0.0
         version: 30.0.0

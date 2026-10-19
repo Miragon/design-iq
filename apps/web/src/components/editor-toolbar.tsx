@@ -1,13 +1,17 @@
 /**
- * The editor's one chrome bar. It carries five different KINDS of thing, and
- * the layout now says which is which instead of nine identical outline buttons
- * in a row:
+ * The editor's one chrome bar. It carries different KINDS of thing, and the
+ * layout now says which is which instead of nine identical outline buttons in
+ * a row:
  *
  *   identity   where you are — repo / model, connection, notation
  *   modes      document-level switches (t.BPM workshop mode) — they change the
  *              canvas FOR EVERYONE, so they sit with the document, not with
  *              the personal tools, and read as "on" when they are
  *   presence   who else is here — capped, the rest collapse into +N
+ *   source     tools for the Monaco source a notation plugin contributes
+ *              (Markdown: Insert diagram), there while the source is on
+ *              screen. They sit before the view switch, so the switch never
+ *              moves under the pointer as they come and go
  *   view       what you are looking at — a segmented Diagram | Source switch
  *              that states the CURRENT view (the old lone "XML" button did not);
  *              a plugin may name its canvas layer (Markdown: Preview) and add
@@ -28,8 +32,9 @@
  *
  * Tool labels collapse to icon + tooltip through container queries as the bar
  * narrows, cheapest first: the actions go at @7xl (a chat bubble and a
- * list-plus are guessable), the panel names hold on to @6xl (they are the
- * labels a once-a-month process owner actually needs), the view switch to @4xl.
+ * list-plus are guessable), the panel and source tool names hold on to @6xl
+ * (they are the labels a once-a-month process owner actually needs), the view
+ * switch to @4xl.
  */
 import type { PresenceUser } from "@designiq/contracts/live";
 import { Badge } from "@designiq/ui-kit/components/badge";
@@ -39,6 +44,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@designiq/ui-kit/components/dropdown-menu";
@@ -61,7 +67,7 @@ import { type ComponentType, type ReactNode, useEffect, useRef, useState } from 
 
 import type { EditorView } from "@/lib/editor-view";
 import { safeAvatarUrl, safePresenceColor } from "@/lib/presence-format";
-import type { CanvasViewLabel, EditorToolbarAction } from "@/notations/registry";
+import type { CanvasViewLabel, EditorToolbarAction, SourceMenu } from "@/notations/registry";
 
 export type EditorStatus = "connecting" | "slow" | "live" | "error";
 
@@ -90,6 +96,7 @@ export function EditorToolbar({
   status,
   presence,
   modeActions,
+  sourceMenus = [],
   view,
   panels,
   menuPanels,
@@ -114,6 +121,9 @@ export function EditorToolbar({
   presence: PresenceUser[];
   /** document modes contributed by the mounted editor engine */
   modeActions: EditorToolbarAction[];
+  /** tools for the Monaco source contributed by the plugin's source tooling,
+   *  passed while the source is on screen */
+  sourceMenus?: SourceMenu[];
   /** the view switch (Diagram | Source, or Preview | Split | Markdown for a
    *  plugin with the split view), absent when the doc has no visual editor;
    *  `canvas` renames the canvas side (absent = Diagram) */
@@ -220,6 +230,14 @@ export function EditorToolbar({
             </div>
             <Divider />
           </>
+        )}
+
+        {sourceMenus.length > 0 && (
+          <div className="flex items-center gap-1">
+            {sourceMenus.map((menu) => (
+              <SourceMenuButton key={menu.id} menu={menu} />
+            ))}
+          </div>
         )}
 
         {view && <ViewSwitch {...view} />}
@@ -408,6 +426,51 @@ function PeerAvatar({ user }: { user: PresenceUser }) {
     >
       {user.name.slice(0, 2).toUpperCase()}
     </div>
+  );
+}
+
+/** A menu of the source tooling (Markdown: Insert diagram), its trigger a
+ *  tool button like the assist menu's. An entry edits the Monaco source and
+ *  gives it the focus, so the menu does not hand the focus back to its
+ *  trigger once it closes, and the entry runs a tick later, once radix has
+ *  let go of the focus (the ⋯ menu's convention for its dialogs). */
+function SourceMenuButton({ menu }: { menu: SourceMenu }) {
+  const chosen = useRef(false);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" aria-label={menu.label} title={menu.buttonTitle}>
+          <menu.icon />
+          <span className="@max-6xl:hidden">{menu.label}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(e) => {
+          if (!chosen.current) return;
+          chosen.current = false;
+          e.preventDefault();
+        }}
+      >
+        {menu.heading ? (
+          <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">{menu.heading}</DropdownMenuLabel>
+        ) : null}
+        {menu.items.map((item) => (
+          <DropdownMenuItem
+            key={item.id}
+            onSelect={() => {
+              chosen.current = true;
+              setTimeout(() => menu.run(item.id), 0);
+            }}
+          >
+            <span className="flex flex-col">
+              {item.label}
+              {item.description ? <span className="text-muted-foreground text-xs">{item.description}</span> : null}
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
