@@ -1,5 +1,20 @@
 # Changelog
 
+## [5.5.0](https://github.com/Miragon/design-iq/compare/v5.4.0...v5.5.0) (2026-10-19)
+
+
+### Features
+
+* diagrams live in Markdown, the standalone Mermaid notation is withdrawn ([#260](https://github.com/Miragon/design-iq/issues/260)) ([b2130af](https://github.com/Miragon/design-iq/commit/b2130af9669cc611793d3b608aff7a63e65ed903))
+* **web:** highlight Mermaid diagrams in the Markdown source ([#262](https://github.com/Miragon/design-iq/issues/262)) ([b7f9b94](https://github.com/Miragon/design-iq/commit/b7f9b94c3c7fdebe0c8aedef74b5666356f072a0))
+* **web:** insert a Mermaid diagram from the Markdown editor ([#263](https://github.com/Miragon/design-iq/issues/263)) ([d518d72](https://github.com/Miragon/design-iq/commit/d518d721e8541ceb5b9ce8aedf10440b9639345f))
+* **web:** split view for Markdown, source and preview side by side ([#261](https://github.com/Miragon/design-iq/issues/261)) ([206e4d0](https://github.com/Miragon/design-iq/commit/206e4d0c8eb8cacd11026eb9134fee762894f1eb))
+
+
+### Bug Fixes
+
+* **web:** keep keys from a canvas that is not in front ([#258](https://github.com/Miragon/design-iq/issues/258)) ([55f5f1a](https://github.com/Miragon/design-iq/commit/55f5f1a6b30bc34e0198dd0ae105cb4b48aa3455))
+
 ## [5.4.0](https://github.com/Miragon/design-iq/compare/v5.3.0...v5.4.0) (2026-10-18)
 
 
