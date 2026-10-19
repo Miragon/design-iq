@@ -24,6 +24,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 import { dialogBackdrop } from "@/components/dialog-shell";
 import type { FileCommitWire } from "@/lib/api";
+import { installMonacoLanguages } from "@/lib/monaco-languages";
 import { installMonacoTheme, MONACO_OPTIONS } from "@/lib/monaco-theme";
 import type { DiffSpec } from "@/notations/registry";
 
@@ -71,6 +72,7 @@ export function HistoryDiffDialog({
   // text view — Monaco diff of the document source
   useEffect(() => {
     if (view !== "text" || !monacoHostRef.current) return;
+    installMonacoLanguages(monaco.languages);
     const original = monaco.editor.createModel(historical, language);
     const modified = monaco.editor.createModel(current, language);
     installMonacoTheme(monaco.editor);
