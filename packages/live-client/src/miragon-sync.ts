@@ -15,7 +15,8 @@
  *    import keeps the renderer's own fit (at most 100 %, clear of the chrome
  *    the host told it about), which diagram-js's fit-viewport is not.
  *  - L7 a rejected import leaves the last good canvas, and its reason reaches
- *    onImportError unchanged. So the rule-4 pre-gate is only "not empty":
+ *    onImportError unchanged. That canvas's export is what a repair of a
+ *    broken merge writes (rule 4). So the rule-4 pre-gate is only "not empty":
  *    every factory imports blank text as an empty diagram, and a blank Y.Text
  *    rendered as one would have the next canvas edit write a whole document
  *    over it.

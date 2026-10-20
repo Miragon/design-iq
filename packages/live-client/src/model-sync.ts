@@ -8,7 +8,10 @@
  *  3. debounced re-import of remote changes with view-state restore and echo
  *     suppression (Yjs transaction origin + last-export equality)
  *  4. gate the merged text before import; keep rendering the last good state on
- *     rare invalid interleavings — the next update usually heals the document
+ *     rare invalid interleavings — the next update usually heals the document.
+ *     Canvas exports that cross on the wire never heal: each canvas keeps its
+ *     own state, so exactly one of their writers writes its canvas over the
+ *     merge they broke (repairs below, #274)
  *
  * What differs per notation (how change events are observed, how the view
  * state survives a re-import, what "renderable" means pre-import) lives in a
@@ -16,12 +19,35 @@
  * modeler behind the @miragon/modeler-api contract) are the adapters.
  * Consumers import those, never this module.
  */
+import { CANVAS_WRITES_KEY } from "@designiq/contracts/live";
 import type * as Y from "yjs";
 
 import { applyHunks, closingBreaksAt, diffHunks, diffRegion, type Hunk } from "./text-diff.ts";
 
 /** Shared origin marker: transactions tagged with it are our own canvas edits. */
 export const CANVAS_ORIGIN = "bpm-canvas";
+
+const CONFLICT_MESSAGE =
+  "Gleichzeitige Änderung am selben Element — deine letzte Aktion wurde durch die Änderung einer Kollegin/eines Kollegen ersetzt.";
+
+/** how long the repairing writer waits for further crossing writes before it writes */
+const REPAIR_SETTLE_MS = 500;
+
+/**
+ * One entry of the canvas write log (CANVAS_WRITES_KEY: writer's Yjs client
+ * id → its latest canvas write, set in the write's own transaction). A write
+ * takes out of the log every entry its canvas already holds, so the log keeps
+ * the canvas writes no canvas has taken in yet: one after edits that follow
+ * each other, two or more after edits that crossed.
+ */
+interface CanvasWrite {
+  /** the writer's own count: a held entry and a newer write of the same writer differ */
+  n: number;
+  /** one more than the deepest other writer's write the canvas stood on, never less than before */
+  depth: number;
+  /** on a repair: the writers whose open writes it overwrote */
+  superseded?: string[];
+}
 
 export interface SyncAdapter {
   /** parse + render the document text (the notation's own format: XML, a
@@ -80,6 +106,8 @@ export function bindModelSync(
   adapter: SyncAdapter,
   ytext: Y.Text,
   doc: Y.Doc,
+  /** a canvas edit of this peer's is lost: an overlapping remote edit won, or
+   *  a peer's repair wrote over it (rule 4) */
   onConflict?: (message: string) => void,
   /**
    * fires when the FIRST import fails or never happens (the document is
@@ -96,6 +124,23 @@ export function bindModelSync(
   let pendingLocalExport = false;
   let importErrorReported = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let repairTimer: ReturnType<typeof setTimeout> | undefined;
+  let unbound = false;
+
+  const writes = doc.getMap<CanvasWrite>(CANVAS_WRITES_KEY);
+  const writer = (): string => String(doc.clientID);
+  // a binding again on the same doc goes on from its earlier entry
+  let ownWrites = writes.get(writer())?.n ?? 0;
+  let ownDepth = writes.get(writer())?.depth ?? 0;
+  /** the log as it stood when the canvas last matched the text: what the canvas holds */
+  let held = new Map<string, CanvasWrite>();
+  /** text changes that were no canvas write (the source view, an agent, a restore), and their count then */
+  let foreignChanges = 0;
+  let foreignChangesHeld = 0;
+  const matched = (log: Map<string, CanvasWrite>, foreign: number): void => {
+    held = log;
+    foreignChangesHeld = foreign;
+  };
 
   // a document that never rendered has no fallback view — surface that once
   const reportFirstImportFailure = (message: string): void => {
@@ -122,8 +167,12 @@ export function bindModelSync(
       // rule 4: keep last good canvas, wait for next update — but a document
       // that is broken from the START has no last good canvas to keep
       reportFirstImportFailure(adapter.unrenderableReason ?? "the document is not renderable in its current state");
+      planRepair(text);
       return;
     }
+    // what this text holds, read with it: more may arrive while it imports
+    const log = new Map(writes.entries());
+    const foreign = foreignChanges;
     importing = true;
     try {
       const isFirstImport = lastExport === "";
@@ -131,10 +180,12 @@ export function bindModelSync(
       await adapter.importText(text);
       restoreView();
       lastExport = text;
+      matched(log, foreign);
       importErrorReported = false;
     } catch (err) {
       console.warn("[designiq] remote document not importable, keeping last good state", err);
       reportFirstImportFailure(err instanceof Error ? err.message : String(err));
+      planRepair(text);
     } finally {
       importing = false;
       if (pendingLocalExport) {
@@ -151,10 +202,109 @@ export function bindModelSync(
     timer = setTimeout(importFromY, 350);
   };
 
-  const observer = (_event: unknown, tx: { origin: unknown }): void => {
-    if (tx.origin !== CANVAS_ORIGIN) scheduleImport();
+  /**
+   * A peer's canvas write carries its log entry in the same transaction, and
+   * nothing else advanced a client's clock in it. Anything else is a person's
+   * or an agent's text, which a repair must never write over.
+   */
+  function isPeerCanvasWrite(tx: Y.Transaction): boolean {
+    if (tx.local) return false;
+    const writers = new Set<number>();
+    for (const key of tx.changed.get(writes as never) ?? []) {
+      if (key !== null && writes.has(key)) writers.add(Number(key));
+    }
+    if (writers.size === 0) return false;
+    for (const [client, clock] of tx.afterState) {
+      if (clock > (tx.beforeState.get(client) ?? 0) && !writers.has(client)) return false;
+    }
+    return true;
+  }
+
+  const observer = (_event: unknown, tx: Y.Transaction): void => {
+    if (tx.origin === CANVAS_ORIGIN) return;
+    if (!isPeerCanvasWrite(tx)) foreignChanges++;
+    scheduleImport();
   };
   ytext.observe(observer as never);
+
+  /** a peer's repair overwrote my open write: my canvas is about to lose it */
+  const onWrites = (event: Y.YMapEvent<CanvasWrite>): void => {
+    if (event.transaction.local) return;
+    for (const key of event.keysChanged) {
+      if (writes.get(key)?.superseded?.includes(writer())) return void onConflict?.(CONFLICT_MESSAGE);
+    }
+  };
+  writes.observe(onWrites);
+
+  /** a canvas write: the hunks and the log entry in one transaction */
+  function writeCanvas(hunks: readonly Hunk[], repair = false): void {
+    doc.transact(() => {
+      applyHunks(ytext, hunks);
+      const me = writer();
+      let deepest = 0;
+      for (const [key, write] of held) if (key !== me) deepest = Math.max(deepest, write.depth);
+      const superseded: string[] = [];
+      for (const [key, write] of [...writes.entries()]) {
+        if (key === me) continue;
+        if (held.get(key)?.n === write.n) {
+          writes.delete(key);
+        } else if (repair) {
+          superseded.push(key);
+          deepest = Math.max(deepest, write.depth);
+          writes.delete(key);
+        }
+      }
+      ownDepth = Math.max(ownDepth, deepest + 1);
+      writes.set(me, { n: ++ownWrites, depth: ownDepth, ...(superseded.length > 0 ? { superseded } : {}) });
+    }, CANVAS_ORIGIN);
+  }
+
+  /**
+   * The repairing writer: the open write that stands on the deepest chain of
+   * other writers' writes (its canvas has taken in the most), on a tie the
+   * lowest client id. Every peer ranks the same log, so every peer names the
+   * same writer. None unless writes crossed.
+   */
+  function repairingWriter(): string | undefined {
+    const open = [...writes.entries()];
+    if (open.length < 2) return undefined;
+    open.sort(([a, x], [b, y]) => y.depth - x.depth || Number(a) - Number(b));
+    return open[0]![0];
+  }
+  const logState = (): string => JSON.stringify([...writes.entries()].map(([key, write]) => [key, write.n]).sort());
+
+  /**
+   * The safety net of rule 4 (#274): a text that fails the gate or the import
+   * while this canvas shows a good state, after nothing but canvas writes since
+   * the canvas last matched the text. If this canvas's writer is the repairing
+   * one, it writes its export over the text after a settle delay, so a crossing
+   * write still on the wire arrives first. It stands down if the text, the log
+   * or the count of other writers' text changes moved meanwhile: a newer write
+   * makes the next check rank the newer log, and a person who starts typing is
+   * never written over. Its write takes every open write out of the log, so
+   * the next check finds one open write and a text every peer imports.
+   */
+  function planRepair(broken: string): void {
+    if (lastExport === "" || foreignChanges !== foreignChangesHeld || repairingWriter() !== writer()) return;
+    const log = logState();
+    clearTimeout(repairTimer);
+    repairTimer = setTimeout(() => void repair(broken, log), REPAIR_SETTLE_MS);
+  }
+
+  async function repair(broken: string, log: string): Promise<void> {
+    const unchanged = (): boolean =>
+      !unbound &&
+      !importing &&
+      ytext.toString() === broken &&
+      logState() === log &&
+      foreignChanges === foreignChangesHeld;
+    if (!unchanged()) return;
+    const text = await adapter.exportText();
+    if (!text || !adapter.looksRenderable(text) || !unchanged()) return;
+    writeCanvas(diffHunks(broken, text), true);
+    lastExport = text;
+    matched(new Map(writes.entries()), foreignChanges);
+  }
 
   const onModelChanged = async (): Promise<void> => {
     if (importing) {
@@ -188,8 +338,9 @@ export function bindModelSync(
 
     if (current === base) {
       // no concurrent remote change — plain minimal diff
-      doc.transact(() => applyHunks(ytext, diffHunks(base, next)), CANVAS_ORIGIN);
+      writeCanvas(diffHunks(base, next));
       lastExport = next;
+      matched(new Map(writes.entries()), foreignChanges);
       return;
     }
 
@@ -214,7 +365,8 @@ export function bindModelSync(
     const delText = base.slice(start, endPrev);
     const insText = next.slice(start, endNext);
     const merge = (body: Hunk[]): void => {
-      doc.transact(() => applyHunks(ytext, [...closing, ...body]), CANVAS_ORIGIN);
+      const hunks = [...closing, ...body];
+      if (hunks.length > 0) writeCanvas(hunks);
       // canvas still lacks the remote part — bring it in on the next quiet moment
       lastExport = next;
       scheduleImport();
@@ -232,9 +384,7 @@ export function bindModelSync(
 
     // overlapping edits: the remote change wins, the local canvas op is undone —
     // explicitly, not silently (rule 4 fallback semantics)
-    onConflict?.(
-      "Gleichzeitige Änderung am selben Element — deine letzte Aktion wurde durch die Änderung einer Kollegin/eines Kollegen ersetzt.",
-    );
+    onConflict?.(CONFLICT_MESSAGE);
     pendingLocalExport = false;
     lastLocalEdit = 0; // bypass the quiet period: re-import now
     void importFromY();
@@ -243,8 +393,11 @@ export function bindModelSync(
   void importFromY();
 
   return () => {
+    unbound = true;
     ytext.unobserve(observer as never);
+    writes.unobserve(onWrites);
     unobserveModel();
     clearTimeout(timer);
+    clearTimeout(repairTimer);
   };
 }
