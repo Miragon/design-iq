@@ -12,10 +12,11 @@
  * fails as well.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import postcss, { type AtRule, type Root, type Rule } from "postcss";
 import prefixSelector from "postcss-prefix-selector";
@@ -161,11 +162,12 @@ const RENDERER_ROOT: Record<string, string> = {
 
 /**
  * The rules of the renderer's own root as the SPA ships them, one entry per
- * root state (what follows the root is left out): the canvas host class, a
- * space, the root. They match because the root is a CHILD of the host
- * (test/miragon-renderers.test.ts mounts the real factories); scoped as a
- * compound on the host, as before the factories, they match nothing and the
- * canvas loses its paper, dot grid, focus ring and label editor styles.
+ * root state in any order (what follows the root is left out): the canvas
+ * host class, a space, the root. They match because the root is a CHILD of
+ * the host (test/miragon-renderers.test.ts mounts the real factories); scoped
+ * as a compound on the host, as before the factories, they match nothing and
+ * the canvas loses its paper, dot grid, focus ring and label editor styles.
+ * designIQ's own rules on a root (src/index.css) are held to the same form.
  */
 const ROOT_RULES: Record<string, string[]> = {
   wardley: [
@@ -187,24 +189,58 @@ const ROOT_RULES: Record<string, string[]> = {
   "context-map": [".cm-canvas .cm-djs-container", ".cm-canvas .cm-djs-container:focus"],
 };
 
+/** the root rules of the scoped sheet, sorted; every scoped rule must be a descendant of the host */
+async function rootRulesOf(spec: MiragonRendererSpec, css?: string): Promise<string[]> {
+  const scope = `.${spec.canvasClassName} `;
+  const root = `.${RENDERER_ROOT[spec.id]}`;
+  const heads = new Set<string>();
+  (await scopedSheet(spec, css)).walkRules((rule) => {
+    for (const selector of rule.selectors) {
+      if (selector.startsWith(":root") || atRulesOf(rule).some((at) => /keyframes$/i.test(at.name))) continue;
+      assert.ok(selector.startsWith(scope), selector);
+      const rest = selector.slice(scope.length);
+      if (rest.startsWith(root) && /^($|[ .:>~+[])/.test(rest.slice(root.length))) {
+        heads.add(scope + rest.split(/[\s>~+]/)[0]);
+      }
+    }
+  });
+  return [...heads].sort();
+}
+
 for (const spec of MIRAGON_RENDERERS) {
   test(`${spec.id}: every scoped rule is a descendant of the canvas host, the renderer's root rules included`, async () => {
-    const scope = `.${spec.canvasClassName} `;
-    const root = `.${RENDERER_ROOT[spec.id]}`;
-    const heads = new Set<string>();
-    (await scopedSheet(spec)).walkRules((rule) => {
+    const expected = [...(ROOT_RULES[spec.id] ?? [])].sort();
+    assert.deepEqual(await rootRulesOf(spec), expected);
+    // a renderer bump that only reorders its sheet changes nothing to review
+    const reordered = postcss.parse(readFileSync(stylesheetOf(spec), "utf8"));
+    reordered.nodes.reverse();
+    assert.deepEqual(await rootRulesOf(spec, reordered.toString()), expected, "the sheet in reverse order");
+  });
+}
+
+/** designIQ's own stylesheets: the SPA's and the widgets' */
+function ownStylesheets(): string[] {
+  const src = fileURLToPath(new URL("../src/", import.meta.url));
+  return readdirSync(src, { recursive: true })
+    .filter((file) => file.endsWith(".css"))
+    .map((file) => join(src, file));
+}
+
+test("designIQ's own rules on a renderer's root name it as a descendant of the canvas host, never as a compound with it", () => {
+  let named = 0;
+  for (const file of ownStylesheets()) {
+    postcss.parse(readFileSync(file, "utf8"), { from: file }).walkRules((rule) => {
       for (const selector of rule.selectors) {
-        if (selector.startsWith(":root") || atRulesOf(rule).some((at) => /keyframes$/i.test(at.name))) continue;
-        assert.ok(selector.startsWith(scope), selector);
-        const rest = selector.slice(scope.length);
-        if (rest.startsWith(root) && /^($|[ .:>~+[])/.test(rest.slice(root.length))) {
-          heads.add(scope + rest.split(/[\s>~+]/)[0]);
+        for (const spec of MIRAGON_RENDERERS) {
+          const root = `\\.${RENDERER_ROOT[spec.id]}(?![\\w-])`;
+          named += selector.match(new RegExp(root, "g"))?.length ?? 0;
+          assert.doesNotMatch(selector, new RegExp(`(?<!\\.${spec.canvasClassName} )${root}`), `${file}: ${selector}`);
         }
       }
     });
-    assert.deepEqual([...heads], ROOT_RULES[spec.id]);
-  });
-}
+  }
+  assert.ok(named > 0, "src/index.css keeps the Team Topologies palette below the SPA's empty top strip");
+});
 
 /** the declarations of the unlayered `:root` rules that set --bio-* */
 async function bioMapping(spec: MiragonRendererSpec): Promise<string[]> {

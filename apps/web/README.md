@@ -254,7 +254,10 @@ sized by `miragon-styles.css`) and removes it with the engine.
    own spelling of the free area (`freeRectInsets`, or `freeRectCenter` and
    `fitOnImport` like `team-topology.ts`). Then its line in
    `src/notations/miragon/index.ts` — the SPA editor plugin, the widget engine,
-   the CSS scoping and the widget bundle derive from it.
+   the CSS scoping and the widget bundle derive from it. The scoping is
+   reviewed per renderer in `test/vendor-css.test.ts`: the new spec needs its
+   rows in `KNOWN_GLOBAL` (the selectors it may leave global), `RENDERER_ROOT`
+   (the root its factory mounts) and `ROOT_RULES` (that root's rules).
 3. The notation id in `GENERATED_WIDGET_NOTATIONS` (`apps/live-host/src/http/mcp.ts`)
    — the tool, its description and its resource derive from the registry
    descriptor (`@designiq/contracts/mcp-app` names the tool) and the test stubs
