@@ -35,7 +35,15 @@ so each refusal is an ERROR (`team-topology/schema`, `context-map/schema`,
 A Context Map's strategic-DDD rules (`validateDocument`, e.g. `protect-or-conform`,
 `endpoints-on-map`) are WARNs, `context-map/semantics`, with the rule named at the end of the
 message: the canvas opens such a map and marks the finding. A repeated id is the exception: the
-canvas refuses it, so it is an ERROR (`context-map/schema`).
+canvas refuses it, so it is an ERROR (`context-map/schema`) at the path of the repeat, e.g.
+`contexts.2.id: Duplicate id "a". (unique-ids)`.
+
+Paths count in the document as the schema model reads it. A Team Topology drops a legacy
+interaction without `position` or `size` before the check, so the index of a later interaction
+counts without it. Some rules only run once the document's shape is valid: the id rules of a Team
+Topology and a Value Chain, and in a Context Map the built-in property and repeated ids and the
+strategic-DDD rules. Fixing the reported errors can therefore bring up further ones, so check
+again until the file is clean.
 
 ## Usage
 

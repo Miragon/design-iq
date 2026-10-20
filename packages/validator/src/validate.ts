@@ -31,7 +31,9 @@ import { markdownFences } from "@designiq/notations/markdown";
 import { mermaidHeader } from "@designiq/notations/mermaid";
 import { hasRefs, type ModelRef, refsOf } from "@designiq/notations/refs";
 import {
+  type CmDocument as ContextMapDocument,
   parseDocumentText as parseContextMap,
+  type SemanticFinding as ContextMapFinding,
   validateDocument as contextMapRules,
 } from "@miragon/context-maps-schema-model";
 import { parseDocument as parseTeamTopology } from "@miragon/team-topologies-schema-model";
@@ -507,6 +509,20 @@ function builtInPropertyIds(collections: Readonly<Record<string, readonly { id: 
  */
 const CONTEXT_MAP_REFUSED_RULES: ReadonlySet<string> = new Set(["unique-ids"]);
 
+/** the path of every repeated id, in the order validateDocument's unique-ids
+ *  rule reports them (contexts, then relationships): its findings name no
+ *  position, and an agent must know which of two entries to change */
+function repeatedIdPaths({ contexts, relationships }: ContextMapDocument): string[] {
+  const seen = new Set<string>();
+  return Object.entries({ contexts, relationships }).flatMap(([collection, elements]) =>
+    elements.flatMap(({ id }, index) => {
+      const repeated = seen.has(id);
+      seen.add(id);
+      return repeated ? [issuePath([collection, index, "id"])] : [];
+    }),
+  );
+}
+
 function checkTeamTopology(raw: string, file: string): Finding[] {
   const parsed = parseTeamTopology(JSON.parse(raw));
   if (!parsed.ok) return parsed.issues.map(schemaError("team-topology/schema", file));
@@ -522,17 +538,22 @@ function checkContextMap(raw: string, file: string): Finding[] {
   }
   const { contexts, relationships } = parsed.document;
   const refusedIds = builtInPropertyIds({ contexts, relationships }).map(schemaError("context-map/schema", file));
+  const repeatedIds = repeatedIdPaths(parsed.document);
+  const subject = (finding: ContextMapFinding): string => {
+    const path = finding.rule === "unique-ids" ? repeatedIds.shift() : undefined;
+    if (path) return `${path}: `;
+    return finding.relationshipId === undefined ? "" : `relationship "${finding.relationshipId}": `;
+  };
   const { errors, warnings } = contextMapRules(parsed.document);
   return [
     ...refusedIds,
     ...[...errors, ...warnings].map((finding): Finding => {
       const refused = CONTEXT_MAP_REFUSED_RULES.has(finding.rule);
-      const where = finding.relationshipId === undefined ? "" : `relationship "${finding.relationshipId}": `;
       return {
         severity: refused ? "ERROR" : "WARN",
         ruleId: refused ? "context-map/schema" : "context-map/semantics",
         file,
-        message: `${where}${finding.message} (${finding.rule})`,
+        message: `${subject(finding)}${finding.message} (${finding.rule})`,
       };
     }),
   ];

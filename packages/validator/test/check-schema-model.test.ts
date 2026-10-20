@@ -125,7 +125,7 @@ test("context map: a list, a newer version, a coordinate or size out of range an
   ]);
 });
 
-test("context map: a repeated id is refused like the canvas refuses it, the advisory rules only warn", () => {
+test("context map: a repeated id is refused like the canvas refuses it, at the repeat's path; the advisory rules only warn", () => {
   const duplicate = contextMap({
     contexts: [context("a"), context("a")],
     relationships: [{ id: "a", from: "a", to: "a", pattern: "partnership" }],
@@ -134,8 +134,22 @@ test("context map: a repeated id is refused like the canvas refuses it, the advi
   assert.deepEqual(
     brief(findings).filter(([severity]) => severity === "ERROR"),
     [
-      ["ERROR", "context-map/schema", 'Duplicate id "a". (unique-ids)'],
-      ["ERROR", "context-map/schema", 'relationship "a": Duplicate id "a". (unique-ids)'],
+      ["ERROR", "context-map/schema", 'contexts.1.id: Duplicate id "a". (unique-ids)'],
+      ["ERROR", "context-map/schema", 'relationships.0.id: Duplicate id "a". (unique-ids)'],
+    ],
+  );
+  const repeats = contextMap({
+    contexts: [context("a"), context("b"), context("a")],
+    relationships: [
+      { id: "r", from: "a", to: "b", pattern: "partnership" },
+      { id: "r", from: "b", to: "a", pattern: "partnership" },
+    ],
+  });
+  assert.deepEqual(
+    brief(checkSchemaModel(repeats, { notation: "context-map" })).filter(([severity]) => severity === "ERROR"),
+    [
+      ["ERROR", "context-map/schema", 'contexts.2.id: Duplicate id "a". (unique-ids)'],
+      ["ERROR", "context-map/schema", 'relationships.1.id: Duplicate id "r". (unique-ids)'],
     ],
   );
   // the self-relationship is one of validateDocument's errors, but the

@@ -211,7 +211,8 @@ A Context Map is also rejected as a list, with a `version` above 1 or with coord
 beyond 1,000,000; a Value Chain with extra keys in `bounds` or in a waypoint,
 with coordinates beyond ±1e9 or with a `__proto__` key. A Context Map's strategic-DDD rules
 (`protect-or-conform`, `endpoints-on-map`, …) are WARNs, `context-map/semantics`: the canvas
-opens such a map and marks the finding.
+opens such a map and marks the finding. Some rules only run once the file's shape is valid, so
+`validate_model` can report further errors after a fix: check again until it answers `ok`.
 `create_model` scaffolds every notation with a template (bpmn, dmn, wardley, team-topology,
 event-storming, context-map, markdown); a notation without one (value-chain) arrives via git only.
 `LIVE_MCP_READONLY=1` keeps the two read tools and drops the writes. The embedded modelers'
