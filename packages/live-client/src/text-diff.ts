@@ -40,7 +40,7 @@ export interface Hunk {
  * to the line breaks that close the text. A writer that adds the closing
  * line break a file lacks (or drops one) leaves the two texts no common
  * suffix, and one changed middle would run from the edit to the end of the
- * file: two peers' concurrent edits would each replace that whole tail, and
+ * text. Two peers' concurrent edits would each replace that whole tail, and
  * the merge keeps both tails.
  */
 export function diffHunks(prev: string, next: string): Hunk[] {
