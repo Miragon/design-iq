@@ -14,6 +14,7 @@ import * as Y from "yjs";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
 import type { LoadedMiragonRenderer } from "../src/notations/miragon/spec.ts";
+import type { EditorContext } from "../src/notations/registry.ts";
 import { closeDom, host } from "./renderer-dom.ts";
 
 after(closeDom);
@@ -111,4 +112,37 @@ test("Wardley: a resize preview never reaches the shared text, the size it commi
   assert.match(ytext.toString(), /size \[1500, 900\]/);
   unbind();
   engine.destroy();
+});
+
+test("Context Maps: every mount shows the legend card, which the 0.3.0 Modeler leaves to its host", async () => {
+  const renderer = await load("context-map");
+  const text = newCmJson("map", "Conference Planner");
+
+  const bareHost = host("cm-canvas");
+  const bare = new renderer.Modeler({ container: bareHost });
+  bare.get("canvas");
+  assert.equal(bareHost.querySelector(".cm-legend"), null, "the renderer alone draws none");
+  bare.destroy();
+
+  const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
+  const spa = host("cm-canvas");
+  const doc = new Y.Doc();
+  doc.getText("content").insert(0, text);
+  const editor = mountMiragonEditor(renderer, spa, {
+    ytext: doc.getText("content"),
+    doc,
+    onSyncError: assert.fail,
+    onImportFailed: assert.fail,
+  } as unknown as EditorContext);
+  await wait(50);
+  assert.ok(spa.querySelector(".cm-legend"), "the SPA editor");
+  editor.destroy();
+
+  for (const readonly of [false, true]) {
+    const widget = host("cm-canvas");
+    const engine = mountMiragonEngine(renderer, widget, readonly);
+    await engine.importText(text);
+    assert.ok(widget.querySelector(".cm-legend"), readonly ? "the widget viewer" : "the widget editor");
+    engine.destroy();
+  }
 });

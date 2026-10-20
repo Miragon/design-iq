@@ -55,11 +55,13 @@ export function mountMiragonEngine(
   opts?: EngineOptions,
 ): MiragonEngine {
   const { lane } = renderer;
+  const modules = renderer.additionalModules ?? [];
   const instance = readonly
-    ? new renderer.NavigatedViewer(
-        lane.kind === "dsl" ? { container, additionalModules: [viewerCommandStackShim] } : { container },
-      )
-    : new renderer.Modeler({ container });
+    ? new renderer.NavigatedViewer({
+        container,
+        additionalModules: lane.kind === "dsl" ? [...modules, viewerCommandStackShim] : [...modules],
+      })
+    : new renderer.Modeler({ container, additionalModules: [...modules] });
   const text =
     lane.kind === "dsl"
       ? dslText(asDslModeler(instance), lane)

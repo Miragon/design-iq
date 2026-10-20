@@ -31,6 +31,10 @@ export interface MiragonRendererCtor {
 export interface LoadedMiragonRenderer {
   Modeler: MiragonRendererCtor;
   NavigatedViewer: MiragonRendererCtor;
+  /** parts the renderer leaves to its host that designIQ wants on every
+   *  mount, editor and viewer alike — designIQ has no chrome of its own for
+   *  them (the Context Maps legend card) */
+  additionalModules?: readonly unknown[];
   lane: MiragonLane;
 }
 

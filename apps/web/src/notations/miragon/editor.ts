@@ -16,7 +16,7 @@ export function mountMiragonEditor(
   container: HTMLElement,
   ctx: EditorContext,
 ): MountedEditor {
-  const modeler = new renderer.Modeler({ container });
+  const modeler = new renderer.Modeler({ container, additionalModules: [...(renderer.additionalModules ?? [])] });
   const unbind = bindMiragon(modeler, renderer.lane, ctx.ytext, ctx.doc, ctx.onSyncError, ctx.onImportFailed);
   const presenceCanvas = ctx.presence ? attachPresenceCanvas(modeler as never, ctx.presence) : undefined;
   return {
