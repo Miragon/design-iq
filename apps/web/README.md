@@ -92,7 +92,12 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   Mermaid renderer, `src/lib/mermaid-render.ts` (strict security level, the CI theme,
   Geist). The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
   theme, palette, CSS or font (`MERMAID_SECURE_KEYS`, checked against mermaid itself in
-  `test/mermaid-engine.test.ts`); layout options stay the author's. The renderer and
+  `test/mermaid-engine.test.ts`); layout options stay the author's. A diagram keeps the look
+  and the layout it had before mermaid 12 unless its front matter picks otherwise (`look: neo`,
+  `layout: elk`): the classic look, and dagre for flowchart, class, state, ER and requirement
+  diagrams. mermaid 12's own sizing still applies: in flowchart and state diagrams a label
+  gets at least 120 px (`minNodeWidth`) and wraps at 120 px (`wrappingWidth`, 200 before),
+  so their nodes come out wider and long labels wrap sooner. The renderer and
   mermaid load on the first document that has such a fence, never for any other. The drawn SVG is sanitized once more (`createDiagramSanitizer` in
   `sanitize.ts`, the profile mermaid applies itself) and cached by source: a re-render for an
   edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram
@@ -128,7 +133,9 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
 - `@designiq/notations/mermaid` holds the reading of a diagram's text the validator and the
   renderer share (the diagram types, the code mermaid's parser sees, the error lines). It
   mirrors mermaid `MERMAID_VERSION`; `test/mermaid-engine.test.ts` fails on a mermaid bump
-  until it is re-read, and checks every listed type against mermaid's own detection.
+  until it is re-read, checks every listed type against mermaid's own detection, and has
+  mermaid parse broken diagrams below comment lines to check the line each notice names
+  (eventmodeling and agentflow-beta parse their comment lines, every other type drops them).
 - `@designiq/notations/markdown` is the validator's reading of a document's fences, a
   zero-dep scanner: the `mermaid/diagram-type` check of every `mermaid` fence stands on it and
   names the document's line. `test/markdown-fences.test.ts` holds it against the markdown-it

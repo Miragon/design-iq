@@ -7,6 +7,12 @@ updates:
   # npm — one block covers the whole pnpm workspace (resolved from the root).
   - package-ecosystem: "npm"
     directory: "/"
+    # docs/ takes its pins from the Miragon docs kit (Miragon/corporate-identity,
+    # skill docs-site), and those change only with a kit release: version
+    # updates leave docs/package.json alone, so a mermaid bump moves apps/web
+    # only. The lockfile still resolves docs/; security updates still reach it.
+    exclude-paths:
+      - "docs/**"
     schedule:
       interval: "weekly"
     labels:

@@ -1,5 +1,5 @@
 /**
- * The Mermaid text conventions (../mermaid.ts): the code mermaid 11.17's
+ * The Mermaid text conventions (../mermaid.ts): the code mermaid 12.1's
  * parser reads after its preprocess, the way back from a line of that code to
  * the source line (parse errors count code lines), and the header that names
  * the diagram type. The validator's check of a ```mermaid fence and the web
@@ -8,7 +8,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { MERMAID_DIAGRAM_TYPES, mermaidCode, mermaidHeader, mermaidSourceLine } from "../mermaid.ts";
+import {
+  MERMAID_DIAGRAM_TYPES,
+  mermaidCode,
+  mermaidFrontMatterLines,
+  mermaidHeader,
+  mermaidSourceLine,
+} from "../mermaid.ts";
 
 const FRONT_MATTER = '---\ntitle: "Order Flow"\nconfig:\n  look: classic\n---\n';
 /** a titled flowchart, its title in the front matter */
@@ -44,6 +50,48 @@ test("mermaidSourceLine: a line of the parsed code back in the source", () => {
   // past the end (mermaid reports EOF errors a line or two late): the last line
   assert.equal(mermaidSourceLine("graph TD\n  A -->", 9), 2);
   assert.equal(mermaidSourceLine("", 1), 1);
+});
+
+test("eventmodeling and agentflow-beta keep their comment lines: mermaid 12 parses them with the code", () => {
+  const COMMENTS = "%% one\n%% two\n%% three\n";
+  // the line numbers mermaid 12.1 reports for the bad line of each (mermaid-engine.test.ts)
+  const EVENTS = "eventmodeling\n\ntf 01 ui CartUI\ntf 02 cmd AddItem\ntf 03 evt ItemAdded\ntf 01 ??? !!!\n";
+  const AGENTS = 'agentflow-beta TB\n  brief["Brief"]@{ shape: input }\n\n  brief --> --> ]]\n';
+  for (const [diagram, codeLine] of [
+    [EVENTS, 6],
+    [AGENTS, 4],
+  ] as const) {
+    assert.equal(mermaidCode(COMMENTS + diagram), COMMENTS + diagram);
+    assert.equal(mermaidSourceLine(diagram, codeLine), codeLine);
+    assert.equal(mermaidSourceLine(COMMENTS + diagram, codeLine + 3), codeLine + 3);
+    // the front matter goes: mermaid counts from the line after it
+    assert.equal(mermaidSourceLine(FRONT_MATTER + COMMENTS + diagram, codeLine + 3), codeLine + 8);
+    // a directive spanning three lines takes two of them
+    const directive = '%%{init: {\n  "wrap": true\n}}%%\n';
+    assert.equal(mermaidSourceLine(directive + COMMENTS + diagram, codeLine + 4), codeLine + 6);
+    // leading blank lines stay too, and a line a directive emptied is no blank line further down
+    assert.equal(mermaidSourceLine(`\n\n%% a\n\n${diagram}`, codeLine + 4), codeLine + 4);
+    assert.equal(mermaidSourceLine(`%%{init: {}}%%\n${diagram}`, codeLine + 1), codeLine + 1);
+  }
+  assert.deepEqual(mermaidHeader(FRONT_MATTER + COMMENTS + EVENTS), {
+    line: 9,
+    text: "eventmodeling",
+    diagramType: "eventmodeling",
+  });
+  // every other type still parses without them
+  const flow = `${COMMENTS}flowchart LR\n  %% the happy path\n  A --> B\n  B -->\n`;
+  assert.equal(mermaidCode(flow), "flowchart LR\n  A --> B\n  B -->\n");
+  assert.equal(mermaidSourceLine(flow, 3), 7);
+  // past mermaid's maxTextSize the comment lines go after all
+  const long = `%% ${"x".repeat(50_000)}\n${EVENTS}`;
+  assert.equal(mermaidCode(long), EVENTS);
+  assert.equal(mermaidSourceLine(long, 6), 7);
+});
+
+test("mermaidFrontMatterLines: the lines before the code, as mermaid counts them", () => {
+  assert.equal(mermaidFrontMatterLines(FRONT_MATTER), 5);
+  assert.equal(mermaidFrontMatterLines(`${FRONT_MATTER}\n\nflowchart LR\n`), 7, "the blank lines after it too");
+  assert.equal(mermaidFrontMatterLines("flowchart LR\n---\n"), 0);
 });
 
 test("mermaidHeader: the first meaningful line names the diagram type", () => {
