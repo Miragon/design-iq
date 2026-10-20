@@ -680,7 +680,10 @@ test("long and odd lines finish at once: no pattern backtracks out of hand", () 
   // state the line before left: a linear read takes about eight times as
   // long, a pattern gone quadratic about 64 times (a dotted link's text read
   // on from every -. to the line's end). A ratio, not a budget in ms, so a
-  // slow or busy CI runner does not fail a linear grammar
+  // slow or busy CI runner does not fail a linear grammar. A line over the
+  // bound is read again, up to three rounds: the suites running alongside
+  // can stall a single read past the bound, a quadratic pattern exceeds it
+  // in every round
   const long: Array<(n: number) => string> = [
     (n) => `A -- ${"x ".repeat(n)}`,
     (n) => "-- x ".repeat(n),
@@ -716,11 +719,17 @@ test("long and odd lines finish at once: no pattern backtracks out of hand", () 
       const unit = make(1).length;
       const n = Math.floor(19_000 / unit);
       const line = make(n);
-      const full = timed(line, state);
-      const eighth = timed(make(Math.floor(n / 8)), state);
+      const short = make(Math.floor(n / 8));
       // a floor for lines too fast to time: well under a quadratic read of 19 000 characters
+      const withinBound = (full: number, eighth: number): boolean => full < Math.max(24 * eighth, 10);
+      let full = Infinity;
+      let eighth = Infinity;
+      for (let round = 0; round < 3 && !withinBound(full, eighth); round++) {
+        full = Math.min(full, timed(line, state));
+        eighth = Math.min(eighth, timed(short, state));
+      }
       assert.ok(
-        full < Math.max(24 * eighth, 10),
+        withinBound(full, eighth),
         `${header}, ${JSON.stringify(line.slice(0, 10))}…: ${full.toFixed(1)} ms in full, ${eighth.toFixed(1)} ms at an eighth`,
       );
       state = mermaid.tokenize(line, true, state).endState;
