@@ -2,6 +2,10 @@
  * templateFor — the generic template dispatch (epic #118 step 3). The
  * builders themselves are pinned by the live-host scaffold suite (which
  * consumes them through the domain shims); here only the dispatch contract.
+ * That a Miragon template is its renderer's own serialization (no phantom
+ * diff on the first canvas save) is pinned against the renderers apps/web
+ * ships, in apps/web/test/miragon-renderers.test.ts: this package depends on
+ * none of them.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
