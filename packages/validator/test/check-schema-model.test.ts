@@ -244,6 +244,17 @@ test("value chain: reserved ids, extra keys in bounds and waypoints, far coordin
   ]);
 });
 
+/** a valid value chain carrying a list nested `depth` levels deep */
+const deepValueChain = (depth: number): string =>
+  valueChain({}).replace(/}$/, `, "extra": ${"[".repeat(depth)}${"]".repeat(depth)}}`);
+
+test("a document nested too deep for its schema model is one ERROR, not a crash", () => {
+  assert.deepEqual(brief(checkSchemaModel(deepValueChain(50_000), { notation: "value-chain" })), [
+    ["ERROR", "value-chain/schema", "(root): could not be checked: Maximum call stack size exceeded"],
+  ]);
+  assert.deepEqual(checkSchemaModel(deepValueChain(10), { notation: "value-chain" }), []);
+});
+
 test("text that is no JSON keeps the baseline finding, whatever the notation", () => {
   for (const [notation, file] of [
     ["team-topology", "t.tt"],
@@ -289,6 +300,7 @@ test("the CLI fails on what a canvas refuses and passes an advisory context-map 
   write("map.cm.json", contextMap({ contexts: [context("cm-root")] }));
   write("chain.vc.json", valueChain({ elements: [step("vc-root")] }));
   write("advisory.cm.json", contextMap({ relationships: [{ id: "r", from: "x", to: "y", pattern: "partnership" }] }));
+  write("deep.vc.json", deepValueChain(50_000));
 
   const run = (...args: string[]) => {
     const r = spawnSync(process.execPath, [VALIDATE, "--root", dir, ...args], { encoding: "utf8" });
@@ -300,7 +312,8 @@ test("the CLI fails on what a canvas refuses and passes an advisory context-map 
   assert.match(all.out, /\[ERROR\] models\/map\.cm\.json: contexts\.0\.id: the id "cm-root" is reserved/);
   assert.match(all.out, /\[ERROR\] models\/chain\.vc\.json: elements\.0\.id: Id "vc-root" is reserved/);
   assert.match(all.out, /\[WARN\] models\/advisory\.cm\.json: relationship "r": References unknown context "x"/);
-  assert.match(all.out, /3 error\(s\), 2 warning\(s\) — FAIL \(0 process\(es\), 4 other model\(s\) checked\)/);
+  assert.match(all.out, /\[ERROR\] models\/deep\.vc\.json: \(root\): could not be checked: Maximum call stack/);
+  assert.match(all.out, /4 error\(s\), 2 warning\(s\) — FAIL \(0 process\(es\), 5 other model\(s\) checked\)/);
 
   const advisory = run("advisory");
   assert.equal(advisory.status, 0, advisory.out);

@@ -542,13 +542,19 @@ function checkValueChain(raw: string, file: string): Finding[] {
   return valueChainIssues(JSON.parse(raw)).map(schemaError("value-chain/schema", file));
 }
 
+interface SchemaCheck {
+  /** the rule a refusal of the schema model is reported under */
+  ruleId: string;
+  check: (raw: string, file: string) => Finding[];
+}
+
 /** each JSON notation's schema model, read the way its canvas reads the file
  *  (a Map, not an object: the notation id may be a caller's free text such
  *  as "constructor") */
-const SCHEMA_CHECKS: ReadonlyMap<string, (raw: string, file: string) => Finding[]> = new Map([
-  ["team-topology", checkTeamTopology],
-  ["context-map", checkContextMap],
-  ["value-chain", checkValueChain],
+const SCHEMA_CHECKS: ReadonlyMap<string, SchemaCheck> = new Map([
+  ["team-topology", { ruleId: "team-topology/schema", check: checkTeamTopology }],
+  ["context-map", { ruleId: "context-map/schema", check: checkContextMap }],
+  ["value-chain", { ruleId: "value-chain/schema", check: checkValueChain }],
 ]);
 
 /**
@@ -563,11 +569,20 @@ const SCHEMA_CHECKS: ReadonlyMap<string, (raw: string, file: string) => Finding[
  */
 export function checkSchemaModel(raw: string, opts: { file?: string; notation: string }): Finding[] {
   const baseline = checkModelBaseline(raw, opts);
-  const check = SCHEMA_CHECKS.get(opts.notation);
+  const schema = SCHEMA_CHECKS.get(opts.notation);
   // a structured notation's text is its codec's format, not the schema
   // model's document (the baseline skips it for the same reason)
-  if (!check || baseline.length > 0 || byId(opts.notation)?.docShape === "structured") return baseline;
-  return check(raw, opts.file ?? `<${opts.notation}>`);
+  if (!schema || baseline.length > 0 || byId(opts.notation)?.docShape === "structured") return baseline;
+  const file = opts.file ?? `<${opts.notation}>`;
+  try {
+    return schema.check(raw, file);
+  } catch (error) {
+    // a schema model that throws (its walk overflows the stack on a document
+    // nested thousands of levels deep) must not end the CLI run or turn a
+    // save into a 500; its canvas throws on that file just the same
+    const reason = error instanceof Error ? error.message : String(error);
+    return [{ severity: "ERROR", ruleId: schema.ruleId, file, message: `(root): could not be checked: ${reason}` }];
+  }
 }
 
 /** what checkModel knows about the surrounding repo */

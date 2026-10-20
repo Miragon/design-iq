@@ -350,6 +350,15 @@ test("putContent refuses what a Miragon canvas cannot open, like an invalid BPMN
       JSON.stringify({ version: 1, title: "M", contexts: [{ id: "toString", label: "S", ...box }], relationships: [] }),
       /contexts\.0\.id: the id "toString" is reserved: it names a built-in property/,
     ],
+    // nested past the schema model's stack: a refusal, not a 500
+    [
+      "processes/deep.vc.json",
+      JSON.stringify({ schemaVersion: 1, meta: { name: "C" }, elements: [], connections: [] }).replace(
+        /}$/,
+        `, "extra": ${"[".repeat(50_000)}${"]".repeat(50_000)}}`,
+      ),
+      /\(root\): could not be checked: Maximum call stack size exceeded/,
+    ],
   ];
   for (const [path, content, reason] of refusals) {
     writeFileSync(join(ws, path), "{}");
