@@ -4,7 +4,8 @@
  * moves every shape through SVG transforms and matrices, jsdom has none), and
  * module hooks for what only a bundler resolves (the renderers import
  * diagram-js subpaths without an extension, the specs' load() imports the
- * stylesheet, the SPA editor the "@/" alias). Import it before any renderer, and import the renderers
+ * stylesheet, the SPA editors the "@/" alias and the bpmn editor its own
+ * sources without one). Import it before any renderer, and import the renderers
  * dynamically: the hooks only see imports resolved after they register.
  * Every element reports one client size (CLIENT_SIZE), so a canvas has a
  * viewbox and a view state, but shapes measure 0×0: nothing about fit, zoom
@@ -26,11 +27,15 @@ registerHooks({
       const code = (error as { code?: string }).code;
       if (code !== "ERR_MODULE_NOT_FOUND" && code !== "ERR_UNSUPPORTED_DIR_IMPORT") throw error;
       if (/\.[cm]?[jt]s$/.test(specifier)) throw error;
-      try {
-        return nextResolve(`${specifier}.js`, context);
-      } catch {
-        return nextResolve(`${specifier}/index.js`, context);
+      // a package's own .js first; the app's sources are .ts (the bpmn editor's relative imports)
+      for (const suffix of [".js", "/index.js", ".ts", "/index.ts"]) {
+        try {
+          return nextResolve(`${specifier}${suffix}`, context);
+        } catch {
+          // the next suffix
+        }
       }
+      throw error;
     }
   },
   load(url, context, nextLoad) {
