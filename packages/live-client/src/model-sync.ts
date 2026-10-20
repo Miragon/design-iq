@@ -30,7 +30,7 @@ import { applyHunks, closingBreaksAt, diffHunks, diffRegion, type Hunk } from ".
 export const CANVAS_ORIGIN = "bpm-canvas";
 
 const CONFLICT_MESSAGE =
-  "Gleichzeitige Änderung am selben Element — deine letzte Aktion wurde durch die Änderung einer Kollegin/eines Kollegen ersetzt.";
+  "A colleague changed the same element at the same moment. Your last action was replaced by their change.";
 /** a repair can undo more than the last action: every canvas edit the repairer's canvas had not taken in */
 const REPAIRED_MESSAGE =
   "Your recent canvas edits crossed a colleague's at the same moment and could not be merged. The model now shows their version.";
