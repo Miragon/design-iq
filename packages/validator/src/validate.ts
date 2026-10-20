@@ -463,14 +463,41 @@ export function checkModelBaseline(raw: string, opts: { file?: string; notation:
  *  "(root)" for the document itself */
 const issuePath = (path: readonly (string | number)[]): string => path.join(".") || "(root)";
 
+interface SchemaIssue {
+  path: readonly (string | number)[];
+  message: string;
+}
+
 const schemaError =
   (ruleId: string, file: string) =>
-  (issue: { path: readonly (string | number)[]; message: string }): Finding => ({
+  (issue: SchemaIssue): Finding => ({
     severity: "ERROR",
     ruleId,
     file,
     message: `${issuePath(issue.path)}: ${issue.message}`,
   });
+
+/**
+ * The ids a Team Topology or Context Map canvas cannot hold although its
+ * schema model takes them: diagram-js keeps its elements in a plain object,
+ * so an id that names a built-in object property ("constructor",
+ * "__proto__") reads as already added and the import fails. The Value Chain
+ * schema model refuses these ids itself; the other two do not yet.
+ */
+function builtInPropertyIds(collections: Readonly<Record<string, readonly { id: string }[]>>): SchemaIssue[] {
+  return Object.entries(collections).flatMap(([collection, elements]) =>
+    elements.flatMap(({ id }, index) =>
+      Object.hasOwn(Object.prototype, id)
+        ? [
+            {
+              path: [collection, index, "id"],
+              message: `the id "${id}" is reserved: it names a built-in property of JavaScript objects`,
+            },
+          ]
+        : [],
+    ),
+  );
+}
 
 /**
  * The context-map rules the canvas enforces itself: its importer refuses a
@@ -482,7 +509,9 @@ const CONTEXT_MAP_REFUSED_RULES: ReadonlySet<string> = new Set(["unique-ids"]);
 
 function checkTeamTopology(raw: string, file: string): Finding[] {
   const parsed = parseTeamTopology(JSON.parse(raw));
-  return parsed.ok ? [] : parsed.issues.map(schemaError("team-topology/schema", file));
+  if (!parsed.ok) return parsed.issues.map(schemaError("team-topology/schema", file));
+  const { nodes, interactions, flows, annotations } = parsed.document;
+  return builtInPropertyIds({ nodes, interactions, flows, annotations }).map(schemaError("team-topology/schema", file));
 }
 
 function checkContextMap(raw: string, file: string): Finding[] {
@@ -491,17 +520,22 @@ function checkContextMap(raw: string, file: string): Finding[] {
     const issues = parsed.issues ?? [{ path: [], message: parsed.error }];
     return issues.map(schemaError("context-map/schema", file));
   }
+  const { contexts, relationships } = parsed.document;
+  const refusedIds = builtInPropertyIds({ contexts, relationships }).map(schemaError("context-map/schema", file));
   const { errors, warnings } = contextMapRules(parsed.document);
-  return [...errors, ...warnings].map((finding) => {
-    const refused = CONTEXT_MAP_REFUSED_RULES.has(finding.rule);
-    const where = finding.relationshipId === undefined ? "" : `relationship "${finding.relationshipId}": `;
-    return {
-      severity: refused ? "ERROR" : "WARN",
-      ruleId: refused ? "context-map/schema" : "context-map/semantics",
-      file,
-      message: `${where}${finding.message} (${finding.rule})`,
-    };
-  });
+  return [
+    ...refusedIds,
+    ...[...errors, ...warnings].map((finding): Finding => {
+      const refused = CONTEXT_MAP_REFUSED_RULES.has(finding.rule);
+      const where = finding.relationshipId === undefined ? "" : `relationship "${finding.relationshipId}": `;
+      return {
+        severity: refused ? "ERROR" : "WARN",
+        ruleId: refused ? "context-map/schema" : "context-map/semantics",
+        file,
+        message: `${where}${finding.message} (${finding.rule})`,
+      };
+    }),
+  ];
 }
 
 function checkValueChain(raw: string, file: string): Finding[] {

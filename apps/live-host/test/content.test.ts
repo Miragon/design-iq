@@ -339,6 +339,17 @@ test("putContent refuses what a Miragon canvas cannot open, like an invalid BPMN
       }),
       /elements\.0\.id: Id "vc-root" is reserved/,
     ],
+    // ids naming a built-in object property break the canvas import although the schema model takes them
+    [
+      "processes/ctor.tt",
+      JSON.stringify({ version: 3, title: "T", nodes: [team("constructor")], interactions: [], flows: [] }),
+      /nodes\.0\.id: the id "constructor" is reserved: it names a built-in property/,
+    ],
+    [
+      "processes/ctor.cm.json",
+      JSON.stringify({ version: 1, title: "M", contexts: [{ id: "toString", label: "S", ...box }], relationships: [] }),
+      /contexts\.0\.id: the id "toString" is reserved: it names a built-in property/,
+    ],
   ];
   for (const [path, content, reason] of refusals) {
     writeFileSync(join(ws, path), "{}");

@@ -205,7 +205,8 @@ model rejects is an ERROR at its JSON path (`nodes.1.id: duplicate id "a"`; rule
 `team-topology/schema`, `context-map/schema`, `value-chain/schema`), so the save refuses a file
 the canvas could not open. Rejected are a duplicate id and the ids a diagram keeps for itself:
 `tt-root`, `cm-root`, `vc-root`, every id starting with `__implicitroot`, `assoc_<annotation id>`
-in a Team Topology, and built-in object property names such as `constructor` in a Value Chain.
+in a Team Topology, and in all three notations the names of built-in object properties such as
+`constructor` or `toString`.
 A Context Map is also rejected as a list, with a `version` above 1 or with coordinates or sizes
 beyond 1,000,000; a Value Chain with extra keys in `bounds` or in a waypoint,
 with coordinates beyond ±1e9 or with a `__proto__` key. A Context Map's strategic-DDD rules

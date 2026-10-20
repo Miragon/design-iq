@@ -22,8 +22,11 @@ so each refusal is an ERROR (`team-topology/schema`, `context-map/schema`,
 `nodes.1.id: duplicate id "a"`. Refused among others:
 
 - a duplicate id, and the ids the diagram keeps for itself: `tt-root`, `cm-root`, `vc-root`,
-  every id starting with `__implicitroot`, `assoc_<annotation id>` in a Team Topology, and in a
-  Value Chain the names of built-in JavaScript object properties such as `constructor`;
+  every id starting with `__implicitroot`, and `assoc_<annotation id>` in a Team Topology;
+- in all three notations, an id that names a built-in JavaScript object property such as
+  `constructor`, `toString` or `__proto__`: the canvas keeps its elements in a plain object and
+  cannot import it. The Team Topology and Context Map schema models still take these ids, so the
+  validator refuses them itself, under the same rule;
 - in a Context Map: a JSON list instead of an object, a `version` newer than 1, coordinates or
   sizes beyond 1,000,000;
 - in a Value Chain: keys other than `x`, `y`, `width`, `height` in `bounds` and other than `x`,

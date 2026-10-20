@@ -29,7 +29,12 @@ const brief = (findings: Finding[] | undefined): Array<[string, string, string]>
 
 const box = { position: { x: 0, y: 0 }, size: { width: 100, height: 50 } };
 
-const teamTopology = (parts: { nodes?: unknown[]; interactions?: unknown[]; annotations?: unknown[] }): string =>
+const teamTopology = (parts: {
+  nodes?: unknown[];
+  interactions?: unknown[];
+  flows?: unknown[];
+  annotations?: unknown[];
+}): string =>
   JSON.stringify({ version: 3, title: "Teams", nodes: [], interactions: [], flows: [], annotations: [], ...parts });
 const team = (id: string): object => ({ id, type: "stream-aligned", label: id, ...box });
 
@@ -156,6 +161,46 @@ test("context map: a repeated id is refused like the canvas refuses it, the advi
       'relationship "r1": Core domain "orders" conforms (CF) to "billing"; protect the core with an ACL instead. (protect-the-core)',
     ],
   ]);
+});
+
+test("team topology and context map: an id that names a built-in object property is refused at its path", () => {
+  // the canvases keep their elements in a plain object, so such an id fails the import
+  const builtIn = (path: string, id: string): string =>
+    `${path}: the id "${id}" is reserved: it names a built-in property of JavaScript objects`;
+  assert.deepEqual(
+    brief(
+      checkSchemaModel(
+        teamTopology({
+          nodes: [team("constructor"), team("constructorTeam")],
+          interactions: [{ id: "toString", mode: "collaboration", ...box }],
+          flows: [{ id: "valueOf", ...box }],
+          annotations: [{ id: "__proto__", text: "n", ...box }],
+        }),
+        { notation: "team-topology" },
+      ),
+    ),
+    [
+      ["ERROR", "team-topology/schema", builtIn("nodes.0.id", "constructor")],
+      ["ERROR", "team-topology/schema", builtIn("interactions.0.id", "toString")],
+      ["ERROR", "team-topology/schema", builtIn("flows.0.id", "valueOf")],
+      ["ERROR", "team-topology/schema", builtIn("annotations.0.id", "__proto__")],
+    ],
+  );
+  assert.deepEqual(
+    brief(
+      checkSchemaModel(
+        contextMap({
+          contexts: [context("billing"), context("hasOwnProperty")],
+          relationships: [{ id: "isPrototypeOf", from: "billing", to: "hasOwnProperty", pattern: "partnership" }],
+        }),
+        { notation: "context-map" },
+      ),
+    ),
+    [
+      ["ERROR", "context-map/schema", builtIn("contexts.1.id", "hasOwnProperty")],
+      ["ERROR", "context-map/schema", builtIn("relationships.0.id", "isPrototypeOf")],
+    ],
+  );
 });
 
 test("value chain: reserved ids, extra keys in bounds and waypoints, far coordinates and __proto__ are refused", () => {
