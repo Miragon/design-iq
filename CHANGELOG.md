@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.6.0](https://github.com/Miragon/design-iq/compare/v5.5.0...v5.6.0) (2026-10-20)
+
+
+### Features
+
+* **validator:** check Team Topologies, Context Maps and Value Chain files against their schema models ([#271](https://github.com/Miragon/design-iq/issues/271)) ([096bfd1](https://github.com/Miragon/design-iq/commit/096bfd18e0d43a303d5e8475fb30631bcf823519))
+* **web:** mount the Miragon modelers through the modeler-api contract ([#272](https://github.com/Miragon/design-iq/issues/272)) ([529f944](https://github.com/Miragon/design-iq/commit/529f944cfab03fd9cc99c972b01d9514b3e3df30))
+
 ## [5.5.0](https://github.com/Miragon/design-iq/compare/v5.4.0...v5.5.0) (2026-10-19)
 
 
