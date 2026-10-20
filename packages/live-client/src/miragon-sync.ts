@@ -28,11 +28,13 @@
  *    codec (importDocument/exportDocument — team topology .tt, context map
  *    .cm.json). The codec — Zod-validated, non-throwing parse on the way in,
  *    deterministic serialize on the way out — is INJECTED, so this package
- *    never depends on a renderer's schema package. importDocument replaces
- *    every shape but leaves the command stack UNTOUCHED (an undo would then
- *    operate on stale, removed objects: silent no-ops, id-coincidence
- *    deletions) — history is erased like bpmn-js does on import, silently
- *    (clear(false): no 'changed' echo). The codec's parse IS the rule-4
+ *    never depends on a renderer's schema package. Team topology's
+ *    importDocument replaces every shape but leaves the command stack
+ *    UNTOUCHED (an undo would then operate on stale, removed objects: silent
+ *    no-ops, id-coincidence deletions); context maps erases it itself since
+ *    0.3.0. So the lane erases history after every import like bpmn-js does,
+ *    silently (clear(false): no 'changed' echo) — a no-op where the renderer
+ *    already did. The codec's parse IS the rule-4
  *    pre-gate: half-typed JSON keeps the last good canvas without an import
  *    round-trip. Every canvas edit runs through the command stack, and the
  *    document meta (title) has no editing surface on the canvas —
@@ -165,9 +167,9 @@ function documentLane(modeler: DocumentModelerLike, lane: { notation: string; co
       const parsed = lane.codec.parse(text);
       if (!parsed.ok) throw new Error(`not a ${lane.notation} document: ${String(parsed.error ?? "parse failed")}`);
       modeler.importDocument(parsed.document);
-      // the renderer's importDocument replaces every shape but leaves the
-      // command stack UNTOUCHED — erase history like bpmn-js does on import,
-      // silently (no 'changed' echo)
+      // team topology's importDocument replaces every shape but leaves the
+      // command stack UNTOUCHED (context maps clears it itself since 0.3.0) —
+      // erase history like bpmn-js does on import, silently (no 'changed' echo)
       modeler.get("commandStack").clear(false);
     },
     exportText: async () => lane.codec.serialize(modeler.exportDocument()),

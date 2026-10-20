@@ -4,9 +4,10 @@
  * export the document TEXT, report user edits, optionally hand the canvas to
  * a Y.Text. Two invariants the lifecycle relies on:
  *
- *  1. importText never fires onDirty. The Miragon DSL renderers run
+ *  1. importText never fires onDirty. The wardley renderer runs
  *     commandStack.clear() inside importDSL, which EMITS 'commandStack.changed'
- *     (bpmn-js clears silently) — an adapter suppresses that echo exactly like
+ *     (bpmn-js clears silently, and so do event storming and context maps
+ *     since 0.3.0) — an adapter suppresses that echo exactly like
  *     live-client's miragon-sync does, or every load and every conflict reload
  *     would autosave a canonicalised file over the hand-authored one.
  *  2. bindLive is a CAPABILITY. Absent = the widget stays on CAS autosave —
