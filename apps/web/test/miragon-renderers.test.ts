@@ -44,6 +44,29 @@ const CONTEXT_MAP = JSON.stringify({
   ],
   relationships: [],
 });
+/** hand-written, not the canonical serialization (one line, unsorted ids) */
+const TEAMS = JSON.stringify({
+  version: 3,
+  title: "Online Shop",
+  nodes: [
+    {
+      id: "team_platform",
+      type: "platform",
+      label: "Platform",
+      position: { x: 40, y: 300 },
+      size: { width: 520, height: 96 },
+    },
+    {
+      id: "team_checkout",
+      type: "stream-aligned",
+      label: "Checkout",
+      position: { x: 40, y: 40 },
+      size: { width: 240, height: 96 },
+    },
+  ],
+  interactions: [],
+  flows: [],
+});
 
 test("the new-file templates are the renderers' own serialization: the first canvas save is no phantom diff", async () => {
   const templates: Array<[id: string, text: string]> = [
@@ -65,6 +88,7 @@ test("importing never dirties the widget (engine invariant 1), the renderer's ow
     ["wardley", MAP],
     ["event-storming", BOARD],
     ["context-map", newCmJson("map", "Conference Planner")],
+    ["team-topology", TEAMS],
   ];
   for (const [id, text] of boards) {
     const engine = mountMiragonEngine(await load(id), host(), false);
@@ -77,10 +101,12 @@ test("importing never dirties the widget (engine invariant 1), the renderer's ow
   }
 });
 
-test("the read-only viewers import without a command stack: Event Storming and Wardley need no shim", async () => {
+test("the read-only viewers import without a command stack: no renderer needs a shim", async () => {
   const boards: Array<[id: string, text: string]> = [
     ["wardley", MAP],
     ["event-storming", BOARD],
+    ["context-map", CONTEXT_MAP],
+    ["team-topology", TEAMS],
   ];
   for (const [id, text] of boards) {
     const engine = mountMiragonEngine(await load(id), host(), true);
@@ -103,6 +129,7 @@ test("Delete acts on the selection once the canvas has the focus, not while a ch
     ["wardley", MAP],
     ["event-storming", BOARD],
     ["context-map", CONTEXT_MAP],
+    ["team-topology", TEAMS],
   ];
   for (const [id, text] of boards) {
     const widget = host();
@@ -175,6 +202,116 @@ test("Wardley: a resize preview never reaches the shared text, the size it commi
   await wait(50);
   assert.match(ytext.toString(), /size \[1500, 900\]/);
   unbind();
+  engine.destroy();
+});
+
+test("Team Topologies takes no key while its canvas is inert or a modal dialog is open, as the live editor's hidden layer and dialogs are", async () => {
+  const layer = host();
+  const canvasHost = layer.ownerDocument.createElement("div");
+  canvasHost.className = "tt-canvas";
+  layer.append(canvasHost);
+  const engine = mountMiragonEngine(await load("team-topology"), canvasHost, false);
+  await engine.importText(TEAMS);
+  const diagram = engine.raw as unknown as DiagramServices;
+  const shapes = () => diagram.get("elementRegistry").filter((e) => e.parent !== undefined && !e.labelTarget);
+  const deleteOnThePage = (): number => {
+    diagram.get("selection").select(shapes()[0]);
+    layer.ownerDocument.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }),
+    );
+    return shapes().length;
+  };
+  const before = shapes().length;
+  layer.setAttribute("inert", "");
+  assert.equal(deleteOnThePage(), before, "an inert layer around the canvas");
+  layer.removeAttribute("inert");
+  const dialog = layer.ownerDocument.createElement("div");
+  dialog.setAttribute("aria-modal", "true");
+  layer.ownerDocument.body.append(dialog);
+  assert.equal(deleteOnThePage(), before, "a modal dialog");
+  dialog.remove();
+  assert.ok(deleteOnThePage() < before, "neither: the page's key is the canvas's");
+  engine.destroy();
+  layer.remove();
+});
+
+interface TeamTopologyModeler {
+  get(name: "elementRegistry"): { get(id: string): unknown };
+  get(name: "modeling"): { moveElements(shapes: unknown[], delta: { x: number; y: number }): void };
+  get(name: "commandStack"): { canUndo(): boolean };
+  get(name: "ttLabelEditing"): {
+    activate(element: unknown): void;
+    openEdit(): { elementId: string; value: string } | undefined;
+  };
+}
+
+/** the open label editor's textarea, typed into as a user would */
+function typeLabel(container: HTMLElement, value: string): HTMLTextAreaElement {
+  const editor = container.querySelector<HTMLTextAreaElement>("textarea.tt-label-editor");
+  assert.ok(editor, "the label editor is open");
+  editor.value = value;
+  // jsdom's own Event: node's global one is no event to jsdom's dispatchEvent
+  editor.dispatchEvent(new editor.ownerDocument.defaultView!.Event("input", { bubbles: true }));
+  return editor;
+}
+
+test("Team Topologies: a hand-written file opens untouched, an edit writes the canonical text, a re-import leaves no undo behind", async () => {
+  const engine = mountMiragonEngine(await load("team-topology"), host("tt-canvas"), false);
+  const doc = new Y.Doc();
+  const ytext = doc.getText("content");
+  ytext.insert(0, TEAMS);
+  const unbind = engine.bindLive!(ytext, doc, { onConflict: assert.fail, onImportError: assert.fail });
+  await wait(500);
+  assert.equal(ytext.toString(), TEAMS, "the import echoes nothing into the shared text");
+
+  const modeler = engine.raw as unknown as TeamTopologyModeler;
+  const checkout = modeler.get("elementRegistry").get("team_checkout");
+  modeler.get("modeling").moveElements([checkout], { x: 10, y: 0 });
+  await wait(50);
+  assert.match(
+    ytext.toString(),
+    /^\{\n {2}"version": 3,[\s\S]*"x": 50,[\s\S]*\}\n$/,
+    "the edit, canonical with its line break",
+  );
+  assert.ok(modeler.get("commandStack").canUndo());
+
+  await wait(700); // past the live binding's quiet period after a local edit
+  const remote = ytext.toString().replace('"label": "Platform"', '"label": "Cloud Platform"');
+  doc.transact(() => {
+    ytext.delete(0, ytext.length);
+    ytext.insert(0, remote);
+  });
+  await wait(500);
+  assert.equal(ytext.toString(), remote, "the re-import echoes nothing either");
+  assert.equal(modeler.get("commandStack").canUndo(), false, "no undo step points at the replaced shapes");
+  unbind();
+  engine.destroy();
+});
+
+test("Team Topologies: typing a label is no edit until it commits, and a peer's re-import keeps what was typed", async () => {
+  const widget = host("tt-canvas");
+  const engine = mountMiragonEngine(await load("team-topology"), widget, false);
+  await engine.importText(TEAMS);
+  let dirty = 0;
+  engine.onDirty(() => dirty++);
+  const modeler = engine.raw as unknown as TeamTopologyModeler;
+  const labels = modeler.get("ttLabelEditing");
+  labels.activate(modeler.get("elementRegistry").get("team_checkout"));
+  typeLabel(widget, "Checkout & Pay");
+  assert.equal(dirty, 0, "the open editor is a preview");
+  assert.doesNotMatch(await engine.exportText(), /Checkout & Pay/);
+
+  await engine.importText(TEAMS.replace('"label":"Platform"', '"label":"Cloud Platform"'));
+  await wait(10);
+  assert.deepEqual(labels.openEdit(), { elementId: "team_checkout", value: "Checkout & Pay" });
+  assert.equal(dirty, 0);
+
+  const editor = typeLabel(widget, "Checkout & Payments");
+  editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  assert.equal(dirty, 1, "the commit is one edit");
+  const saved = await engine.exportText();
+  assert.match(saved, /"label": "Checkout & Payments"/);
+  assert.match(saved, /"label": "Cloud Platform"/, "the peer's change stays");
   engine.destroy();
 });
 

@@ -32,10 +32,11 @@ function stylesheetOf(spec: MiragonRendererSpec): string {
   return join(dirname(manifest), sheets[0]![1]);
 }
 
-/** the renderer's stylesheet as the SPA ships it, scoped by vendor-css.ts */
-async function scopedSheet(spec: MiragonRendererSpec): Promise<Root> {
+/** the renderer's stylesheet (or `css` in its place) as the SPA ships it, scoped by vendor-css.ts */
+async function scopedSheet(spec: MiragonRendererSpec, css?: string): Promise<Root> {
   const from = stylesheetOf(spec);
-  return (await postcss([prefixSelector(vendorCssScoping(spec))]).process(readFileSync(from, "utf8"), { from })).root;
+  return (await postcss([prefixSelector(vendorCssScoping(spec))]).process(css ?? readFileSync(from, "utf8"), { from }))
+    .root;
 }
 
 /** the at-rules around a rule, innermost first */
@@ -95,22 +96,21 @@ const tokensIn = (layer: string): string[] => [
  *
  * - `@layer <renderer>-tokens :root { --cd-* }` and the `.cd-nur-*`
  *   helpers: in a layer, ui-kit's unlayered --cd-* win on every name both
- *   define, and no designIQ markup uses the helpers.
- * - Team Topology 0.10 `:root { --cd-* }`, unlayered: ui-kit's own names
- *   and values, only minified (checked below). Unlayered tokens with other
- *   values override the app's own, as team-topologies-renderer 0.11.0's and
- *   0.11.1's do (their warning and success text fail contrast), so Team
- *   Topology waits for a release that puts its tokens in a layer.
+ *   define, and no designIQ markup uses the helpers. Team Topology has them
+ *   in a layer since 0.11.2; 0.11.0 and 0.11.1 set them unlayered, which the
+ *   value check below refuses.
  * - `:root { --bio-* }`, unlayered: maps diagram-js's own --bio-* onto the
  *   design-system roles. bpmn-js and dmn-js read them inside
- *   .bio-theme-parent only, where lib/bpmn-io-theme.css sets its own.
+ *   .bio-theme-parent only, where lib/bpmn-io-theme.css sets its own. Every
+ *   renderer declares the same mapping (checked below), so the order in
+ *   which their chunks load never changes it.
  * - `:root[data-cd-kontrast=hoch] …`: high contrast for the renderer's own
  *   chrome; designIQ never sets data-cd-kontrast. Event Storming's palette
  *   rule would restyle the bpmn-js palette too if it did.
  */
 const KNOWN_GLOBAL: Record<string, string[]> = {
   wardley: [...tokensIn("wardley-tokens"), ":root { --bio-* }"],
-  "team-topology": [":root { --cd-* }"],
+  "team-topology": [...tokensIn("team-topologies-tokens"), ":root { --bio-* }"],
   "event-storming": [
     ...tokensIn("event-storming-tokens"),
     ":root { --bio-* }",
@@ -147,6 +147,24 @@ for (const spec of MIRAGON_RENDERERS) {
     assert.deepEqual(await unscoped(spec), KNOWN_GLOBAL[spec.id]);
   });
 }
+
+/** the declarations of the unlayered `:root` rules that set --bio-* */
+async function bioMapping(spec: MiragonRendererSpec): Promise<string[]> {
+  const declarations: string[] = [];
+  (await scopedSheet(spec)).walkRules((rule) => {
+    if (!rule.selectors.includes(":root") || atRulesOf(rule).some((at) => at.name === "layer")) return;
+    if (!rule.some((node) => node.type === "decl" && node.prop.startsWith("--bio-"))) return;
+    rule.walkDecls((decl) => void declarations.push(`${decl.prop}: ${decl.value}`));
+  });
+  return declarations;
+}
+
+test("every renderer maps --bio-* the same way, so no load order changes it", async () => {
+  const [first, ...others] = MIRAGON_RENDERERS;
+  const mapping = await bioMapping(first!);
+  assert.ok(mapping.length > 0);
+  for (const spec of others) assert.deepEqual(await bioMapping(spec), mapping, spec.id);
+});
 
 /**
  * One spelling per token value: the renderer sheets come minified (#fff,
@@ -192,14 +210,19 @@ function appTokens(): Map<string, string> {
   return tokens;
 }
 
-/** the --cd-* tokens a renderer sets on :root outside any cascade layer */
-async function unlayeredTokens(spec: MiragonRendererSpec): Promise<Record<string, string>> {
+/** the --cd-* tokens a scoped sheet sets on :root outside any cascade layer */
+function unlayeredTokens(sheet: Root): Record<string, string> {
   const tokens: Record<string, string> = {};
-  (await scopedSheet(spec)).walkRules((rule) => {
+  sheet.walkRules((rule) => {
     if (!rule.selectors.includes(":root") || atRulesOf(rule).some((at) => at.name === "layer")) return;
     rule.walkDecls(/^--cd-/, (decl) => void (tokens[decl.prop] = canonicalValue(decl.value)));
   });
   return tokens;
+}
+
+/** what ui-kit sets each of `own`'s names to (undefined: not one of its tokens) */
+function uiKitValuesOf(own: Record<string, string>): Record<string, string | undefined> {
+  return Object.fromEntries(Object.keys(own).map((name) => [name, APP_TOKENS.get(name)]));
 }
 
 test("token values compare across spellings, and only across spellings", () => {
@@ -219,7 +242,29 @@ const APP_TOKENS = appTokens();
 
 for (const spec of MIRAGON_RENDERERS) {
   test(`${spec.id}: the tokens it sets unlayered are ui-kit's, value for value`, async () => {
-    const own = await unlayeredTokens(spec);
-    assert.deepEqual(own, Object.fromEntries(Object.keys(own).map((name) => [name, APP_TOKENS.get(name)])));
+    const own = unlayeredTokens(await scopedSheet(spec));
+    assert.deepEqual(own, uiKitValuesOf(own));
   });
 }
+
+/** a sheet with its cascade layers dissolved: their rules stand where the layer stood */
+function withoutLayers(css: string): string {
+  const sheet = postcss.parse(css);
+  sheet.walkAtRules("layer", (at) => {
+    if (at.nodes) at.replaceWith(at.nodes);
+  });
+  return sheet.toString();
+}
+
+test("a token sheet without its layer fails the value check: team-topologies-renderer 0.11.1's overrode the status colours", async () => {
+  // 0.11.2's stylesheet without its layer is byte for byte 0.11.1's
+  const spec = MIRAGON_RENDERERS.find((s) => s.id === "team-topology")!;
+  const unlayered = unlayeredTokens(await scopedSheet(spec, withoutLayers(readFileSync(stylesheetOf(spec), "utf8"))));
+  const uiKit = uiKitValuesOf(unlayered);
+  assert.notDeepEqual(unlayered, uiKit);
+  for (const name of ["--cd-success", "--cd-warning", "--cd-danger", "--cd-info"]) {
+    assert.ok(uiKit[name], name);
+    assert.notEqual(unlayered[name], uiKit[name], name);
+  }
+  assert.equal(unlayered["--cd-warning"], canonicalValue("#ffb000"));
+});

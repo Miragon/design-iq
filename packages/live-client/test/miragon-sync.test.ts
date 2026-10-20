@@ -144,11 +144,20 @@ test("dsl lane: emptied text keeps the last good canvas (lenient DSL, non-empty 
 
 const TT_DOC = JSON.stringify({ version: 2, title: "T", nodes: [], interactions: [], flows: [] });
 
+/** the document renderers' import trait (team-topologies-renderer 0.11,
+ *  context-maps-renderer 0.3): importDocument replaces every shape and erases
+ *  the history itself, silently — `cleared` records every clear(emit) */
 function makeFakeDocumentModeler(initial: string) {
   const handlers: Record<string, Array<() => void>> = {};
   const imports: unknown[] = [];
   const cleared: boolean[] = [];
   let current: unknown = JSON.parse(initial);
+  const commandStack = {
+    clear: (emit?: boolean) => {
+      cleared.push(emit ?? true);
+      if (emit !== false) handlers["commandStack.changed"]?.forEach((h) => h());
+    },
+  };
   return {
     imports,
     cleared,
@@ -158,7 +167,7 @@ function makeFakeDocumentModeler(initial: string) {
     fire: (ev: string) => handlers[ev]?.forEach((h) => h()),
     get: (service: string) =>
       service === "commandStack"
-        ? { clear: (emit?: boolean) => void cleared.push(emit ?? true) }
+        ? commandStack
         : { viewbox: () => ({ x: 0, y: 0, width: 100, height: 100 }), zoom: () => undefined },
     on: (ev: string, cb: () => void) => {
       (handlers[ev] ??= []).push(cb);
@@ -167,6 +176,7 @@ function makeFakeDocumentModeler(initial: string) {
     importDocument: (d: unknown) => {
       imports.push(d);
       current = d;
+      commandStack.clear(false);
       return { warnings: [] };
     },
     exportDocument: () => current,
@@ -196,9 +206,10 @@ test("document lane: the injected codec gates imports — parsed documents in, b
   await wait(700);
   assert.equal(modeler.imports.length, 1, "the initial import ran despite the text not being XML");
   assert.equal((modeler.imports[0] as { version: number }).version, 2, "the PARSED document reaches the modeler");
-  // the renderer's importDocument leaves undo history on stale shapes — the
-  // adapter must erase it, SILENTLY (no 'changed' echo)
-  assert.deepEqual(modeler.cleared, [false], "commandStack.clear(false) after the import");
+  // no undo step may survive on the replaced shapes: the renderer erases the
+  // history and the adapter does too (kept until #136), both SILENTLY — a
+  // 'changed' echo would export the canonical text over the hand-written one
+  assert.deepEqual(modeler.cleared, [false, false], "every clear after the import is clear(false)");
   assert.equal(ytext.toString(), TT_DOC, "opening a document must not rewrite it");
 
   // a co-editor's half-typed JSON must not reach the canvas

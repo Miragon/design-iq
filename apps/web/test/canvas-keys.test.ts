@@ -2,8 +2,8 @@
  * A canvas engine hears keys only while it is in front (src/lib/canvas-keys.ts),
  * under jsdom. The page is built the way the live editor has it: a canvas
  * engine with the Miragon renderers' document keydown listener and the
- * guards they have today (Team Topology's text-target guard, the canvas-or-page
- * guard of the others, Wardley's keys from a button), the Monaco host with
+ * guards they have today (the canvas-or-page guard of all four, Wardley's
+ * keys from a button, Team Topology's inert and modal checks), the Monaco host with
  * an EditContext div (none of the three) and the container's keybinding
  * listener, a toolbar button, React's delegated listener on #root, a menu's
  * capture-phase listener on document and a dialog's Escape listener on window.
@@ -49,21 +49,30 @@ function page() {
   });
   root.addEventListener("keydown", (e) => heard.react.push(e.key));
   document.addEventListener("keydown", (e) => heard.menu.push(e.key), true);
-  // the renderers' guards: team-topologies-renderer 0.10 skips text targets
-  // only; wardley-renderer 0.8.0 (shouldIgnoreKeyEvent), event-storming and
-  // context-maps-renderer 0.3.0 act on their canvas and the page itself, and
-  // Wardley on undo/redo and its single-key tools from a button as well
+  // the renderers' guards: wardley-renderer 0.8.0 (shouldIgnoreKeyEvent),
+  // event-storming and context-maps-renderer 0.3.0 and team-topologies-renderer
+  // 0.11.2 (TtKeyboard) act on their canvas and the page itself, Wardley on
+  // undo/redo and its single-key tools from a button as well; Team Topology
+  // skips text fields, Alt, a key already handled, an inert canvas and an
+  // open modal dialog on top
   const textTarget = (t: HTMLElement): boolean =>
-    t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable;
+    t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable;
   const canvasOrPage = (t: HTMLElement): boolean =>
     canvas.contains(t) || t === document.body || t === document.documentElement;
   const wardleyButtonKey = (e: KeyboardEvent): boolean =>
     (e.target as HTMLElement).tagName === "BUTTON" &&
     (e.metaKey || e.ctrlKey ? /^[zy]$/.test(e.key) : /^[cunpla]$/.test(e.key));
+  const teamTopologyHears = (e: KeyboardEvent): boolean =>
+    !e.defaultPrevented &&
+    !e.altKey &&
+    !textTarget(e.target as HTMLElement) &&
+    canvasOrPage(e.target as HTMLElement) &&
+    !canvas.closest("[inert]") &&
+    !document.querySelector('[aria-modal="true"], dialog[open]');
   const heardBy = (e: KeyboardEvent): string[] => {
     const t = e.target as HTMLElement;
     const by: string[] = [];
-    if (!textTarget(t)) by.push("team-topology");
+    if (teamTopologyHears(e)) by.push("team-topology");
     if (canvasOrPage(t)) by.push("event-storming", "context-map");
     if (canvasOrPage(t) || wardleyButtonKey(e)) by.push("wardley");
     return by;
@@ -83,18 +92,35 @@ function page() {
   return { document, canvas, button, host, editContext, heard, press };
 }
 
-test("unheld, keys meant for something else reach the engines: on the page itself, from a button, typed in Monaco", () => {
+test("unheld, keys meant for something else reach the engines: on the page itself, ⌘Z from a button", () => {
   const p = page();
   p.press(p.document.body, "Backspace");
   p.press(p.button, "z", { metaKey: true });
   p.press(p.button, "Backspace");
   p.press(p.editContext, "l");
-  assert.deepEqual(p.heard.engine, ["Backspace", "z", "Backspace", "l"]);
+  assert.deepEqual(p.heard.engine, ["Backspace", "z"]);
   assert.deepEqual(p.heard.byRenderer, [
     ["team-topology", "event-storming", "context-map", "wardley"],
-    ["team-topology", "wardley"],
-    ["team-topology"],
-    ["team-topology"],
+    ["wardley"],
+    [],
+    [],
+  ]);
+});
+
+test("unheld, only Team Topology lets a key on the page pass while its canvas is inert or a modal dialog is open", () => {
+  const p = page();
+  // the live editor's hidden layer, as React writes it
+  p.canvas.setAttribute("inert", "");
+  p.press(p.document.body, "Backspace");
+  p.canvas.removeAttribute("inert");
+  const dialog = p.document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  p.document.body.append(dialog);
+  p.press(p.document.body, "Backspace");
+  assert.deepEqual(p.heard.byRenderer, [
+    ["event-storming", "context-map", "wardley"],
+    ["event-storming", "context-map", "wardley"],
   ]);
 });
 

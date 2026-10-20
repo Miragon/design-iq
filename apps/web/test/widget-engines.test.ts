@@ -182,27 +182,33 @@ test("dsl lane: a rejected importDSL releases the latch — later edits still co
 // ── the document lane ───────────────────────────────────────────────────────
 
 /** a JSON renderer: `services` names what its injector registers (the viewer
- *  has no command stack); clear(emit) fires 'changed' unless emit === false */
+ *  has no command stack); clear(emit) fires 'changed' unless emit === false.
+ *  Like team-topologies-renderer 0.11 and context-maps-renderer 0.3, its
+ *  importDocument erases the history itself, silently, where it has one */
 function fakeDocument(services: string[]) {
   const handlers = new Map<string, Array<() => void>>();
   const log: unknown[] = [];
+  const service = (name: string): any => {
+    if (name === "canvas") return { zoom: () => {}, viewbox: () => ({ x: 0, y: 0, width: 1, height: 1 }) };
+    if (services.includes(name)) {
+      return {
+        clear: (emit?: boolean) => {
+          log.push(`clear:${name}:${emit}`);
+          if (emit !== false) handlers.get("commandStack.changed")?.forEach((cb) => cb());
+        },
+      };
+    }
+    throw new Error(`No provider for "${name}"!`);
+  };
   const instance: MiragonRendererLike = {
-    get: (service: string): any => {
-      if (service === "canvas") return { zoom: () => {}, viewbox: () => ({ x: 0, y: 0, width: 1, height: 1 }) };
-      if (services.includes(service)) {
-        return {
-          clear: (emit?: boolean) => {
-            log.push(`clear:${service}:${emit}`);
-            if (emit !== false) handlers.get("commandStack.changed")?.forEach((cb) => cb());
-          },
-        };
-      }
-      throw new Error(`No provider for "${service}"!`);
-    },
+    get: service,
     on: (event: string, cb: () => void) => void (handlers.get(event) ?? handlers.set(event, []).get(event)!).push(cb),
     off: () => {},
     destroy: () => {},
-    importDocument: (doc: unknown) => void log.push(doc),
+    importDocument: (doc: unknown) => {
+      log.push(doc);
+      if (services.includes("commandStack")) service("commandStack").clear(false);
+    },
     exportDocument: () => ({ nodes: [] }),
   };
   const ctor = () =>
@@ -235,10 +241,14 @@ test("document lane editable: the post-import clear is SILENT, a rejected parse 
   let dirty = 0;
   engine.onDirty(() => dirty++);
   await engine.importText("ok");
-  assert.deepEqual(r.log, [{ text: "ok" }, "clear:commandStack:false"], "history erased with clear(false)");
+  assert.deepEqual(
+    r.log,
+    [{ text: "ok" }, "clear:commandStack:false", "clear:commandStack:false"],
+    "the renderer's own erase, then the engine's: both clear(false)",
+  );
   assert.equal(dirty, 0, "engine invariant 1: the import (and its history erase) never dirties");
   await assert.rejects(() => engine.importText("bad"));
-  assert.equal(r.log.length, 2, "a rejected parse never reached importDocument");
+  assert.equal(r.log.length, 3, "a rejected parse never reached importDocument");
   r.emit("commandStack.changed");
   assert.equal(dirty, 1, "a real edit does");
   assert.equal(await engine.exportText(), '{"nodes":[]}');
