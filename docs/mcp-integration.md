@@ -223,7 +223,10 @@ the same way once live (`mint_ws_ticket` carries their name and color), and the 
 (BPMN and the Miragon renderers) publish that person's pointer and selection and render the peers'
 cursors on their own canvas (the web shell's presence controller, unchanged). On the Miragon
 renderers the selection travels as the document's element ids (`@miragon/modeler-api`'s element
-surface), and an element the agent names (a Wardley map's components) is outlined by its name.
+surface), and an element the agent names (a Wardley map's components) is outlined by its name,
+together with every other element of that name (the component's pipeline). A selection of
+something the element surface does not address (a Wardley note, annotation, region or drawing,
+an Event Storming note or drawing) is not shared.
 
 The other direction is `get_presence`: who is in a model's room right now, with every person's name,
 selected element ids and pointer (model coordinates), the AI clients acting in it (`kind: "agent"`),

@@ -24,7 +24,12 @@
  * selection then travels as the DOCUMENT's element ids, the ones every peer
  * and the Live Host read from the same text, and an id this canvas does not
  * know is looked up as an element name — the Live Host names a Wardley
- * map's components, the canvas ids them `cmp_<name>`.
+ * map's components, the canvas ids them `cmp_<name>`. Every element that
+ * carries the name is outlined (a Wardley pipeline carries its
+ * component's). What the surface does not address is not shared: a
+ * selected Wardley note, annotation, region or drawing, or an Event
+ * Storming note or drawing, publishes nothing, because the ids the text
+ * gives those move to another element when a line above them changes.
  */
 import type { CanvasPresence, PresenceUser } from "@designiq/contracts/live";
 import { CD, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
@@ -113,11 +118,11 @@ function namePill(color: string, name: string, x: number, y: number): { group: S
   return { group, fit: () => pill.setAttribute("width", String(Math.ceil(label.getComputedTextLength()) + 12)) };
 }
 
-/** element name → id; a name more than one element carries names none */
-function uniqueNames(list: ReadonlyArray<{ id: string; name?: string }>): Map<string, string | undefined> {
-  const names = new Map<string, string | undefined>();
+/** element name → the ids of every element carrying it */
+function idsByName(list: ReadonlyArray<{ id: string; name?: string }>): Map<string, string[]> {
+  const names = new Map<string, string[]>();
   for (const { id, name } of list) {
-    if (name !== undefined) names.set(name, names.has(name) ? undefined : id);
+    if (name !== undefined) names.set(name, [...(names.get(name) ?? []), id]);
   }
   return names;
 }
@@ -217,13 +222,12 @@ export function attachPresenceCanvas(
     const glyphScale = 1 / (vb.scale || 1);
     // a peer's entry is an element id, else (with an element surface) an
     // element name; the names are read once per render, and only on a miss
-    let names: Map<string, string | undefined> | undefined;
-    const elementOf = (id: string): ElementLike | undefined => {
+    let names: Map<string, string[]> | undefined;
+    const elementsOf = (id: string): ElementLike[] => {
       const byId = registry.get(id);
-      if (byId || !elements) return byId;
-      names ??= uniqueNames(elements.list());
-      const namedId = names.get(id);
-      return namedId === undefined ? undefined : registry.get(namedId);
+      if (byId || !elements) return byId ? [byId] : [];
+      names ??= idsByName(elements.list());
+      return (names.get(id) ?? []).flatMap((namedId) => registry.get(namedId) ?? []);
     };
 
     for (const peer of peers) {
@@ -236,10 +240,13 @@ export function attachPresenceCanvas(
       // the shape is re-checked (belt and suspenders against future callers)
       const selection = Array.isArray(peer.canvas.selection) ? peer.canvas.selection : [];
       let anchor: { x: number; y: number } | undefined; // the first outlined box
-      for (const id of selection.slice(0, MAX_OUTLINES)) {
-        const el = typeof id === "string" ? elementOf(id) : undefined;
+      const boxes = selection
+        .slice(0, MAX_OUTLINES)
+        .flatMap((id) => (typeof id === "string" ? elementsOf(id) : []))
+        .slice(0, MAX_OUTLINES);
+      for (const el of boxes) {
         // shapes only — connections carry waypoints, not a box
-        if (!el || typeof el.x !== "number" || typeof el.width !== "number") continue;
+        if (typeof el.x !== "number" || typeof el.width !== "number") continue;
         const outline = svg("rect");
         outline.setAttribute("x", String(el.x - 3));
         outline.setAttribute("y", String((el.y ?? 0) - 3));

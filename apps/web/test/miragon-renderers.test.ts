@@ -440,57 +440,61 @@ test("Wardley: a resize preview never reaches the shared text, the size it commi
   engine.destroy();
 });
 
-test("presence on a Wardley map: the selection travels as document ids, a peer's component NAME (the Live Host's) is outlined", async () => {
+test("presence on a Wardley map, in both hosts: the selection travels as document ids, a peer's component NAME (the Live Host's) is outlined", async () => {
   const raf = globalThis.requestAnimationFrame;
   globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0) as unknown as number;
-  const engine = await engineOf("wardley", host("wardley-canvas"));
-  const doc = new Y.Doc();
-  const ytext = doc.getText("content");
-  ytext.insert(0, MAP);
-  const published: string[][] = [];
-  let deliver: (peers: RemotePresence[]) => void = () => {};
-  const unbind = engine.bindLive!(ytext, doc, {
-    onConflict: assert.fail,
-    onImportError: assert.fail,
-    presence: {
+  // a pipeline carries its component's name
+  const map = `${MAP}pipeline Hot Water [0.4, 0.9]\n`;
+  for (const where of HOSTS) {
+    const doc = new Y.Doc();
+    const ytext = doc.getText("content");
+    ytext.insert(0, map);
+    const published: string[][] = [];
+    let deliver: (peers: RemotePresence[]) => void = () => {};
+    const { modeler, destroy } = await mountLive(where, "wardley", ytext, doc, {
       setLocal: (local) => void (local && published.push(local.selection)),
       onRemote(callback) {
         deliver = callback;
         callback([]);
         return () => {};
       },
-    },
-  });
-  await wait(50);
-  const diagram = engine.modeler.diagram as unknown as WardleyServices;
-  const cup = diagram.get("elementRegistry").get("cmp_cup_of_tea");
-  diagram.get("selection").select(cup);
-  assert.deepEqual(published.at(-1), ["cmp_cup_of_tea"]);
-  // renamed on this canvas: the canvas keeps its id until the next import,
-  // the document (and so every peer) ids the element by its new name
-  diagram.get("wardleyModeling").updateLabel(cup, "Pot of Tea");
-  diagram.get("selection").select(cup);
-  assert.deepEqual(published.at(-1), ["cmp_pot_of_tea"]);
-  await wait(20);
-  assert.match(ytext.toString(), /^component Pot of Tea /m);
+    });
+    await wait(50);
+    const diagram = modeler.diagram as unknown as WardleyServices;
+    const cup = diagram.get("elementRegistry").get("cmp_cup_of_tea");
+    diagram.get("selection").select(cup);
+    assert.deepEqual(published.at(-1), ["cmp_cup_of_tea"], where);
+    // renamed on this canvas: the canvas keeps its id until the next import,
+    // the document (and so every peer) ids the element by its new name
+    diagram.get("wardleyModeling").updateLabel(cup, "Pot of Tea");
+    diagram.get("selection").select(cup);
+    assert.deepEqual(published.at(-1), ["cmp_pot_of_tea"], where);
+    await wait(20);
+    assert.match(ytext.toString(), /^component Pot of Tea /m, where);
 
-  deliver([
-    {
-      clientId: 7,
-      user: { name: "AI · Dominik", color: "#1D4ED8", kind: "agent" },
-      canvas: { cursor: null, selection: ["Hot Water", "dep-0"] },
-    },
-  ]);
-  await wait(20);
-  const outlines = [...diagram.get("canvas").getLayer("designiq-presence").querySelectorAll("rect[stroke-dasharray]")];
-  const water = diagram.get("elementRegistry").get("cmp_hot_water")!;
-  assert.deepEqual(
-    outlines.map((rect) => [Number(rect.getAttribute("x")), Number(rect.getAttribute("y"))]),
-    [[water.x - 3, water.y - 3]],
-    "the component the agent changed, by its name; the positional edge id outlines nothing",
-  );
-  unbind();
-  engine.destroy();
+    deliver([
+      {
+        clientId: 7,
+        user: { name: "AI · Dominik", color: "#1D4ED8", kind: "agent" },
+        canvas: { cursor: null, selection: ["Hot Water", "dep-0"] },
+      },
+    ]);
+    await wait(20);
+    const outlines = [
+      ...diagram.get("canvas").getLayer("designiq-presence").querySelectorAll("rect[stroke-dasharray]"),
+    ];
+    const boxes = ["cmp_hot_water", "pipeline_hot_water"].map((id) => {
+      const element = diagram.get("elementRegistry").get(id);
+      assert.ok(element, `${where}: ${id}`);
+      return [element.x - 3, element.y - 3];
+    });
+    assert.deepEqual(
+      outlines.map((rect) => [Number(rect.getAttribute("x")), Number(rect.getAttribute("y"))]).sort(),
+      boxes.sort(),
+      `${where}: the component the agent changed, by its name, with its pipeline; the positional edge id outlines nothing`,
+    );
+    destroy();
+  }
   globalThis.requestAnimationFrame = raf;
 });
 
