@@ -58,7 +58,8 @@ function makeFakeDslModeler(initial: string) {
   };
 }
 
-const WARDLEY: MiragonLane = { kind: "dsl", changeEvents: ["commandStack.changed", "wardley.config.changed"] };
+// the lanes of apps/web/src/notations/miragon/{wardley,event-storming}.ts
+const WARDLEY: MiragonLane = { kind: "dsl", changeEvents: ["commandStack.changed"] };
 const EVENT_STORMING: MiragonLane = { kind: "dsl", changeEvents: ["commandStack.changed"] };
 
 test("dsl lane: OWM text imports (non-XML!), edits round-trip through every configured change event", async () => {
@@ -80,11 +81,29 @@ test("dsl lane: OWM text imports (non-XML!), edits round-trip through every conf
   await wait(100);
   assert.match(ytext.toString(), /Water/);
 
-  // a config edit (axis labels) fires wardley.config.changed, NOT commandStack
-  modeler.setDsl(ytext.toString().replace("Tea ->", "Tee ->"));
-  modeler.fire("wardley.config.changed");
+  unbind();
+});
+
+test("dsl lane: a wardley resize preview (wardley.config.changed, transient) never reaches the Y.Text, its commit does", async () => {
+  const doc = new Y.Doc();
+  const ytext = doc.getText("content");
+  ytext.insert(0, OWM);
+  const modeler = makeFakeDslModeler(OWM);
+  const unbind = bindMiragon(modeler, WARDLEY, ytext, doc);
+  await wait(700);
+  // wardley-renderer 0.8.0: every drag step previews the size in exportDSL and
+  // fires wardley.config.changed { transient: true }
+  for (const size of ["size [900, 700]", "size [1100, 800]", "size [1500, 900]"]) {
+    modeler.setDsl(`${size}\n${OWM}`);
+    modeler.fire("wardley.config.changed");
+  }
   await wait(100);
-  assert.match(ytext.toString(), /Tee ->/);
+  assert.equal(ytext.toString(), OWM, "no preview size in the shared document");
+  // the drop commits ONE size through the command stack
+  modeler.fire("commandStack.changed");
+  await wait(100);
+  assert.match(ytext.toString(), /size \[1500, 900\]/);
+  assert.doesNotMatch(ytext.toString(), /size \[(900|1100)/);
   unbind();
 });
 

@@ -10,18 +10,20 @@
  *  - "dsl": the file format is a lossless line-DSL round-trip
  *    (importDSL/exportDSL — wardley OWM, event storming .storm); the text
  *    lane carries the DSL directly. Two traits from the renderers' own
- *    VS-Code-webview recipes: importDSL runs commandStack.clear(), which
- *    EMITS 'changed' (unlike bpmn-js, which clears silently) — without
+ *    VS-Code-webview recipes: wardley's importDSL runs commandStack.clear(),
+ *    which EMITS 'changed' (unlike bpmn-js, which clears silently; event
+ *    storming's import is silent since 0.3.0, the latch idles there) — without
  *    suppression that echo would re-export the canvas's CANONICAL
  *    serialization after every import, reordering a hand-authored file on
  *    open and replacing half-typed Monaco text after every debounce (the
  *    reference webviews drop the echo the same way: `if (importing) return`
  *    in their pushEdit). And the DSLs are lenient by design (unknown lines
  *    are preserved), so the rule-4 pre-gate is "any non-empty text" — the
- *    parser stays the judge. Per notation only the CHANGE EVENTS differ:
- *    wardley's axis-label edits fire 'wardley.config.changed', not the
- *    command stack; an event storming board's view options are a display
- *    preference, never content.
+ *    parser stays the judge. Per notation only the CHANGE EVENTS differ;
+ *    today both listen to the command stack alone: wardley's
+ *    'wardley.config.changed' also fires for transient previews (a resize
+ *    drag), which must never be persisted, and an event storming board's
+ *    view options are a display preference, never content.
  *  - "document": the file format is ONE JSON document with a schema-model
  *    codec (importDocument/exportDocument — team topology .tt, context map
  *    .cm.json). The codec — Zod-validated, non-throwing parse on the way in,

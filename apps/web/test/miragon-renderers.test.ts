@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { newCmJson, newOwmText, newStormText, newTtJson } from "@designiq/notations/templates";
+import * as Y from "yjs";
 
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
@@ -17,10 +18,17 @@ import { closeDom, host } from "./renderer-dom.ts";
 
 after(closeDom);
 
+const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function load(id: string): Promise<LoadedMiragonRenderer> {
   const spec = MIRAGON_RENDERERS.find((s) => s.id === id);
   assert.ok(spec, id);
   return spec.load();
+}
+
+interface WardleyModeler {
+  setMapSize(width: number, height: number, options?: { transient?: boolean }): void;
+  exportDSL(): string;
 }
 
 const MAP =
@@ -56,4 +64,51 @@ test("importing never dirties the widget (engine invariant 1), the renderer's ow
     assert.equal(dirty, 0, id);
     engine.destroy();
   }
+});
+
+/** what a drag of the plot corner does on every snapped step */
+function dragPlotCorner(modeler: WardleyModeler): void {
+  for (const [width, height] of [
+    [900, 700],
+    [1200, 800],
+    [1500, 900],
+  ] as const) {
+    modeler.setMapSize(width, height, { transient: true });
+  }
+}
+
+test("Wardley: a resize preview is no edit for the widget's autosave, the size it commits is", async () => {
+  const engine = mountMiragonEngine(await load("wardley"), host("wardley-canvas"), false);
+  await engine.importText(MAP);
+  let dirty = 0;
+  engine.onDirty(() => dirty++);
+  const modeler = engine.raw as unknown as WardleyModeler;
+  dragPlotCorner(modeler);
+  assert.match(await engine.exportText(), /size \[1500, 900\]/, "the export already carries the preview");
+  assert.equal(dirty, 0, "no autosave of a preview size");
+  modeler.setMapSize(1500, 900);
+  assert.ok(dirty > 0);
+  engine.destroy();
+});
+
+test("Wardley: a resize preview never reaches the shared text, the size it commits does", async () => {
+  const engine = mountMiragonEngine(await load("wardley"), host("wardley-canvas"), false);
+  const doc = new Y.Doc();
+  const ytext = doc.getText("content");
+  ytext.insert(0, MAP);
+  const unbind = engine.bindLive!(ytext, doc, {
+    onConflict: assert.fail,
+    onImportError: assert.fail,
+  });
+  await wait(500);
+  const opened = ytext.toString();
+  const modeler = engine.raw as unknown as WardleyModeler;
+  dragPlotCorner(modeler);
+  await wait(50);
+  assert.equal(ytext.toString(), opened, "no preview size for the peers");
+  modeler.setMapSize(1500, 900);
+  await wait(50);
+  assert.match(ytext.toString(), /size \[1500, 900\]/);
+  unbind();
+  engine.destroy();
 });

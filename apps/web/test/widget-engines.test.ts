@@ -89,7 +89,7 @@ function fakeDsl(
     NavigatedViewer: ctor((opts) => {
       state.viewerModules = opts.additionalModules;
     }),
-    lane: { kind: "dsl", changeEvents: o.changeEvents ?? ["commandStack.changed", "wardley.config.changed"] },
+    lane: { kind: "dsl", changeEvents: o.changeEvents ?? ["commandStack.changed"] },
   };
   return { state, renderer, emit };
 }
@@ -105,12 +105,13 @@ test("dsl lane: the import echo never fires onDirty, a later edit does; exportTe
   await engine.importText("component A [0.1, 0.2]");
   assert.equal(dirty, 0, "the importDSL clear() echo is suppressed");
   assert.equal(state.fitted, 1);
-  emit("commandStack.changed");
   emit("wardley.config.changed");
-  assert.equal(dirty, 2, "both change events count as edits");
+  assert.equal(dirty, 0, "a resize preview is no edit — autosave must never store a preview size");
+  emit("commandStack.changed");
+  assert.equal(dirty, 1, "the committed edit is");
   off();
   emit("commandStack.changed");
-  assert.equal(dirty, 2, "unsubscribed");
+  assert.equal(dirty, 1, "unsubscribed");
   assert.equal(await engine.exportText(), "export(component A [0.1, 0.2])");
   engine.destroy();
   assert.equal(state.destroyed, 1);
@@ -145,7 +146,7 @@ test("dsl lane: bindLive hands the canvas to live-client's miragon-sync — the 
   assert.equal(errors.length, 0);
   // a canvas edit exports into the Y.Text (through the lane's change events)
   state.dsl = "component A [0.1, 0.2]\ncomponent B [0.5, 0.5]\n";
-  emit("wardley.config.changed");
+  emit("commandStack.changed");
   await tick(50);
   assert.match(ytext.toString(), /component B/);
   unbind();
