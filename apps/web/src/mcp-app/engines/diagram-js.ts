@@ -37,31 +37,6 @@ export function fitViewport(instance: Pick<DiagramLike, "get">): void {
   (instance.get("canvas") as { zoom(mode: string): void }).zoom("fit-viewport");
 }
 
-export interface InertCommandStack {
-  clear(): void;
-  canUndo(): boolean;
-  canRedo(): boolean;
-}
-/** a didi module declaration: `[type, value]` providers keyed by service */
-export type ViewerModule = { commandStack: ["value", InertCommandStack] };
-
-/**
- * A didi VALUE module providing an inert `commandStack` — the read-only
- * mount of the wardley and event-storming renderers needs it: their
- * importMap runs `get("commandStack").clear()` unconditionally, but only the
- * Modeler registers a command stack (features/modeling); the Viewer and
- * NavigatedViewer do not, so a plain `new NavigatedViewer().importDSL()`
- * rejects with didi's "No provider for commandStack" (verified in
- * wardley-renderer 0.6.1 dist/index.js:204 and event-storming-renderer 0.2.1
- * dist/index.js:82). Nothing edits a viewer, so an inert stack is the truthful
- * service. team-topologies' importDocument never touches the stack — no shim
- * there. Remove once the renderers guard the clear() themselves (upstream
- * issues on Miragon/wardley-maps-modeler and Miragon/event-storming-modeler).
- */
-export const viewerCommandStackShim: ViewerModule = {
-  commandStack: ["value", { clear(): void {}, canUndo: () => false, canRedo: () => false }],
-};
-
 // ── view controls ───────────────────────────────────────────────────────────
 
 type Viewbox = Box & { scale: number; inner: Box; outer: { width: number; height: number } };
@@ -77,6 +52,7 @@ interface CanvasLike {
    *  its columns, keep-selection-visible scrolls) — nobody else calls it here */
   resized?(): void;
   getContainer?(): HTMLElement;
+  focus?(): void;
 }
 
 interface PaletteLike {
@@ -287,6 +263,7 @@ export function diagramView(
       return () => listeners.delete(cb);
     },
     ...(paletteControls ? { palette: paletteControls } : {}),
+    focus: () => canvas().focus?.(),
     importFit,
     destroy() {
       stopAnimation();

@@ -1,6 +1,6 @@
 /**
  * The Miragon widget engine without a browser (src/mcp-app/engines/miragon.ts):
- * the DSL lane's dirty suppression and viewer shim, the document lane's
+ * the DSL lane's dirty suppression and viewer mount, the document lane's
  * silent history erase and codec gate, the live binding through the real
  * live-client adapter, and the ONE schema-model codec both the SPA and the
  * widget serialize through (src/notations/miragon/codec.ts). Plus the fit and
@@ -13,7 +13,7 @@ import { test } from "node:test";
 import * as Y from "yjs";
 
 import type { Insets } from "../src/mcp-app/core/engine.ts";
-import { diagramView, viewerCommandStackShim } from "../src/mcp-app/engines/diagram-js.ts";
+import { diagramView } from "../src/mcp-app/engines/diagram-js.ts";
 import {
   type Box,
   cubicBezier,
@@ -89,7 +89,7 @@ function fakeDsl(
     NavigatedViewer: ctor((opts) => {
       state.viewerModules = opts.additionalModules;
     }),
-    lane: { kind: "dsl", changeEvents: o.changeEvents ?? ["commandStack.changed", "wardley.config.changed"] },
+    lane: { kind: "dsl", changeEvents: o.changeEvents ?? ["commandStack.changed"] },
   };
   return { state, renderer, emit };
 }
@@ -105,22 +105,23 @@ test("dsl lane: the import echo never fires onDirty, a later edit does; exportTe
   await engine.importText("component A [0.1, 0.2]");
   assert.equal(dirty, 0, "the importDSL clear() echo is suppressed");
   assert.equal(state.fitted, 1);
-  emit("commandStack.changed");
   emit("wardley.config.changed");
-  assert.equal(dirty, 2, "both change events count as edits");
+  assert.equal(dirty, 0, "a resize preview is no edit — autosave must never store a preview size");
+  emit("commandStack.changed");
+  assert.equal(dirty, 1, "the committed edit is");
   off();
   emit("commandStack.changed");
-  assert.equal(dirty, 2, "unsubscribed");
+  assert.equal(dirty, 1, "unsubscribed");
   assert.equal(await engine.exportText(), "export(component A [0.1, 0.2])");
   engine.destroy();
   assert.equal(state.destroyed, 1);
 });
 
-test("dsl lane read-only: the viewer gets the inert command stack, no change events, no export", async () => {
+test("dsl lane read-only: the viewer gets the spec's modules and nothing else, no change events, no export", async () => {
   const { state, renderer, emit } = fakeDsl({ changeEvents: ["commandStack.changed"] });
   const engine = mountMiragonEngine(renderer, container, true);
   assert.equal(state.modelerMounts, 0);
-  assert.deepEqual(state.viewerModules, [viewerCommandStackShim]);
+  assert.deepEqual(state.viewerModules, [], "no command-stack shim: the renderers no longer need one");
   assert.equal(engine.editable, false);
   let dirty = 0;
   engine.onDirty(() => dirty++);
@@ -145,7 +146,7 @@ test("dsl lane: bindLive hands the canvas to live-client's miragon-sync — the 
   assert.equal(errors.length, 0);
   // a canvas edit exports into the Y.Text (through the lane's change events)
   state.dsl = "component A [0.1, 0.2]\ncomponent B [0.5, 0.5]\n";
-  emit("wardley.config.changed");
+  emit("commandStack.changed");
   await tick(50);
   assert.match(ytext.toString(), /component B/);
   unbind();
@@ -178,38 +179,36 @@ test("dsl lane: a rejected importDSL releases the latch — later edits still co
   assert.equal(dirty, 1, "edits after a failed import still count");
 });
 
-test("viewerCommandStackShim is an inert didi value module", () => {
-  const [kind, stack] = viewerCommandStackShim.commandStack;
-  assert.equal(kind, "value");
-  assert.equal(stack.clear(), undefined);
-  assert.equal(stack.canUndo(), false);
-  assert.equal(stack.canRedo(), false);
-});
-
 // ── the document lane ───────────────────────────────────────────────────────
 
 /** a JSON renderer: `services` names what its injector registers (the viewer
- *  has no command stack); clear(emit) fires 'changed' unless emit === false */
+ *  has no command stack); clear(emit) fires 'changed' unless emit === false.
+ *  Like team-topologies-renderer 0.11 and context-maps-renderer 0.3, its
+ *  importDocument erases the history itself, silently, where it has one */
 function fakeDocument(services: string[]) {
   const handlers = new Map<string, Array<() => void>>();
   const log: unknown[] = [];
+  const service = (name: string): any => {
+    if (name === "canvas") return { zoom: () => {}, viewbox: () => ({ x: 0, y: 0, width: 1, height: 1 }) };
+    if (services.includes(name)) {
+      return {
+        clear: (emit?: boolean) => {
+          log.push(`clear:${name}:${emit}`);
+          if (emit !== false) handlers.get("commandStack.changed")?.forEach((cb) => cb());
+        },
+      };
+    }
+    throw new Error(`No provider for "${name}"!`);
+  };
   const instance: MiragonRendererLike = {
-    get: (service: string): any => {
-      if (service === "canvas") return { zoom: () => {}, viewbox: () => ({ x: 0, y: 0, width: 1, height: 1 }) };
-      if (services.includes(service)) {
-        return {
-          clear: (emit?: boolean) => {
-            log.push(`clear:${service}:${emit}`);
-            if (emit !== false) handlers.get("commandStack.changed")?.forEach((cb) => cb());
-          },
-        };
-      }
-      throw new Error(`No provider for "${service}"!`);
-    },
+    get: service,
     on: (event: string, cb: () => void) => void (handlers.get(event) ?? handlers.set(event, []).get(event)!).push(cb),
     off: () => {},
     destroy: () => {},
-    importDocument: (doc: unknown) => void log.push(doc),
+    importDocument: (doc: unknown) => {
+      log.push(doc);
+      if (services.includes("commandStack")) service("commandStack").clear(false);
+    },
     exportDocument: () => ({ nodes: [] }),
   };
   const ctor = () =>
@@ -242,10 +241,14 @@ test("document lane editable: the post-import clear is SILENT, a rejected parse 
   let dirty = 0;
   engine.onDirty(() => dirty++);
   await engine.importText("ok");
-  assert.deepEqual(r.log, [{ text: "ok" }, "clear:commandStack:false"], "history erased with clear(false)");
+  assert.deepEqual(
+    r.log,
+    [{ text: "ok" }, "clear:commandStack:false", "clear:commandStack:false"],
+    "the renderer's own erase, then the engine's: both clear(false)",
+  );
   assert.equal(dirty, 0, "engine invariant 1: the import (and its history erase) never dirties");
   await assert.rejects(() => engine.importText("bad"));
-  assert.equal(r.log.length, 2, "a rejected parse never reached importDocument");
+  assert.equal(r.log.length, 3, "a rejected parse never reached importDocument");
   r.emit("commandStack.changed");
   assert.equal(dirty, 1, "a real edit does");
   assert.equal(await engine.exportText(), '{"nodes":[]}');

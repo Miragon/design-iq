@@ -6,7 +6,7 @@
  *
  *   ./plugin.ts               → the web editor plugin (WebNotationPlugin)
  *   ../../mcp-app/engines/miragon.ts → the MCP-App widget engine
- *   ../../../vite.config.ts   → the SPA's vendor-CSS scoping (pkg + vendorRoot)
+ *   ./vendor-css.ts           → the SPA's vendor-CSS scoping (pkg + vendorRoot), in vite.config.ts
  *   ../../../scripts/build-widgets.ts → one single-file widget bundle per spec
  *
  * The eager part is DATA (id, package, css classes); the renderer, its
@@ -31,6 +31,10 @@ export interface MiragonRendererCtor {
 export interface LoadedMiragonRenderer {
   Modeler: MiragonRendererCtor;
   NavigatedViewer: MiragonRendererCtor;
+  /** parts the renderer leaves to its host that designIQ wants on every
+   *  mount, editor and viewer alike — designIQ has no chrome of its own for
+   *  them (the Context Maps legend card) */
+  additionalModules?: readonly unknown[];
   lane: MiragonLane;
 }
 

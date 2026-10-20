@@ -15,10 +15,10 @@ export const spec: MiragonRendererSpec = {
     return {
       Modeler: Modeler as unknown as MiragonRendererCtor,
       NavigatedViewer: NavigatedViewer as unknown as MiragonRendererCtor,
-      // the one wardley specific, from the modeler's own VS-Code-webview
-      // recipe: config edits (axis labels via setEvolutionLabels) fire
-      // `wardley.config.changed`, NOT `commandStack.changed` — observe both
-      lane: { kind: "dsl", changeEvents: ["commandStack.changed", "wardley.config.changed"] },
+      // a committed title, size or axis-label edit runs through the command
+      // stack since 0.7.0; `wardley.config.changed` also fires for every
+      // preview step of a resize drag, whose size must never reach the Y.Text
+      lane: { kind: "dsl", changeEvents: ["commandStack.changed"] },
     };
   },
 };

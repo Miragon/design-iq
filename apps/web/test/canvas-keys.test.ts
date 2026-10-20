@@ -1,8 +1,9 @@
 /**
  * A canvas engine hears keys only while it is in front (src/lib/canvas-keys.ts),
  * under jsdom. The page is built the way the live editor has it: a canvas
- * engine with the Miragon renderers' document keydown listener and their
- * text-target guard (INPUT, TEXTAREA, contenteditable), the Monaco host with
+ * engine with the Miragon renderers' document keydown listener and the
+ * guards they have today (the canvas-or-page guard of all four, Wardley's
+ * keys from a button, Team Topology's inert and modal checks), the Monaco host with
  * an EditContext div (none of the three) and the container's keybinding
  * listener, a toolbar button, React's delegated listener on #root, a menu's
  * capture-phase listener on document and a dialog's Escape listener on window.
@@ -37,6 +38,8 @@ function page() {
     react: [] as string[],
     menu: [] as string[],
     engine: [] as string[],
+    /** per key that reached the engines' listener, the renderers that act on it */
+    byRenderer: [] as string[][],
     dialog: [] as string[],
   };
   // the keybinding listener on the editor container: a bound key stops here
@@ -46,11 +49,38 @@ function page() {
   });
   root.addEventListener("keydown", (e) => heard.react.push(e.key));
   document.addEventListener("keydown", (e) => heard.menu.push(e.key), true);
-  // the renderers' guard (wardley-renderer 0.6.3 dist/index.js:2371-2374)
-  document.addEventListener("keydown", (e) => {
+  // the renderers' guards: wardley-renderer 0.8.0 (shouldIgnoreKeyEvent),
+  // event-storming and context-maps-renderer 0.3.0 and team-topologies-renderer
+  // 0.11.2 (TtKeyboard) act on their canvas and the page itself, Wardley on
+  // undo/redo and its single-key tools from a button as well; Team Topology
+  // skips text fields, Alt, a key already handled, an inert canvas and an
+  // open modal dialog on top
+  const textTarget = (t: HTMLElement): boolean =>
+    t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable;
+  const canvasOrPage = (t: HTMLElement): boolean =>
+    canvas.contains(t) || t === document.body || t === document.documentElement;
+  const wardleyButtonKey = (e: KeyboardEvent): boolean =>
+    (e.target as HTMLElement).tagName === "BUTTON" &&
+    (e.metaKey || e.ctrlKey ? /^[zy]$/.test(e.key) : /^[cunpla]$/.test(e.key));
+  const teamTopologyHears = (e: KeyboardEvent): boolean =>
+    !e.defaultPrevented &&
+    !e.altKey &&
+    !textTarget(e.target as HTMLElement) &&
+    canvasOrPage(e.target as HTMLElement) &&
+    !canvas.closest("[inert]") &&
+    !document.querySelector('[aria-modal="true"], dialog[open]');
+  const heardBy = (e: KeyboardEvent): string[] => {
     const t = e.target as HTMLElement;
-    if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) return;
-    heard.engine.push(e.key);
+    const by: string[] = [];
+    if (teamTopologyHears(e)) by.push("team-topology");
+    if (canvasOrPage(t)) by.push("event-storming", "context-map");
+    if (canvasOrPage(t) || wardleyButtonKey(e)) by.push("wardley");
+    return by;
+  };
+  document.addEventListener("keydown", (e) => {
+    const by = heardBy(e);
+    if (by.length > 0) heard.engine.push(e.key);
+    heard.byRenderer.push(by);
   });
   window.addEventListener("keydown", (e) => heard.dialog.push(e.key));
 
@@ -62,11 +92,36 @@ function page() {
   return { document, canvas, button, host, editContext, heard, press };
 }
 
-test("in front, the engine hears every key, Monaco's EditContext div included (the bug behind the source layer)", () => {
+test("unheld, keys meant for something else reach the engines: on the page itself, ⌘Z from a button", () => {
   const p = page();
-  for (const key of ["l", "c", "u"]) p.press(p.editContext, key);
+  p.press(p.document.body, "Backspace");
+  p.press(p.button, "z", { metaKey: true });
   p.press(p.button, "Backspace");
-  assert.deepEqual(p.heard.engine, ["l", "c", "u", "Backspace"]);
+  p.press(p.editContext, "l");
+  assert.deepEqual(p.heard.engine, ["Backspace", "z"]);
+  assert.deepEqual(p.heard.byRenderer, [
+    ["team-topology", "event-storming", "context-map", "wardley"],
+    ["wardley"],
+    [],
+    [],
+  ]);
+});
+
+test("unheld, only Team Topology lets a key on the page pass while its canvas is inert or a modal dialog is open", () => {
+  const p = page();
+  // the live editor's hidden layer, as React writes it
+  p.canvas.setAttribute("inert", "");
+  p.press(p.document.body, "Backspace");
+  p.canvas.removeAttribute("inert");
+  const dialog = p.document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  p.document.body.append(dialog);
+  p.press(p.document.body, "Backspace");
+  assert.deepEqual(p.heard.byRenderer, [
+    ["event-storming", "context-map", "wardley"],
+    ["event-storming", "context-map", "wardley"],
+  ]);
 });
 
 test("held, a key typed in Monaco reaches Monaco, React and the capture listeners, never the engine", () => {
@@ -132,10 +187,13 @@ test("held from the source alone (the split view), a key typed in Monaco never r
   for (const key of ["l", "c"]) p.press(p.editContext, key);
   p.press(p.editContext, "v", { metaKey: true });
   assert.deepEqual(p.heard.monaco, ["l", "c", "v"]);
-  assert.deepEqual(p.heard.engine, []);
-  // the canvas is in front beside the source: its own keys and the toolbar's are its
+  // none of the four renderers acts on a key typed in Monaco today, so only
+  // the listener itself shows whether the hold kept it from the engines
+  assert.deepEqual(p.heard.byRenderer, []);
+  assert.deepEqual(p.heard.dialog, []);
+  // the canvas is in front beside the source: its own keys and the page's are its
   p.press(p.canvas, "l");
-  p.press(p.button, "Backspace");
+  p.press(p.document.body, "Backspace");
   assert.deepEqual(p.heard.engine, ["l", "Backspace"]);
 });
 
@@ -144,6 +202,6 @@ test("the release puts the canvas back in front", () => {
   const release = keepKeysFromCanvas(p.document);
   release();
   p.press(p.canvas, "l");
-  p.press(p.button, "Backspace");
+  p.press(p.document.body, "Backspace");
   assert.deepEqual(p.heard.engine, ["l", "Backspace"]);
 });

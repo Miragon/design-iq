@@ -7,12 +7,12 @@ Desktop, ChatGPT).
 
 ## Scripts
 
-| Script                                  | What it does                                                                                                                                                                                                                                                                        |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                                                                                     |
-| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                                                                                         |
-| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams and the mermaid engine's configuration. |
-| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                             |
+| Script                                  | What it does                                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                                                                                                                                                |
+| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                                                                                                                                                    |
+| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and the Miragon renderers themselves (`test/renderer-dom.ts`). |
+| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                        |
 
 ## Theming
 
@@ -168,8 +168,8 @@ against the contract in `core/engine.ts` — `importText` / `exportText` /
 renderers). Its extras (`WidgetExtras`: the Todos and Checks cards) hear
 `onRead` (the path is known: discovery runs in parallel with the import),
 `onDocument` and `onSaved`. Two engine invariants the core relies on:
-`importText` never fires `onDirty` (the Miragon DSL renderers emit
-`commandStack.changed` from their own `clear()` — `engines/miragon.ts`
+`importText` never fires `onDirty` (the Wardley renderer emits
+`commandStack.changed` from its own `clear()`, and `engines/miragon.ts`
 suppresses the echo), and `bindLive` is a capability (absent = CAS autosave
 only — the dmn engine's deliberate mode). Full behaviour:
 [docs/mcp-integration.md](../../docs/mcp-integration.md).
@@ -218,7 +218,8 @@ entries: `src/notations/miragon/<id>.ts` holds ONE `MiragonRendererSpec` per
 renderer (package, css classes, a lazy `load()` yielding Modeler + viewer +
 the text lane), and everything derives from it — the SPA's editor plugin
 (`notations/miragon/plugin.ts`), the widget engine (`engines/miragon.ts` over
-`@designiq/live-client/miragon-sync`), the vendor-CSS scoping in `vite.config.ts`,
+`@designiq/live-client/miragon-sync`), the SPA's vendor-CSS scoping
+(`notations/miragon/vendor-css.ts`, its global selectors pinned in `test/vendor-css.test.ts`),
 and the widget bundle: `mcp-app-miragon.html` + `src/mcp-app/miragon-main.ts`
 are the ONE template + entry, built once per spec with the spec aliased in
 through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
@@ -232,9 +233,9 @@ deliberately absent here. Never bundle two engines (or bpmn-js next to a Miragon
 sheet) into one widget.
 
 **Read-only hosts** (`LIVE_MCP_READONLY=1` on the Live Host) mount each engine's
-`NavigatedViewer`; for the DSL-lane renderers (Wardley Map, Event Storming) with an
-inert `commandStack` value module (`engines/diagram-js.ts` — their import clears
-a stack only the Modeler registers). The superseded freeze takes the same viewer
+`NavigatedViewer`, with the spec's `additionalModules` like the editor (the
+Context Maps legend). No renderer needs a command stack on the viewer any more
+(`test/miragon-renderers.test.ts`). The superseded freeze takes the same viewer
 path. Every Miragon renderer adopts the element it is handed as its root and
 removes it on `destroy()`, so `miragon-main.ts` gives each mount a host element
 of its own inside `#canvas` (carrying the scope class).

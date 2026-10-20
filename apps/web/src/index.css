@@ -18,6 +18,23 @@
   height: 100%;
   width: 100%;
 }
+/* the Miragon renderers stack their own chrome high (palette 110, context
+   pad 100, popups 200 and up) for hosts that only frame the canvas; here it
+   would paint over the side panels (z-10) and over the dialogs and menus
+   (z-50). Isolated, the canvas is one layer under all of them, a popup that
+   reaches into an open side panel included */
+.wardley-canvas,
+.tt-canvas,
+.es-canvas,
+.cm-canvas {
+  isolation: isolate;
+}
+/* Team Topologies drops its palette to 64px at viewports up to 760px wide,
+   a row kept free for a host's top chrome; the SPA has none over its canvas,
+   so the palette would float over the diagram below an empty strip */
+.tt-canvas.tt-djs-container .djs-palette:not([data-chrome="palette"]) {
+  top: 12px;
+}
 /* decision tables grow with their rules — scroll inside the editor pane
    (the DRD fills 100% height, so no scrollbars appear there) */
 .dmn-canvas {

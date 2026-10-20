@@ -1,5 +1,7 @@
 # Dependabot — balanced mode: minor+patch grouped per ecosystem, each major
-# lands as its own PR for individual review. Reviewers come from CODEOWNERS.
+# lands as its own PR for individual review. The Miragon modeler families are
+# the exception: one PR per family, majors included, because a renderer and
+# the schema model it pins only move together. Reviewers come from CODEOWNERS.
 version: 2
 updates:
   # npm — one block covers the whole pnpm workspace (resolved from the root).
@@ -45,10 +47,40 @@ updates:
       npm-minor-patch:
         applies-to: version-updates
         patterns: ["*"]
-        # the BPMN editing engine (ADR 0009) is 0.x: a minor can change the ops,
-        # error codes and results agents see — each bump is its own PR
-        exclude-patterns: ["@miragon/bpmn-cli"]
+        exclude-patterns:
+          # the BPMN editing engine (ADR 0009) is 0.x: a minor can change the ops,
+          # error codes and results agents see — each bump is its own PR
+          - "@miragon/bpmn-cli"
+          # the Miragon modelers are 0.x too: a minor can change the canvas, its
+          # stylesheet or its text lane at runtime, which no CI job renders (#252
+          # took a Team Topologies minor in this group). Each family is its own PR
+          # (the groups below), reviewed with the canvas open.
+          - "@miragon/wardley-*"
+          - "@miragon/event-storming-*"
+          - "@miragon/context-maps-*"
+          - "@miragon/team-topologies-*"
+          - "@miragon/modeler-*"
         update-types: ["minor", "patch"]
+      # a renderer and its schema model move together (the renderer pins the
+      # schema model exactly; apps/web pins both), so one PR per family, its
+      # majors included
+      miragon-wardley:
+        applies-to: version-updates
+        patterns: ["@miragon/wardley-*"]
+      miragon-event-storming:
+        applies-to: version-updates
+        patterns: ["@miragon/event-storming-*"]
+      miragon-context-maps:
+        applies-to: version-updates
+        patterns: ["@miragon/context-maps-*"]
+      miragon-team-topologies:
+        applies-to: version-updates
+        patterns: ["@miragon/team-topologies-*"]
+      # the contract the renderers implement (@miragon/modeler-api) and the
+      # shell around them, once apps/web takes them directly (#136, #265)
+      miragon-modeler:
+        applies-to: version-updates
+        patterns: ["@miragon/modeler-*"]
       npm-security:
         applies-to: security-updates
         patterns: ["*"]

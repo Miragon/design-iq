@@ -350,7 +350,11 @@ export const mountLayout: MountLayout = (deps) => {
     update();
     if (returnFocus) els.tools.focus();
   }
-  els.tools.onclick = () => setTools(!toolsOpen);
+  els.tools.onclick = (e) => {
+    setTools(!toolsOpen);
+    // a click hands the focus back to the canvas (chrome/zoom.ts)
+    if (e.detail > 0) deps.view()?.focus?.();
+  };
 
   update();
   return {

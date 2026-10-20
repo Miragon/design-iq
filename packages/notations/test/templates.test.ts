@@ -2,9 +2,17 @@
  * templateFor — the generic template dispatch (epic #118 step 3). The
  * builders themselves are pinned by the live-host scaffold suite (which
  * consumes them through the domain shims); here only the dispatch contract.
+ * That a Miragon template is its renderer's own serialization (no phantom
+ * diff on the first canvas save) is pinned against the renderers apps/web
+ * ships, in apps/web/test/miragon-renderers.test.ts. The Team Topology
+ * template is also held against the schema model's own serializer here (a
+ * devDependency at the version apps/web pins), so its next format change
+ * fails in this package's suite too.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
+import { emptyDocument, serializeDocument } from "@miragon/team-topologies-schema-model";
 
 import {
   hasTemplate,
@@ -58,14 +66,10 @@ test("the event-storming template is a title-only .storm board — the serialize
 });
 
 test("the team-topology template is the schema-model's CANONICAL empty document (byte-stable first save)", () => {
-  // shape pinned against @miragon/team-topologies-schema-model serializeDocument(…, true):
-  // version 3, 2-space indent, key order version/title/nodes/interactions/flows, an empty
-  // `annotations` list omitted, NO trailing newline
-  const text = newTtJson("teams", "Team Landscape");
-  assert.equal(
-    text,
-    '{\n  "version": 3,\n  "title": "Team Landscape",\n  "nodes": [],\n  "interactions": [],\n  "flows": []\n}',
-  );
+  // the codec apps/web saves through (notations/miragon/codec.ts) calls serializeDocument(…, true)
+  for (const name of ["Team Landscape", "Platform & Streams", 'Quote " and \\ backslash']) {
+    assert.equal(newTtJson("teams", name), serializeDocument(emptyDocument(name), true), name);
+  }
 });
 
 test("the context-map template is the schema-model's CANONICAL empty document (byte-stable first save)", () => {

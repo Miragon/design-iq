@@ -194,23 +194,23 @@ importers:
         specifier: 5.3.0
         version: 5.3.0
       '@miragon/context-maps-renderer':
-        specifier: 0.2.0
-        version: 0.2.0
+        specifier: 0.3.0
+        version: 0.3.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/context-maps-schema-model':
-        specifier: 0.2.0
-        version: 0.2.0
+        specifier: 0.3.0
+        version: 0.3.0(zod@4.6.7)
       '@miragon/event-storming-renderer':
-        specifier: 0.2.2
-        version: 0.2.2(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
+        specifier: 0.3.0
+        version: 0.3.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/team-topologies-renderer':
-        specifier: 0.10.1
-        version: 0.10.1(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
+        specifier: 0.11.2
+        version: 0.11.2(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/team-topologies-schema-model':
-        specifier: 0.10.1
-        version: 0.10.1(zod@4.6.7)
+        specifier: 0.11.2
+        version: 0.11.2(zod@4.6.7)
       '@miragon/wardley-renderer':
-        specifier: 0.6.3
-        version: 0.6.3(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
+        specifier: 0.8.0
+        version: 0.8.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
       '@modelcontextprotocol/client':
         specifier: 2.3.1
         version: 2.3.1
@@ -299,6 +299,9 @@ importers:
       jsdom:
         specifier: 30.1.2
         version: 30.1.2
+      postcss:
+        specifier: 8.5.29
+        version: 8.5.29
       postcss-prefix-selector:
         specifier: 2.2.1
         version: 2.2.1(postcss@8.5.29)
@@ -482,9 +485,15 @@ importers:
         specifier: 2.9.1
         version: 2.9.1
     devDependencies:
+      '@miragon/team-topologies-schema-model':
+        specifier: 0.11.2
+        version: 0.11.2(zod@4.6.7)
       '@types/node':
         specifier: 26.6.5
         version: 26.6.5
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/ui-kit:
     dependencies:
@@ -1372,19 +1381,26 @@ packages:
     peerDependencies:
       bpmnlint: '>=11.14.0'
 
-  '@miragon/context-maps-renderer@0.2.0':
-    resolution: {integrity: sha512-vrQmuxf87/fbQU3+BMWP0FYmuZqAkoSdOkEbB1xQcOTIxuD2FN0IHVvoBneZE+N/KWxHFdCP0pRRQhcZOzLnMw==}
-
-  '@miragon/context-maps-schema-model@0.2.0':
-    resolution: {integrity: sha512-B+6ha1ZYM5oopz4YaRUKW7nqNnyeWkk5b7d4ms2rBERVcb6Zx7Zgx0o5r3hI/DvsFpPQWJvQn3NPxNRAtcqHFQ==}
-
-  '@miragon/event-storming-dsl@0.2.2':
-    resolution: {integrity: sha512-AnUMAxD9j5IpnRDUIweL0vyQBRdj0z1Xl+PXIN0qZmuTKioJw6IqKLs5n05CPmnh0BDE4iUwHyPCEbRSlm1dtA==}
-
-  '@miragon/event-storming-renderer@0.2.2':
-    resolution: {integrity: sha512-U+XmfI4/6d75GspowNzVAicfjzG9W8XLElLm5dlyRUmEStxBITql14N7mvdDRcUWv0B58QUlKDmuZFLUu2R73w==}
+  '@miragon/context-maps-renderer@0.3.0':
+    resolution: {integrity: sha512-tUvC4u1Hwjr+a+z5HNd4C//lMMXsASNQQnjFif94OhpbXpK5fqM2bKKJtS9bI3CbBo98lLc4KSQwb687M0FfVg==}
     peerDependencies:
       diagram-js: ^15.26.0
+      didi: ^11.0.0
+      tiny-svg: ^4.1.4
+      zod: ^4.5.0
+
+  '@miragon/context-maps-schema-model@0.3.0':
+    resolution: {integrity: sha512-ajN5W64i5wcVi6a7ZNCg2qgURH6/ctAWsaFvgLMnjaSexc2OdcVTOEmL6KIGEWccWQLkceI/EHvnnYe61NuELA==}
+    peerDependencies:
+      zod: ^4.5.0
+
+  '@miragon/event-storming-dsl@0.3.0':
+    resolution: {integrity: sha512-KDFVYckjw+1W6JlNwv4zrmYkiCXB8EzZytO805P0jxKDyrtfqFQjDxQvVIpiJxLUG+Q9zowStGVqiUxxRNbGdQ==}
+
+  '@miragon/event-storming-renderer@0.3.0':
+    resolution: {integrity: sha512-KUuudxnsGaK1uJEMf4LN+U66ZyrvsWG8bIhv31FxcYKQiPwvNhB3JCAGVzw29AHph8ey6skK8fc50TfxSh3xfg==}
+    peerDependencies:
+      diagram-js: ^15.28.0
       didi: ^11.0.0
       tiny-svg: ^4.1.4
 
@@ -1393,34 +1409,38 @@ packages:
     peerDependencies:
       zod: ^4.6.4
 
-  '@miragon/team-topologies-renderer@0.10.1':
-    resolution: {integrity: sha512-GxC05MZw0UvPyY0VQTUo6AMP/C6tkJqwTTsczE1GfI3c9W1rMpoAsED6znc0Nv1Z/JQNSwrSBjbpMVggTkdtUA==}
+  '@miragon/modeler-api@1.1.0':
+    resolution: {integrity: sha512-K/8x2NGEUvn1lRIh2XEdyxgcGsQ2MSnrOTs+5bUZ+8xN16WL96CB4mojgCzynPi4xhg2EwOPYAPkygYyQX8BFA==}
+    engines: {node: '>=22.13.0'}
+
+  '@miragon/team-topologies-renderer@0.11.2':
+    resolution: {integrity: sha512-EcjVvCoIcTp8q8BT6xukOI7Ve7sgDhzpQJurO6ntOQwnOSFPoeBvTl4ZV6LRKupVdr+h7TrlWdlHjdBA0K5+oA==}
+    peerDependencies:
+      diagram-js: ^15.28.0
+      didi: ^11.0.0 || ^12.0.0
+      tiny-svg: ^4.1.4
+      zod: ^4.6.0
+
+  '@miragon/team-topologies-schema-model@0.11.2':
+    resolution: {integrity: sha512-t+tdMc5Jto1Raxhw8L8xpv6td2XoJhiZU2mBPWqCb2gdOJZWnqPt7qEJDlYjStQtpa9tQF539cBHX+3jOYGUaA==}
+    peerDependencies:
+      zod: ^4.6.0
+
+  '@miragon/wardley-dsl@0.7.0':
+    resolution: {integrity: sha512-ZxXhCAaaq6IUT4QrN2HKlyRqpLEB3wF5JxadFGFKcLybGf7Vf30XKqoSIUW/rZS1tM/ekS3PKHQjdHztm92TmQ==}
+    peerDependencies:
+      zod: ^4.6.0
+
+  '@miragon/wardley-renderer@0.8.0':
+    resolution: {integrity: sha512-43gneyM5V4nYyPZXzsouneABpmTMytpm2ljnlIPQGW5m/DjQzVMcCX33p6eQFBVoyz5XSGOgLxllRgz43sc6LQ==}
     peerDependencies:
       diagram-js: ^15.26.0
       didi: ^11.0.0
       tiny-svg: ^4.1.4
       zod: ^4.6.0
 
-  '@miragon/team-topologies-schema-model@0.10.1':
-    resolution: {integrity: sha512-zlYF1OZyout7nmEYZnUn8yvS1GnfFkWqN5fmJXrbtg01iLo88MCskEAt/UMl6+M1YO2GffQrrQnQ9ri2GcxQ9Q==}
-    peerDependencies:
-      zod: ^4.6.0
-
-  '@miragon/wardley-dsl@0.5.3':
-    resolution: {integrity: sha512-t4KhSc6/sPG2bctsj8HenNTcS2CCu0AFhPIhShQ9wZpTiigTZmgBxvQP5FPilmz5k8c9astOL4N178lgShG5qw==}
-    peerDependencies:
-      zod: ^4.6.0
-
-  '@miragon/wardley-renderer@0.6.3':
-    resolution: {integrity: sha512-fRlwOh1EajgKsdnc5EpD85HdcAuV7jil2SsxT8MmgBG/g5ec/Za67Yvm1KIGGYa1Z44dhjInDP81G3jsVySJ+w==}
-    peerDependencies:
-      diagram-js: ^15.26.0
-      didi: ^11.0.0
-      tiny-svg: ^4.1.4
-      zod: ^4.6.0
-
-  '@miragon/wardley-schema-model@0.5.1':
-    resolution: {integrity: sha512-IxR6cYl6fT2iJHCcpigpjAfEyTov9zQvPJEQH3Be1o5vAawMKyqSddh0raB5uKGFkCTx0h4FxODEVXupdc3Fdg==}
+  '@miragon/wardley-schema-model@0.6.0':
+    resolution: {integrity: sha512-LyUPwncCOc5FkHd8LtQ06///QUFAIf0Dil8uxYWfgyVkEdhSrGL5pwgHeAPBD/r8MenmGCQxC0fxDVK4QTlmhw==}
     peerDependencies:
       zod: ^4.6.0
 
@@ -3008,25 +3028,13 @@ packages:
   devlop@1.1.0:
     resolution: {integrity: sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==}
 
-  diagram-js-direct-editing@3.5.1:
-    resolution: {integrity: sha512-fEQCQ/x5oKVV0m7Nmgv7i85Vhw+kJkKNXF8zcV5Vm0KwF8x/8e3Ax0aJgdXt8/fDPymEkY8HmZweXIipCeeh+g==}
-    peerDependencies:
-      diagram-js: '*'
-
   diagram-js-direct-editing@3.6.0:
     resolution: {integrity: sha512-zaXChbFqLccq+rji1fnKD9dL90kO7XLJoaENMVqFOxslax8QD7eumwBBpLYS36br7zva9R4bz3YTu0ey3mbHAA==}
     peerDependencies:
       diagram-js: '*'
 
-  diagram-js@15.24.1:
-    resolution: {integrity: sha512-0zlPffk8pGdbUmt0RQH32N7dIbgYuLwkFlZTCi28kRSkb37GdEjONjXKs+NluZvWeLsY1hqSyq4le19ZeFE19Q==}
-
   diagram-js@15.28.1:
     resolution: {integrity: sha512-R90PKnpRL9prdiYxc9ndtqkxnn1dIZacWgq0cpz4ABse1AwhrXexD8sRUZkNdxj9Adz4k04DUee/J6l/uTVDfw==}
-
-  didi@11.0.0:
-    resolution: {integrity: sha512-PzCfRzQttvFpVcYMbSF7h8EsWjeJpVjWH4qDhB5LkMi1ILvHq4Ob0vhM2wLFziPkbUBi+PAo7ODbe2sacR7nJQ==}
-    engines: {node: '>= 20.12'}
 
   didi@11.0.1:
     resolution: {integrity: sha512-eEBvv5SHBhoCyDX/kOR8UozNfqEkjEXjNCTsE2vWWoxoJ5QC8KXYRTE78mrpdpvXNtSEriLhbgQdD0OkHvLFWQ==}
@@ -3855,8 +3863,8 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@6.0.1:
-    resolution: {integrity: sha512-3wVS3i51pE2pi1k5FFL/95BGfVS0kSsvDVuGXHOtxox/TywUmtgq+3qiTOTbs9J7KfHaXPiN171k/A6dBnaXFw==}
+  nanoid@6.0.2:
+    resolution: {integrity: sha512-hIvVOb9Qr1p/9CNNLOe0OlWvgx/ziTsVwKN/GDSsuArN2K0wDiafP3s0SWmsm7o2BdnyS8Z9Z64NFBUbn6ziBg==}
     engines: {node: ^22 || ^24 || >=26}
     hasBin: true
 
@@ -4214,10 +4222,6 @@ packages:
     peerDependenciesMeta:
       '@types/react':
         optional: true
-
-  source-map-js@1.2.1:
-    resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
-    engines: {node: '>=0.10.0'}
 
   source-map-js@1.2.2:
     resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
@@ -5533,31 +5537,32 @@ snapshots:
     transitivePeerDependencies:
       - moddle
 
-  '@miragon/context-maps-renderer@0.2.0':
+  '@miragon/context-maps-renderer@0.3.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
-      '@miragon/context-maps-schema-model': 0.2.0
-      diagram-js: 15.24.1
-      diagram-js-direct-editing: 3.5.1(diagram-js@15.24.1)
-      didi: 11.0.0
+      '@miragon/context-maps-schema-model': 0.3.0(zod@4.6.7)
+      '@miragon/modeler-api': 1.1.0
+      diagram-js: 15.28.1
+      diagram-js-direct-editing: 3.6.0(diagram-js@15.28.1)
+      didi: 11.0.1
       tiny-svg: 4.1.4
-    transitivePeerDependencies:
-      - preact-render-to-string
+      zod: 4.6.7
 
-  '@miragon/context-maps-schema-model@0.2.0':
+  '@miragon/context-maps-schema-model@0.3.0(zod@4.6.7)':
     dependencies:
-      nanoid: 6.0.1
-      zod: 4.4.3
+      nanoid: 6.0.2
+      zod: 4.6.7
 
-  '@miragon/event-storming-dsl@0.2.2(zod@4.6.7)':
+  '@miragon/event-storming-dsl@0.3.0(zod@4.6.7)':
     dependencies:
       '@miragon/event-storming-schema-model': 0.2.1(zod@4.6.7)
     transitivePeerDependencies:
       - zod
 
-  '@miragon/event-storming-renderer@0.2.2(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/event-storming-renderer@0.3.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
-      '@miragon/event-storming-dsl': 0.2.2(zod@4.6.7)
+      '@miragon/event-storming-dsl': 0.3.0(zod@4.6.7)
       '@miragon/event-storming-schema-model': 0.2.1(zod@4.6.7)
+      '@miragon/modeler-api': 1.1.0
       clsx: 2.1.1
       diagram-js: 15.28.1
       didi: 11.0.1
@@ -5569,35 +5574,39 @@ snapshots:
     dependencies:
       zod: 4.6.7
 
-  '@miragon/team-topologies-renderer@0.10.1(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/modeler-api@1.1.0': {}
+
+  '@miragon/team-topologies-renderer@0.11.2(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
-      '@miragon/team-topologies-schema-model': 0.10.1(zod@4.6.7)
+      '@miragon/modeler-api': 1.1.0
+      '@miragon/team-topologies-schema-model': 0.11.2(zod@4.6.7)
       diagram-js: 15.28.1
       didi: 11.0.1
       tiny-svg: 4.1.4
       zod: 4.6.7
 
-  '@miragon/team-topologies-schema-model@0.10.1(zod@4.6.7)':
+  '@miragon/team-topologies-schema-model@0.11.2(zod@4.6.7)':
     dependencies:
-      nanoid: 6.0.1
+      nanoid: 6.0.2
       zod: 4.6.7
 
-  '@miragon/wardley-dsl@0.5.3(zod@4.6.7)':
+  '@miragon/wardley-dsl@0.7.0(zod@4.6.7)':
     dependencies:
-      '@miragon/wardley-schema-model': 0.5.1(zod@4.6.7)
+      '@miragon/wardley-schema-model': 0.6.0(zod@4.6.7)
       zod: 4.6.7
 
-  '@miragon/wardley-renderer@0.6.3(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/wardley-renderer@0.8.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
-      '@miragon/wardley-dsl': 0.5.3(zod@4.6.7)
-      '@miragon/wardley-schema-model': 0.5.1(zod@4.6.7)
+      '@miragon/modeler-api': 1.1.0
+      '@miragon/wardley-dsl': 0.7.0(zod@4.6.7)
+      '@miragon/wardley-schema-model': 0.6.0(zod@4.6.7)
       clsx: 2.1.1
       diagram-js: 15.28.1
       didi: 11.0.1
       tiny-svg: 4.1.4
       zod: 4.6.7
 
-  '@miragon/wardley-schema-model@0.5.1(zod@4.6.7)':
+  '@miragon/wardley-schema-model@0.6.0(zod@4.6.7)':
     dependencies:
       zod: 4.6.7
 
@@ -6076,7 +6085,7 @@ snapshots:
       jiti: 2.7.0
       lightningcss: 1.32.0
       magic-string: 0.30.21
-      source-map-js: 1.2.1
+      source-map-js: 1.2.2
       tailwindcss: 4.3.3
 
   '@tailwindcss/oxide-android-arm64@4.3.3':
@@ -7103,31 +7112,11 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  diagram-js-direct-editing@3.5.1(diagram-js@15.24.1):
-    dependencies:
-      diagram-js: 15.24.1
-      min-dash: 5.1.0
-      min-dom: 5.3.0
-
   diagram-js-direct-editing@3.6.0(diagram-js@15.28.1):
     dependencies:
       diagram-js: 15.28.1
       min-dash: 5.1.0
       min-dom: 5.3.0
-
-  diagram-js@15.24.1:
-    dependencies:
-      '@bpmn-io/diagram-js-ui': 0.2.4
-      clsx: 2.1.1
-      didi: 11.0.0
-      inherits-browser: 0.1.0
-      min-dash: 5.1.0
-      min-dom: 5.3.0
-      object-refs: 0.4.0
-      path-intersection: 4.2.1
-      tiny-svg: 4.1.4
-    transitivePeerDependencies:
-      - preact-render-to-string
 
   diagram-js@15.28.1:
     dependencies:
@@ -7142,8 +7131,6 @@ snapshots:
       tiny-svg: 4.1.4
     transitivePeerDependencies:
       - preact-render-to-string
-
-  didi@11.0.0: {}
 
   didi@11.0.1: {}
 
@@ -8020,7 +8007,7 @@ snapshots:
 
   nanoid@3.3.20: {}
 
-  nanoid@6.0.1: {}
+  nanoid@6.0.2: {}
 
   natural-compare@1.4.0: {}
 
@@ -8369,8 +8356,6 @@ snapshots:
       react-dom: 19.3.0(react@19.3.0)
     optionalDependencies:
       '@types/react': 19.3.0
-
-  source-map-js@1.2.1: {}
 
   source-map-js@1.2.2: {}
 

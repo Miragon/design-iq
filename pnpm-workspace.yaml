@@ -10,16 +10,17 @@ allowBuilds:
   esbuild: true
   inferno: false
 minimumReleaseAgeExclude:
-  # the event-storming modeler family (#116) — pinned exact, adopted fresh
-  - "@miragon/event-storming-dsl@0.2.1"
-  - "@miragon/event-storming-renderer@0.2.1"
-  - "@miragon/event-storming-schema-model@0.2.0"
-  # the context-maps modeler pair (#157) — 0.2.0 published minutes before the bump
-  - "@miragon/context-maps-renderer@0.2.0"
-  - "@miragon/context-maps-schema-model@0.2.0"
-  # the team-topologies modeler pair — 0.8.0 (document v3, annotations) published minutes before the bump
-  - "@miragon/team-topologies-renderer@0.8.0"
-  - "@miragon/team-topologies-schema-model@0.8.0"
+  # the Miragon renderer rollout (modeler-api 1.1, #136): published 2026-10-19/20, adopted 2026-10-20
+  - "@miragon/event-storming-renderer@0.3.0"
+  - "@miragon/event-storming-dsl@0.3.0"
+  - "@miragon/context-maps-renderer@0.3.0"
+  - "@miragon/context-maps-schema-model@0.3.0"
+  - "@miragon/wardley-renderer@0.8.0"
+  - "@miragon/wardley-dsl@0.7.0"
+  - "@miragon/team-topologies-renderer@0.11.2"
+  - "@miragon/team-topologies-schema-model@0.11.2"
+  # the shared modeler contract, an exact dependency of all four renderers
+  - "@miragon/modeler-api@1.1.0"
   # the BPMN editing engine (#236) — 0.7.0 published 2026-10-14, adopted the same day (#248)
   - "@miragon/bpmn-cli@0.7.0"
   # its bpmnlint plugin, an exact dependency of 0.7.0 — 0.12.1 published the evening before

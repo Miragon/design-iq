@@ -1,6 +1,11 @@
 /** @miragon/team-topologies-renderer — works on a typed TtDocument, so the
  *  text lane goes through the schema-model codec (parse: Zod-validated,
- *  non-throwing; serialize: deterministic) */
+ *  non-throwing, keeps unknown fields, refuses duplicate and reserved ids
+ *  since 0.11.0; serialize: deterministic, with a trailing newline since
+ *  0.11.0). importDocument erases the history itself since 0.11.0, silently,
+ *  so the document lane's own clear(false) is a no-op here. Every committed
+ *  edit, the label editor's included, runs through the command stack; drags
+ *  and an open label editor stay previews until they commit. */
 import { schemaModelCodec } from "./codec.ts";
 import type { LoadedMiragonRenderer, MiragonRendererCtor, MiragonRendererSpec } from "./spec.ts";
 

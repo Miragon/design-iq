@@ -58,7 +58,8 @@ function makeFakeDslModeler(initial: string) {
   };
 }
 
-const WARDLEY: MiragonLane = { kind: "dsl", changeEvents: ["commandStack.changed", "wardley.config.changed"] };
+// the lanes of apps/web/src/notations/miragon/{wardley,event-storming}.ts
+const WARDLEY: MiragonLane = { kind: "dsl", changeEvents: ["commandStack.changed"] };
 const EVENT_STORMING: MiragonLane = { kind: "dsl", changeEvents: ["commandStack.changed"] };
 
 test("dsl lane: OWM text imports (non-XML!), edits round-trip through every configured change event", async () => {
@@ -80,11 +81,29 @@ test("dsl lane: OWM text imports (non-XML!), edits round-trip through every conf
   await wait(100);
   assert.match(ytext.toString(), /Water/);
 
-  // a config edit (axis labels) fires wardley.config.changed, NOT commandStack
-  modeler.setDsl(ytext.toString().replace("Tea ->", "Tee ->"));
-  modeler.fire("wardley.config.changed");
+  unbind();
+});
+
+test("dsl lane: a wardley resize preview (wardley.config.changed, transient) never reaches the Y.Text, its commit does", async () => {
+  const doc = new Y.Doc();
+  const ytext = doc.getText("content");
+  ytext.insert(0, OWM);
+  const modeler = makeFakeDslModeler(OWM);
+  const unbind = bindMiragon(modeler, WARDLEY, ytext, doc);
+  await wait(700);
+  // wardley-renderer 0.8.0: every drag step previews the size in exportDSL and
+  // fires wardley.config.changed { transient: true }
+  for (const size of ["size [900, 700]", "size [1100, 800]", "size [1500, 900]"]) {
+    modeler.setDsl(`${size}\n${OWM}`);
+    modeler.fire("wardley.config.changed");
+  }
   await wait(100);
-  assert.match(ytext.toString(), /Tee ->/);
+  assert.equal(ytext.toString(), OWM, "no preview size in the shared document");
+  // the drop commits ONE size through the command stack
+  modeler.fire("commandStack.changed");
+  await wait(100);
+  assert.match(ytext.toString(), /size \[1500, 900\]/);
+  assert.doesNotMatch(ytext.toString(), /size \[(900|1100)/);
   unbind();
 });
 
@@ -125,11 +144,20 @@ test("dsl lane: emptied text keeps the last good canvas (lenient DSL, non-empty 
 
 const TT_DOC = JSON.stringify({ version: 2, title: "T", nodes: [], interactions: [], flows: [] });
 
+/** the document renderers' import trait (team-topologies-renderer 0.11,
+ *  context-maps-renderer 0.3): importDocument replaces every shape and erases
+ *  the history itself, silently — `cleared` records every clear(emit) */
 function makeFakeDocumentModeler(initial: string) {
   const handlers: Record<string, Array<() => void>> = {};
   const imports: unknown[] = [];
   const cleared: boolean[] = [];
   let current: unknown = JSON.parse(initial);
+  const commandStack = {
+    clear: (emit?: boolean) => {
+      cleared.push(emit ?? true);
+      if (emit !== false) handlers["commandStack.changed"]?.forEach((h) => h());
+    },
+  };
   return {
     imports,
     cleared,
@@ -139,7 +167,7 @@ function makeFakeDocumentModeler(initial: string) {
     fire: (ev: string) => handlers[ev]?.forEach((h) => h()),
     get: (service: string) =>
       service === "commandStack"
-        ? { clear: (emit?: boolean) => void cleared.push(emit ?? true) }
+        ? commandStack
         : { viewbox: () => ({ x: 0, y: 0, width: 100, height: 100 }), zoom: () => undefined },
     on: (ev: string, cb: () => void) => {
       (handlers[ev] ??= []).push(cb);
@@ -148,6 +176,7 @@ function makeFakeDocumentModeler(initial: string) {
     importDocument: (d: unknown) => {
       imports.push(d);
       current = d;
+      commandStack.clear(false);
       return { warnings: [] };
     },
     exportDocument: () => current,
@@ -177,9 +206,10 @@ test("document lane: the injected codec gates imports — parsed documents in, b
   await wait(700);
   assert.equal(modeler.imports.length, 1, "the initial import ran despite the text not being XML");
   assert.equal((modeler.imports[0] as { version: number }).version, 2, "the PARSED document reaches the modeler");
-  // the renderer's importDocument leaves undo history on stale shapes — the
-  // adapter must erase it, SILENTLY (no 'changed' echo)
-  assert.deepEqual(modeler.cleared, [false], "commandStack.clear(false) after the import");
+  // no undo step may survive on the replaced shapes: the renderer erases the
+  // history and the adapter does too (kept until #136), both SILENTLY — a
+  // 'changed' echo would export the canonical text over the hand-written one
+  assert.deepEqual(modeler.cleared, [false, false], "every clear after the import is clear(false)");
   assert.equal(ytext.toString(), TT_DOC, "opening a document must not rewrite it");
 
   // a co-editor's half-typed JSON must not reach the canvas
@@ -194,6 +224,43 @@ test("document lane: the injected codec gates imports — parsed documents in, b
   });
   await wait(700);
   assert.equal(modeler.imports.length, 2);
+  unbind();
+});
+
+test("document lane: a document the codec refuses from the start reports the codec's reason, half-typed JSON the format", async () => {
+  const refused: Array<[text: string, reason: string]> = [
+    [JSON.stringify({ version: 1 }), "not a team-topology document: version"],
+    ['{ "version": 2, "nodes": [', "the document is not well-formed JSON"],
+  ];
+  for (const [text, reason] of refused) {
+    const doc = new Y.Doc();
+    const ytext = doc.getText("content");
+    ytext.insert(0, text);
+    const modeler = makeFakeDocumentModeler(TT_DOC);
+    const reported: string[] = [];
+    const unbind = bindMiragon(modeler as never, TEAM_TOPOLOGY, ytext, doc, undefined, (m) => reported.push(m));
+    await wait(100);
+    assert.deepEqual(reported, [reason]);
+    assert.equal(modeler.imports.length, 0, "nothing reaches the canvas");
+    unbind();
+  }
+});
+
+test("document lane: a refused document after a good one keeps the last good canvas and reports nothing", async () => {
+  const doc = new Y.Doc();
+  const ytext = doc.getText("content");
+  ytext.insert(0, TT_DOC);
+  const modeler = makeFakeDocumentModeler(TT_DOC);
+  const reported: string[] = [];
+  const unbind = bindMiragon(modeler as never, TEAM_TOPOLOGY, ytext, doc, undefined, (m) => reported.push(m));
+  await wait(100);
+  doc.transact(() => {
+    ytext.delete(0, ytext.length);
+    ytext.insert(0, JSON.stringify({ version: 1 }));
+  });
+  await wait(700);
+  assert.equal(modeler.imports.length, 1, "the last good canvas stays");
+  assert.deepEqual(reported, [], "a later rejection is a transient interleaving");
   unbind();
 });
 
