@@ -671,6 +671,83 @@ test("Team Topologies: typing a label is no edit until it commits, and a peer's 
   engine.destroy();
 });
 
+/** an element's position in a Context Maps or Team Topologies document */
+function positionOf(json: string, elementId: string): unknown {
+  const document = JSON.parse(json) as Record<string, unknown>;
+  for (const list of [document.contexts, document.nodes]) {
+    const element = (list as Array<{ id: string; position: unknown }> | undefined)?.find((e) => e.id === elementId);
+    if (element) return element.position;
+  }
+  assert.fail(elementId);
+}
+
+test("Context Maps and Team Topologies: two peers' first edits at once, on a file without the closing line break, merge into valid JSON", async () => {
+  const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
+  const cases: Array<[id: string, text: string, moved: [string, string]]> = [
+    ["context-map", CONTEXT_MAP, ["ctx_cfp", "ctx_agenda"]],
+    ["team-topology", TEAMS, ["team_checkout", "team_platform"]],
+  ];
+  for (const [id, text, moved] of cases) {
+    const [spec, renderer] = await load(id);
+    // the file as written before the renderer closed its text with a line
+    // break: canonical apart from that
+    const bare = renderer.create();
+    bare.attachTo(host());
+    await bare.importText(text);
+    const older = bare.exportText().replace(/\n$/, "");
+    bare.destroy();
+    const seed = new Y.Doc();
+    seed.getText("content").insert(0, older);
+    const state = Y.encodeStateAsUpdate(seed);
+
+    const peers = moved.map((elementId) => {
+      const doc = new Y.Doc();
+      Y.applyUpdate(doc, state);
+      const conflicts: string[] = [];
+      let modeler: MiragonModeler | undefined;
+      const editor = mountMiragonEditor(
+        spec,
+        { ...renderer, create: (options) => (modeler = renderer.create(options)) },
+        host(spec.canvasClassName),
+        {
+          ytext: doc.getText("content"),
+          doc,
+          onSyncError: (message: string) => conflicts.push(message),
+          onImportFailed: (message: string) => conflicts.push(message),
+        } as unknown as EditorContext,
+      );
+      return { doc, modeler: modeler!, editor, elementId, conflicts, own: "" };
+    });
+    await wait(50);
+    for (const [index, peer] of peers.entries()) {
+      const diagram = peer.modeler.diagram as unknown as TeamTopologyModeler;
+      const element = diagram.get("elementRegistry").get(peer.elementId);
+      diagram.get("modeling").moveElements([element], index === 0 ? { x: 10, y: 0 } : { x: 0, y: 20 });
+    }
+    await wait(20);
+    for (const peer of peers) peer.own = peer.doc.getText("content").toString();
+    const [a, b] = peers as [(typeof peers)[0], (typeof peers)[0]];
+    const fromA = Y.encodeStateAsUpdate(a.doc);
+    Y.applyUpdate(a.doc, Y.encodeStateAsUpdate(b.doc));
+    Y.applyUpdate(b.doc, fromA);
+    await wait(1100); // past the quiet period after a local edit, then the import's debounce
+
+    const merged = a.doc.getText("content").toString();
+    assert.equal(b.doc.getText("content").toString(), merged, `${id}: the peers converge`);
+    assert.doesNotThrow(() => JSON.parse(merged), `${id}: valid JSON`);
+    for (const peer of peers) {
+      assert.deepEqual(
+        positionOf(merged, peer.elementId),
+        positionOf(peer.own, peer.elementId),
+        `${id}: each move kept`,
+      );
+      assert.deepEqual(JSON.parse(peer.modeler.exportText()), JSON.parse(merged), `${id}: each canvas shows the text`);
+      assert.deepEqual(peer.conflicts, [], id);
+      peer.editor.destroy();
+    }
+  }
+});
+
 test("Context Maps: every mount shows the legend card, which the 0.3.0 Modeler leaves to its host", async () => {
   const [spec, renderer] = await load("context-map");
   const text = newCmJson("map", "Conference Planner");

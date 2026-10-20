@@ -230,6 +230,104 @@ test("L4: an undo right after a peer's re-import changes nothing, so nothing rea
   unbind();
 });
 
+/**
+ * A JSON modeler: its canonical text is the pretty-printed document with a
+ * closing line break, which a file written before that change lacks. Text
+ * that is no valid JSON is refused (L7).
+ */
+function jsonModeler() {
+  let document: Record<string, number> = {};
+  const listeners = new Set<() => void>();
+  const modeler: CollaborativeModeler & { move(key: string, value: number): void } = {
+    meta: { notation: "context-maps", apiVersion: MODELER_API_VERSION, editable: true },
+    attachTo: () => {},
+    async importText(text) {
+      document = JSON.parse(text) as Record<string, number>;
+      return { warnings: [] };
+    },
+    exportText: () => `${JSON.stringify(document, null, 2)}\n`,
+    onContentChanged(cb) {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    getViewState: () => undefined,
+    setViewState: () => {},
+    destroy: () => {},
+    move(key, value) {
+      document = { ...document, [key]: value };
+      for (const listener of [...listeners]) listener();
+    },
+  };
+  return modeler;
+}
+
+/** a file as written before the closing line break: canonical apart from it */
+const OLDER_FILE = JSON.stringify({ cfp: 40, agenda: 400, venue: 800 }, null, 2);
+
+/** two peers on the same file, each with its own Y.Doc, as the Live Host syncs them */
+function twoPeers(text: string) {
+  const seed = new Y.Doc();
+  seed.getText("content").insert(0, text);
+  const state = Y.encodeStateAsUpdate(seed);
+  return [0, 1].map(() => {
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, state);
+    const ytext = doc.getText("content");
+    const modeler = jsonModeler();
+    const conflicts: string[] = [];
+    const unbind = bindMiragon(modeler, "context-maps", ytext, doc, (m) => conflicts.push(m), assert.fail);
+    return { doc, ytext, modeler, conflicts, unbind };
+  });
+}
+
+test("concurrent first edits of a file without its closing line break merge into valid JSON, both kept", async () => {
+  const [a, b] = twoPeers(OLDER_FILE);
+  await wait(50);
+  a!.modeler.move("cfp", 50);
+  b!.modeler.move("venue", 820);
+  await wait(20);
+  const fromA = Y.encodeStateAsUpdate(a!.doc);
+  const fromB = Y.encodeStateAsUpdate(b!.doc);
+  Y.applyUpdate(a!.doc, fromB);
+  Y.applyUpdate(b!.doc, fromA);
+  await wait(1100); // past the quiet period after a local edit, then the import's debounce
+
+  const merged = a!.ytext.toString();
+  assert.equal(b!.ytext.toString(), merged, "the peers converge");
+  assert.deepEqual(JSON.parse(merged), { cfp: 50, agenda: 400, venue: 820 }, "valid JSON with both moves");
+  assert.match(merged, /\}\n+$/, "closed by the line break");
+  for (const peer of [a!, b!]) {
+    assert.deepEqual(JSON.parse(peer.modeler.exportText()), JSON.parse(merged), "each canvas shows the shared text");
+    assert.deepEqual(peer.conflicts, []);
+    peer.unbind();
+  }
+});
+
+test("a peer's edit after mine, inside the import debounce, merges with my first edit of such a file", async () => {
+  const [peer] = twoPeers(OLDER_FILE);
+  await wait(50);
+  const venue = peer!.ytext.toString().indexOf("800");
+  peer!.doc.transact(() => {
+    peer!.ytext.delete(venue, 3);
+    peer!.ytext.insert(venue, "877");
+  }, "remote");
+  await wait(20);
+  peer!.modeler.move("cfp", 50);
+  await wait(450);
+  assert.deepEqual(JSON.parse(peer!.ytext.toString()), { cfp: 50, agenda: 400, venue: 877 });
+  assert.deepEqual(peer!.conflicts, [], "no overlap: the local edit is not dropped");
+  peer!.unbind();
+});
+
+test("the next edit after such a merge drops the doubled closing line break again", async () => {
+  const [peer] = twoPeers(`${OLDER_FILE}\n\n`);
+  await wait(50);
+  peer!.modeler.move("agenda", 410);
+  await wait(20);
+  assert.equal(peer!.ytext.toString(), `${OLDER_FILE.replace("400", "410")}\n`);
+  peer!.unbind();
+});
+
 test("the contract check: another notation or another major fails at bind time, a newer minor binds", () => {
   const { doc, ytext } = session(HAND_AUTHORED);
   assert.throws(

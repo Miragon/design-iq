@@ -3,7 +3,8 @@
  * docs/platform-concept.md, notation-agnostic:
  *
  *  1. one pinned modeler version across all clients (package.json)
- *  2. minimal diffs into Y.Text, never replace-all (common prefix/suffix trim)
+ *  2. minimal diffs into Y.Text, never replace-all (common prefix/suffix trim,
+ *     the line breaks that close the text apart)
  *  3. debounced re-import of remote changes with view-state restore and echo
  *     suppression (Yjs transaction origin + last-export equality)
  *  4. gate the merged text before import; keep rendering the last good state on
@@ -17,7 +18,7 @@
  */
 import type * as Y from "yjs";
 
-import { diffRegion } from "./text-diff.ts";
+import { applyHunks, closingBreaksAt, diffHunks, diffRegion, type Hunk } from "./text-diff.ts";
 
 /** Shared origin marker: transactions tagged with it are our own canvas edits. */
 export const CANVAS_ORIGIN = "bpm-canvas";
@@ -187,37 +188,46 @@ export function bindModelSync(
 
     if (current === base) {
       // no concurrent remote change — plain minimal diff
-      const { start, endPrev, endNext } = diffRegion(base, next);
-      doc.transact(() => {
-        if (endPrev > start) ytext.delete(start, endPrev - start);
-        if (endNext > start) ytext.insert(start, next.slice(start, endNext));
-      }, CANVAS_ORIGIN);
+      doc.transact(() => applyHunks(ytext, diffHunks(base, next)), CANVAS_ORIGIN);
       lastExport = next;
       return;
     }
 
     // remote edits landed since our last sync — merge if regions are disjoint.
+    // The line breaks that close the text are no part of the change region
+    // (diffHunks): the export adds the one an older file lacks, and peers
+    // making their first edit at once would otherwise each replace the whole
+    // tail. They change only where the remote edits left them as they were.
+    const baseBody = closingBreaksAt(base);
+    const nextBody = closingBreaksAt(next);
+    const currentBody = closingBreaksAt(current);
+    const closing: Hunk[] = [];
+    if (base.slice(baseBody) === current.slice(currentBody)) {
+      for (const hunk of diffHunks(base.slice(baseBody), next.slice(nextBody))) {
+        closing.push({ ...hunk, at: currentBody + hunk.at });
+      }
+    }
     // Locate the local change region in the current text by its surrounding
     // context; wide context first (position safety), shrinking so that a nearby
     // -but-disjoint remote edit inside the window doesn't masquerade as overlap.
-    const { start, endPrev, endNext } = diffRegion(base, next);
+    const { start, endPrev, endNext } = diffRegion(base.slice(0, baseBody), next.slice(0, nextBody));
     const delText = base.slice(start, endPrev);
     const insText = next.slice(start, endNext);
-    for (const ctx of [64, 32, 16, 8]) {
-      const ctxL = base.slice(Math.max(0, start - ctx), start);
-      const ctxR = base.slice(endPrev, endPrev + ctx);
-      const needle = ctxL + delText + ctxR;
-      const at = current.indexOf(needle);
-      if (at < 0 || current.indexOf(needle, at + 1) >= 0) continue; // absent or ambiguous
-      const pos = at + ctxL.length;
-      doc.transact(() => {
-        if (delText) ytext.delete(pos, delText.length);
-        if (insText) ytext.insert(pos, insText);
-      }, CANVAS_ORIGIN);
+    const merge = (body: Hunk[]): void => {
+      doc.transact(() => applyHunks(ytext, [...closing, ...body]), CANVAS_ORIGIN);
       // canvas still lacks the remote part — bring it in on the next quiet moment
       lastExport = next;
       scheduleImport();
-      return;
+    };
+    if (!delText && !insText) return merge([]);
+    const currentText = current.slice(0, currentBody);
+    for (const ctx of [64, 32, 16, 8]) {
+      const ctxL = base.slice(Math.max(0, start - ctx), start);
+      const ctxR = base.slice(endPrev, Math.min(baseBody, endPrev + ctx));
+      const needle = ctxL + delText + ctxR;
+      const at = currentText.indexOf(needle);
+      if (at < 0 || currentText.indexOf(needle, at + 1) >= 0) continue; // absent or ambiguous
+      return merge([{ at: at + ctxL.length, deleteCount: delText.length, insert: insText }]);
     }
 
     // overlapping edits: the remote change wins, the local canvas op is undone —
