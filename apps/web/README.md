@@ -131,7 +131,9 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
 - `@designiq/notations/mermaid` holds the reading of a diagram's text the validator and the
   renderer share (the diagram types, the code mermaid's parser sees, the error lines). It
   mirrors mermaid `MERMAID_VERSION`; `test/mermaid-engine.test.ts` fails on a mermaid bump
-  until it is re-read, and checks every listed type against mermaid's own detection.
+  until it is re-read, checks every listed type against mermaid's own detection, and has
+  mermaid parse broken diagrams below comment lines to check the line each notice names
+  (eventmodeling and agentflow-beta parse their comment lines, every other type drops them).
 - `@designiq/notations/markdown` is the validator's reading of a document's fences, a
   zero-dep scanner: the `mermaid/diagram-type` check of every `mermaid` fence stands on it and
   names the document's line. `test/markdown-fences.test.ts` holds it against the markdown-it

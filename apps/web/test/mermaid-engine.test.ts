@@ -19,6 +19,8 @@ import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
 import { JSDOM } from "jsdom";
 import type { Mermaid } from "mermaid";
 
+import { describeMermaidError } from "../src/lib/mermaid-render.ts";
+
 let mermaid: Mermaid;
 
 /** jsdom has no CSSStyleSheet; mermaid builds a diagram's classDef rules in one */
@@ -77,6 +79,42 @@ async function drawing(source: string) {
     style: (/<style>(.*?)<\/style>/s.exec(svg)?.[1] ?? "").replaceAll(id, "ID"),
   };
 }
+
+/** what drawing a source fails with, as the app draws it */
+async function drawingError(source: string): Promise<unknown> {
+  try {
+    await mermaid.render(`drawing-${++drawings}`, source);
+  } catch (error) {
+    return error;
+  }
+  return assert.fail(`${JSON.stringify(source)} draws`);
+}
+
+test("an error names the line it is on, whatever comment lines stand above it", async () => {
+  // mermaid 12 parses eventmodeling and agentflow-beta with their comment
+  // lines, every other type without them
+  const diagrams: [diagram: string, onTheBadLine: string][] = [
+    ["eventmodeling\n\ntf 01 ui CartUI\ntf 02 cmd AddItem\ntf 01 ??? !!!\ntf 03 evt Done\n", "tf 01 ???"],
+    ['agentflow-beta TB\n  brief["Brief"]@{ shape: input }\n\n  brief --> --> ]]\n', "brief --> -->"],
+    // agentflow's own error in an @{…} block
+    ['agentflow-beta TB\n  brief["Brief"]@{ shape: input }\n  draft["Draft"]@{ shape: nosuchshape }\n', "nosuchshape"],
+    ['pie title Pets\n  "Dogs" : 3\n  "Cats" x\n', '"Cats" x'],
+    ["flowchart LR\n  A --> B\n  B --> -->\n  B --> C\n", "B --> -->"],
+  ];
+  const heads = [
+    "",
+    "%% one\n%% two\n%% three\n",
+    "---\ntitle: Orders\n---\n%% one\n%% two\n",
+    '%%{init: {\n  "wrap": true\n}}%%\n%% one\n',
+  ];
+  for (const [diagram, bad] of diagrams) {
+    for (const head of heads) {
+      const source = head + diagram;
+      const { line } = describeMermaidError(await drawingError(source), source);
+      assert.equal(line, source.split("\n").findIndex((l) => l.includes(bad)) + 1, JSON.stringify(source));
+    }
+  }
+});
 
 test("a diagram cannot leave the CI look: no other theme, palette, CSS or font", async () => {
   const sources = [
