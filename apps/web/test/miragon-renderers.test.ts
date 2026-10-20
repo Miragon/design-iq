@@ -284,6 +284,19 @@ test("L7: a refused document leaves no trace — the canvas, its export, its und
   }
 });
 
+test("a blank document is refused in the widget as in the SPA: no empty canvas whose first edit writes a whole document", async () => {
+  for (const [id, text] of DOCUMENTS) {
+    for (const readonly of [false, true]) {
+      const engine = await engineOf(id, host(), readonly);
+      for (const blank of ["", "  \n"]) {
+        await assert.rejects(() => engine.importText(blank), { message: "the document is empty" }, `${id} ${readonly}`);
+      }
+      await engine.importText(text);
+      engine.destroy();
+    }
+  }
+});
+
 test("the SPA editor names the reason a renderer refuses a document, word for word", async () => {
   const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
   for (const [id, , refused, reason] of REFUSED) {

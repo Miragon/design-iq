@@ -374,6 +374,8 @@ Measured: the conflict card fits a 480x420 frame with the top row and part of th
 | Load failed: import rejected             | "order-to-cash could not be displayed"        | parser error in mono                                                                                             | **Ask the assistant to fix it** (primary; `ui/message` with path + parser error; only with `getHostCapabilities().message`) · **Open in designIQ**. Without the message capability: **Open in designIQ** (primary) · **Try again** |
 | Miragon renderer failed to load          | "The Event Storming modeler could not start"  | error in mono                                                                                                    | **Try again** (re-runs `spec.load()`)                                                                                                                                                                                              |
 
+A Miragon model whose text is blank lands on the import card too, with "the document is empty": the SPA's live binding refuses it the same way, and an empty canvas would write a whole new document over the file with its first edit.
+
 ### 5.4 Event → surface rules
 
 | Event                                 | Surface                                                                                                                                                                                                                    |

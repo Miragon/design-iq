@@ -13,7 +13,7 @@
  * The factories come from the loaded spec (the node --test suite hands in
  * fakes); this module imports neither a renderer nor a stylesheet.
  */
-import { assertContract, bindMiragon } from "@designiq/live-client/miragon-sync";
+import { assertContract, bindMiragon, EMPTY_DOCUMENT, isBlank } from "@designiq/live-client/miragon-sync";
 import type * as Y from "yjs";
 
 import { attachPresenceCanvas } from "../../lib/presence-canvas.ts";
@@ -50,6 +50,9 @@ export function mountMiragonEngine(
     editable: !readonly,
     view,
     async importText(content: string): Promise<void> {
+      // refused like the SPA's live binding refuses it: the widget shows its
+      // import card instead of an empty canvas
+      if (isBlank(content)) throw new Error(EMPTY_DOCUMENT);
       await modeler.importText(content);
       view.importFit();
     },

@@ -31,7 +31,9 @@ import { bindModelSync } from "./model-sync.ts";
 
 export type { CollaborativeModeler, ElementInfo, ElementsSurface } from "@miragon/modeler-api";
 
-const EMPTY = "the document is empty";
+/** the one pre-gate (L7 above), which the widget's own import applies too */
+export const isBlank = (text: string): boolean => text.trim() === "";
+export const EMPTY_DOCUMENT = "the document is empty";
 
 /** a modeler of another notation, or of an incompatible contract version,
  *  fails here with a readable message instead of mis-rendering a document */
@@ -60,8 +62,8 @@ export function bindMiragon(
     {
       importText: (text) => modeler.importText(text),
       exportText: async () => modeler.exportText(),
-      looksRenderable: (text) => text.trim() !== "",
-      unrenderableReason: EMPTY,
+      looksRenderable: (text) => !isBlank(text),
+      unrenderableReason: EMPTY_DOCUMENT,
       beforeImport(isFirstImport) {
         if (isFirstImport) return () => {};
         const view = modeler.getViewState();
