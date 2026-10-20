@@ -199,6 +199,18 @@ as `content` in the notation's own format (XML, the OWM/`.storm` DSL, JSON, Mark
 runs the same `checkModel` gate as `pnpm validate` and the REST PUT (ERROR findings refuse the
 save under the default `lint:"block"` and are reported under `"warn"`) and is compare-and-set
 like `save_bpmn_xml`: a stale `baseVersion` answers `{conflict: true, currentContent, baseVersion}`.
+For a Team Topology (`.tt`, `.ttm.json`), a Context Map (`.cm.json`) or a Value Chain (`.vc.json`)
+the gate is the notation's schema model, the one its canvas opens the file with. Whatever the
+model rejects is an ERROR at its JSON path (`nodes.1.id: duplicate id "a"`; rule ids
+`team-topology/schema`, `context-map/schema`, `value-chain/schema`), so the save refuses a file
+the canvas could not open. Rejected are a duplicate id and the ids a diagram keeps for itself:
+`tt-root`, `cm-root`, `vc-root`, every id starting with `__implicitroot`, `assoc_<annotation id>`
+in a Team Topology, and built-in object property names such as `constructor` in a Value Chain.
+A Context Map is also rejected as a list, with a `version` above 1 or with coordinates or sizes
+beyond 1,000,000; a Value Chain with extra keys in `bounds` or in a waypoint,
+with coordinates beyond ±1e9 or with a `__proto__` key. A Context Map's strategic-DDD rules
+(`protect-or-conform`, `endpoints-on-map`, …) are WARNs, `context-map/semantics`: the canvas
+opens such a map and marks the finding.
 `create_model` scaffolds every notation with a template (bpmn, dmn, wardley, team-topology,
 event-storming, context-map, markdown); a notation without one (value-chain) arrives via git only.
 `LIVE_MCP_READONLY=1` keeps the two read tools and drops the writes. The embedded modelers'
