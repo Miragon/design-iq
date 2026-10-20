@@ -12,7 +12,7 @@
  * What differs per notation (how change events are observed, how the view
  * state survives a re-import, what "renderable" means pre-import) lives in a
  * SyncAdapter; bpmn-sync, dmn-sync and miragon-sync (ONE adapter for every
- * Miragon renderer, parameterised by its text lane) are the adapters.
+ * modeler behind the @miragon/modeler-api contract) are the adapters.
  * Consumers import those, never this module.
  */
 import type * as Y from "yjs";
@@ -55,9 +55,9 @@ export const looksWellFormedXml = (s: string): boolean =>
 export const NOT_WELL_FORMED_XML = "the document is not well-formed XML";
 
 /**
- * The diagram-js view-state recipe every single-canvas modeler shares
- * (bpmn-js and the Miragon renderers): snapshot the canvas viewbox before an
- * import, restore it after a RE-import, fit the viewport on the first one.
+ * The diagram-js view-state recipe of a single-canvas modeler without a view
+ * state of its own (bpmn-js): snapshot the canvas viewbox before an import,
+ * restore it after a RE-import, fit the viewport on the first one.
  */
 export function keepDiagramViewbox(modeler: { get(service: string): any }): SyncAdapter["beforeImport"] {
   return (isFirstImport) => {
