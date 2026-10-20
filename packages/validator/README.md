@@ -3,13 +3,36 @@
 Deterministic validator for designIQ content repositories: `designiq.yml` discovery, BPMN
 structural checks (flow soundness, complete BPMNDI coverage), DMN structure and DMNDI coverage,
 the generic cross-model reference rule (every required reference — `callActivity` calls,
-`businessRuleTask` decides — must resolve in the repo), and a per-mediaKind parse baseline for
-every other registered notation (a broken `.tt`/`.vc.json` is an ERROR; DSL notations are
-lenient by design; a `mermaid` fence in a Markdown document that does not start with a diagram
-type such as `flowchart` or `sequenceDiagram` is a WARN, `mermaid/diagram-type`, naming the
-document's line). Every finding carries a stable `ruleId` (e.g. `bpmn/flow`, `dmn/di`,
-`refs/dangling`). It treats the target repo as pure data — it never executes content-repo code.
-Exit code 0 = no errors (warnings allowed), 1 = errors.
+`businessRuleTask` decides — must resolve in the repo), the schema check of the Miragon JSON
+notations, and a per-mediaKind parse baseline for every other registered notation (a file that
+is no JSON or XML is an ERROR; DSL notations are lenient by design; a `mermaid` fence in a
+Markdown document that does not start with a diagram type such as `flowchart` or
+`sequenceDiagram` is a WARN, `mermaid/diagram-type`, naming the document's line). Every finding
+carries a stable `ruleId` (e.g. `bpmn/flow`, `dmn/di`, `refs/dangling`). It treats the target
+repo as pure data — it never executes content-repo code. Exit code 0 = no errors (warnings
+allowed), 1 = errors.
+
+## Team Topologies, Context Maps and Value Chains
+
+A `.tt`/`.ttm.json`, `.cm.json` or `.vc.json` file is parsed with the schema model its canvas
+opens it with (`@miragon/team-topologies-schema-model`, `@miragon/context-maps-schema-model`,
+`@miragon/value-chain-schema-model`). Whatever the schema model refuses, the canvas cannot open,
+so each refusal is an ERROR (`team-topology/schema`, `context-map/schema`,
+`value-chain/schema`) that names the offending value by its JSON path, e.g.
+`nodes.1.id: duplicate id "a"`. Refused among others:
+
+- a duplicate id, and the ids the diagram keeps for itself: `tt-root`, `cm-root`, `vc-root`,
+  every id starting with `__implicitroot`, `assoc_<annotation id>` in a Team Topology, and in a
+  Value Chain the names of built-in JavaScript object properties such as `constructor`;
+- in a Context Map: a JSON list instead of an object, a `version` newer than 1, coordinates or
+  sizes beyond 1,000,000;
+- in a Value Chain: keys other than `x`, `y`, `width`, `height` in `bounds` and other than `x`,
+  `y` in a waypoint, coordinates beyond ±1e9, and a `__proto__` key anywhere.
+
+A Context Map's strategic-DDD rules (`validateDocument`, e.g. `protect-or-conform`,
+`endpoints-on-map`) are WARNs, `context-map/semantics`, with the rule named at the end of the
+message: the canvas opens such a map and marks the finding. A repeated id is the exception: the
+canvas refuses it, so it is an ERROR (`context-map/schema`).
 
 ## Usage
 

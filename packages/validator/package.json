@@ -2,7 +2,7 @@
   "name": "@miragon/design-iq-validator",
   "version": "5.5.0",
   "type": "module",
-  "description": "Platform-owned validator for designIQ content repos — designiq.yml discovery, BPMN/DMN structure and diagram coverage, cross-model references, and a parse check for every other notation. Runs against any checkout via --root; never executes content-repo code.",
+  "description": "Platform-owned validator for designIQ content repos — designiq.yml discovery, BPMN/DMN structure and diagram coverage, cross-model references, the schema check of Team Topologies, Context Maps and Value Chains, and a parse check for every other notation. Runs against any checkout via --root; never executes content-repo code.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -44,7 +44,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts"
   },
-  "//": "fast-xml-parser stays a RUNTIME dependency although src/ no longer imports it directly: tsdown inlines @designiq/notations (whose extract.ts imports it) but keeps npm deps external, so the published dist/ resolves it from here. Removing it breaks the npm artifact at import time while the workspace keeps working.",
+  "//": "fast-xml-parser stays a RUNTIME dependency although src/ no longer imports it directly: tsdown inlines @designiq/notations (whose extract.ts imports it) but keeps npm deps external, so the published dist/ resolves it from here. Removing it breaks the npm artifact at import time while the workspace keeps working. zod is a RUNTIME dependency for the same reason: src/ never imports it, but the team-topologies and context-maps schema models take it as a peer, and the published package is what provides it.",
   "dependencies": {
     "@miragon/context-maps-schema-model": "0.3.0",
     "@miragon/team-topologies-schema-model": "0.11.2",
