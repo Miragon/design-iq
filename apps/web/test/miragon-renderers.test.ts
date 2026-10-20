@@ -154,14 +154,48 @@ test("the new-file templates are the renderers' own serialization: the first can
   }
 });
 
-test("importing never dirties the widget: the contract's import is silent, the renderer's own history erase included", async () => {
-  for (const [id, text] of DOCUMENTS) {
+test("L1: importing never dirties the widget, over an edit's undo history too, and leaves no undo step", async () => {
+  for (const [id, text, peer] of DOCUMENTS) {
     const engine = await engineOf(id, host());
     let dirty = 0;
     engine.onDirty(() => dirty++);
     await engine.importText(text);
     await engine.importText(text);
     assert.equal(dirty, 0, id);
+    const diagram = engine.modeler.diagram as unknown as DiagramServices;
+    diagram.get("modeling").removeElements([shapesOf(diagram)[0]]);
+    assert.equal(dirty, 1, `${id}: the edit is`);
+    assert.ok(diagram.get("commandStack").canUndo(), id);
+    await engine.importText(peer);
+    assert.equal(dirty, 1, `${id}: the re-import over its history is not`);
+    assert.equal(diagram.get("commandStack").canUndo(), false, `${id}: L4, no undo step points at replaced shapes`);
+    engine.destroy();
+  }
+});
+
+test("L4: an undo right after a peer's re-import changes neither the canvas nor the shared text", async () => {
+  for (const [id, text, peer] of DOCUMENTS) {
+    const engine = await engineOf(id, host());
+    const doc = new Y.Doc();
+    const ytext = doc.getText("content");
+    ytext.insert(0, text);
+    const unbind = engine.bindLive!(ytext, doc, { onConflict: assert.fail, onImportError: assert.fail });
+    await wait(50);
+    const diagram = engine.modeler.diagram as unknown as DiagramServices;
+    diagram.get("modeling").removeElements([shapesOf(diagram)[0]]);
+    await wait(650); // past the live binding's quiet period after a local edit
+    assert.equal(ytext.toString(), await engine.exportText(), `${id}: the edit is shared`);
+    doc.transact(() => {
+      ytext.delete(0, ytext.length);
+      ytext.insert(0, peer);
+    });
+    await wait(450);
+    const imported = await engine.exportText();
+    diagram.get("commandStack").undo();
+    await wait(50);
+    assert.equal(await engine.exportText(), imported, `${id}: the canvas`);
+    assert.equal(ytext.toString(), peer, `${id}: the shared text`);
+    unbind();
     engine.destroy();
   }
 });
@@ -187,6 +221,27 @@ function withId(json: string, list: "nodes" | "contexts", index: number, id: str
   return JSON.stringify(document);
 }
 
+test("L7: a refused document leaves no trace — the canvas, its export, its undo history, no change event", async () => {
+  for (const [id, good, refused, reason] of REFUSED) {
+    const engine = await engineOf(id, host());
+    await engine.importText(good);
+    const diagram = engine.modeler.diagram as unknown as DiagramServices;
+    diagram.get("modeling").removeElements([shapesOf(diagram)[0]]);
+    const before = await engine.exportText();
+    const shapes = shapesOf(diagram).length;
+    let dirty = 0;
+    engine.onDirty(() => dirty++);
+    await assert.rejects(() => engine.importText(refused), { message: reason }, id);
+    assert.equal(await engine.exportText(), before, id);
+    assert.equal(shapesOf(diagram).length, shapes, `${id}: still rendered`);
+    assert.ok(diagram.get("commandStack").canUndo(), `${id}: the history is untouched`);
+    assert.equal(dirty, 0, id);
+    await engine.importText(good);
+    assert.equal(shapesOf(diagram).length, shapes + 1, `${id}: and the next valid text renders`);
+    engine.destroy();
+  }
+});
+
 test("the SPA editor names the reason a renderer refuses a document, word for word", async () => {
   const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
   for (const [id, , refused, reason] of REFUSED) {
@@ -204,6 +259,38 @@ test("the SPA editor names the reason a renderer refuses a document, word for wo
     assert.equal(failed.length, 1, id);
     assert.match(failed[0]!, reason, id);
     editor.destroy();
+  }
+});
+
+test("L5: a peer's re-import keeps the view the user panned to; the first import keeps the renderer's own fit", async () => {
+  for (const [id, text, peer] of DOCUMENTS) {
+    const bare = await engineOf(id, host());
+    await bare.modeler.importText(text);
+    const ownFit = bare.modeler.getViewState();
+    bare.destroy();
+
+    const engine = await engineOf(id, host());
+    const doc = new Y.Doc();
+    const ytext = doc.getText("content");
+    ytext.insert(0, text);
+    const unbind = engine.bindLive!(ytext, doc, { onConflict: assert.fail, onImportError: assert.fail });
+    await wait(50);
+    const fitted = engine.modeler.getViewState() as { x: number; y: number; width: number; height: number };
+    assert.ok(fitted && fitted.width > 0, `${id}: a view to keep`);
+    assert.deepEqual(fitted, ownFit, `${id}: the binding puts no view of its own over the first import`);
+    const panned = { ...fitted, x: fitted.x + 123, y: fitted.y - 45 };
+    engine.modeler.setViewState(panned);
+    const readback = engine.modeler.getViewState();
+    const before = await engine.exportText();
+    doc.transact(() => {
+      ytext.delete(0, ytext.length);
+      ytext.insert(0, peer);
+    });
+    await wait(450);
+    assert.notEqual(await engine.exportText(), before, `${id}: re-imported`);
+    assert.deepEqual(engine.modeler.getViewState(), readback, `${id}: the view does not jump`);
+    unbind();
+    engine.destroy();
   }
 });
 

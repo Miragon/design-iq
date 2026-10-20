@@ -6,8 +6,10 @@
  * diagram-js subpaths without an extension, the specs' load() imports the
  * stylesheet, the SPA editor the "@/" alias). Import it before any renderer, and import the renderers
  * dynamically: the hooks only see imports resolved after they register.
- * Boxes measure 0×0 here, so nothing about fit, zoom or label layout can be
- * asserted, only what the renderers import, export and emit.
+ * Every element reports one client size (CLIENT_SIZE), so a canvas has a
+ * viewbox and a view state, but shapes measure 0×0: nothing about fit, zoom
+ * or label layout can be asserted, only what the renderers import, export,
+ * emit and keep as their view.
  */
 import { registerHooks } from "node:module";
 
@@ -166,6 +168,12 @@ svg.createSVGPoint = () => ({
   },
 });
 globals.SVGMatrix = Matrix;
+
+/** the client size of every element — a canvas without one has no viewbox */
+export const CLIENT_SIZE = { width: 1000, height: 640 };
+const htmlElement = window.HTMLElement.prototype;
+Object.defineProperty(htmlElement, "clientWidth", { configurable: true, get: () => CLIENT_SIZE.width });
+Object.defineProperty(htmlElement, "clientHeight", { configurable: true, get: () => CLIENT_SIZE.height });
 
 /** a fresh host in the document, the way the editor and the widget mount a renderer */
 export function host(className?: string): HTMLElement {
