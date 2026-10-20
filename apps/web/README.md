@@ -233,9 +233,9 @@ deliberately absent here. Never bundle two engines (or bpmn-js next to a Miragon
 sheet) into one widget.
 
 **Read-only hosts** (`LIVE_MCP_READONLY=1` on the Live Host) mount each engine's
-`NavigatedViewer`; for the DSL-lane renderers (Wardley Map, Event Storming) with an
-inert `commandStack` value module (`engines/diagram-js.ts` — their import clears
-a stack only the Modeler registers). The superseded freeze takes the same viewer
+`NavigatedViewer`, with the spec's `additionalModules` like the editor (the
+Context Maps legend). No renderer needs a command stack on the viewer any more
+(`test/miragon-renderers.test.ts`). The superseded freeze takes the same viewer
 path. Every Miragon renderer adopts the element it is handed as its root and
 removes it on `destroy()`, so `miragon-main.ts` gives each mount a host element
 of its own inside `#canvas` (carrying the scope class).
