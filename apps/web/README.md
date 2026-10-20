@@ -168,8 +168,8 @@ against the contract in `core/engine.ts` — `importText` / `exportText` /
 renderers). Its extras (`WidgetExtras`: the Todos and Checks cards) hear
 `onRead` (the path is known: discovery runs in parallel with the import),
 `onDocument` and `onSaved`. Two engine invariants the core relies on:
-`importText` never fires `onDirty` (the Miragon DSL renderers emit
-`commandStack.changed` from their own `clear()` — `engines/miragon.ts`
+`importText` never fires `onDirty` (the Wardley renderer emits
+`commandStack.changed` from its own `clear()`, and `engines/miragon.ts`
 suppresses the echo), and `bindLive` is a capability (absent = CAS autosave
 only — the dmn engine's deliberate mode). Full behaviour:
 [docs/mcp-integration.md](../../docs/mcp-integration.md).

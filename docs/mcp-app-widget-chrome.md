@@ -162,7 +162,7 @@ Zoom group (BR), 28px targets:
 
 **Focus after a click.** A pointer click on a zoom control or on Tools hands the keyboard focus back to the canvas (`view.focus()`, diagram-js `canvas.focus()`), in every diagram-js widget (bpmn and the DMN DRD view too). The Miragon renderers act on keys only while their canvas or the page has the focus, so Delete or ⌘Z right after a zoom click would otherwise do nothing. Enter or Space on the button keeps the focus there. The menu trigger, fullscreen and the pill keep the focus: what they open takes it.
 
-Keyboard zoom (Ctrl/⌘ + / − / 0) comes from the diagram-js 15 keyboard, which binds implicitly while the canvas has focus.
+Keyboard zoom (Ctrl/⌘ + / − / 0) comes from the diagram-js 15 keyboard, which binds implicitly while the canvas has focus (bpmn and the DMN DRD view). The Miragon renderers bind no zoom keys, so their widgets zoom by the zoom group and the wheel and fit with ⇧1 ([#265](https://github.com/Miragon/design-iq/issues/265)).
 
 Undo/redo:
 
