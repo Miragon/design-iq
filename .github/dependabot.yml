@@ -1,5 +1,7 @@
 # Dependabot — balanced mode: minor+patch grouped per ecosystem, each major
-# lands as its own PR for individual review. Reviewers come from CODEOWNERS.
+# lands as its own PR for individual review. The Miragon modeler families are
+# the exception: one PR per family, majors included, because a renderer and
+# the schema model it pins only move together. Reviewers come from CODEOWNERS.
 version: 2
 updates:
   # npm — one block covers the whole pnpm workspace (resolved from the root).
@@ -41,6 +43,12 @@ updates:
       # moving to inferno 6+ — then this bump follows theirs.
       - dependency-name: "inferno"
         versions: [">=6"]
+      # 0.11.0 and 0.11.1 ship their design-system tokens outside a cascade
+      # layer, so they override the app's status colours app-wide (warning
+      # text #FFB000 at 1.83:1; apps/web/test/vendor-css.test.ts fails on
+      # them). Unblock: a release that layers the tokens (#264).
+      - dependency-name: "@miragon/team-topologies-*"
+        versions: ["0.11.0", "0.11.1"]
     groups:
       npm-minor-patch:
         applies-to: version-updates
@@ -60,7 +68,8 @@ updates:
           - "@miragon/modeler-*"
         update-types: ["minor", "patch"]
       # a renderer and its schema model move together (the renderer pins the
-      # schema model exactly; apps/web pins both), so one PR per family
+      # schema model exactly; apps/web pins both), so one PR per family, its
+      # majors included
       miragon-wardley:
         applies-to: version-updates
         patterns: ["@miragon/wardley-*"]
@@ -73,6 +82,11 @@ updates:
       miragon-team-topologies:
         applies-to: version-updates
         patterns: ["@miragon/team-topologies-*"]
+      # the contract the renderers implement (@miragon/modeler-api) and the
+      # shell around them, once apps/web takes them directly (#136, #265)
+      miragon-modeler:
+        applies-to: version-updates
+        patterns: ["@miragon/modeler-*"]
       npm-security:
         applies-to: security-updates
         patterns: ["*"]
