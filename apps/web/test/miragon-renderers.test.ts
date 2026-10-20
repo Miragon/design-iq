@@ -349,6 +349,51 @@ test("L5: a peer's re-import keeps the view the user panned to; the first import
   }
 });
 
+test("each spec hands the chrome's insets to its renderer the way that renderer spells the free area", async () => {
+  const insets = { top: 56, right: 0, bottom: 0, left: 300 };
+  for (const [id, palette] of [
+    ["event-storming", "config.eventStormingPalette"],
+    ["context-map", "config.cmPalette"],
+  ] as const) {
+    const [, renderer] = await load(id);
+    const modeler = renderer.create({ insets: () => insets });
+    const config = modeler.diagram.get(palette) as { freeRectInsets(): unknown };
+    assert.deepEqual(config.freeRectInsets(), insets, id);
+    modeler.destroy();
+  }
+
+  // Team Topologies takes the free area's centre in diagram coordinates, and
+  // leaves the fit after an import to a host that fits itself
+  const [, renderer] = await load("team-topology");
+  for (const fitsItself of [true, false]) {
+    const modeler = renderer.create(fitsItself ? { insets: () => insets } : {});
+    modeler.attachTo(host("tt-canvas"));
+    const diagram = modeler.diagram as unknown as {
+      importDocument(document: unknown, options?: { fit?: boolean }): unknown;
+      get(name: "config.ttPalette"): { freeRectCenter?(): { x: number; y: number } };
+    };
+    let fit: boolean | undefined;
+    const importDocument = diagram.importDocument.bind(diagram);
+    diagram.importDocument = (document, options) => {
+      fit = options?.fit;
+      return importDocument(document, options);
+    };
+    await modeler.importText(TEAMS);
+    assert.equal(fit, !fitsItself, `fits on import: ${!fitsItself}`);
+    const centre = diagram.get("config.ttPalette").freeRectCenter;
+    if (!fitsItself) {
+      assert.equal(centre, undefined, "the renderer's own free area");
+    } else {
+      // the 1000×640 canvas at 100 %: the middle of what the insets leave
+      assert.deepEqual(centre!(), { x: 300 + 700 / 2, y: 56 + 584 / 2 });
+      // panned and at 50 %, the same screen point in diagram coordinates
+      modeler.setViewState({ x: 100, y: 50, width: 2000, height: 1280 });
+      assert.deepEqual(centre!(), { x: 100 + (300 + 700 / 2) * 2, y: 50 + (56 + 584 / 2) * 2 });
+    }
+    modeler.destroy();
+  }
+});
+
 test("the read-only viewers import without a command stack: no renderer needs a shim", async () => {
   for (const [id, text] of DOCUMENTS) {
     const engine = await engineOf(id, host(), true);
