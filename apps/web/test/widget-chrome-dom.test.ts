@@ -5,7 +5,8 @@
  * the DRD | Table switch, the focus hand-back around a loading card, a toast
  * that yields its place in the lane, a decision card over a folded sheet — and
  * a decision card's consequence lines describe their buttons; a leaving toast
- * fades out of the lane's flow.
+ * fades out of the lane's flow; a click on the zoom group hands the keys back
+ * to the canvas.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -17,7 +18,8 @@ import { mountModeChip } from "../src/mcp-app/chrome/mode-chip.ts";
 import { mountLiveRegions, mountSync } from "../src/mcp-app/chrome/sync.ts";
 import { mountToasts } from "../src/mcp-app/chrome/toasts.ts";
 import { mountViewSwitch } from "../src/mcp-app/chrome/view-switch.ts";
-import type { DecisionView, DecisionViews } from "../src/mcp-app/core/engine.ts";
+import { mountZoom } from "../src/mcp-app/chrome/zoom.ts";
+import type { DecisionView, DecisionViews, ViewControls } from "../src/mcp-app/core/engine.ts";
 import type { SyncState } from "../src/mcp-app/core/lifecycle.ts";
 import { LIVE_TITLE } from "../src/mcp-app/core/sync-view.ts";
 import { asEl, type FakeElement, installFakeDom } from "./fake-dom.ts";
@@ -461,4 +463,62 @@ test("focus hand-back around a loading card: the trigger again after Reload, the
   dom.setFocused(false);
   refocus.restore(() => asEl(trigger));
   assert.equal(dom.active(), dom.body, "never pulls the focus back into the widget");
+});
+
+test("zoom group: a click hands the focus back to the canvas, Enter or Space leaves it on the button", () => {
+  const dom = installFakeDom();
+  (globalThis as Record<string, unknown>).cancelAnimationFrame ??= () => {};
+  const button = (id: string): FakeElement => dom.el("button", { id });
+  const els = {
+    zoom: dom.el("div", { id: "zoom" }),
+    zoomOut: button("zoom-out"),
+    zoomPct: button("zoom-pct"),
+    zoomIn: button("zoom-in"),
+    zoomFit: button("zoom-fit"),
+  };
+  const did: string[] = [];
+  const view = {
+    hasViewport: () => true,
+    level: () => 1,
+    zoomBy: (step: number) => void did.push(`zoomBy ${step}`),
+    zoomTo: (level: number) => void did.push(`zoomTo ${level}`),
+    onChange: () => () => {},
+    focus: () => void did.push("focus canvas"),
+  } as unknown as ViewControls;
+  const zoom = mountZoom({
+    els: {
+      zoom: asEl(els.zoom),
+      zoomOut: asEl(els.zoomOut),
+      zoomPct: asEl(els.zoomPct),
+      zoomIn: asEl(els.zoomIn),
+      zoomFit: asEl(els.zoomFit),
+    },
+    fit: () => void did.push("fit"),
+  });
+  zoom.bind(view);
+  const press = (el: FakeElement, detail: number): void =>
+    (el.onclick as unknown as (e: { detail: number }) => void)({ detail });
+
+  press(els.zoomIn, 1);
+  press(els.zoomOut, 1);
+  press(els.zoomPct, 2);
+  press(els.zoomFit, 1);
+  assert.deepEqual(did, [
+    "zoomBy 0.2",
+    "focus canvas",
+    "zoomBy -0.2",
+    "focus canvas",
+    "zoomTo 1",
+    "focus canvas",
+    "fit",
+    "focus canvas",
+  ]);
+
+  did.length = 0;
+  for (const el of [els.zoomIn, els.zoomOut, els.zoomPct, els.zoomFit]) press(el, 0);
+  assert.deepEqual(
+    did,
+    ["zoomBy 0.2", "zoomBy -0.2", "zoomTo 1", "fit"],
+    "a keyboard press keeps the focus where it is",
+  );
 });

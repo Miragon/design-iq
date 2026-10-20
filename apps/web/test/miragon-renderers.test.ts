@@ -35,6 +35,15 @@ interface WardleyModeler {
 const MAP =
   "title Tea Shop\ncomponent Cup of Tea [0.79, 0.61]\ncomponent Hot Water [0.82, 0.45]\nCup of Tea->Hot Water\n";
 const BOARD = "title Checkout\ncommand Place Order [240, 300]\nevent Order Placed [620, 300]\n";
+const CONTEXT_MAP = JSON.stringify({
+  version: 1,
+  title: "Conference",
+  contexts: [
+    { id: "ctx_cfp", label: "CfP", position: { x: 40, y: 40 }, size: { width: 200, height: 110 } },
+    { id: "ctx_agenda", label: "Agenda", position: { x: 400, y: 40 }, size: { width: 200, height: 110 } },
+  ],
+  relationships: [],
+});
 
 test("the new-file templates are the renderers' own serialization: the first canvas save is no phantom diff", async () => {
   const templates: Array<[id: string, text: string]> = [
@@ -79,6 +88,46 @@ test("the read-only viewers import without a command stack: Event Storming and W
     await engine.importText(text);
     await engine.importText(text);
     engine.destroy();
+  }
+});
+
+interface DiagramServices {
+  get(name: "elementRegistry"): {
+    filter(fn: (e: { id: string; parent?: unknown; labelTarget?: unknown }) => boolean): Array<{ id: string }>;
+  };
+  get(name: "selection"): { select(element: unknown): void };
+}
+
+test("Delete acts on the selection once the canvas has the focus, not while a chrome button has it", async () => {
+  const boards: Array<[id: string, text: string]> = [
+    ["wardley", MAP],
+    ["event-storming", BOARD],
+    ["context-map", CONTEXT_MAP],
+  ];
+  for (const [id, text] of boards) {
+    const widget = host();
+    const button = widget.ownerDocument.createElement("button");
+    widget.ownerDocument.body.append(button);
+    const engine = mountMiragonEngine(await load(id), widget, false);
+    await engine.importText(text);
+    const diagram = engine.raw as unknown as DiagramServices;
+    const shapes = () => diagram.get("elementRegistry").filter((e) => e.parent !== undefined && !e.labelTarget);
+    const before = shapes().length;
+    diagram.get("selection").select(shapes()[0]);
+    const pressDelete = (): void =>
+      void widget.ownerDocument.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }),
+      );
+
+    button.focus();
+    pressDelete();
+    assert.equal(shapes().length, before, `${id}: a chrome button keeps the key`);
+    engine.view.focus?.();
+    assert.equal(widget.ownerDocument.activeElement, widget.querySelector(".djs-container > svg"), id);
+    pressDelete();
+    assert.ok(shapes().length < before, `${id}: the canvas takes it`);
+    engine.destroy();
+    button.remove();
   }
 });
 

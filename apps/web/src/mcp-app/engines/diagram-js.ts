@@ -52,6 +52,7 @@ interface CanvasLike {
    *  its columns, keep-selection-visible scrolls) — nobody else calls it here */
   resized?(): void;
   getContainer?(): HTMLElement;
+  focus?(): void;
 }
 
 interface PaletteLike {
@@ -262,6 +263,7 @@ export function diagramView(
       return () => listeners.delete(cb);
     },
     ...(paletteControls ? { palette: paletteControls } : {}),
+    focus: () => canvas().focus?.(),
     importFit,
     destroy() {
       stopAnimation();

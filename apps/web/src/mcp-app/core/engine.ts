@@ -81,6 +81,9 @@ export interface ViewControls {
   /** viewbox changes, view switches, (re-)imports — the readout re-reads level() */
   onChange(cb: () => void): () => void;
   palette?: PaletteControls;
+  /** hand the keyboard focus to the canvas: the renderers act on keys only
+   *  while it (or the page itself) has the focus, not a chrome button */
+  focus?(): void;
   /** touch-only devices (phase 2) */
   undo?: { canUndo(): boolean; canRedo(): boolean; undo(): void; redo(): void };
 }

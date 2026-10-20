@@ -42,11 +42,19 @@ export const mountZoom: MountZoom = ({ els, fit }) => {
     if (!frame) frame = requestAnimationFrame(render);
   };
 
+  /** a click (detail > 0) gives the focus back to the canvas, so its keys
+   *  work on at once; Enter or Space (detail 0) keeps it on the button */
+  const thenCanvas =
+    (act: () => void) =>
+    (e: MouseEvent): void => {
+      act();
+      if (e.detail > 0) view?.focus?.();
+    };
   els.zoomPct.title = "Reset zoom to 100%";
-  els.zoomOut.onclick = () => view?.zoomBy(-STEP);
-  els.zoomIn.onclick = () => view?.zoomBy(STEP);
-  els.zoomPct.onclick = () => view?.zoomTo(1);
-  els.zoomFit.onclick = () => fit();
+  els.zoomOut.onclick = thenCanvas(() => view?.zoomBy(-STEP));
+  els.zoomIn.onclick = thenCanvas(() => view?.zoomBy(STEP));
+  els.zoomPct.onclick = thenCanvas(() => view?.zoomTo(1));
+  els.zoomFit.onclick = thenCanvas(fit);
 
   return {
     bind(next) {
