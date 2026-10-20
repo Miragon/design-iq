@@ -1329,6 +1329,13 @@ test("generic model tools: get/save ANY notation with CAS, validate_model, creat
   );
   const unknown = await call("validate_model", { content: "x", path: "notes.txt" });
   assert.ok(unknown.isError && /pass `notation`/.test(unknown.text), unknown.text);
+  // a mistyped notation id is an error too, not an ok that skips the check the save would run
+  const mistyped = await call("validate_model", {
+    content: duplicate,
+    path: "processes/teams.tt",
+    notation: "team-topologies",
+  });
+  assert.ok(mistyped.isError && /'team-topologies' is no registered notation/.test(mistyped.text), mistyped.text);
 
   // the widget's live ticket mints for any notation's room
   const ticket = await callJson("mint_ws_ticket", { repo: REPO.fullName, path: OWM_PATH });

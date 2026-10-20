@@ -1073,7 +1073,9 @@ export function createLiveMcpServer(
         const findings = checkModel(content, { path: path ?? `<${notation ?? "model"}>`, notation, modelIds });
         if (!findings) {
           return fail(
-            `no registered notation for ${path ? `'${path}'` : "the payload"} — pass \`notation\` (one of: ${NOTATION_IDS}).`,
+            notation
+              ? `'${notation}' is no registered notation — pass one of: ${NOTATION_IDS}.`
+              : `no registered notation for ${path ? `'${path}'` : "the payload"} — pass \`notation\` (one of: ${NOTATION_IDS}).`,
           );
         }
         return ok({ ok: !findings.some((f) => f.severity === "ERROR"), findings });

@@ -3,7 +3,7 @@
  * and the Live Host's save gate. Pinned here: notation selection by path,
  * full-checker parity for BPMN/DMN, the schema model for the Miragon JSON
  * notations, the baseline for everything else, and `undefined` for
- * non-model files.
+ * non-model files and unknown notation ids.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -119,4 +119,6 @@ test("checkModel: other notations run the baseline, non-models are undefined", (
   assert.equal(checkModel("flowchrt", { path: "docs/flow.mermaid" }), undefined);
   assert.equal(checkModel("cases: []", { path: "p.tests.yaml" }), undefined);
   assert.equal(checkModel("anything", { path: "no-extension" }), undefined);
+  // an explicit notation id outranks the path: an unknown one checks nothing, it never passes
+  assert.equal(checkModel("{ broken", { path: "teams/t.tt", notation: "nope" }), undefined);
 });

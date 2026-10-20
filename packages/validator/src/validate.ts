@@ -604,12 +604,13 @@ export interface CheckContext {
  * notations, the mediaKind baseline for everything else, plus the generic
  * dangling-reference rule for ANY notation with a refs emitter; `undefined`
  * when the path matches no registered notation (the file is not a model;
- * nothing to check). Consumed by the CLI (runCli) AND the Live Host's save
- * gate (application/content.ts) so both always agree.
+ * nothing to check) or `ctx.notation` names none (a mistyped id must not
+ * pass a file unchecked). Consumed by the CLI (runCli) AND the Live Host's
+ * save gate (application/content.ts) so both always agree.
  */
 export function checkModel(raw: string, ctx: CheckContext): Finding[] | undefined {
   const notation = ctx.notation ?? byExtension(ctx.path)?.id;
-  if (!notation) return undefined;
+  if (!notation || !byId(notation)) return undefined;
   const base =
     notation === "bpmn"
       ? checkBpmnXml(raw, { file: ctx.path }).findings
