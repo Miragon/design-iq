@@ -34,3 +34,10 @@
 #app[data-kind="miragon"] #canvas .cm-legend {
   max-height: calc(100% - var(--under-row) - var(--inset-b) - 40px);
 }
+
+/* the per-mount host (miragon-main.ts) fills the frame; the renderer's root
+   inside it is 100 % of it */
+#app[data-kind="miragon"] #canvas > div {
+  position: absolute;
+  inset: 0;
+}

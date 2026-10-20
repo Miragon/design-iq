@@ -20,7 +20,8 @@ export interface DiagramLike {
 }
 
 /** the single selected element's id (a label resolves to its target), or
- *  undefined — also when this build registers no selection service */
+ *  undefined — also when this build registers no selection service. The
+ *  bpmn engine's; a contract modeler reports its selection itself */
 export function selectedElementOf(instance: Pick<DiagramLike, "get">): string | undefined {
   try {
     const selection = instance.get("selection") as { get(): Array<{ id: string; labelTarget?: { id: string } }> };

@@ -209,9 +209,9 @@ export interface WebNotationPlugin {
    *  keys typed in the source from a `documentKeys` engine. The engine must
    *  follow its host's size: the divider and the view switch resize the
    *  mounted canvas layer. No diagram-js engine of the SPA does yet (it
-   *  takes a ResizeObserver calling canvas.resized(); without it
-   *  keepDiagramViewbox restores a stale viewbox on the next import and
-   *  rescales the canvas), so the Miragon renderers wait for that. Absent =
+   *  takes a ResizeObserver calling canvas.resized(); without it the view
+   *  restored after the next import is a stale viewbox and rescales the
+   *  canvas), so the Miragon renderers wait for that. Absent =
    *  the canvas or the source, one at a time; BPMN and DMN never opt in
    *  (their panels dock over the canvas edge) */
   splitView?: boolean;

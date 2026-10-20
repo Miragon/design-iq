@@ -3,9 +3,9 @@
  * diagram-js canvas, plus publishing the LOCAL pointer/selection. Same
  * ownership rule and structural typing as todo-canvas: framework-free, one
  * controller per modeler, created by the notation engine on mount and torn
- * down in its destroy. Works unchanged on bpmn-js and the Miragon
- * wardley/team-topologies modelers (all diagram-js: canvas + elementRegistry
- * + eventBus-backed on/off).
+ * down in its destroy. Works on bpmn-js and on the diagram every Miragon
+ * renderer wraps (`modeler.diagram`; all diagram-js: canvas +
+ * elementRegistry + eventBus-backed on/off).
  *
  * Coordinates travel in MODEL space (@designiq/contracts/live CanvasPresence),
  * so peers at different zoom/pan see each cursor on the right spot. The
@@ -59,9 +59,11 @@ interface CanvasLike {
   getLayer(name: string): SVGElement;
   viewbox(): { x: number; y: number; scale: number };
 }
+interface RegistryLike {
+  get(id: string): ElementLike | undefined;
+}
 interface ModelerLike {
-  get(service: "canvas"): CanvasLike;
-  get(service: "elementRegistry"): { get(id: string): ElementLike | undefined };
+  get(service: string): unknown;
   on(event: string, callback: (event?: unknown) => void): void;
   off(event: string, callback: (event?: unknown) => void): void;
 }
@@ -100,8 +102,8 @@ function namePill(color: string, name: string, x: number, y: number): { group: S
 }
 
 export function attachPresenceCanvas(modeler: ModelerLike, presence: PresenceSurface): { destroy(): void } {
-  const canvas = modeler.get("canvas");
-  const registry = modeler.get("elementRegistry");
+  const canvas = modeler.get("canvas") as CanvasLike;
+  const registry = modeler.get("elementRegistry") as RegistryLike;
   const container = canvas.getContainer();
 
   // ── local: pointer + selection → setLocal, throttled ───────────────────────

@@ -12,7 +12,7 @@ export function miragonPlugin(spec: MiragonRendererSpec): WebNotationPlugin {
     canvasClassName: spec.canvasClassName,
     mountEditor: async (container, ctx) => {
       const [{ mountMiragonEditor }, renderer] = await Promise.all([import("./editor"), spec.load()]);
-      return mountMiragonEditor(renderer, container, ctx);
+      return mountMiragonEditor(spec, renderer, container, ctx);
     },
     // every Miragon renderer's keyboard module listens on document
     documentKeys: true,

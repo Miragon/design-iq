@@ -16,6 +16,6 @@ import type { MiragonRendererSpec } from "./spec.ts";
 import { spec as teamTopology } from "./team-topology.ts";
 import { spec as wardley } from "./wardley.ts";
 
-export type { LoadedMiragonRenderer, MiragonRendererLike, MiragonRendererSpec } from "./spec.ts";
+export type { LoadedMiragonRenderer, MiragonModeler, MiragonMountOptions, MiragonRendererSpec } from "./spec.ts";
 
 export const MIRAGON_RENDERERS: readonly MiragonRendererSpec[] = [wardley, teamTopology, eventStorming, contextMap];

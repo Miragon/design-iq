@@ -1,8 +1,9 @@
 /**
  * The Miragon renderers apps/web pins, for real (under jsdom, test/renderer-dom.ts),
  * through the very specs, widget engine and SPA editor the app mounts them
- * with. The other suites drive fakes that model a renderer's traits; these
- * cases pin the traits themselves, so a renderer bump that changes one fails
+ * with — their @miragon/modeler-api factories. The other suites drive a fake
+ * that keeps the contract's laws; these cases pin that the renderers keep
+ * them the way designIQ relies on, so a renderer bump that breaks one fails
  * here instead of in a browser.
  */
 import assert from "node:assert/strict";
@@ -13,7 +14,7 @@ import * as Y from "yjs";
 
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
-import type { LoadedMiragonRenderer } from "../src/notations/miragon/spec.ts";
+import type { LoadedMiragonRenderer, MiragonRendererSpec } from "../src/notations/miragon/spec.ts";
 import type { EditorContext } from "../src/notations/registry.ts";
 import { closeDom, host } from "./renderer-dom.ts";
 
@@ -21,15 +22,36 @@ after(closeDom);
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function load(id: string): Promise<LoadedMiragonRenderer> {
+function specOf(id: string): MiragonRendererSpec {
   const spec = MIRAGON_RENDERERS.find((s) => s.id === id);
   assert.ok(spec, id);
-  return spec.load();
+  return spec;
+}
+
+/** the spec and its loaded factories, as both hosts mount them */
+async function load(id: string): Promise<[MiragonRendererSpec, LoadedMiragonRenderer]> {
+  const spec = specOf(id);
+  return [spec, await spec.load()];
+}
+
+/** the widget engine of a notation, mounted the way the widget does it */
+async function engineOf(id: string, container: HTMLElement, readonly = false) {
+  const [spec, renderer] = await load(id);
+  return mountMiragonEngine(spec, renderer, container, readonly);
+}
+
+interface DiagramServices {
+  get(name: "elementRegistry"): {
+    get(id: string): unknown;
+    filter(fn: (e: { id: string; parent?: unknown; labelTarget?: unknown }) => boolean): Array<{ id: string }>;
+  };
+  get(name: "selection"): { select(element: unknown): void };
+  get(name: "modeling"): { removeElements(elements: unknown[]): void };
+  get(name: "commandStack"): { canUndo(): boolean; undo(): void };
 }
 
 interface WardleyModeler {
   setMapSize(width: number, height: number, options?: { transient?: boolean }): void;
-  exportDSL(): string;
 }
 
 const MAP =
@@ -68,6 +90,47 @@ const TEAMS = JSON.stringify({
   flows: [],
 });
 
+/** one hand-written document per notation, and a second one a peer turns it into */
+const DOCUMENTS: Array<[id: string, text: string, peer: string]> = [
+  ["wardley", MAP, MAP.replace("[0.82, 0.45]", "[0.82, 0.55]")],
+  ["event-storming", BOARD, BOARD.replace("[620, 300]", "[640, 300]")],
+  ["context-map", CONTEXT_MAP, CONTEXT_MAP.replace('"label":"Agenda"', '"label":"Agenda Builder"')],
+  ["team-topology", TEAMS, TEAMS.replace('"label":"Platform"', '"label":"Cloud Platform"')],
+];
+
+/** the shapes a user can select and delete (no root, no external label) */
+const shapesOf = (diagram: DiagramServices) =>
+  diagram.get("elementRegistry").filter((e) => e.parent !== undefined && !e.labelTarget);
+
+test("each spec's factories are its renderer's: meta.notation is the spec's contractNotation, editor and viewer", async () => {
+  for (const spec of MIRAGON_RENDERERS) {
+    const renderer = await spec.load();
+    const editor = renderer.create();
+    const viewer = renderer.createViewer();
+    assert.equal(editor.meta.notation, spec.contractNotation, spec.id);
+    assert.deepEqual([editor.meta.editable, viewer.meta.editable], [true, false], spec.id);
+    editor.destroy();
+    viewer.destroy();
+  }
+});
+
+test("the renderer's root mounts INSIDE the host, which keeps the scope class; destroy removes only that root", async () => {
+  for (const spec of MIRAGON_RENDERERS) {
+    const widget = host(spec.canvasClassName);
+    const engine = await engineOf(spec.id, widget);
+    const root = widget.firstElementChild!;
+    assert.equal(widget.children.length, 1, spec.id);
+    // the descendant prefix of the SPA's vendor-CSS scoping (notations/miragon/vendor-css.ts)
+    assert.ok(root.matches(`.${spec.canvasClassName} > *`), spec.id);
+    assert.ok(!root.classList.contains(spec.canvasClassName), `${spec.id}: the scope class stays on the host`);
+    assert.ok(root.querySelector(".djs-container"), spec.id);
+    engine.destroy();
+    assert.equal(widget.children.length, 0, `${spec.id}: its root is gone`);
+    assert.ok(widget.isConnected, `${spec.id}: the host is the host's to remove`);
+    widget.remove();
+  }
+});
+
 test("the new-file templates are the renderers' own serialization: the first canvas save is no phantom diff", async () => {
   const templates: Array<[id: string, text: string]> = [
     ["wardley", newOwmText("map", "Platform Map")],
@@ -76,22 +139,16 @@ test("the new-file templates are the renderers' own serialization: the first can
     ["team-topology", newTtJson("teams", "Team Landscape")],
   ];
   for (const [id, text] of templates) {
-    const engine = mountMiragonEngine(await load(id), host(), false);
+    const engine = await engineOf(id, host());
     await engine.importText(text);
     assert.equal(await engine.exportText(), text, id);
     engine.destroy();
   }
 });
 
-test("importing never dirties the widget (engine invariant 1), the renderer's own import echo included", async () => {
-  const boards: Array<[id: string, text: string]> = [
-    ["wardley", MAP],
-    ["event-storming", BOARD],
-    ["context-map", newCmJson("map", "Conference Planner")],
-    ["team-topology", TEAMS],
-  ];
-  for (const [id, text] of boards) {
-    const engine = mountMiragonEngine(await load(id), host(), false);
+test("importing never dirties the widget: the contract's import is silent, the renderer's own history erase included", async () => {
+  for (const [id, text] of DOCUMENTS) {
+    const engine = await engineOf(id, host());
     let dirty = 0;
     engine.onDirty(() => dirty++);
     await engine.importText(text);
@@ -101,46 +158,72 @@ test("importing never dirties the widget (engine invariant 1), the renderer's ow
   }
 });
 
+/** a document each JSON renderer refuses, with the reason it gives — the
+ *  line DSLs refuse nothing: they keep every line they do not understand */
+const REFUSED: Array<[id: string, good: string, refused: string, reason: RegExp]> = [
+  [
+    "context-map",
+    CONTEXT_MAP,
+    withId(CONTEXT_MAP, "contexts", 0, "cm-root"),
+    /^contexts\.0\.id: the id "cm-root" is reserved/,
+  ],
+  ["team-topology", TEAMS, withId(TEAMS, "nodes", 1, "team_platform"), /^nodes\.1\.id: duplicate id "team_platform"/],
+  ["context-map", CONTEXT_MAP, CONTEXT_MAP.slice(0, 40), /^\(root\): not valid JSON/],
+  ["team-topology", TEAMS, TEAMS.slice(0, 40), /JSON/],
+];
+
+/** the document with one element's id replaced */
+function withId(json: string, list: "nodes" | "contexts", index: number, id: string): string {
+  const document = JSON.parse(json) as Record<string, Array<{ id: string }>>;
+  document[list]![index]!.id = id;
+  return JSON.stringify(document);
+}
+
+test("the SPA editor names the reason a renderer refuses a document, word for word", async () => {
+  const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
+  for (const [id, , refused, reason] of REFUSED) {
+    const [spec, renderer] = await load(id);
+    const doc = new Y.Doc();
+    doc.getText("content").insert(0, refused);
+    const failed: string[] = [];
+    const editor = mountMiragonEditor(spec, renderer, host(), {
+      ytext: doc.getText("content"),
+      doc,
+      onSyncError: assert.fail,
+      onImportFailed: (message: string) => failed.push(message),
+    } as unknown as EditorContext);
+    await wait(50);
+    assert.equal(failed.length, 1, id);
+    assert.match(failed[0]!, reason, id);
+    editor.destroy();
+  }
+});
+
 test("the read-only viewers import without a command stack: no renderer needs a shim", async () => {
-  const boards: Array<[id: string, text: string]> = [
-    ["wardley", MAP],
-    ["event-storming", BOARD],
-    ["context-map", CONTEXT_MAP],
-    ["team-topology", TEAMS],
-  ];
-  for (const [id, text] of boards) {
-    const engine = mountMiragonEngine(await load(id), host(), true);
-    assert.throws(() => engine.raw.get("commandStack"), /No provider for "commandStack"/, id);
+  for (const [id, text] of DOCUMENTS) {
+    const engine = await engineOf(id, host(), true);
+    assert.equal(engine.modeler.meta.editable, false, id);
+    assert.throws(
+      () => (engine.modeler.diagram as unknown as DiagramServices).get("commandStack"),
+      /No provider for "commandStack"/,
+      id,
+    );
     await engine.importText(text);
     await engine.importText(text);
     engine.destroy();
   }
 });
 
-interface DiagramServices {
-  get(name: "elementRegistry"): {
-    filter(fn: (e: { id: string; parent?: unknown; labelTarget?: unknown }) => boolean): Array<{ id: string }>;
-  };
-  get(name: "selection"): { select(element: unknown): void };
-}
-
 test("Delete acts on the selection once the canvas has the focus, not while a chrome button has it", async () => {
-  const boards: Array<[id: string, text: string]> = [
-    ["wardley", MAP],
-    ["event-storming", BOARD],
-    ["context-map", CONTEXT_MAP],
-    ["team-topology", TEAMS],
-  ];
-  for (const [id, text] of boards) {
+  for (const [id, text] of DOCUMENTS) {
     const widget = host();
     const button = widget.ownerDocument.createElement("button");
     widget.ownerDocument.body.append(button);
-    const engine = mountMiragonEngine(await load(id), widget, false);
+    const engine = await engineOf(id, widget);
     await engine.importText(text);
-    const diagram = engine.raw as unknown as DiagramServices;
-    const shapes = () => diagram.get("elementRegistry").filter((e) => e.parent !== undefined && !e.labelTarget);
-    const before = shapes().length;
-    diagram.get("selection").select(shapes()[0]);
+    const diagram = engine.modeler.diagram as unknown as DiagramServices;
+    const before = shapesOf(diagram).length;
+    diagram.get("selection").select(shapesOf(diagram)[0]);
     const pressDelete = (): void =>
       void widget.ownerDocument.activeElement?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }),
@@ -148,11 +231,11 @@ test("Delete acts on the selection once the canvas has the focus, not while a ch
 
     button.focus();
     pressDelete();
-    assert.equal(shapes().length, before, `${id}: a chrome button keeps the key`);
+    assert.equal(shapesOf(diagram).length, before, `${id}: a chrome button keeps the key`);
     engine.view.focus?.();
     assert.equal(widget.ownerDocument.activeElement, widget.querySelector(".djs-container > svg"), id);
     pressDelete();
-    assert.ok(shapes().length < before, `${id}: the canvas takes it`);
+    assert.ok(shapesOf(diagram).length < before, `${id}: the canvas takes it`);
     engine.destroy();
     button.remove();
   }
@@ -170,11 +253,11 @@ function dragPlotCorner(modeler: WardleyModeler): void {
 }
 
 test("Wardley: a resize preview is no edit for the widget's autosave, the size it commits is", async () => {
-  const engine = mountMiragonEngine(await load("wardley"), host("wardley-canvas"), false);
+  const engine = await engineOf("wardley", host("wardley-canvas"));
   await engine.importText(MAP);
   let dirty = 0;
   engine.onDirty(() => dirty++);
-  const modeler = engine.raw as unknown as WardleyModeler;
+  const modeler = engine.modeler.diagram as unknown as WardleyModeler;
   dragPlotCorner(modeler);
   assert.match(await engine.exportText(), /size \[1500, 900\]/, "the export already carries the preview");
   assert.equal(dirty, 0, "no autosave of a preview size");
@@ -184,7 +267,7 @@ test("Wardley: a resize preview is no edit for the widget's autosave, the size i
 });
 
 test("Wardley: a resize preview never reaches the shared text, the size it commits does", async () => {
-  const engine = mountMiragonEngine(await load("wardley"), host("wardley-canvas"), false);
+  const engine = await engineOf("wardley", host("wardley-canvas"));
   const doc = new Y.Doc();
   const ytext = doc.getText("content");
   ytext.insert(0, MAP);
@@ -194,13 +277,15 @@ test("Wardley: a resize preview never reaches the shared text, the size it commi
   });
   await wait(500);
   const opened = ytext.toString();
-  const modeler = engine.raw as unknown as WardleyModeler;
+  assert.equal(opened, MAP, "opening writes nothing");
+  const modeler = engine.modeler.diagram as unknown as WardleyModeler;
   dragPlotCorner(modeler);
   await wait(50);
   assert.equal(ytext.toString(), opened, "no preview size for the peers");
   modeler.setMapSize(1500, 900);
   await wait(50);
   assert.match(ytext.toString(), /size \[1500, 900\]/);
+  assert.doesNotMatch(ytext.toString(), /size \[(900|1200), /);
   unbind();
   engine.destroy();
 });
@@ -210,18 +295,17 @@ test("Team Topologies takes no key while its canvas is inert or a modal dialog i
   const canvasHost = layer.ownerDocument.createElement("div");
   canvasHost.className = "tt-canvas";
   layer.append(canvasHost);
-  const engine = mountMiragonEngine(await load("team-topology"), canvasHost, false);
+  const engine = await engineOf("team-topology", canvasHost);
   await engine.importText(TEAMS);
-  const diagram = engine.raw as unknown as DiagramServices;
-  const shapes = () => diagram.get("elementRegistry").filter((e) => e.parent !== undefined && !e.labelTarget);
+  const diagram = engine.modeler.diagram as unknown as DiagramServices;
   const deleteOnThePage = (): number => {
-    diagram.get("selection").select(shapes()[0]);
+    diagram.get("selection").select(shapesOf(diagram)[0]);
     layer.ownerDocument.body.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }),
     );
-    return shapes().length;
+    return shapesOf(diagram).length;
   };
-  const before = shapes().length;
+  const before = shapesOf(diagram).length;
   layer.setAttribute("inert", "");
   assert.equal(deleteOnThePage(), before, "an inert layer around the canvas");
   layer.removeAttribute("inert");
@@ -256,7 +340,7 @@ function typeLabel(container: HTMLElement, value: string): HTMLTextAreaElement {
 }
 
 test("Team Topologies: a hand-written file opens untouched, an edit writes the canonical text, a re-import leaves no undo behind", async () => {
-  const engine = mountMiragonEngine(await load("team-topology"), host("tt-canvas"), false);
+  const engine = await engineOf("team-topology", host("tt-canvas"));
   const doc = new Y.Doc();
   const ytext = doc.getText("content");
   ytext.insert(0, TEAMS);
@@ -264,7 +348,7 @@ test("Team Topologies: a hand-written file opens untouched, an edit writes the c
   await wait(500);
   assert.equal(ytext.toString(), TEAMS, "the import echoes nothing into the shared text");
 
-  const modeler = engine.raw as unknown as TeamTopologyModeler;
+  const modeler = engine.modeler.diagram as unknown as TeamTopologyModeler;
   const checkout = modeler.get("elementRegistry").get("team_checkout");
   modeler.get("modeling").moveElements([checkout], { x: 10, y: 0 });
   await wait(50);
@@ -290,11 +374,11 @@ test("Team Topologies: a hand-written file opens untouched, an edit writes the c
 
 test("Team Topologies: typing a label is no edit until it commits, and a peer's re-import keeps what was typed", async () => {
   const widget = host("tt-canvas");
-  const engine = mountMiragonEngine(await load("team-topology"), widget, false);
+  const engine = await engineOf("team-topology", widget);
   await engine.importText(TEAMS);
   let dirty = 0;
   engine.onDirty(() => dirty++);
-  const modeler = engine.raw as unknown as TeamTopologyModeler;
+  const modeler = engine.modeler.diagram as unknown as TeamTopologyModeler;
   const labels = modeler.get("ttLabelEditing");
   labels.activate(modeler.get("elementRegistry").get("team_checkout"));
   typeLabel(widget, "Checkout & Pay");
@@ -315,56 +399,15 @@ test("Team Topologies: typing a label is no edit until it commits, and a peer's 
   engine.destroy();
 });
 
-/** the document with one element's id replaced */
-function withId(json: string, list: "nodes" | "contexts", index: number, id: string): string {
-  const document = JSON.parse(json) as Record<string, Array<{ id: string }>>;
-  document[list]![index]!.id = id;
-  return JSON.stringify(document);
-}
-
-test("the SPA editor names the reason the schema model refuses a document: a duplicate or reserved id", async () => {
-  const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
-  const refused: Array<[id: string, text: string, reason: RegExp]> = [
-    [
-      "team-topology",
-      withId(TEAMS, "nodes", 1, "team_platform"),
-      /^not a team-topology document: nodes\.1\.id: duplicate id "team_platform"/,
-    ],
-    [
-      "team-topology",
-      withId(TEAMS, "nodes", 0, "tt-root"),
-      /^not a team-topology document: nodes\.0\.id: "tt-root" is reserved/,
-    ],
-    [
-      "context-map",
-      withId(CONTEXT_MAP, "contexts", 0, "cm-root"),
-      /^not a context-map document: contexts\.0\.id: the id "cm-root" is reserved/,
-    ],
-  ];
-  for (const [id, text, reason] of refused) {
-    const doc = new Y.Doc();
-    doc.getText("content").insert(0, text);
-    const failed: string[] = [];
-    const editor = mountMiragonEditor(await load(id), host(), {
-      ytext: doc.getText("content"),
-      doc,
-      onSyncError: assert.fail,
-      onImportFailed: (message: string) => failed.push(message),
-    } as unknown as EditorContext);
-    await wait(50);
-    assert.equal(failed.length, 1, id);
-    assert.match(failed[0]!, reason);
-    editor.destroy();
-  }
-});
-
 test("Context Maps: every mount shows the legend card, which the 0.3.0 Modeler leaves to its host", async () => {
-  const renderer = await load("context-map");
+  const [spec, renderer] = await load("context-map");
   const text = newCmJson("map", "Conference Planner");
 
+  const { createCollaborativeModeler } = await import("@miragon/context-maps-renderer");
   const bareHost = host("cm-canvas");
-  const bare = new renderer.Modeler({ container: bareHost });
-  bare.get("canvas");
+  const bare = createCollaborativeModeler();
+  bare.attachTo(bareHost);
+  await bare.importText(text);
   assert.equal(bareHost.querySelector(".cm-legend"), null, "the renderer alone draws none");
   bare.destroy();
 
@@ -372,7 +415,7 @@ test("Context Maps: every mount shows the legend card, which the 0.3.0 Modeler l
   const spa = host("cm-canvas");
   const doc = new Y.Doc();
   doc.getText("content").insert(0, text);
-  const editor = mountMiragonEditor(renderer, spa, {
+  const editor = mountMiragonEditor(spec, renderer, spa, {
     ytext: doc.getText("content"),
     doc,
     onSyncError: assert.fail,
@@ -384,7 +427,7 @@ test("Context Maps: every mount shows the legend card, which the 0.3.0 Modeler l
 
   for (const readonly of [false, true]) {
     const widget = host("cm-canvas");
-    const engine = mountMiragonEngine(renderer, widget, readonly);
+    const engine = mountMiragonEngine(spec, renderer, widget, readonly);
     await engine.importText(text);
     assert.ok(widget.querySelector(".cm-legend"), readonly ? "the widget viewer" : "the widget editor");
     engine.destroy();
