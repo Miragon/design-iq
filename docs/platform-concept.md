@@ -203,6 +203,28 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
    string-equality guard (echo prevention via Yjs transaction origins).
 4. **Validate merged XML before import** (cheap parse); on the rare interleaved-merge
    corruption, fall back to the last-good snapshot the Live Host keeps anyway.
+   **Repair a merge that canvas writes alone broke** (#274). Two canvas exports that cross
+   on the wire, each one large region (bpmn-js reorders lane refs and DI on export, so one
+   move rewrites lines 11 to 176 of order-to-cash), merge into a text no peer can import,
+   and every canvas keeps its own last good state: no later update heals that. Each canvas
+   write therefore records itself in a shared Y.Map next to the text (`CANVAS_WRITES_KEY`,
+   same transaction) and takes out the entries its canvas already holds, so the map keeps
+   the writes no canvas has taken in yet. When a merged text fails the gate or the import,
+   every change since the canvas last matched the text was such a write, and two or more
+   are open, all peers rank the open writes the same way: deepest first (the canvas that
+   has taken in the most of the other writers' writes), then the lowest Yjs client id. Only
+   the first one's writer acts: after a 500 ms settle delay, and only if the text, the map
+   and the source view are as they were, it writes its canvas export over the text, which
+   empties the map down to its own entry. The writers whose open writes it overwrote get
+   the conflict toast; the repairer keeps its edit. A crossing write that arrives during
+   the delay changes the text and the map, so the repair stands down and the next check
+   ranks the new map: two peers never repair one broken state. Typing in the source view,
+   an agent's or the Live Host's save (`updateText`) and a restore write no entry, so a
+   text they touched is never written over: half-typed text is a legitimate state, and a
+   save was confirmed to its author, who has no toast to learn of its loss. Two limits: if
+   the first-ranked writer leaves before its delay ends, the text stays as it is (as before
+   this rule), and a merge the notation still imports (the Wardley and Event Storming
+   parsers keep a line they cannot read) is no broken text to this rule.
 
 Accepted v1 costs (the honest trade-offs): local undo history resets when remote changes
 arrive (diagram-js clears the command stack on re-import), and remote keystrokes on
@@ -259,14 +281,14 @@ needed or wanted in v1; OCT's server doesn't cluster either. One landscape = one
 
 ## Risks & mitigations
 
-| Risk                                                       | Mitigation                                                                                                                            |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| OCT is pre-1.0 (0.3.x)                                     | Pin versions; MIT license keeps the fork option; the protocol surface we use is small (room, fs, sync)                                |
-| Session dies if Live Host restarts                         | We own the host: persisted Y-updates + auto room re-creation + client auto-rejoin via the session API; 30 s socket grace covers blips |
-| Miragon modeler ↔ OCT text sync unproven                   | M0 spike task #1; known fix path (minimal-diff writes) is upstream work in our own plugin                                             |
-| Y.Text merge can produce invalid XML in rare interleavings | Rule 4: validate + last-good fallback; soft element-locks reduce the collision window                                                 |
-| OCT encrypts with AES-CBC (not AEAD)                       | Acceptable for v1 (transport is TLS anyway); track upstream                                                                           |
-| Live state exists only on one volume                       | Fly volume snapshots + the update log doubles as journal; releases drain risk continuously — encourage small, frequent releases       |
+| Risk                                                       | Mitigation                                                                                                                                              |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OCT is pre-1.0 (0.3.x)                                     | Pin versions; MIT license keeps the fork option; the protocol surface we use is small (room, fs, sync)                                                  |
+| Session dies if Live Host restarts                         | We own the host: persisted Y-updates + auto room re-creation + client auto-rejoin via the session API; 30 s socket grace covers blips                   |
+| Miragon modeler ↔ OCT text sync unproven                   | M0 spike task #1; known fix path (minimal-diff writes) is upstream work in our own plugin                                                               |
+| Y.Text merge can produce invalid XML in rare interleavings | Rule 4: validate + last-good fallback; a merge that canvas writes alone broke is repaired by one writer; soft element-locks reduce the collision window |
+| OCT encrypts with AES-CBC (not AEAD)                       | Acceptable for v1 (transport is TLS anyway); track upstream                                                                                             |
+| Live state exists only on one volume                       | Fly volume snapshots + the update log doubles as journal; releases drain risk continuously — encourage small, frequent releases                         |
 
 ## Milestones
 

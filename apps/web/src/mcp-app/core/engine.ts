@@ -36,7 +36,9 @@ export interface Insets {
 
 /** what a live binding may report back while the Y.Text owns the canvas */
 export interface LiveBindHooks {
-  /** overlapping concurrent edit — the remote change won (model-sync rule 4) */
+  /** a canvas edit lost to a peer's: an overlapping remote edit won, or a
+   *  peer's repair of a merge broken by crossing canvas writes replaced it
+   *  (model-sync rule 4) */
   onConflict(message: string): void;
   /** a remote snapshot did not import — reported by the binds that support it
    *  (bindBpmn reports nothing; the core tolerates silence) */
