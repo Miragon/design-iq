@@ -1,5 +1,5 @@
 /**
- * The Mermaid text conventions (../mermaid.ts): the code mermaid 11.17's
+ * The Mermaid text conventions (../mermaid.ts): the code mermaid 12.1's
  * parser reads after its preprocess, the way back from a line of that code to
  * the source line (parse errors count code lines), and the header that names
  * the diagram type. The validator's check of a ```mermaid fence and the web

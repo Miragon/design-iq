@@ -20,7 +20,7 @@
  */
 
 /** the mermaid release this file mirrors: apps/web's exact pin */
-export const MERMAID_VERSION = "11.17.2";
+export const MERMAID_VERSION = "12.1.0";
 
 /**
  * Every diagram type MERMAID_VERSION renders, spelled as its header keyword
@@ -77,6 +77,8 @@ export const MERMAID_DIAGRAM_TYPES: readonly string[] = [
   "railroad-ebnf-beta",
   "railroad-abnf-beta",
   "railroad-peg-beta",
+  "usecase-beta",
+  "agentflow-beta",
 ];
 
 // mermaid's own patterns (src/diagram-api/regexes.ts, src/diagram-api/comments.ts)
