@@ -151,6 +151,8 @@ Measured on the built widgets: order-to-cash fits at 0.56 at 720x520 (left palet
 
 The re-fit animates the viewbox over 250ms with `--cd-ease` (rAF interpolation). Under `prefers-reduced-motion` it jumps.
 
+No re-fit runs while someone types a label on the canvas (a text field in it has the focus). Every renderer saves an open label editor when the viewbox changes, so a re-fit after a peer's re-import or a resize would save the name typed so far.
+
 Zoom group (BR), 28px targets:
 
 | Control | Accessible name                        | Action                                                          |
