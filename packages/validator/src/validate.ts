@@ -480,32 +480,42 @@ const schemaError =
  */
 const CONTEXT_MAP_REFUSED_RULES: ReadonlySet<string> = new Set(["unique-ids"]);
 
-/** each JSON notation's schema model, read the way its canvas reads the file */
-const SCHEMA_CHECKS: Readonly<Record<string, (raw: string, file: string) => Finding[]>> = {
-  "team-topology": (raw, file) => {
-    const parsed = parseTeamTopology(JSON.parse(raw));
-    return parsed.ok ? [] : parsed.issues.map(schemaError("team-topology/schema", file));
-  },
-  "context-map": (raw, file) => {
-    const parsed = parseContextMap(raw);
-    if (!parsed.ok) {
-      const issues = parsed.issues ?? [{ path: [], message: parsed.error }];
-      return issues.map(schemaError("context-map/schema", file));
-    }
-    const { errors, warnings } = contextMapRules(parsed.document);
-    return [...errors, ...warnings].map((finding) => {
-      const refused = CONTEXT_MAP_REFUSED_RULES.has(finding.rule);
-      const where = finding.relationshipId === undefined ? "" : `relationship "${finding.relationshipId}": `;
-      return {
-        severity: refused ? "ERROR" : "WARN",
-        ruleId: refused ? "context-map/schema" : "context-map/semantics",
-        file,
-        message: `${where}${finding.message} (${finding.rule})`,
-      };
-    });
-  },
-  "value-chain": (raw, file) => valueChainIssues(JSON.parse(raw)).map(schemaError("value-chain/schema", file)),
-};
+function checkTeamTopology(raw: string, file: string): Finding[] {
+  const parsed = parseTeamTopology(JSON.parse(raw));
+  return parsed.ok ? [] : parsed.issues.map(schemaError("team-topology/schema", file));
+}
+
+function checkContextMap(raw: string, file: string): Finding[] {
+  const parsed = parseContextMap(raw);
+  if (!parsed.ok) {
+    const issues = parsed.issues ?? [{ path: [], message: parsed.error }];
+    return issues.map(schemaError("context-map/schema", file));
+  }
+  const { errors, warnings } = contextMapRules(parsed.document);
+  return [...errors, ...warnings].map((finding) => {
+    const refused = CONTEXT_MAP_REFUSED_RULES.has(finding.rule);
+    const where = finding.relationshipId === undefined ? "" : `relationship "${finding.relationshipId}": `;
+    return {
+      severity: refused ? "ERROR" : "WARN",
+      ruleId: refused ? "context-map/schema" : "context-map/semantics",
+      file,
+      message: `${where}${finding.message} (${finding.rule})`,
+    };
+  });
+}
+
+function checkValueChain(raw: string, file: string): Finding[] {
+  return valueChainIssues(JSON.parse(raw)).map(schemaError("value-chain/schema", file));
+}
+
+/** each JSON notation's schema model, read the way its canvas reads the file
+ *  (a Map, not an object: the notation id may be a caller's free text such
+ *  as "constructor") */
+const SCHEMA_CHECKS: ReadonlyMap<string, (raw: string, file: string) => Finding[]> = new Map([
+  ["team-topology", checkTeamTopology],
+  ["context-map", checkContextMap],
+  ["value-chain", checkValueChain],
+]);
 
 /**
  * The schema check of a Miragon JSON notation (Team Topology, Context Map,
@@ -519,7 +529,7 @@ const SCHEMA_CHECKS: Readonly<Record<string, (raw: string, file: string) => Find
  */
 export function checkSchemaModel(raw: string, opts: { file?: string; notation: string }): Finding[] {
   const baseline = checkModelBaseline(raw, opts);
-  const check = SCHEMA_CHECKS[opts.notation];
+  const check = SCHEMA_CHECKS.get(opts.notation);
   // a structured notation's text is its codec's format, not the schema
   // model's document (the baseline skips it for the same reason)
   if (!check || baseline.length > 0 || byId(opts.notation)?.docShape === "structured") return baseline;

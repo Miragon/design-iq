@@ -213,6 +213,12 @@ test("text that is no JSON keeps the baseline finding, whatever the notation", (
   }
   // a notation without a schema model is the baseline alone
   assert.deepEqual(checkSchemaModel("component Tea [0.5, 0.5]", { notation: "wardley" }), []);
+  // validate_model passes an agent's `notation` through: an id that names an
+  // object built-in is an unknown notation, not a schema check
+  for (const notation of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+    assert.deepEqual(checkSchemaModel("{}", { notation }), [], notation);
+    assert.deepEqual(checkModel("{}", { path: "<model>", notation }), [], notation);
+  }
   assert.deepEqual(checkSchemaModel("<a", { notation: "bpmn" }), checkModelBaseline("<a", { notation: "bpmn" }));
 });
 
