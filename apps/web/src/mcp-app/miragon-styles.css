@@ -23,13 +23,14 @@
 }
 
 /* the Context Maps legend card (notations/miragon/context-map.ts) stands
-   above the bottom-left cluster, never under the sync pill, and ends below
-   the top row (44px: the 36px cluster and its 8px gap, core/layout.ts) */
+   8px above the bottom row, so never over the sync pill (40px: the 32px row,
+   BOTTOM_H in core/layout.ts, and the gap the sync popover keeps too), and
+   ends below the top row (--under-row) */
 #app[data-kind="miragon"] #canvas :is(.cm-legend, .cm-legend-toggle) {
-  bottom: calc(var(--inset-b) + 44px);
+  bottom: calc(var(--inset-b) + 40px);
   left: var(--inset-l);
 }
 
 #app[data-kind="miragon"] #canvas .cm-legend {
-  max-height: calc(100% - var(--under-row) - var(--inset-b) - 44px);
+  max-height: calc(100% - var(--under-row) - var(--inset-b) - 40px);
 }
