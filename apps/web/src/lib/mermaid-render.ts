@@ -13,7 +13,7 @@
  * The rest is pure (config, ids, error wording) and runs under node --test:
  * mermaid itself needs a DOM to measure text.
  */
-import { mermaidHeader, mermaidSourceLine } from "@designiq/notations/mermaid";
+import { mermaidFrontMatterLines, mermaidHeader, mermaidSourceLine } from "@designiq/notations/mermaid";
 import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
 import type { Mermaid, MermaidConfig } from "mermaid";
 
@@ -60,7 +60,10 @@ export const MERMAID_THEME_VARIABLES = {
  * a hybrid (mermaid merges the CI variables into the other theme's palette:
  * near-black boxes with near-black labels), and `themeCSS` would let any
  * collaborator inject CSS (a `url()` in it is a request from every reader's
- * browser). Layout options (direction, curve, wrap, look) stay the author's.
+ * browser). mermaid checks the list at every level of a config, so a theme
+ * scoped to one diagram type (`flowchart: { theme: dark }`, new in mermaid 12)
+ * is refused too. Layout options (direction, curve, wrap, look, layout) stay
+ * the author's.
  */
 export const MERMAID_SECURE_KEYS = [
   "secure",
@@ -84,7 +87,15 @@ export const MERMAID_SECURE_KEYS = [
  * wrap long labels and stay inert under `strict`. `suppressErrorRendering`
  * keeps mermaid from drawing its own error picture; the caller shows the
  * error and keeps the last good diagram instead. The CI look is not a
- * default but fixed: see MERMAID_SECURE_KEYS.
+ * default but fixed: see MERMAID_SECURE_KEYS. The classic look and the dagre
+ * layout are defaults a diagram may change: without them mermaid 12 draws
+ * most diagram types in its `neo` look (gradient strokes and drop shadows on
+ * the canvas set) and lays the graphs out with ELK, which moves the boxes of
+ * every diagram already written. dagre is set per diagram type that had it:
+ * a top-level layout would also take mindmaps off cose-bilkent and swimlanes
+ * off their lanes. mermaid 12's sizing is left as it is (in flowchart and
+ * state diagrams a label gets at least 120 px and wraps at 120, not 200):
+ * it is not part of mermaid's migration advice, and an author can set it.
  */
 export const MERMAID_CONFIG = {
   startOnLoad: false,
@@ -93,6 +104,12 @@ export const MERMAID_CONFIG = {
   themeVariables: MERMAID_THEME_VARIABLES,
   fontFamily: FONT_SANS,
   htmlLabels: true,
+  look: "classic",
+  flowchart: { layout: "dagre" },
+  class: { layout: "dagre" },
+  state: { layout: "dagre" },
+  er: { layout: "dagre" },
+  requirement: { layout: "dagre" },
   suppressErrorRendering: true,
   secure: MERMAID_SECURE_KEYS,
 } as const satisfies MermaidConfig;
@@ -121,22 +138,28 @@ export interface MermaidRenderError {
 
 export type MermaidRenderResult = { svg: string } | { error: MermaidRenderError };
 
-/** the line of mermaid's parsed code an error names: the jison parsers'
- *  hash.loc (exact even at the end of the text, where the message's own
- *  line number runs late), else the "line N" in the message (the langium
- *  parsers) */
-function codeLineOf(error: unknown, message: string): number | undefined {
-  const loc = (error as { hash?: { loc?: { first_line?: unknown } } } | null)?.hash?.loc?.first_line;
-  if (typeof loc === "number" && loc > 0) return loc;
+/** the SOURCE line an error names. The jison parsers' hash.loc (exact even
+ *  at the end of the text, where the message's own line number runs late)
+ *  and the "line N" of the langium parsers' messages count lines of the
+ *  parsed code. agentflow's own errors (a shape or YAML problem in an `@{…}`
+ *  block) carry a hash.loc without a token that adds the front matter's
+ *  lines to it. */
+function sourceLineOf(error: unknown, message: string, source: string): number | undefined {
+  const hash = (error as { hash?: { token?: unknown; loc?: { first_line?: unknown } } } | null)?.hash;
+  const loc = hash?.loc?.first_line;
+  if (typeof loc === "number" && loc > 0) {
+    return mermaidSourceLine(source, hash?.token === null ? loc - mermaidFrontMatterLines(source) : loc);
+  }
   const named = /\bline (\d+)/i.exec(message)?.[1];
-  return named ? Number(named) : undefined;
+  return named ? mermaidSourceLine(source, Number(named)) : undefined;
 }
 
 /**
  * What a failed mermaid parse or render means for the person typing: the
- * source line (mermaid counts lines AFTER dropping the front matter and the
- * comments, @designiq/notations/mermaid maps them back) and the message. A
- * missing or unknown diagram type reads like the validator's header check.
+ * source line (mermaid counts lines AFTER dropping the front matter and, for
+ * most diagram types, the comments; @designiq/notations/mermaid maps them
+ * back) and the message. A missing or unknown diagram type reads like the
+ * validator's header check.
  */
 export function describeMermaidError(error: unknown, source: string): MermaidRenderError {
   const raw = (error instanceof Error ? error.message : String(error)).trim();
@@ -149,14 +172,14 @@ export function describeMermaidError(error: unknown, source: string): MermaidRen
       message: `"${word}" is not a Mermaid diagram type. Start with one, for example flowchart LR.`,
     };
   }
-  const codeLine = codeLineOf(error, raw);
+  const line = sourceLineOf(error, raw, source);
   const message = raw
     .replace(/^Parsing failed:\s*/, "")
     .replace(/^(?:Parse|Lexer|Lexical) error on line \d+(?:, column \d+)?[:.]?\s*/, "")
     .trim();
   return {
     message: message || raw || "The diagram could not be drawn.",
-    ...(codeLine !== undefined ? { line: mermaidSourceLine(source, codeLine) } : {}),
+    ...(line !== undefined ? { line } : {}),
   };
 }
 

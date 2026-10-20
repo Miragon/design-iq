@@ -5,10 +5,14 @@
  *
  *   - mermaidCode        the text mermaid's diagram parsers see: its
  *                        preprocess drops the front matter, the %%{…}%%
- *                        directives and the %% comment lines first
+ *                        directives and, for every type but the two that
+ *                        keep them (KEEPS_COMMENTS), the %% comment lines
  *   - mermaidSourceLine  a line of that text back in the source: mermaid's
  *                        parse errors count lines of mermaidCode, so a title
  *                        in the front matter would shift every error line
+ *   - mermaidFrontMatterLines
+ *                        the lines the front matter takes: the errors
+ *                        agentflow raises itself count them as well
  *   - mermaidHeader      the first line, the one that names the diagram type
  *
  * Syntax knowledge, not a checker: the validator turns an unknown header
@@ -20,7 +24,7 @@
  */
 
 /** the mermaid release this file mirrors: apps/web's exact pin */
-export const MERMAID_VERSION = "11.17.2";
+export const MERMAID_VERSION = "12.1.0";
 
 /**
  * Every diagram type MERMAID_VERSION renders, spelled as its header keyword
@@ -77,12 +81,26 @@ export const MERMAID_DIAGRAM_TYPES: readonly string[] = [
   "railroad-ebnf-beta",
   "railroad-abnf-beta",
   "railroad-peg-beta",
+  "usecase-beta",
+  "agentflow-beta",
 ];
 
 // mermaid's own patterns (src/diagram-api/regexes.ts, src/diagram-api/comments.ts)
 const FRONT_MATTER = /^([^\S\n\r]*)-{3}\s*[\n\r](.*?)[\n\r]\1-{3}\s*[\n\r]+/s;
 const DIRECTIVE = /%{2}{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%{2}).|\r?\n)*))?\s*(?:}%{2})?/gi;
 const COMMENT_LINE = /^\s*%%(?!{)[^\n]+\n?/gm;
+
+/**
+ * The diagram types whose parser reads the comment lines too: their db sets
+ * preserveCommentsWhenParsing (src/Diagram.ts), so their errors count those
+ * lines. mermaid's detectors for them (src/diagrams/eventmodeling/detector.ts,
+ * src/diagrams/agentflow/afDetector.ts), against the header line.
+ */
+const KEEPS_COMMENTS = /^(?:eventmodeling|agentflow-beta\b)/;
+
+/** mermaid's default maxTextSize, which apps/web keeps (a secure key): past
+ *  it, mermaid parses even those types without their comment lines */
+const MAX_TEXT_SIZE = 50_000;
 
 /** a header keyword, followed by the end of the line, a space, ":" or ";" */
 const HEADER = new RegExp(
@@ -100,11 +118,41 @@ function cleanup(source: string): string {
     );
 }
 
+/** the first line that is neither blank nor a bare `%%` comment (mermaid's
+ *  type detection skips those too), -1 when there is none */
+function headerIndex(lines: readonly string[]): number {
+  return lines.findIndex((l) => l.trim() !== "" && !l.trim().startsWith("%%"));
+}
+
+/** mermaid's preprocess (src/preprocess.ts), step by step */
+function preprocess(source: string) {
+  const text = cleanup(source);
+  const frontMatter = FRONT_MATTER.exec(text)?.[0] ?? "";
+  const body = text.slice(frontMatter.length);
+  const withComments = body.replace(DIRECTIVE, "");
+  const cleaned = withComments.replace(COMMENT_LINE, "").trimStart();
+  const cleanedLines = cleaned.split("\n");
+  const header = cleanedLines[headerIndex(cleanedLines)]?.trim() ?? "";
+  const keepsComments = KEEPS_COMMENTS.test(header) && withComments.length <= MAX_TEXT_SIZE;
+  return {
+    text,
+    frontMatterLines: frontMatter.split("\n").length - 1,
+    body,
+    keepsComments,
+    code: keepsComments ? withComments : cleaned,
+  };
+}
+
 /** The text mermaid's diagram parser reads: the source after mermaid's
- *  preprocess (front matter, directives and comment lines removed, leading
- *  whitespace trimmed). */
+ *  preprocess, its front matter and directives removed and, for all but the
+ *  KEEPS_COMMENTS types, its comment lines and leading whitespace too. */
 export function mermaidCode(source: string): string {
-  return cleanup(source).replace(FRONT_MATTER, "").replace(DIRECTIVE, "").replace(COMMENT_LINE, "").trimStart();
+  return preprocess(source).code;
+}
+
+/** The lines the front matter takes (mermaid's frontmatterLineOffset). */
+export function mermaidFrontMatterLines(source: string): number {
+  return preprocess(source).frontMatterLines;
 }
 
 /**
@@ -113,20 +161,38 @@ export function mermaidCode(source: string): string {
  * that spans lines), so the code is the source's lines in order: each code
  * line is matched to the next source line with the same text. A line the
  * preprocess rewrote matches nothing and takes the next line; a line past the
- * end clamps to the last one.
+ * end clamps to the last one. Code that kept its comment lines lost no line
+ * but the front matter's and a directive's inner line breaks, so its lines
+ * are counted instead: matching by text would take a line a directive
+ * emptied for a later blank line.
  */
 export function mermaidSourceLine(source: string, codeLine: number): number {
-  const cleaned = cleanup(source);
-  const sourceLines = cleaned.split("\n").map((l) => l.trim());
-  const codeLines = mermaidCode(source).split("\n");
+  const { text, frontMatterLines, body, keepsComments, code } = preprocess(source);
+  const sourceLines = text.split("\n").map((l) => l.trim());
+  if (keepsComments) {
+    const joined = new Set<number>();
+    for (const directive of body.matchAll(DIRECTIVE)) {
+      for (let i = directive.index; i < directive.index + directive[0].length; i++) {
+        if (body[i] === "\n") joined.add(i);
+      }
+    }
+    let line = frontMatterLines;
+    for (let i = 0, breaks = 0; i < body.length && breaks < codeLine - 1; i++) {
+      if (body[i] !== "\n") continue;
+      line++;
+      if (!joined.has(i)) breaks++;
+    }
+    return Math.min(line, sourceLines.length - 1) + 1;
+  }
+  const codeLines = code.split("\n");
   // the code starts after the front matter (the match ends on its last line
   // break): a YAML line must never be taken for a line of the diagram
-  let next = (cleaned.match(FRONT_MATTER)?.[0] ?? "").split("\n").length - 1;
+  let next = frontMatterLines;
   let at = next;
   for (let i = 0; i < Math.min(codeLine, codeLines.length); i++) {
-    const text = codeLines[i]!.trim();
+    const lineText = codeLines[i]!.trim();
     let k = next;
-    while (k < sourceLines.length && sourceLines[k] !== text) k++;
+    while (k < sourceLines.length && sourceLines[k] !== lineText) k++;
     at = k < sourceLines.length ? k : next;
     next = at + 1;
   }
@@ -150,7 +216,7 @@ export interface MermaidHeader {
  */
 export function mermaidHeader(source: string): MermaidHeader | undefined {
   const lines = mermaidCode(source).split("\n");
-  const index = lines.findIndex((l) => l.trim() !== "" && !l.trim().startsWith("%%"));
+  const index = headerIndex(lines);
   if (index < 0) return undefined;
   const text = lines[index]!.trim();
   return { line: mermaidSourceLine(source, index + 1), text, diagramType: HEADER.exec(text)?.[0] };
