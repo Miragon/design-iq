@@ -19,12 +19,6 @@ minimumReleaseAgeExclude:
   - "@miragon/wardley-dsl@0.7.0"
   - "@miragon/team-topologies-renderer@0.11.2"
   - "@miragon/team-topologies-schema-model@0.11.2"
-  # the shared modeler contract, an exact dependency of all four renderers
-  - "@miragon/modeler-api@1.1.0"
-  # the BPMN editing engine (#236) — 0.7.0 published 2026-10-14, adopted the same day (#248)
-  - "@miragon/bpmn-cli@0.7.0"
-  # its bpmnlint plugin, an exact dependency of 0.7.0 — 0.12.1 published the evening before
-  - "@miragon/bpmnlint-plugin-rules@0.12.1"
 overrides:
   # vitepress 1.6.4 (docs/) is the latest release and still requests vite
   # ^5.4.14, which is stuck below the server.fs.deny bypass fix (>=6.4.3).
