@@ -17,13 +17,14 @@
  *  - "document" (team topology .tt, context map .cm.json): the document is a
  *    typed object, so the text lane goes through the spec's codec — the SAME
  *    codec the SPA's live binding uses, so a widget save and the live export
- *    serialize the same bytes. team topology's importDocument replaces every
- *    shape but leaves the command stack UNTOUCHED (an undo would then act on
- *    removed objects; context maps erases it itself since 0.3.0), so the
- *    EDITABLE mount erases history after each import, silently. The viewer
- *    registers no command stack at all (and the renderer's get() forwards no
- *    strict flag: a lookup would throw), so the clear is gated on the mount,
- *    not on a lookup.
+ *    serialize the same bytes. importDocument replaces every shape and an
+ *    undo would then act on removed objects, so the EDITABLE mount erases
+ *    history after each import, silently, as both renderers already do
+ *    themselves (context maps since 0.3.0, team topology since 0.11.0). The
+ *    viewer registers no command stack at all (and the renderer's get()
+ *    forwards no strict flag: a lookup would throw), so the clear is gated on
+ *    the mount, not on a lookup; both renderers' own import looks the stack
+ *    up optionally (test/miragon-renderers.test.ts).
  *
  * Renderer constructors come from the loaded spec (the node --test suite
  * hands in fakes); this module imports neither a renderer nor a stylesheet.

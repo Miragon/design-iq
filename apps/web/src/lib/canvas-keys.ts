@@ -1,27 +1,22 @@
 /**
  * A canvas engine hears keys only while it is in front. The Miragon renderers
  * (Wardley, Event Storming, Team Topology, Context Map) take their shortcuts
- * from a keydown listener on `document`. Team Topology 0.10 acts wherever the
- * focus is, unless the target is an INPUT, a TEXTAREA or contenteditable.
- * Wardley since 0.7.0, Event Storming and Context Map since 0.3.0 act only on
- * a key aimed at their own canvas or at the page itself (<body>, nothing
- * focused); Wardley also on ⌘Z/⌘Y and its single-key tools from a focused
- * button. The live editor keeps the canvas mounted behind the Monaco source
- * layer and behind its dialogs, and `inert` does not reach a listener on
- * `document`, so keys meant for something else would edit a diagram nobody
- * can see:
+ * from a keydown listener on `document`, and act only on a key aimed at their
+ * own canvas or at the page itself (<body>, nothing focused): Wardley since
+ * 0.7.0, Event Storming and Context Map since 0.3.0, Team Topology since
+ * 0.11.0. Wardley also acts on ⌘Z/⌘Y and its single-key tools from a focused
+ * button. Team Topology alone checks `inert` itself (on its canvas or an
+ * ancestor) and lets every key pass while a modal dialog is open. The live
+ * editor keeps the canvas mounted behind the Monaco source layer and behind
+ * its dialogs, and `inert` does not reach a listener on `document`, so keys
+ * meant for something else would edit a diagram nobody can see:
  *
  * - With nothing focused (a click on the page outside every control, a
  *   control that went away): Backspace deletes the hidden selection, the
- *   arrows move it, ⌘Z undoes the last canvas edit, in every renderer.
- * - Typed in Monaco (Team Topology): Monaco 0.55 in Chrome and Edge types
- *   through a `div.native-edit-context` (EditContext API), none of the three
- *   text targets. "l" starts a lasso and never reaches the text, ⌘V goes to
- *   the canvas instead of into the source.
+ *   arrows move it, ⌘Z undoes the last canvas edit (Wardley, Event Storming,
+ *   Context Map).
  * - Pressed with the focus on a toolbar button: ⌘Z undoes the last canvas
- *   edit and "c" starts a component (Wardley, Team Topology). In Team
- *   Topology on any button, a dialog's included: Backspace deletes the
- *   selection, ⌘A selects every element for the next one.
+ *   edit and "c" starts a component (Wardley).
  *
  * While the canvas is not in front the shell holds the keydowns at the root
  * element, in the bubble phase: the target, its React handlers (delegated at
