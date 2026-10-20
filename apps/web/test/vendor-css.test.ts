@@ -4,9 +4,12 @@
  * which selectors it leaves global. A global selector applies to the whole
  * app once a renderer's chunk has loaded, bpmn-js and dmn-js included, so
  * each one is listed here with the reason it may stay, and a renderer bump
- * that adds one fails until it is reviewed. The --cd-* tokens a sheet sets on
- * :root outside a cascade layer override the app's own, so they must be
- * ui-kit's, value for value: a bump that changes one fails as well.
+ * that adds one fails until it is reviewed. Every other rule is scoped as a
+ * descendant of the canvas host, the renderer's own root rules included
+ * (the contract factories mount that root inside the host). The --cd-*
+ * tokens a sheet sets on :root outside a cascade layer override the app's
+ * own, so they must be ui-kit's, value for value: a bump that changes one
+ * fails as well.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -145,6 +148,61 @@ test("the scoping keys on each renderer's own files, as pnpm's store spells them
 for (const spec of MIRAGON_RENDERERS) {
   test(`${spec.id}: only the reviewed selectors stay global`, async () => {
     assert.deepEqual(await unscoped(spec), KNOWN_GLOBAL[spec.id]);
+  });
+}
+
+/** the root element each renderer's factory mounts inside the canvas host */
+const RENDERER_ROOT: Record<string, string> = {
+  wardley: "wardley-container",
+  "team-topology": "tt-djs-container",
+  "event-storming": "event-storming-container",
+  "context-map": "cm-djs-container",
+};
+
+/**
+ * The rules of the renderer's own root as the SPA ships them, one entry per
+ * root state (what follows the root is left out): the canvas host class, a
+ * space, the root. They match because the root is a CHILD of the host
+ * (test/miragon-renderers.test.ts mounts the real factories); scoped as a
+ * compound on the host, as before the factories, they match nothing and the
+ * canvas loses its paper, dot grid, focus ring and label editor styles.
+ */
+const ROOT_RULES: Record<string, string[]> = {
+  wardley: [
+    ".wardley-canvas .wardley-container",
+    ".wardley-canvas .wardley-container.wardley-draw-mode",
+    ".wardley-canvas .wardley-container.wardley-labels-draggable",
+    ".wardley-canvas .wardley-container.wardley-label-dragging",
+    ".wardley-canvas .wardley-container.wardley-read-only",
+  ],
+  "team-topology": [
+    ".tt-canvas .tt-djs-container",
+    ".tt-canvas .tt-djs-container:focus",
+    ".tt-canvas .tt-djs-container:focus-visible",
+  ],
+  "event-storming": [
+    ".es-canvas .event-storming-container",
+    ".es-canvas .event-storming-container.event-storming-draw-mode",
+  ],
+  "context-map": [".cm-canvas .cm-djs-container", ".cm-canvas .cm-djs-container:focus"],
+};
+
+for (const spec of MIRAGON_RENDERERS) {
+  test(`${spec.id}: every scoped rule is a descendant of the canvas host, the renderer's root rules included`, async () => {
+    const scope = `.${spec.canvasClassName} `;
+    const root = `.${RENDERER_ROOT[spec.id]}`;
+    const heads = new Set<string>();
+    (await scopedSheet(spec)).walkRules((rule) => {
+      for (const selector of rule.selectors) {
+        if (selector.startsWith(":root") || atRulesOf(rule).some((at) => /keyframes$/i.test(at.name))) continue;
+        assert.ok(selector.startsWith(scope), selector);
+        const rest = selector.slice(scope.length);
+        if (rest.startsWith(root) && /^($|[ .:>~+[])/.test(rest.slice(root.length))) {
+          heads.add(scope + rest.split(/[\s>~+]/)[0]);
+        }
+      }
+    });
+    assert.deepEqual([...heads], ROOT_RULES[spec.id]);
   });
 }
 

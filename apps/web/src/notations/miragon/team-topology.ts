@@ -28,7 +28,6 @@ export const spec: MiragonRendererSpec = {
   id: "team-topology",
   pkg: "@miragon/team-topologies-renderer",
   canvasClassName: "tt-canvas",
-  vendorRoot: "tt-djs-container",
   contractNotation: "team-topologies",
   async load(): Promise<LoadedMiragonRenderer> {
     const [{ createCollaborativeModeler, createCollaborativeViewer }] = await Promise.all([

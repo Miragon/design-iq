@@ -11,7 +11,6 @@ export const spec: MiragonRendererSpec = {
   id: "context-map",
   pkg: "@miragon/context-maps-renderer",
   canvasClassName: "cm-canvas",
-  vendorRoot: "cm-djs-container",
   contractNotation: "context-maps",
   async load(): Promise<LoadedMiragonRenderer> {
     const [{ cmLegendModule, createCollaborativeModeler, createCollaborativeViewer }] = await Promise.all([

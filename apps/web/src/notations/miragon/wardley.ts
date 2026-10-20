@@ -10,7 +10,6 @@ export const spec: MiragonRendererSpec = {
   id: "wardley",
   pkg: "@miragon/wardley-renderer",
   canvasClassName: "wardley-canvas",
-  vendorRoot: "wardley-container",
   contractNotation: "wardley",
   async load(): Promise<LoadedMiragonRenderer> {
     const [{ createCollaborativeModeler, createCollaborativeViewer }] = await Promise.all([

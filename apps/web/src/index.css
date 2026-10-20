@@ -32,7 +32,7 @@
 /* Team Topologies drops its palette to 64px at viewports up to 760px wide,
    a row kept free for a host's top chrome; the SPA has none over its canvas,
    so the palette would float over the diagram below an empty strip */
-.tt-canvas.tt-djs-container .djs-palette:not([data-chrome="palette"]) {
+.tt-canvas .tt-djs-container .djs-palette:not([data-chrome="palette"]) {
   top: 12px;
 }
 /* decision tables grow with their rules — scroll inside the editor pane

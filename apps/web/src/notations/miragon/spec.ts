@@ -6,7 +6,7 @@
  *
  *   ./plugin.ts               → the web editor plugin (WebNotationPlugin)
  *   ../../mcp-app/engines/miragon.ts → the MCP-App widget engine
- *   ./vendor-css.ts           → the SPA's vendor-CSS scoping (pkg + vendorRoot), in vite.config.ts
+ *   ./vendor-css.ts           → the SPA's vendor-CSS scoping (pkg + canvas class), in vite.config.ts
  *   ../../../scripts/build-widgets.ts → one single-file widget bundle per spec
  *
  * The eager part is DATA (id, package, css class, contract notation); the
@@ -64,9 +64,6 @@ export interface MiragonRendererSpec {
   pkg: string;
   /** css class of the canvas host (the SPA scopes the vendor sheet under it) */
   canvasClassName: string;
-  /** the renderer's own root class — the scoping prefixes it as a compound
-   *  with the canvas host class */
-  vendorRoot: string;
   /** the renderer's `meta.notation` — its own name for the notation, which
    *  may differ from designIQ's id ("team-topologies" for "team-topology");
    *  checked when a mount binds, together with the contract version */

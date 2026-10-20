@@ -7,7 +7,6 @@ export const spec: MiragonRendererSpec = {
   id: "event-storming",
   pkg: "@miragon/event-storming-renderer",
   canvasClassName: "es-canvas",
-  vendorRoot: "event-storming-container",
   contractNotation: "event-storming",
   async load(): Promise<LoadedMiragonRenderer> {
     const [{ createCollaborativeModeler, createCollaborativeViewer }] = await Promise.all([
