@@ -4,11 +4,12 @@
  * two Y.Docs whose drops cross on the wire, one in the SPA editor and one in
  * the live widget's engine. One bpmn-js move rewrites order-to-cash.bpmn from
  * line 11 to line 176 (lane refs and DI are reordered on export); the first
- * edit of a hand-written Context Maps or Team Topologies file rewrites all of
- * it. Each merge is a text no canvas imports. Afterwards both peers hold
- * exactly one peer's export, both canvases show it, and the peer whose edit is
- * lost has been told, through the SPA's sync-error toast or the widget's
- * conflict hook.
+ * edit of a hand-written Context Maps, Team Topologies, Wardley or Event
+ * Storming file rewrites all of it. Each merge is a text no canvas imports,
+ * or one the Wardley and Event Storming parsers read garbled (every element
+ * twice). Afterwards both peers hold exactly one peer's export, both canvases
+ * show it, and the peer whose edit is lost has been told, through the SPA's
+ * sync-error toast or the widget's conflict hook.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -263,6 +264,76 @@ test("Context Maps and Team Topologies: both peers' first edits of a hand-writte
       return (document.contexts ?? document.nodes)?.find((e) => e.id === elementId)?.position;
     };
     assert.deepEqual(positionOf(shared, moved[0]), positionOf(spaOwn, moved[0]), `${id}: the SPA's move kept`);
+    assert.deepEqual(spaConflicts, [], id);
+    assert.equal(widgetConflicts.length, 1, `${id}: the widget's move is lost, and the widget is told`);
+    unbind();
+    engine.destroy();
+    editor.destroy();
+  }
+});
+
+test("Wardley and Event Storming: first edits of a hand-written file at once, whose merge the parsers read garbled, are repaired into one peer's export", async () => {
+  const { MIRAGON_RENDERERS } = await import("../src/notations/miragon/index.ts");
+  const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
+  const { mountMiragonEngine } = await import("../src/mcp-app/engines/miragon.ts");
+  const files: Array<[id: string, text: string, moved: [string, string]]> = [
+    [
+      "wardley",
+      // hand-written: no space after the comma, none around the arrow
+      "title Tea Shop\ncomponent Cup of Tea [0.79,0.61]\ncomponent Hot Water [0.82,0.78]\ncomponent Kettle [0.43,0.35]\nCup of Tea->Hot Water\nHot Water->Kettle\n",
+      ["cmp_cup_of_tea", "cmp_kettle"],
+    ],
+    [
+      "event-storming",
+      "title Checkout\ncommand Place Order [240,300]\nevent Order Placed [620,300]\nevent Order Shipped [900,300]\nPlace Order -> Order Placed\n",
+      ["cmd_place_order", "event_order_shipped"],
+    ],
+  ];
+  for (const [id, text, moved] of files) {
+    const spec = MIRAGON_RENDERERS.find((s) => s.id === id);
+    assert.ok(spec, id);
+    const renderer = await spec.load();
+    const { net, docs } = room(text, [100, 200]);
+    const [spaDoc, widgetDoc] = docs as [Y.Doc, Y.Doc];
+    const spaConflicts: string[] = [];
+    let spa: ReturnType<typeof renderer.create> | undefined;
+    const editor = mountMiragonEditor(
+      spec,
+      { ...renderer, create: (options) => (spa = renderer.create(options)) },
+      host(spec.canvasClassName),
+      editorContext(spaDoc, spaConflicts),
+    );
+    const widgetConflicts: string[] = [];
+    const engine = mountMiragonEngine(spec, renderer, host(spec.canvasClassName), false, {
+      insets: () => ({ top: 56, right: 0, bottom: 0, left: 0 }),
+    });
+    const unbind = engine.bindLive!(widgetDoc.getText("content"), widgetDoc, {
+      onConflict: (message) => widgetConflicts.push(message),
+      onImportError: (message) => widgetConflicts.push(`import failed: ${message}`),
+    });
+    await wait(100);
+    assert.ok(spa, id);
+
+    net.hold();
+    moveElement(spa.diagram as unknown as Modeling, moved[0], { x: 30, y: 0 });
+    moveElement(engine.modeler.diagram as unknown as Modeling, moved[1], { x: 0, y: 40 });
+    await wait(50);
+    const [spaOwn, widgetOwn] = [spaDoc, widgetDoc].map((doc) => doc.getText("content").toString()) as [string, string];
+    net.flush();
+    const merged = spaDoc.getText("content").toString();
+    const reader = renderer.create();
+    reader.attachTo(host(spec.canvasClassName));
+    await assert.doesNotReject(reader.importText(merged), `${id}: the parser reads the merge`);
+    assert.notEqual(reader.exportText(), spaOwn, `${id}: as neither peer's model`);
+    assert.notEqual(reader.exportText(), widgetOwn, id);
+    reader.destroy();
+    net.release();
+    await wait(SETTLED);
+
+    const shared = spaDoc.getText("content").toString();
+    assert.equal(widgetDoc.getText("content").toString(), shared, `${id}: the peers converge`);
+    assert.equal(shared, spaOwn, `${id}: the SPA's peer has the lower client id: its export, exactly`);
+    assert.deepEqual([spa.exportText(), engine.modeler.exportText()], [shared, shared], `${id}: both canvases show it`);
     assert.deepEqual(spaConflicts, [], id);
     assert.equal(widgetConflicts.length, 1, `${id}: the widget's move is lost, and the widget is told`);
     unbind();
