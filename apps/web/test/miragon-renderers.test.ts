@@ -12,10 +12,10 @@ import { after, test } from "node:test";
 import { newCmJson, newOwmText, newStormText, newTtJson } from "@designiq/notations/templates";
 import * as Y from "yjs";
 
-import type { RemotePresence } from "../src/lib/presence-canvas.ts";
+import type { PresenceSurface, RemotePresence } from "../src/lib/presence-canvas.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
-import type { LoadedMiragonRenderer, MiragonRendererSpec } from "../src/notations/miragon/spec.ts";
+import type { LoadedMiragonRenderer, MiragonModeler, MiragonRendererSpec } from "../src/notations/miragon/spec.ts";
 import type { EditorContext } from "../src/notations/registry.ts";
 import { closeDom, host } from "./renderer-dom.ts";
 
@@ -39,6 +39,48 @@ async function load(id: string): Promise<[MiragonRendererSpec, LoadedMiragonRend
 async function engineOf(id: string, container: HTMLElement, readonly = false) {
   const [spec, renderer] = await load(id);
   return mountMiragonEngine(spec, renderer, container, readonly);
+}
+
+const HOSTS = ["the SPA editor", "the live widget"] as const;
+
+/**
+ * A notation's editing mount bound to a shared Y.Text the way a host does
+ * it: the SPA's editor, or the widget's engine with the chrome's insets (so
+ * the widget fits the view itself after every import).
+ */
+async function mountLive(
+  where: (typeof HOSTS)[number],
+  id: string,
+  ytext: Y.Text,
+  doc: Y.Doc,
+  presence?: PresenceSurface,
+): Promise<{ container: HTMLElement; modeler: MiragonModeler; destroy(): void }> {
+  const [spec, renderer] = await load(id);
+  const container = host(spec.canvasClassName);
+  if (where === "the live widget") {
+    const engine = mountMiragonEngine(spec, renderer, container, false, {
+      insets: () => ({ top: 56, right: 0, bottom: 0, left: 0 }),
+    });
+    const unbind = engine.bindLive!(ytext, doc, { onConflict: assert.fail, onImportError: assert.fail, presence });
+    return {
+      container,
+      modeler: engine.modeler,
+      destroy: () => {
+        unbind();
+        engine.destroy();
+      },
+    };
+  }
+  const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
+  let modeler: MiragonModeler | undefined;
+  const editor = mountMiragonEditor(
+    spec,
+    { ...renderer, create: (options) => (modeler = renderer.create(options)) },
+    container,
+    { ytext, doc, onSyncError: assert.fail, onImportFailed: assert.fail, presence } as unknown as EditorContext,
+  );
+  assert.ok(modeler, id);
+  return { container, modeler, destroy: () => editor.destroy() };
 }
 
 interface DiagramServices {
@@ -519,6 +561,87 @@ test("Team Topologies: a hand-written file opens untouched, an edit writes the c
   assert.equal(modeler.get("commandStack").canUndo(), false, "no undo step points at the replaced shapes");
   unbind();
   engine.destroy();
+});
+
+/** per notation: the element whose label is typed, and what the peer's
+ *  change in DOCUMENTS leaves in the text (another element) */
+const LABEL_EDITS: Record<string, [elementId: string, peerChange: string]> = {
+  wardley: ["cmp_cup_of_tea", "Hot Water [0.82, 0.55]"],
+  "event-storming": ["cmd_place_order", "Order Placed [640, 300]"],
+  "context-map": ["ctx_cfp", "Agenda Builder"],
+  "team-topology": ["team_checkout", "Cloud Platform"],
+};
+
+interface EditableDiagram {
+  get(name: "elementRegistry"): { get(id: string): unknown };
+  get(name: "eventBus"): { fire(event: string, payload: unknown): void };
+}
+
+/** the canvas's open label editor: an input, a textarea or diagram-js's
+ *  direct editing (contenteditable) */
+function openLabelEditor(container: HTMLElement): HTMLElement {
+  const field = container.querySelector<HTMLElement>("input, textarea, [contenteditable='true']");
+  assert.ok(field, "a label editor is open");
+  return field;
+}
+
+// diagram-js's direct editing reads innerText, which jsdom only stores
+const typedText = (field: HTMLElement): string =>
+  field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement
+    ? field.value
+    : (field as unknown as { innerText: string }).innerText;
+
+function typeInto(field: HTMLElement, value: string): void {
+  if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) field.value = value;
+  else (field as unknown as { innerText: string }).innerText = value;
+  field.dispatchEvent(new field.ownerDocument.defaultView!.Event("input", { bubbles: true }));
+}
+
+test("every renderer, in both hosts: a typed label is no edit until it commits, and a peer's re-import keeps it open", async () => {
+  const svgElement = SVGElement.prototype as unknown as { getBBox(): unknown };
+  const getBBox = svgElement.getBBox;
+  // content with a size, so the widget fits the view after the peer's
+  // re-import (jsdom measures every shape 0×0, and an empty canvas is not fitted)
+  svgElement.getBBox = () => ({ x: 0, y: 0, width: 600, height: 400 });
+  try {
+    for (const where of HOSTS) {
+      for (const [id, text, peer] of DOCUMENTS) {
+        const [elementId, peerChange] = LABEL_EDITS[id]!;
+        const doc = new Y.Doc();
+        const ytext = doc.getText("content");
+        ytext.insert(0, text);
+        const { container, modeler, destroy } = await mountLive(where, id, ytext, doc);
+        await wait(50);
+        const diagram = modeler.diagram as unknown as EditableDiagram;
+        const element = diagram.get("elementRegistry").get(elementId);
+        assert.ok(element, `${where}, ${id}: ${elementId}`);
+        diagram.get("eventBus").fire("element.dblclick", { element });
+        typeInto(openLabelEditor(container), "Half Typ");
+        await wait(20);
+        assert.equal(ytext.toString(), text, `${where}, ${id}: the open editor is a preview`);
+
+        doc.transact(() => {
+          ytext.delete(0, ytext.length);
+          ytext.insert(0, peer);
+        });
+        await wait(500);
+        assert.equal(ytext.toString(), peer, `${where}, ${id}: the peer's text, nothing of what was typed`);
+        const field = openLabelEditor(container);
+        assert.equal(typedText(field), "Half Typ", `${where}, ${id}: the editor stays open with what was typed`);
+
+        typeInto(field, "Half Typed");
+        field.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, ctrlKey: true, bubbles: true, cancelable: true }),
+        );
+        await wait(20);
+        assert.match(ytext.toString(), /Half Typed/, `${where}, ${id}: the commit is the edit`);
+        assert.ok(ytext.toString().includes(peerChange), `${where}, ${id}: the peer's change stays`);
+        destroy();
+      }
+    }
+  } finally {
+    svgElement.getBBox = getBBox;
+  }
 });
 
 test("Team Topologies: typing a label is no edit until it commits, and a peer's re-import keeps what was typed", async () => {

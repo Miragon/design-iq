@@ -9,6 +9,7 @@
  * auto-fit until touched, the palette for Tools and the layout.
  */
 import type { Insets, PaletteControls, ViewControls } from "../core/engine.ts";
+import { TEXT_FIELD } from "../core/keymap.ts";
 import { type Box, fitViewbox, isUntouched, lerpBox, parseCubicBezier, steppedLevel, zoomAround } from "./fit.ts";
 export interface DiagramLike {
   /** didi's strict lookup — the Miragon viewers forward only the name, so a
@@ -179,12 +180,21 @@ export function diagramView(
       : undefined;
   if (container) resizes?.observe(container);
 
+  // every renderer commits an open label editor on a viewbox change, so a
+  // fit the host makes on its own (after a peer's re-import, on a frame
+  // resize) would save what the user has typed so far
+  const typingOnCanvas = (): boolean => {
+    const focused = container?.ownerDocument.activeElement;
+    return !!focused && !!container?.contains(focused) && focused.matches(TEXT_FIELD);
+  };
+
   function stopAnimation(): void {
     if (frame && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
     frame = 0;
   }
 
   function fit(insets: Insets, animate: boolean): void {
+    if (typingOnCanvas()) return;
     const vb = canvas().viewbox(false);
     // a hidden or unlaid-out container has no size to fit into, and an
     // empty canvas (mounted, not yet imported) nothing to fit
@@ -215,6 +225,7 @@ export function diagramView(
 
   function importFit(): void {
     importing = false;
+    if (typingOnCanvas()) return;
     if (!opts.insets) {
       fitViewport(instance);
       return;
