@@ -92,7 +92,10 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   Mermaid renderer, `src/lib/mermaid-render.ts` (strict security level, the CI theme,
   Geist). The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
   theme, palette, CSS or font (`MERMAID_SECURE_KEYS`, checked against mermaid itself in
-  `test/mermaid-engine.test.ts`); layout options stay the author's. The renderer and
+  `test/mermaid-engine.test.ts`); layout options stay the author's. A diagram draws as before
+  mermaid 12 unless its front matter picks otherwise (`look: neo`, `layout: elk`): in the
+  classic look, and flowchart, class, state, ER and requirement diagrams laid out by dagre.
+  The renderer and
   mermaid load on the first document that has such a fence, never for any other. The drawn SVG is sanitized once more (`createDiagramSanitizer` in
   `sanitize.ts`, the profile mermaid applies itself) and cached by source: a re-render for an
   edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram

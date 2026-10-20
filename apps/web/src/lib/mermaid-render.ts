@@ -60,7 +60,10 @@ export const MERMAID_THEME_VARIABLES = {
  * a hybrid (mermaid merges the CI variables into the other theme's palette:
  * near-black boxes with near-black labels), and `themeCSS` would let any
  * collaborator inject CSS (a `url()` in it is a request from every reader's
- * browser). Layout options (direction, curve, wrap, look) stay the author's.
+ * browser). mermaid checks the list at every level of a config, so a theme
+ * scoped to one diagram type (`flowchart: { theme: dark }`, new in mermaid 12)
+ * is refused too. Layout options (direction, curve, wrap, look, layout) stay
+ * the author's.
  */
 export const MERMAID_SECURE_KEYS = [
   "secure",
@@ -84,7 +87,13 @@ export const MERMAID_SECURE_KEYS = [
  * wrap long labels and stay inert under `strict`. `suppressErrorRendering`
  * keeps mermaid from drawing its own error picture; the caller shows the
  * error and keeps the last good diagram instead. The CI look is not a
- * default but fixed: see MERMAID_SECURE_KEYS.
+ * default but fixed: see MERMAID_SECURE_KEYS. The classic look and the dagre
+ * layout are defaults a diagram may change: without them mermaid 12 draws
+ * most diagram types in its `neo` look (gradient strokes and drop shadows on
+ * the canvas set) and lays the graphs out with ELK, which moves the boxes of
+ * every diagram already written. dagre is set per diagram type that had it:
+ * a top-level layout would also take mindmaps off cose-bilkent and swimlanes
+ * off their lanes.
  */
 export const MERMAID_CONFIG = {
   startOnLoad: false,
@@ -93,6 +102,12 @@ export const MERMAID_CONFIG = {
   themeVariables: MERMAID_THEME_VARIABLES,
   fontFamily: FONT_SANS,
   htmlLabels: true,
+  look: "classic",
+  flowchart: { layout: "dagre" },
+  class: { layout: "dagre" },
+  state: { layout: "dagre" },
+  er: { layout: "dagre" },
+  requirement: { layout: "dagre" },
   suppressErrorRendering: true,
   secure: MERMAID_SECURE_KEYS,
 } as const satisfies MermaidConfig;

@@ -3,7 +3,7 @@
  * configuration mermaid is initialised with (safe, the CI look), the element
  * ids of concurrent renders, and how a mermaid error reads for the person
  * typing. mermaid itself needs a DOM and never runs here; the error fixtures
- * are mermaid 11.17.2's own messages.
+ * have the shapes of mermaid 12.1.0's own messages.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -34,6 +34,14 @@ test("the mermaid config: strict, never auto-started, its own errors drawn by th
   for (const key of ["theme", "themeVariables", "themeCSS", "darkMode", "fontFamily", "altFontFamily"]) {
     assert.ok(MERMAID_CONFIG.secure.includes(key), key);
   }
+  // the look and the layout diagrams had before mermaid 12, as defaults a diagram may change
+  assert.equal(MERMAID_CONFIG.look, "classic");
+  for (const type of ["flowchart", "class", "state", "er", "requirement"] as const) {
+    assert.equal(MERMAID_CONFIG[type].layout, "dagre", type);
+  }
+  // a top-level layout counts as the user's for every type: a mindmap would leave cose-bilkent
+  assert.ok(!("layout" in MERMAID_CONFIG));
+  for (const key of ["look", "layout"]) assert.ok(!MERMAID_CONFIG.secure.includes(key), key);
 });
 
 test("the mermaid theme: Geist and literal colours from the CI tokens, nothing else", () => {
