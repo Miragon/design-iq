@@ -1,13 +1,14 @@
 /**
  * checkModel — THE one check dispatch (epic #118 step 3), consumed by the CLI
  * and the Live Host's save gate. Pinned here: notation selection by path,
- * full-checker parity for BPMN/DMN, the baseline for everything else, and
- * `undefined` for non-model files.
+ * full-checker parity for BPMN/DMN, the schema model for the Miragon JSON
+ * notations, the baseline for everything else, and `undefined` for
+ * non-model files and unknown notation ids.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { checkBpmnXml, checkDmnXml, checkModel, checkModelBaseline } from "../src/validate.ts";
+import { checkBpmnXml, checkDmnXml, checkModel, checkModelBaseline, checkSchemaModel } from "../src/validate.ts";
 
 const BPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
@@ -83,6 +84,23 @@ test("checkModel(dmn): checkDmnXml parity", () => {
   assert.deepEqual(checkModel(DMN, { path: "d.dmn" }), checkDmnXml(DMN, { file: "d.dmn" }).findings);
 });
 
+test("checkModel: the Miragon JSON notations run their schema model", () => {
+  const RESERVED_TEAM = '{"nodes": [{"id": "tt-root"}]}';
+  for (const [path, notation, raw] of [
+    ["teams/t.tt", "team-topology", RESERVED_TEAM],
+    ["teams/t.ttm.json", "team-topology", RESERVED_TEAM],
+    ["maps/m.cm.json", "context-map", "[]"],
+    ["chains/c.vc.json", "value-chain", "[]"],
+  ] as const) {
+    const findings = checkModel(raw, { path });
+    assert.deepEqual(findings, checkSchemaModel(raw, { file: path, notation }), path);
+    assert.ok(
+      findings?.some((f) => f.severity === "ERROR" && f.ruleId === `${notation}/schema`),
+      path,
+    );
+  }
+});
+
 test("checkModel: other notations run the baseline, non-models are undefined", () => {
   assert.deepEqual(
     checkModel("{ broken", { path: "teams/t.tt" }),
@@ -101,4 +119,6 @@ test("checkModel: other notations run the baseline, non-models are undefined", (
   assert.equal(checkModel("flowchrt", { path: "docs/flow.mermaid" }), undefined);
   assert.equal(checkModel("cases: []", { path: "p.tests.yaml" }), undefined);
   assert.equal(checkModel("anything", { path: "no-extension" }), undefined);
+  // an explicit notation id outranks the path: an unknown one checks nothing, it never passes
+  assert.equal(checkModel("{ broken", { path: "teams/t.tt", notation: "nope" }), undefined);
 });

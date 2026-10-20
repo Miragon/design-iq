@@ -242,8 +242,10 @@ async function saveGate(
 
   // full platform validation per notation — checkModel, the one dispatch the
   // CLI runs too (BPMN structure + BPMNDI coverage + links, DMN table/DMNDI/
-  // requirement integrity, the baseline parse of every other notation; the
-  // FEEL semantics live in the analyze_decision tool, not on the write path).
+  // requirement integrity, the schema model of the Miragon JSON notations, so
+  // nothing their canvas refuses to open lands, the baseline parse of every
+  // other notation; the FEEL semantics live in the analyze_decision tool, not
+  // on the write path).
   // A path that is no registered notation (a YAML sidecar) passes unvalidated.
   // lint:"warn" reports ERRORs on the result instead of refusing — the modeler
   // widget's autosave path; the ws rooms have never gated live edits, so this

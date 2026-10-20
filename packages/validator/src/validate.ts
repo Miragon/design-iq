@@ -30,6 +30,14 @@ import {
 import { markdownFences } from "@designiq/notations/markdown";
 import { mermaidHeader } from "@designiq/notations/mermaid";
 import { hasRefs, type ModelRef, refsOf } from "@designiq/notations/refs";
+import {
+  type CmDocument as ContextMapDocument,
+  parseDocumentText as parseContextMap,
+  type SemanticFinding as ContextMapFinding,
+  validateDocument as contextMapRules,
+} from "@miragon/context-maps-schema-model";
+import { parseDocument as parseTeamTopology } from "@miragon/team-topologies-schema-model";
+import { documentIssues as valueChainIssues } from "@miragon/value-chain-schema-model";
 
 export type Severity = "ERROR" | "WARN";
 export interface Finding {
@@ -284,7 +292,7 @@ export function checkBpmnXml(
  *
  * Deliberately NOT here: FEEL semantics, hit-policy reachability, dead wiring.
  * Those need the FEEL engine and live in @designiq/decisions (`analyze_decision`),
- * which would drag a browser-side dependency into this zero-dep CLI.
+ * which would drag a browser-side dependency into this CLI.
  */
 export function checkDmnXml(raw: string, opts: { file?: string } = {}): { findings: Finding[] } {
   const file = opts.file ?? "<dmn>";
@@ -399,8 +407,8 @@ function mermaidFenceProblem(content: string, line: number): string | undefined 
  * notation that is not .bpmn/.dmn): a discovered model must at minimum parse
  * per its notation's mediaKind — a broken .tt/.vc.json used to pass
  * validation untouched. Pure: no filesystem, no process.exit. Deliberately
- * mechanical: notation-specific structure checks arrive with the per-notation
- * checkers (epic #118, step 3).
+ * mechanical: notation-specific structure checks are the per-notation
+ * checkers' (epic #118, step 3; checkSchemaModel runs this gate first).
  */
 export function checkModelBaseline(raw: string, opts: { file?: string; notation: string }): Finding[] {
   const file = opts.file ?? `<${opts.notation}>`;
@@ -453,6 +461,159 @@ export function checkModelBaseline(raw: string, opts: { file?: string; notation:
   return findings;
 }
 
+/** a schema model's issue location as the canvases print it ("nodes.1.id"),
+ *  "(root)" for the document itself */
+const issuePath = (path: readonly (string | number)[]): string => path.join(".") || "(root)";
+
+interface SchemaIssue {
+  path: readonly (string | number)[];
+  message: string;
+}
+
+const schemaError =
+  (ruleId: string, file: string) =>
+  (issue: SchemaIssue): Finding => ({
+    severity: "ERROR",
+    ruleId,
+    file,
+    message: `${issuePath(issue.path)}: ${issue.message}`,
+  });
+
+/**
+ * The ids a Team Topology or Context Map canvas cannot hold although its
+ * schema model takes them: diagram-js keeps its elements in a plain object,
+ * so an id that names a built-in object property ("constructor",
+ * "__proto__") reads as already added and the import fails. The Value Chain
+ * schema model refuses these ids itself; the other two do not yet.
+ */
+function builtInPropertyIds(collections: Readonly<Record<string, unknown>>): SchemaIssue[] {
+  return Object.entries(collections).flatMap(([collection, elements]) =>
+    (Array.isArray(elements) ? elements : []).flatMap((element: unknown, index) => {
+      const id = (element as { id?: unknown } | null)?.id;
+      return typeof id === "string" && Object.hasOwn(Object.prototype, id)
+        ? [
+            {
+              path: [collection, index, "id"],
+              message: `the id "${id}" is reserved: it names a built-in property of JavaScript objects`,
+            },
+          ]
+        : [];
+    }),
+  );
+}
+
+/**
+ * The context-map rules the canvas enforces itself: its importer refuses a
+ * repeated id (CmImporter.assertImportable), so the file does not open. The
+ * other strategic-DDD rules are advisory there: the canvas opens the map and
+ * marks the finding, so a save must not refuse it either.
+ */
+const CONTEXT_MAP_REFUSED_RULES: ReadonlySet<string> = new Set(["unique-ids"]);
+
+/** the path of every repeated id, in the order validateDocument's unique-ids
+ *  rule reports them (contexts, then relationships): its findings name no
+ *  position, and an agent must know which of two entries to change */
+function repeatedIdPaths({ contexts, relationships }: ContextMapDocument): string[] {
+  const seen = new Set<string>();
+  return Object.entries({ contexts, relationships }).flatMap(([collection, elements]) =>
+    elements.flatMap(({ id }, index) => {
+      const repeated = seen.has(id);
+      seen.add(id);
+      return repeated ? [issuePath([collection, index, "id"])] : [];
+    }),
+  );
+}
+
+function checkTeamTopology(raw: string, file: string): Finding[] {
+  const parsed = parseTeamTopology(JSON.parse(raw));
+  if (!parsed.ok) return parsed.issues.map(schemaError("team-topology/schema", file));
+  const { nodes, interactions, flows, annotations } = parsed.document;
+  return builtInPropertyIds({ nodes, interactions, flows, annotations }).map(schemaError("team-topology/schema", file));
+}
+
+function checkContextMap(raw: string, file: string): Finding[] {
+  const parsed = parseContextMap(raw);
+  const issues = parsed.ok ? [] : (parsed.issues ?? [{ path: [], message: parsed.error }]);
+  // a list or a newer version is refused as a whole, before any element is read
+  if (issues.some(({ path }) => path.length === 0 || path[0] === "version")) {
+    return issues.map(schemaError("context-map/schema", file));
+  }
+  // read from the file rather than the parsed document: the schema model
+  // reports its own reserved ids next to a sibling field's error, so these
+  // come in the same round
+  const { contexts, relationships } = JSON.parse(raw) as Record<string, unknown>;
+  const schemaFindings = [...issues, ...builtInPropertyIds({ contexts, relationships })].map(
+    schemaError("context-map/schema", file),
+  );
+  if (!parsed.ok) return schemaFindings;
+  const repeatedIds = repeatedIdPaths(parsed.document);
+  const subject = (finding: ContextMapFinding): string => {
+    const path = finding.rule === "unique-ids" ? repeatedIds.shift() : undefined;
+    if (path) return `${path}: `;
+    return finding.relationshipId === undefined ? "" : `relationship "${finding.relationshipId}": `;
+  };
+  const { errors, warnings } = contextMapRules(parsed.document);
+  return [
+    ...schemaFindings,
+    ...[...errors, ...warnings].map((finding): Finding => {
+      const refused = CONTEXT_MAP_REFUSED_RULES.has(finding.rule);
+      return {
+        severity: refused ? "ERROR" : "WARN",
+        ruleId: refused ? "context-map/schema" : "context-map/semantics",
+        file,
+        message: `${subject(finding)}${finding.message} (${finding.rule})`,
+      };
+    }),
+  ];
+}
+
+function checkValueChain(raw: string, file: string): Finding[] {
+  return valueChainIssues(JSON.parse(raw)).map(schemaError("value-chain/schema", file));
+}
+
+interface SchemaCheck {
+  /** the rule a refusal of the schema model is reported under */
+  ruleId: string;
+  check: (raw: string, file: string) => Finding[];
+}
+
+/** each JSON notation's schema model, read the way its canvas reads the file
+ *  (a Map, not an object: the notation id may be a caller's free text such
+ *  as "constructor") */
+const SCHEMA_CHECKS: ReadonlyMap<string, SchemaCheck> = new Map([
+  ["team-topology", { ruleId: "team-topology/schema", check: checkTeamTopology }],
+  ["context-map", { ruleId: "context-map/schema", check: checkContextMap }],
+  ["value-chain", { ruleId: "value-chain/schema", check: checkValueChain }],
+]);
+
+/**
+ * The schema check of a Miragon JSON notation (Team Topology, Context Map,
+ * Value Chain): the file is parsed with the notation's schema model, the
+ * same parse its canvas opens it with, so everything the model refuses (a
+ * duplicate or reserved id, a coordinate out of range, a newer version) is
+ * an ERROR — a save would otherwise land a file the canvas cannot open.
+ * Text that is no JSON keeps the baseline's finding, and a notation without
+ * a schema model gets the baseline alone. Pure: no filesystem, no
+ * process.exit.
+ */
+export function checkSchemaModel(raw: string, opts: { file?: string; notation: string }): Finding[] {
+  const baseline = checkModelBaseline(raw, opts);
+  const schema = SCHEMA_CHECKS.get(opts.notation);
+  // a structured notation's text is its codec's format, not the schema
+  // model's document (the baseline skips it for the same reason)
+  if (!schema || baseline.length > 0 || byId(opts.notation)?.docShape === "structured") return baseline;
+  const file = opts.file ?? `<${opts.notation}>`;
+  try {
+    return schema.check(raw, file);
+  } catch (error) {
+    // a schema model that throws (its walk overflows the stack on a document
+    // nested thousands of levels deep) must not end the CLI run or turn a
+    // save into a 500; its canvas throws on that file just the same
+    const reason = error instanceof Error ? error.message : String(error);
+    return [{ severity: "ERROR", ruleId: schema.ruleId, file, message: `(root): could not be checked: ${reason}` }];
+  }
+}
+
 /** what checkModel knows about the surrounding repo */
 export interface CheckContext {
   /** repo-relative path — selects the notation AND labels the findings */
@@ -468,21 +629,23 @@ export interface CheckContext {
 
 /**
  * THE one check dispatch: the platform check for whatever notation `ctx.path`
- * is — full checkers for BPMN/DMN, the mediaKind baseline for everything
- * else, plus the generic dangling-reference rule for ANY notation with a
- * refs emitter; `undefined` when the path matches no registered notation
- * (the file is not a model; nothing to check). Consumed by the CLI (runCli)
- * AND the Live Host's save gate (application/content.ts) so both always agree.
+ * is — full checkers for BPMN/DMN, the schema model for the Miragon JSON
+ * notations, the mediaKind baseline for everything else, plus the generic
+ * dangling-reference rule for ANY notation with a refs emitter; `undefined`
+ * when the path matches no registered notation (the file is not a model;
+ * nothing to check) or `ctx.notation` names none (a mistyped id must not
+ * pass a file unchecked). Consumed by the CLI (runCli) AND the Live Host's
+ * save gate (application/content.ts) so both always agree.
  */
 export function checkModel(raw: string, ctx: CheckContext): Finding[] | undefined {
   const notation = ctx.notation ?? byExtension(ctx.path)?.id;
-  if (!notation) return undefined;
+  if (!notation || !byId(notation)) return undefined;
   const base =
     notation === "bpmn"
       ? checkBpmnXml(raw, { file: ctx.path }).findings
       : notation === "dmn"
         ? checkDmnXml(raw, { file: ctx.path }).findings
-        : checkModelBaseline(raw, { file: ctx.path, notation });
+        : checkSchemaModel(raw, { file: ctx.path, notation });
   return [...base, ...checkRefs(notation, raw, ctx)];
 }
 
