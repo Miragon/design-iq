@@ -215,6 +215,30 @@ test("team topology and context map: an id that names a built-in object property
       ["ERROR", "context-map/schema", builtIn("relationships.0.id", "isPrototypeOf")],
     ],
   );
+  // a context map names them in the same round as its own reserved ids and a sibling field's error
+  assert.deepEqual(
+    brief(
+      checkSchemaModel(contextMap({ contexts: [context("toString", { label: 3 }), context("cm-root")] }), {
+        notation: "context-map",
+      }),
+    ),
+    [
+      ["ERROR", "context-map/schema", "contexts.0.label: Invalid input: expected string, received number"],
+      ["ERROR", "context-map/schema", 'contexts.1.id: the id "cm-root" is reserved for the diagram itself'],
+      ["ERROR", "context-map/schema", builtIn("contexts.0.id", "toString")],
+    ],
+  );
+  // …but not in a file refused as a whole
+  assert.deepEqual(
+    brief(checkSchemaModel(contextMap({ version: 2, contexts: [context("toString")] }), { notation: "context-map" })),
+    [
+      [
+        "ERROR",
+        "context-map/schema",
+        "version: 2 is newer than this modeler reads (1); update the modeler to open this file",
+      ],
+    ],
+  );
 });
 
 test("value chain: reserved ids, extra keys in bounds and waypoints, far coordinates and __proto__ are refused", () => {

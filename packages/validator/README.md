@@ -41,9 +41,9 @@ canvas refuses it, so it is an ERROR (`context-map/schema`) at the path of the r
 Paths count in the document as the schema model reads it. A Team Topology drops a legacy
 interaction without `position` or `size` before the check, so the index of a later interaction
 counts without it. Some rules only run once the document's shape is valid: the id rules of a Team
-Topology and a Value Chain, and in a Context Map the built-in property and repeated ids and the
-strategic-DDD rules. Fixing the reported errors can therefore bring up further ones, so check
-again until the file is clean.
+Topology and a Value Chain, and in a Context Map the repeated ids and the strategic-DDD rules.
+Fixing the reported errors can therefore bring up further ones, so check again until the file is
+clean.
 
 ## Usage
 

@@ -486,18 +486,19 @@ const schemaError =
  * "__proto__") reads as already added and the import fails. The Value Chain
  * schema model refuses these ids itself; the other two do not yet.
  */
-function builtInPropertyIds(collections: Readonly<Record<string, readonly { id: string }[]>>): SchemaIssue[] {
+function builtInPropertyIds(collections: Readonly<Record<string, unknown>>): SchemaIssue[] {
   return Object.entries(collections).flatMap(([collection, elements]) =>
-    elements.flatMap(({ id }, index) =>
-      Object.hasOwn(Object.prototype, id)
+    (Array.isArray(elements) ? elements : []).flatMap((element: unknown, index) => {
+      const id = (element as { id?: unknown } | null)?.id;
+      return typeof id === "string" && Object.hasOwn(Object.prototype, id)
         ? [
             {
               path: [collection, index, "id"],
               message: `the id "${id}" is reserved: it names a built-in property of JavaScript objects`,
             },
           ]
-        : [],
-    ),
+        : [];
+    }),
   );
 }
 
@@ -532,12 +533,19 @@ function checkTeamTopology(raw: string, file: string): Finding[] {
 
 function checkContextMap(raw: string, file: string): Finding[] {
   const parsed = parseContextMap(raw);
-  if (!parsed.ok) {
-    const issues = parsed.issues ?? [{ path: [], message: parsed.error }];
+  const issues = parsed.ok ? [] : (parsed.issues ?? [{ path: [], message: parsed.error }]);
+  // a list or a newer version is refused as a whole, before any element is read
+  if (issues.some(({ path }) => path.length === 0 || path[0] === "version")) {
     return issues.map(schemaError("context-map/schema", file));
   }
-  const { contexts, relationships } = parsed.document;
-  const refusedIds = builtInPropertyIds({ contexts, relationships }).map(schemaError("context-map/schema", file));
+  // read from the file rather than the parsed document: the schema model
+  // reports its own reserved ids next to a sibling field's error, so these
+  // come in the same round
+  const { contexts, relationships } = JSON.parse(raw) as Record<string, unknown>;
+  const schemaFindings = [...issues, ...builtInPropertyIds({ contexts, relationships })].map(
+    schemaError("context-map/schema", file),
+  );
+  if (!parsed.ok) return schemaFindings;
   const repeatedIds = repeatedIdPaths(parsed.document);
   const subject = (finding: ContextMapFinding): string => {
     const path = finding.rule === "unique-ids" ? repeatedIds.shift() : undefined;
@@ -546,7 +554,7 @@ function checkContextMap(raw: string, file: string): Finding[] {
   };
   const { errors, warnings } = contextMapRules(parsed.document);
   return [
-    ...refusedIds,
+    ...schemaFindings,
     ...[...errors, ...warnings].map((finding): Finding => {
       const refused = CONTEXT_MAP_REFUSED_RULES.has(finding.rule);
       return {
