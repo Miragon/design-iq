@@ -170,7 +170,7 @@ svg.createSVGPoint = () => ({
 globals.SVGMatrix = Matrix;
 
 /** the client size of every element — a canvas without one has no viewbox */
-export const CLIENT_SIZE = { width: 1000, height: 640 };
+const CLIENT_SIZE = { width: 1000, height: 640 };
 const htmlElement = window.HTMLElement.prototype;
 Object.defineProperty(htmlElement, "clientWidth", { configurable: true, get: () => CLIENT_SIZE.width });
 Object.defineProperty(htmlElement, "clientHeight", { configurable: true, get: () => CLIENT_SIZE.height });

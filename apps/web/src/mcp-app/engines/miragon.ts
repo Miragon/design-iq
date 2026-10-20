@@ -6,7 +6,8 @@
  * (engine invariant 1), exportText is the canonical text the SPA's live
  * binding writes too (one byte lineage), onContentChanged is the user's edit
  * and nothing else, and a viewer imports without a command stack and never
- * reports a change. The chrome's insets reach the renderer as its free area,
+ * reports a change. The chrome's insets reach the renderer as its free area
+ * where its spec maps them (Wardley's not yet, see notations/miragon/wardley.ts),
  * so keyboard creation lands clear of the chrome; the chrome still fits the
  * view itself (diagramView, on the wrapped diagram).
  *

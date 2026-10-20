@@ -29,8 +29,6 @@ import type * as Y from "yjs";
 
 import { bindModelSync } from "./model-sync.ts";
 
-export type { CollaborativeModeler, ElementInfo, ElementsSurface } from "@miragon/modeler-api";
-
 /** the one pre-gate (L7 above), which the widget's own import applies too */
 export const isBlank = (text: string): boolean => text.trim() === "";
 export const EMPTY_DOCUMENT = "the document is empty";
