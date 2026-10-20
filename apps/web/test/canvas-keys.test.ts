@@ -187,7 +187,10 @@ test("held from the source alone (the split view), a key typed in Monaco never r
   for (const key of ["l", "c"]) p.press(p.editContext, key);
   p.press(p.editContext, "v", { metaKey: true });
   assert.deepEqual(p.heard.monaco, ["l", "c", "v"]);
-  assert.deepEqual(p.heard.engine, []);
+  // none of the four renderers acts on a key typed in Monaco today, so only
+  // the listener itself shows whether the hold kept it from the engines
+  assert.deepEqual(p.heard.byRenderer, []);
+  assert.deepEqual(p.heard.dialog, []);
   // the canvas is in front beside the source: its own keys and the page's are its
   p.press(p.canvas, "l");
   p.press(p.document.body, "Backspace");
