@@ -1,24 +1,48 @@
-/** @miragon/wardley-renderer — the OWM DSL round-trips losslessly
- *  (importDSL/exportDSL), so the text tab and the canvas edit one document */
-import type { LoadedMiragonRenderer, MiragonRendererCtor, MiragonRendererSpec } from "./spec.ts";
+/** @miragon/wardley-renderer — the OWM DSL. Its factory reports content
+ *  changes from the command stack only: the steps of a plot-resize drag,
+ *  which the export already carries, are previews, the dropped size is the
+ *  edit. It gets no `freeRectInsets` yet: with them its pan constraint pulls
+ *  the widget's fit towards its own content bounds, which are not the bounds
+ *  the chrome fits (#265 aligns the fit). The viewer takes no options.
+ *
+ *  Its name and link editors commit on every viewbox change, the host's own
+ *  included, and its import reopens an open editor before it returns: the
+ *  view a peer's re-import restores would write what the user has typed so
+ *  far into the shared text. So the editing mount's `setViewState` sets an
+ *  open editor aside around the change, with the set-aside the renderer's
+ *  import uses (the other renderers reopen theirs one task after an import,
+ *  past the host's restore). */
+import type { Modeler, WardleyLabelEditing, WardleyLinkEditing } from "@miragon/wardley-renderer";
+
+import type { LoadedMiragonRenderer, MiragonRendererSpec } from "./spec.ts";
 
 export const spec: MiragonRendererSpec = {
   id: "wardley",
   pkg: "@miragon/wardley-renderer",
   canvasClassName: "wardley-canvas",
-  vendorRoot: "wardley-container",
+  contractNotation: "wardley",
   async load(): Promise<LoadedMiragonRenderer> {
-    const [{ Modeler, NavigatedViewer }] = await Promise.all([
-      import("@miragon/wardley-renderer"),
-      import("@miragon/wardley-renderer/assets/wardley.css"),
-    ]);
+    const [{ createCollaborativeModeler, createCollaborativeViewer, restoreEditorState, setAsideEditorState }] =
+      await Promise.all([import("@miragon/wardley-renderer"), import("@miragon/wardley-renderer/assets/wardley.css")]);
     return {
-      Modeler: Modeler as unknown as MiragonRendererCtor,
-      NavigatedViewer: NavigatedViewer as unknown as MiragonRendererCtor,
-      // a committed title, size or axis-label edit runs through the command
-      // stack since 0.7.0; `wardley.config.changed` also fires for every
-      // preview step of a resize drag, whose size must never reach the Y.Text
-      lane: { kind: "dsl", changeEvents: ["commandStack.changed"] },
+      create: () => {
+        const modeler = createCollaborativeModeler({ keyboard: { undoRedo: true } });
+        const diagram = modeler.diagram as Modeler;
+        const editing = (): boolean =>
+          diagram.get<WardleyLabelEditing>("wardleyLabelEditing").getActiveEdit() !== null ||
+          diagram.get<WardleyLinkEditing>("wardleyLinkEditing").getActiveEdit() !== null;
+        return {
+          ...modeler,
+          setViewState(state) {
+            if (!editing()) return modeler.setViewState(state);
+            const aside = setAsideEditorState(diagram);
+            modeler.setViewState(state);
+            // a view change keeps the canvas's own element ids, as a refused import does
+            restoreEditorState(diagram, aside, { importRejected: true });
+          },
+        };
+      },
+      createViewer: () => createCollaborativeViewer(),
     };
   },
 };

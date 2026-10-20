@@ -33,16 +33,28 @@ bootWidget({
   prepare: async () => {
     renderer = await spec.load();
   },
-  // every Miragon renderer adopts the element it is handed as its root and
-  // REMOVES it on destroy — so each mount gets a host of its own inside
-  // #canvas (the superseded freeze destroys the editor, then mounts a viewer
-  // into the same #canvas). The host carries the scope class like the SPA's
-  // editor host: the dev server's vendor-CSS prefix is a compound with the
-  // renderer's root class, so both must sit on the same element
+  // each mount gets a host of its own inside #canvas, sized by
+  // miragon-styles.css (the renderer's root fills it), and removed with the
+  // engine: a renderer's destroy removes only that root, and the superseded
+  // freeze destroys the editor before it mounts a viewer into the same
+  // #canvas. The host carries the scope class like the SPA's editor host, for
+  // the dev server's vendor-CSS prefix
   engine: (container, readonly, opts) => {
     if (!renderer) throw new Error(`the ${notation.label} renderer is not loaded`);
     const host = h("div", { class: spec.canvasClassName });
     container.append(host);
-    return mountMiragonEngine(renderer, host, readonly, opts);
+    try {
+      const engine = mountMiragonEngine(spec, renderer, host, readonly, opts);
+      return {
+        ...engine,
+        destroy: () => {
+          engine.destroy();
+          host.remove();
+        },
+      };
+    } catch (error) {
+      host.remove();
+      throw error;
+    }
   },
 });

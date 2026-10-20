@@ -1,106 +1,78 @@
 /**
- * The widget engine of every Miragon renderer — the widget twin of
- * live-client's miragon-sync, parameterised by the SAME text lane (the spec's
- * `load()` hands both the renderer and its lane over):
+ * The widget engine of every Miragon renderer — the widget twin of the SPA's
+ * Miragon editor: the spec's contract factory (`create`, or `createViewer`
+ * on a read-only mount) behind the widget-core engine contract. The
+ * @miragon/modeler-api laws are what the core needs: importText is silent
+ * (engine invariant 1), exportText is the canonical text the SPA's live
+ * binding writes too (one byte lineage), onContentChanged is the user's edit
+ * and nothing else, and a viewer imports without a command stack and never
+ * reports a change. The chrome's insets reach the renderer as its free area
+ * where its spec maps them (Wardley's not yet, see notations/miragon/wardley.ts),
+ * so keyboard creation lands clear of the chrome; the chrome still fits the
+ * view itself (diagramView, on the wrapped diagram).
  *
- *  - "dsl" (wardley OWM, event storming .storm): the text lane IS the DSL
- *    (importDSL/exportDSL round-trip losslessly), and the one trap is shared
- *    with the live binding: wardley's importDSL runs commandStack.clear(),
- *    which EMITS 'commandStack.changed' (bpmn-js clears silently, event
- *    storming too since 0.3.0). Without suppression
- *    the echo would mark the canvas dirty on every load and conflict reload
- *    and autosave the CANONICAL serialization over the hand-authored file —
- *    so onDirty ignores everything raised while importText runs (engine
- *    invariant 1). The read-only mount needs no command stack: both
- *    renderers look the stack up optionally since wardley 0.7.0 and event
- *    storming 0.3.0 (test/miragon-renderers.test.ts).
- *  - "document" (team topology .tt, context map .cm.json): the document is a
- *    typed object, so the text lane goes through the spec's codec — the SAME
- *    codec the SPA's live binding uses, so a widget save and the live export
- *    serialize the same bytes. importDocument replaces every shape and an
- *    undo would then act on removed objects, so the EDITABLE mount erases
- *    history after each import, silently, as both renderers already do
- *    themselves (context maps since 0.3.0, team topology since 0.11.0). The
- *    viewer registers no command stack at all (and the renderer's get()
- *    forwards no strict flag: a lookup would throw), so the clear is gated on
- *    the mount, not on a lookup; both renderers' own import looks the stack
- *    up optionally (test/miragon-renderers.test.ts).
- *
- * Renderer constructors come from the loaded spec (the node --test suite
- * hands in fakes); this module imports neither a renderer nor a stylesheet.
+ * The factories come from the loaded spec (the node --test suite hands in
+ * fakes); this module imports neither a renderer nor a stylesheet.
  */
-import {
-  asDocumentModeler,
-  asDslModeler,
-  bindMiragon,
-  type DocumentModelerLike,
-  type DslModelerLike,
-  type MiragonLane,
-} from "@designiq/live-client/miragon-sync";
+import { assertContract, bindMiragon, EMPTY_DOCUMENT, isBlank } from "@designiq/live-client/miragon-sync";
 import type * as Y from "yjs";
 
 import { attachPresenceCanvas } from "../../lib/presence-canvas.ts";
-import type { LoadedMiragonRenderer, MiragonRendererLike } from "../../notations/miragon/spec.ts";
+import type { LoadedMiragonRenderer, MiragonModeler, MiragonRendererSpec } from "../../notations/miragon/spec.ts";
 import type { EngineOptions, LiveBindHooks, WidgetEngine } from "../core/engine.ts";
-import { type DiagramView, diagramView, selectedElementOf } from "./diagram-js.ts";
+import { type DiagramView, diagramView } from "./diagram-js.ts";
 
 export interface MiragonEngine extends WidgetEngine {
-  /** the renderer instance — for tests and future extras */
-  raw: MiragonRendererLike;
+  /** the mounted contract instance — for tests and future extras */
+  modeler: MiragonModeler;
   /** fit / zoom; `palette` is the renderer's own (top-centre, tier 1/2) */
   view: DiagramView;
 }
 
 export function mountMiragonEngine(
+  spec: Pick<MiragonRendererSpec, "contractNotation">,
   renderer: LoadedMiragonRenderer,
   container: HTMLElement,
   readonly: boolean,
   opts?: EngineOptions,
 ): MiragonEngine {
-  const { lane } = renderer;
-  const options = { container, additionalModules: [...(renderer.additionalModules ?? [])] };
-  const instance = readonly ? new renderer.NavigatedViewer(options) : new renderer.Modeler(options);
-  const text =
-    lane.kind === "dsl"
-      ? dslText(asDslModeler(instance), lane)
-      : documentText(asDocumentModeler(instance), lane, readonly);
-  const view = diagramView(instance, opts ? { insets: opts.insets } : {});
-  let importing = false;
-  const dirtyCbs = new Set<() => void>();
-  if (!readonly) {
-    const changed = (): void => {
-      if (importing) return; // the importDSL clear() echo — not a user edit
-      for (const cb of dirtyCbs) cb();
-    };
-    for (const event of text.changeEvents) instance.on(event, changed);
+  const mount = opts ? { insets: opts.insets } : {};
+  const modeler = readonly ? renderer.createViewer(mount) : renderer.create(mount);
+  try {
+    assertContract(modeler, spec.contractNotation);
+  } catch (error) {
+    modeler.destroy();
+    throw error;
   }
+  modeler.attachTo(container);
+  const view = diagramView(modeler.diagram, opts ? { insets: opts.insets } : {});
   return {
-    raw: instance,
+    modeler,
     editable: !readonly,
     view,
     async importText(content: string): Promise<void> {
-      importing = true;
-      try {
-        await text.importText(content);
-      } finally {
-        importing = false;
-      }
+      // refused like the SPA's live binding refuses it: the widget shows its
+      // import card instead of an empty canvas
+      if (isBlank(content)) throw new Error(EMPTY_DOCUMENT);
+      await modeler.importText(content);
       view.importFit();
     },
     async exportText(): Promise<string> {
       if (readonly) throw new Error("read-only view");
-      return text.exportText();
+      return modeler.exportText();
     },
-    onDirty(cb: () => void): () => void {
-      dirtyCbs.add(cb);
-      return () => dirtyCbs.delete(cb);
+    onDirty: (cb: () => void): (() => void) => modeler.onContentChanged(cb),
+    selectedElementId(): string | undefined {
+      const selected = modeler.elements.selection();
+      return selected.length === 1 ? selected[0] : undefined;
     },
-    selectedElementId: () => selectedElementOf(instance),
     bindLive(ytext: Y.Text, doc: Y.Doc, hooks: LiveBindHooks): () => void {
-      const unbind = bindMiragon(instance, lane, ytext, doc, hooks.onConflict, hooks.onImportError);
-      // every Miragon renderer is diagram-js — the SPA's presence controller
-      // attaches unchanged (notations/miragon/editor.ts does the same)
-      const presence = hooks.presence ? attachPresenceCanvas(instance as never, hooks.presence) : undefined;
+      const unbind = bindMiragon(modeler, spec.contractNotation, ytext, doc, hooks.onConflict, hooks.onImportError);
+      // the SPA's presence controller, on the diagram the renderer wraps
+      // (notations/miragon/editor.ts does the same)
+      const presence = hooks.presence
+        ? attachPresenceCanvas(modeler.diagram, hooks.presence, modeler.elements)
+        : undefined;
       return () => {
         presence?.destroy();
         unbind();
@@ -108,44 +80,7 @@ export function mountMiragonEngine(
     },
     destroy(): void {
       view.destroy();
-      instance.destroy();
+      modeler.destroy();
     },
-  };
-}
-
-/** the lane-specific half of the engine: which events mean "user edit", how
- *  text goes in and comes out */
-interface TextLane {
-  changeEvents: readonly string[];
-  importText(text: string): Promise<void>;
-  exportText(): string;
-}
-
-function dslText(modeler: DslModelerLike, lane: Extract<MiragonLane, { kind: "dsl" }>): TextLane {
-  return {
-    changeEvents: lane.changeEvents,
-    importText: async (text) => {
-      await modeler.importDSL(text);
-    },
-    exportText: () => modeler.exportDSL(),
-  };
-}
-
-function documentText(
-  modeler: DocumentModelerLike,
-  lane: Extract<MiragonLane, { kind: "document" }>,
-  readonly: boolean,
-): TextLane {
-  return {
-    // importDocument emits nothing and clear(false) is silent — no echo to suppress
-    changeEvents: ["commandStack.changed"],
-    importText: async (text) => {
-      const parsed = lane.codec.parse(text);
-      if (!parsed.ok) throw new Error(`not a ${lane.notation} document: ${String(parsed.error ?? "parse failed")}`);
-      modeler.importDocument(parsed.document);
-      // the editable mount only — the viewer has no command stack (see header)
-      if (!readonly) modeler.get("commandStack").clear(false);
-    },
-    exportText: () => lane.codec.serialize(modeler.exportDocument()),
   };
 }

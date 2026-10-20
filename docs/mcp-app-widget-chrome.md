@@ -151,6 +151,8 @@ Measured on the built widgets: order-to-cash fits at 0.56 at 720x520 (left palet
 
 The re-fit animates the viewbox over 250ms with `--cd-ease` (rAF interpolation). Under `prefers-reduced-motion` it jumps.
 
+No re-fit runs while someone types a label on the canvas (a text field in it has the focus). Every renderer saves an open label editor when the viewbox changes, so a re-fit after a peer's re-import or a resize would save the name typed so far.
+
 Zoom group (BR), 28px targets:
 
 | Control | Accessible name                        | Action                                                          |
@@ -373,6 +375,8 @@ Measured: the conflict card fits a 480x420 frame with the top row and part of th
 | Load failed: read rejected               | "Could not load order-to-cash"                | "designIQ did not return the model. Its reason is below; try again, or open the model in designIQ." + mono error | **Try again** (primary, `lc.load(lastInput)`) · **Open in designIQ** (when a link can be built: path known → file route, else the repo route)                                                                                      |
 | Load failed: import rejected             | "order-to-cash could not be displayed"        | parser error in mono                                                                                             | **Ask the assistant to fix it** (primary; `ui/message` with path + parser error; only with `getHostCapabilities().message`) · **Open in designIQ**. Without the message capability: **Open in designIQ** (primary) · **Try again** |
 | Miragon renderer failed to load          | "The Event Storming modeler could not start"  | error in mono                                                                                                    | **Try again** (re-runs `spec.load()`)                                                                                                                                                                                              |
+
+A Miragon model whose text is blank lands on the import card too, with "the document is empty": the SPA's live binding refuses it the same way, and an empty canvas would write a whole new document over the file with its first edit.
 
 ### 5.4 Event → surface rules
 
@@ -749,7 +753,7 @@ All three entries: `mcp-app.html`, `mcp-app-dmn.html`, `mcp-app-miragon.html`.
 Per entry:
 
 - `mcp-app-dmn.html`: tests panel → `#checks` (sections), toggle `#checks-toggle` (shield-check).
-- `mcp-app-miragon.html`: no panel; `#canvas` gets `spec.canvasClassName` at boot (miragon-main.ts). This fixes the dev-preview trap.
+- `mcp-app-miragon.html`: no panel; each mount gets a host inside `#canvas` that carries `spec.canvasClassName` (miragon-main.ts), so the dev preview's vendor-CSS scoping matches the renderer's root inside it.
 
 ### `apps/web/src/mcp-app` — pure, tested modules (`.ts` imports, no DOM, no `@/`)
 

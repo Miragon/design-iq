@@ -15,8 +15,9 @@
          emits it once per renderer spec as mcp-app-<notation>.html, the spec
          resolved through the build-time alias @/mcp-app/widget-spec. The
          frameless widget (spec §2): the whole iframe is canvas, the chrome
-         floats in the corners; the renderer palette sits top-centre. #canvas
-         gets the spec's canvasClassName at boot (miragon-main.ts). -->
+         floats in the corners; the renderer palette sits top-centre. Each
+         mount gets a host inside #canvas carrying the spec's canvasClassName
+         (miragon-main.ts). -->
     <div id="app" data-kind="miragon">
       <div id="canvas"></div>
       <div id="tl" class="corner tl">

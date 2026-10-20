@@ -8,10 +8,9 @@
  * Which selectors that leaves global per renderer is pinned in
  * test/vendor-css.test.ts, so a bump that adds one shows up in review.
  *
- * Each renderer also adds its own root class (`vendorRoot`) to the SAME
- * element that carries the scope class, so a descendant prefix would never
- * match those selectors: they get the scope as a compound instead
- * (.wardley-canvas.wardley-container …).
+ * The prefix is a descendant one for every rule, the renderer's own root
+ * rules (.wardley-container …) included: its contract factory mounts that
+ * root INSIDE the host it is attached to, never on it.
  *
  * Node-loadable (vite.config.ts and the node suites import it): no DOM, no
  * "@/" alias.
@@ -25,19 +24,11 @@ export interface VendorCssScoping {
   transform(scope: string, selector: string, prefixed: string): string;
 }
 
-export function vendorCssScoping(
-  spec: Pick<MiragonRendererSpec, "pkg" | "canvasClassName" | "vendorRoot">,
-): VendorCssScoping {
-  const vendorRoot = `.${spec.vendorRoot}`;
+export function vendorCssScoping(spec: Pick<MiragonRendererSpec, "pkg" | "canvasClassName">): VendorCssScoping {
   return {
     prefix: `.${spec.canvasClassName}`,
     includeFiles: [vendorSheetOf(spec.pkg)],
-    transform(scope, selector, prefixed) {
-      if (selector.startsWith(":root")) return selector;
-      const rest = selector.slice(vendorRoot.length);
-      if (selector.startsWith(vendorRoot) && /^($|[ .:,>~+[])/.test(rest)) return scope + selector;
-      return prefixed;
-    },
+    transform: (_scope, selector, prefixed) => (selector.startsWith(":root") ? selector : prefixed),
   };
 }
 

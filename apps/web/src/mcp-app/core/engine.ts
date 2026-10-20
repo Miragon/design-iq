@@ -4,13 +4,11 @@
  * export the document TEXT, report user edits, optionally hand the canvas to
  * a Y.Text. Two invariants the lifecycle relies on:
  *
- *  1. importText never fires onDirty. The wardley renderer runs
- *     commandStack.clear() inside importDSL, which EMITS 'commandStack.changed'
- *     (bpmn-js clears silently, and so do event storming and context maps
- *     since 0.3.0, team topology since 0.11.0) — an adapter suppresses that
- *     echo exactly like live-client's miragon-sync does, or every load and
- *     every conflict reload would autosave a canonicalised file over the
- *     hand-authored one.
+ *  1. importText never fires onDirty, or every load and every conflict
+ *     reload would autosave a canonicalised file over the hand-authored one.
+ *     The Miragon engine has it from the contract (law L1, a silent import),
+ *     bpmn-js clears its command stack silently, and the dmn engine mutes
+ *     what a view switch or an import raises.
  *  2. bindLive is a CAPABILITY. Absent = the widget stays on CAS autosave —
  *     the DMN widget's deliberate mode (engines/dmn.ts); any renderer without
  *     a live-client binding mounts the same way.

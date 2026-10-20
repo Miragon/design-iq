@@ -1,199 +1,79 @@
 /**
- * Y.Text ↔ Miragon-modeler binding — the ONE adapter for every diagram-js
- * modeler built from the Miragon modeler template (wardley maps, event
- * storming, team topologies, context maps) on the shared sync engine
- * (model-sync.ts; the four rules live there). What differs between those
- * renderers is not the notation but the TEXT LANE their API exposes — the
- * `MiragonLane` discriminator, chosen per notation by the web client's
- * renderer spec (apps/web/src/notations/miragon/<notation>.ts):
+ * Y.Text ↔ collaborative-modeler binding — the ONE adapter for every modeler
+ * that implements @miragon/modeler-api (the Miragon renderers: Wardley maps,
+ * Event Storming boards, Context Maps, Team Topologies), on the shared sync
+ * engine (model-sync.ts; the four rules live there). The contract's laws are
+ * what used to be per-renderer knowledge in this module:
  *
- *  - "dsl": the file format is a lossless line-DSL round-trip
- *    (importDSL/exportDSL — wardley OWM, event storming .storm); the text
- *    lane carries the DSL directly. Two traits from the renderers' own
- *    VS-Code-webview recipes: wardley's importDSL runs commandStack.clear(),
- *    which EMITS 'changed' (unlike bpmn-js, which clears silently; event
- *    storming's import is silent since 0.3.0, the latch idles there) — without
- *    suppression that echo would re-export the canvas's CANONICAL
- *    serialization after every import, reordering a hand-authored file on
- *    open and replacing half-typed Monaco text after every debounce (the
- *    reference webviews drop the echo the same way: `if (importing) return`
- *    in their pushEdit). And the DSLs are lenient by design (unknown lines
- *    are preserved), so the rule-4 pre-gate is "any non-empty text" — the
- *    parser stays the judge. Per notation only the CHANGE EVENTS differ;
- *    today both listen to the command stack alone: wardley's
- *    'wardley.config.changed' also fires for transient previews (a resize
- *    drag), which must never be persisted, and an event storming board's
- *    view options are a display preference, never content.
- *  - "document": the file format is ONE JSON document with a schema-model
- *    codec (importDocument/exportDocument — team topology .tt, context map
- *    .cm.json). The codec — Zod-validated, non-throwing parse on the way in,
- *    deterministic serialize on the way out — is INJECTED, so this package
- *    never depends on a renderer's schema package. importDocument replaces
- *    every shape, and an undo step left on the stack would then operate on
- *    stale, removed objects (silent no-ops, id-coincidence deletions): both
- *    renderers erase the history themselves, silently (context maps since
- *    0.3.0, team topology since 0.11.0). The lane still erases it after every
- *    import like bpmn-js does, silently (clear(false): no 'changed' echo), a
- *    no-op behind both until #136. The rule-4 pre-gate is JSON
- *    well-formedness, as XML well-formedness is for bpmn: half-typed JSON
- *    keeps the last good canvas without an import attempt, and the codec in
- *    importText stays the judge, so a document it refuses (a duplicate or
- *    reserved id) keeps the last good canvas too and names its reason
- *    instead of a generic one. Every canvas edit runs through the command
- *    stack, and the document meta (title) has no editing surface on the
- *    canvas — commandStack.changed is the ONE change event.
+ *  - L1 silent import: importText fires no change event and erases the undo
+ *    history itself, so there is no echo to suppress and no history to clear.
+ *  - L2/L3 one canonical text, one change event: onContentChanged covers
+ *    every user-visible change (config, title and undo included, transient
+ *    previews such as a Wardley resize drag never), and exportText already
+ *    returns the changed document inside the listener.
+ *  - L5 view state: snapshot before a RE-import, restore after it. The first
+ *    import keeps the renderer's own fit (at most 100 %, clear of the chrome
+ *    the host told it about), which diagram-js's fit-viewport is not.
+ *  - L7 a rejected import leaves the last good canvas, and its reason reaches
+ *    onImportError unchanged. So the rule-4 pre-gate is only "not empty":
+ *    every factory imports blank text as an empty diagram, and a blank Y.Text
+ *    rendered as one would have the next canvas edit write a whole document
+ *    over it.
  *
- * Both lanes share the diagram-js canvas whose viewbox survives a re-import.
- * Issue #136 (@miragon/modeler-api) retires the lane split upstream: once the
- * renderers implement importText/exportText with a silent import, this
- * module shrinks to one lane and the specs to `{ id, load }`.
+ * The one thing left to check is that the modeler is the one the host meant:
+ * its notation and the contract version it implements, at bind time.
  */
+import { type CollaborativeModeler, MODELER_API_VERSION } from "@miragon/modeler-api";
+import { apiVersionsCompatible } from "@miragon/modeler-api/conformance";
 import type * as Y from "yjs";
 
-import { bindModelSync, keepDiagramViewbox, type SyncAdapter } from "./model-sync.ts";
+import { bindModelSync } from "./model-sync.ts";
 
-/** the diagram-js surface every Miragon renderer shares — STRUCTURALLY: each
- *  renderer pins its own diagram-js copy, so nothing here may instanceof */
-export interface MiragonModelerLike {
-  get(service: string): any;
-  on(event: string, cb: () => void): void;
-  off(event: string, cb: () => void): void;
-}
+/** the one pre-gate (L7 above), which the widget's own import applies too */
+export const isBlank = (text: string): boolean => text.trim() === "";
+export const EMPTY_DOCUMENT = "the document is empty";
 
-/** a renderer whose text lane is a lossless line DSL (wardley, event storming) */
-export interface DslModelerLike extends MiragonModelerLike {
-  importDSL(text: string): Promise<unknown>;
-  exportDSL(): string;
-}
-
-/** a renderer whose text lane is one JSON document behind a schema-model
- *  codec (team topologies, context maps) */
-export interface DocumentModelerLike extends MiragonModelerLike {
-  get(service: "commandStack"): { clear(emitChanged?: boolean): void };
-  get(service: string): any;
-  importDocument(document: unknown): unknown;
-  exportDocument(): unknown;
-}
-
-export type MiragonModeler = DslModelerLike | DocumentModelerLike;
-
-export interface DocumentCodec {
-  /** non-throwing parse — `ok: false` keeps the last good canvas (rule 4) */
-  parse(text: string): { ok: true; document: unknown } | { ok: false; error?: unknown };
-  /** deterministic serialization (diff-friendly, the modeler's house rule) */
-  serialize(document: unknown): string;
-}
-
-/** HOW a Miragon renderer exposes its text lane — the one thing that differs
- *  between the renderers (see the module header) */
-export type MiragonLane =
-  | {
-      kind: "dsl";
-      /** the events after which the canvas is re-exported into the text lane */
-      changeEvents: readonly string[];
-    }
-  | {
-      kind: "document";
-      /** the notation's name in the rejection message ("not a team-topology document") */
-      notation: string;
-      codec: DocumentCodec;
-    };
-
-/** a spec/renderer mismatch must fail at bind time with a readable message,
- *  not as "importDSL is not a function" inside a debounced import */
-export function asDslModeler(modeler: MiragonModeler): DslModelerLike {
-  if (typeof (modeler as Partial<DslModelerLike>).importDSL !== "function") {
-    throw new Error("lane 'dsl' needs a renderer with importDSL/exportDSL");
+/** a modeler of another notation, or of an incompatible contract version,
+ *  fails here with a readable message instead of mis-rendering a document */
+export function assertContract(modeler: Pick<CollaborativeModeler, "meta">, notation: string): void {
+  const { meta } = modeler;
+  if (meta.notation !== notation) {
+    throw new Error(`expected a '${notation}' modeler, got '${meta.notation}'`);
   }
-  return modeler as DslModelerLike;
-}
-
-export function asDocumentModeler(modeler: MiragonModeler): DocumentModelerLike {
-  if (typeof (modeler as Partial<DocumentModelerLike>).importDocument !== "function") {
-    throw new Error("lane 'document' needs a renderer with importDocument/exportDocument");
+  if (!apiVersionsCompatible(meta.apiVersion, MODELER_API_VERSION)) {
+    throw new Error(
+      `the '${notation}' modeler implements @miragon/modeler-api ${meta.apiVersion}, designIQ speaks ${MODELER_API_VERSION}`,
+    );
   }
-  return modeler as DocumentModelerLike;
 }
 
 export function bindMiragon(
-  modeler: MiragonModeler,
-  lane: MiragonLane,
+  modeler: CollaborativeModeler,
+  notation: string,
   ytext: Y.Text,
   doc: Y.Doc,
   onConflict?: (message: string) => void,
   onImportError?: (message: string) => void,
 ): () => void {
-  const adapter =
-    lane.kind === "dsl"
-      ? dslLane(asDslModeler(modeler), lane.changeEvents)
-      : documentLane(asDocumentModeler(modeler), lane);
+  assertContract(modeler, notation);
   return bindModelSync(
-    { ...adapter, beforeImport: keepDiagramViewbox(modeler) },
+    {
+      importText: (text) => modeler.importText(text),
+      exportText: async () => modeler.exportText(),
+      looksRenderable: (text) => !isBlank(text),
+      unrenderableReason: EMPTY_DOCUMENT,
+      beforeImport(isFirstImport) {
+        if (isFirstImport) return () => {};
+        const view = modeler.getViewState();
+        return () => {
+          if (view !== undefined) modeler.setViewState(view);
+        };
+      },
+      observeModel: (onChanged) => modeler.onContentChanged(onChanged),
+    },
     ytext,
     doc,
     onConflict,
     onImportError,
   );
-}
-
-type LaneAdapter = Omit<SyncAdapter, "beforeImport">;
-
-function dslLane(modeler: DslModelerLike, changeEvents: readonly string[]): LaneAdapter {
-  let importing = false;
-  return {
-    importText: async (text) => {
-      importing = true;
-      try {
-        await modeler.importDSL(text);
-      } finally {
-        importing = false;
-      }
-    },
-    exportText: async () => modeler.exportDSL(),
-    // lenient DSL: the parser is the judge — only emptiness is gated here
-    looksRenderable: (text) => text.trim().length > 0,
-    observeModel(onChanged) {
-      const handler = (): void => {
-        if (!importing) onChanged(); // the importDSL clear() echo — not a user edit
-      };
-      for (const event of changeEvents) modeler.on(event, handler);
-      return () => {
-        for (const event of changeEvents) modeler.off(event, handler);
-      };
-    },
-  };
-}
-
-const NOT_WELL_FORMED_JSON = "the document is not well-formed JSON";
-
-function looksWellFormedJson(text: string): boolean {
-  try {
-    JSON.parse(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function documentLane(modeler: DocumentModelerLike, lane: { notation: string; codec: DocumentCodec }): LaneAdapter {
-  return {
-    importText: async (text) => {
-      const parsed = lane.codec.parse(text);
-      if (!parsed.ok) throw new Error(`not a ${lane.notation} document: ${String(parsed.error ?? "parse failed")}`);
-      modeler.importDocument(parsed.document);
-      // no undo step may outlive the shapes it points at: erase history like
-      // bpmn-js does on import, silently (no 'changed' echo) — both renderers
-      // already did (context maps since 0.3.0, team topology since 0.11.0)
-      modeler.get("commandStack").clear(false);
-    },
-    exportText: async () => lane.codec.serialize(modeler.exportDocument()),
-    // rule-4 pre-gate (see the module header): only well-formedness, so the
-    // codec's reason for a refused document reaches onImportError
-    looksRenderable: looksWellFormedJson,
-    unrenderableReason: NOT_WELL_FORMED_JSON,
-    observeModel(onChanged) {
-      modeler.on("commandStack.changed", onChanged);
-      return () => modeler.off("commandStack.changed", onChanged);
-    },
-  };
 }

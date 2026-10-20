@@ -8,7 +8,7 @@ import { test } from "node:test";
 
 import * as Y from "yjs";
 
-import { diffRegion, updateText } from "../src/text-diff.ts";
+import { diffHunks, diffRegion, updateText } from "../src/text-diff.ts";
 
 /* ── diffRegion ─────────────────────────────────────────────────────────── */
 
@@ -42,6 +42,26 @@ test("diffRegion: middle change trims prefix and suffix", () => {
   const r = diffRegion("hello world", "hello brave world");
   assert.deepEqual(r, { start: 6, endPrev: 6, endNext: 12 });
   assert.equal("hello brave world".slice(r.start, r.endNext), "brave ");
+});
+
+/* ── diffHunks ──────────────────────────────────────────────────────────── */
+
+test("diffHunks: the same closing line breaks → the one changed middle of diffRegion", () => {
+  assert.deepEqual(diffHunks("a 1\nb 2\n", "a 1\nb 3\n"), [{ at: 6, deleteCount: 1, insert: "3" }]);
+  assert.deepEqual(diffHunks("same", "same"), []);
+});
+
+test("diffHunks: a closing line break added or dropped is a hunk of its own at the end, last first", () => {
+  assert.deepEqual(diffHunks('{"x": 1, "y": 2}', '{"x": 5, "y": 2}\n'), [
+    { at: 16, deleteCount: 0, insert: "\n" },
+    { at: 6, deleteCount: 1, insert: "5" },
+  ]);
+  assert.deepEqual(diffHunks("a\nb\n\n", "a\nc\n"), [
+    { at: 4, deleteCount: 1, insert: "" },
+    { at: 2, deleteCount: 1, insert: "c" },
+  ]);
+  assert.deepEqual(diffHunks("abc", "abc\r\n"), [{ at: 3, deleteCount: 0, insert: "\r\n" }]);
+  assert.deepEqual(diffHunks("", "\n"), [{ at: 0, deleteCount: 0, insert: "\n" }]);
 });
 
 /* ── updateText ─────────────────────────────────────────────────────────── */
@@ -103,6 +123,18 @@ test("updateText: pure deletion keeps prefix and suffix", () => {
   assert.equal(ops[0]?.retain, 6, `expected a leading retain, got ${JSON.stringify(ops)}`);
   assert.equal(deleted(ops), "brave ".length);
   assert.equal(inserted(ops), 0, "pure deletion must not insert anything");
+});
+
+test("updateText: adding the closing line break keeps the edit's region local, not a replace to the end", () => {
+  const prev = '{\n  "a": 1,\n  "b": 2,\n  "c": 3\n}';
+  const { ytext, deltas } = makeYText(prev);
+  updateText(ytext, prev.replace('"a": 1', '"a": 7') + "\n");
+
+  assert.equal(ytext.toString(), '{\n  "a": 7,\n  "b": 2,\n  "c": 3\n}\n');
+  assert.equal(deltas.length, 1, "one transaction");
+  const ops = deltas[0]!;
+  assert.equal(deleted(ops), 1, `only the changed digit is deleted, got ${JSON.stringify(ops)}`);
+  assert.equal(inserted(ops), 2, "the new digit and the line break");
 });
 
 test("updateText: equal content is a no-op — no transaction fired", () => {

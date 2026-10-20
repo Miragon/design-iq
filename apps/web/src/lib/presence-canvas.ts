@@ -3,9 +3,9 @@
  * diagram-js canvas, plus publishing the LOCAL pointer/selection. Same
  * ownership rule and structural typing as todo-canvas: framework-free, one
  * controller per modeler, created by the notation engine on mount and torn
- * down in its destroy. Works unchanged on bpmn-js and the Miragon
- * wardley/team-topologies modelers (all diagram-js: canvas + elementRegistry
- * + eventBus-backed on/off).
+ * down in its destroy. Works on bpmn-js and on the diagram every Miragon
+ * renderer wraps (`modeler.diagram`; all diagram-js: canvas +
+ * elementRegistry + eventBus-backed on/off).
  *
  * Coordinates travel in MODEL space (@designiq/contracts/live CanvasPresence),
  * so peers at different zoom/pan see each cursor on the right spot. The
@@ -19,6 +19,17 @@
  * server-side) have no pointer: their selection is the elements their last
  * save changed. They render as dashed outlines with the name pill anchored to
  * the first outlined element, so "where the AI worked" reads at a glance.
+ *
+ * A modeler behind @miragon/modeler-api hands in its element surface: the
+ * selection then travels as the DOCUMENT's element ids, the ones every peer
+ * and the Live Host read from the same text, and an id this canvas does not
+ * know is looked up as an element name — the Live Host names a Wardley
+ * map's components, the canvas ids them `cmp_<name>`. Every element that
+ * carries the name is outlined (a Wardley pipeline carries its
+ * component's). What the surface does not address is not shared: a
+ * selected Wardley note, annotation, region or drawing, or an Event
+ * Storming note or drawing, publishes nothing, because the ids the text
+ * gives those move to another element when a line above them changes.
  */
 import type { CanvasPresence, PresenceUser } from "@designiq/contracts/live";
 import { CD, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
@@ -43,6 +54,12 @@ export interface PresenceSurface {
   onRemote(cb: (peers: RemotePresence[]) => void): () => void;
 }
 
+/** the slice of a collaborative modeler's element surface presence reads */
+export interface PresenceElements {
+  list(): Array<{ id: string; name?: string }>;
+  onSelection(callback: (ids: string[]) => void): () => void;
+}
+
 /** minimal structural view of the diagram-js services we touch */
 interface ElementLike {
   id: string;
@@ -59,9 +76,11 @@ interface CanvasLike {
   getLayer(name: string): SVGElement;
   viewbox(): { x: number; y: number; scale: number };
 }
+interface RegistryLike {
+  get(id: string): ElementLike | undefined;
+}
 interface ModelerLike {
-  get(service: "canvas"): CanvasLike;
-  get(service: "elementRegistry"): { get(id: string): ElementLike | undefined };
+  get(service: string): unknown;
   on(event: string, callback: (event?: unknown) => void): void;
   off(event: string, callback: (event?: unknown) => void): void;
 }
@@ -99,9 +118,22 @@ function namePill(color: string, name: string, x: number, y: number): { group: S
   return { group, fit: () => pill.setAttribute("width", String(Math.ceil(label.getComputedTextLength()) + 12)) };
 }
 
-export function attachPresenceCanvas(modeler: ModelerLike, presence: PresenceSurface): { destroy(): void } {
-  const canvas = modeler.get("canvas");
-  const registry = modeler.get("elementRegistry");
+/** element name → the ids of every element carrying it */
+function idsByName(list: ReadonlyArray<{ id: string; name?: string }>): Map<string, string[]> {
+  const names = new Map<string, string[]>();
+  for (const { id, name } of list) {
+    if (name !== undefined) names.set(name, [...(names.get(name) ?? []), id]);
+  }
+  return names;
+}
+
+export function attachPresenceCanvas(
+  modeler: ModelerLike,
+  presence: PresenceSurface,
+  elements?: PresenceElements,
+): { destroy(): void } {
+  const canvas = modeler.get("canvas") as CanvasLike;
+  const registry = modeler.get("elementRegistry") as RegistryLike;
   const container = canvas.getContainer();
 
   // ── local: pointer + selection → setLocal, throttled ───────────────────────
@@ -147,6 +179,15 @@ export function attachPresenceCanvas(modeler: ModelerLike, presence: PresenceSur
     local.cursor = null;
     publishNow();
   };
+  const publishSelection = (ids: Iterable<string>): void => {
+    // capped at the SOURCE, not only at render: awareness re-broadcasts the
+    // full state with every cursor tick, and a select-all on a huge diagram
+    // (~3,750+ elements) would exceed the server's ephemeral-message cap —
+    // Hocuspocus then CLOSEs the doc and the session dies. Nobody renders
+    // more than MAX_OUTLINES outlines anyway.
+    local.selection = [...ids].slice(0, MAX_OUTLINES);
+    publishNow(); // selection is discrete — no reason to throttle
+  };
   const onSelectionChanged = (event?: unknown): void => {
     const raw = (event as { newSelection?: ElementLike[] } | undefined)?.newSelection ?? [];
     const ids = new Set<string>();
@@ -155,13 +196,7 @@ export function attachPresenceCanvas(modeler: ModelerLike, presence: PresenceSur
       const target = el.type === "label" && el.labelTarget ? el.labelTarget : el;
       ids.add(target.id);
     }
-    // capped at the SOURCE, not only at render: awareness re-broadcasts the
-    // full state with every cursor tick, and a select-all on a huge diagram
-    // (~3,750+ elements) would exceed the server's ephemeral-message cap —
-    // Hocuspocus then CLOSEs the doc and the session dies. Nobody renders
-    // more than MAX_OUTLINES outlines anyway.
-    local.selection = [...ids].slice(0, MAX_OUTLINES);
-    publishNow(); // selection is discrete — no reason to throttle
+    publishSelection(ids);
   };
 
   // ── remote: peers → cursors + outlines on the presence layer ───────────────
@@ -185,6 +220,15 @@ export function attachPresenceCanvas(modeler: ModelerLike, presence: PresenceSur
       return;
     }
     const glyphScale = 1 / (vb.scale || 1);
+    // a peer's entry is an element id, else (with an element surface) an
+    // element name; the names are read once per render, and only on a miss
+    let names: Map<string, string[]> | undefined;
+    const elementsOf = (id: string): ElementLike[] => {
+      const byId = registry.get(id);
+      if (byId || !elements) return byId ? [byId] : [];
+      names ??= idsByName(elements.list());
+      return (names.get(id) ?? []).flatMap((namedId) => registry.get(namedId) ?? []);
+    };
 
     for (const peer of peers) {
       if (!peer.canvas) continue;
@@ -196,10 +240,13 @@ export function attachPresenceCanvas(modeler: ModelerLike, presence: PresenceSur
       // the shape is re-checked (belt and suspenders against future callers)
       const selection = Array.isArray(peer.canvas.selection) ? peer.canvas.selection : [];
       let anchor: { x: number; y: number } | undefined; // the first outlined box
-      for (const id of selection.slice(0, MAX_OUTLINES)) {
-        const el = typeof id === "string" ? registry.get(id) : undefined;
+      const boxes = selection
+        .slice(0, MAX_OUTLINES)
+        .flatMap((id) => (typeof id === "string" ? elementsOf(id) : []))
+        .slice(0, MAX_OUTLINES);
+      for (const el of boxes) {
         // shapes only — connections carry waypoints, not a box
-        if (!el || typeof el.x !== "number" || typeof el.width !== "number") continue;
+        if (typeof el.x !== "number" || typeof el.width !== "number") continue;
         const outline = svg("rect");
         outline.setAttribute("x", String(el.x - 3));
         outline.setAttribute("y", String((el.y ?? 0) - 3));
@@ -252,7 +299,12 @@ export function attachPresenceCanvas(modeler: ModelerLike, presence: PresenceSur
 
   container.addEventListener("pointermove", onPointerMove, { passive: true });
   container.addEventListener("pointerleave", onPointerLeave);
-  modeler.on("selection.changed", onSelectionChanged);
+  let offSelection: () => void;
+  if (elements) offSelection = elements.onSelection(publishSelection);
+  else {
+    modeler.on("selection.changed", onSelectionChanged);
+    offSelection = () => modeler.off("selection.changed", onSelectionChanged);
+  }
   // zoom changes glyph scale; imports/edits move or replace outlined elements
   modeler.on("canvas.viewbox.changed", scheduleRender);
   modeler.on("import.done", scheduleRender);
@@ -262,7 +314,7 @@ export function attachPresenceCanvas(modeler: ModelerLike, presence: PresenceSur
     destroy(): void {
       container.removeEventListener("pointermove", onPointerMove);
       container.removeEventListener("pointerleave", onPointerLeave);
-      modeler.off("selection.changed", onSelectionChanged);
+      offSelection();
       modeler.off("canvas.viewbox.changed", scheduleRender);
       modeler.off("import.done", scheduleRender);
       modeler.off("elements.changed", scheduleRender);

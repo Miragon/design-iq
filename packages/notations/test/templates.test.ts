@@ -4,14 +4,18 @@
  * consumes them through the domain shims); here only the dispatch contract.
  * That a Miragon template is its renderer's own serialization (no phantom
  * diff on the first canvas save) is pinned against the renderers apps/web
- * ships, in apps/web/test/miragon-renderers.test.ts. The Team Topology
- * template is also held against the schema model's own serializer here (a
- * devDependency at the version apps/web pins), so its next format change
- * fails in this package's suite too.
+ * ships, in apps/web/test/miragon-renderers.test.ts. The Team Topology and
+ * Context Map templates are also held against their schema model's own
+ * serializer here (devDependencies at the versions the renderers apps/web
+ * pins depend on), so a format change fails in this package's suite too.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import {
+  emptyDocument as emptyContextMap,
+  serializeDocumentText as serializeContextMap,
+} from "@miragon/context-maps-schema-model";
 import { emptyDocument, serializeDocument } from "@miragon/team-topologies-schema-model";
 
 import {
@@ -66,19 +70,19 @@ test("the event-storming template is a title-only .storm board — the serialize
 });
 
 test("the team-topology template is the schema-model's CANONICAL empty document (byte-stable first save)", () => {
-  // the codec apps/web saves through (notations/miragon/codec.ts) calls serializeDocument(…, true)
+  // the renderer's exportText (createCollaborativeModeler) calls serializeDocument(…, true)
   for (const name of ["Team Landscape", "Platform & Streams", 'Quote " and \\ backslash']) {
     assert.equal(newTtJson("teams", name), serializeDocument(emptyDocument(name), true), name);
   }
 });
 
 test("the context-map template is the schema-model's CANONICAL empty document (byte-stable first save)", () => {
-  // pinned against @miragon/context-maps-schema-model serializeDocument(emptyDocument(name)):
-  // version 1, 2-space indent, key order version/title/contexts/relationships, NO trailing newline
-  assert.equal(
-    newCmJson("conference", "Conference Planner"),
-    '{\n  "version": 1,\n  "title": "Conference Planner",\n  "contexts": [],\n  "relationships": []\n}',
-  );
+  // the renderer's exportText (createCollaborativeModeler) is serializeDocumentText: the
+  // pretty document and its line break
+  for (const name of ["Conference Planner", "Orders & Billing", 'Quote " and \\ backslash']) {
+    assert.equal(newCmJson("map", name), serializeContextMap(emptyContextMap(name)), name);
+  }
+  assert.ok(newCmJson("map", "Conference Planner").endsWith("}\n"));
   assert.equal((JSON.parse(newCmJson("x", "A\nB")) as { title: string }).title, "A B");
 });
 

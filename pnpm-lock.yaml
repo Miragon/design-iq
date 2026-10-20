@@ -196,18 +196,15 @@ importers:
       '@miragon/context-maps-renderer':
         specifier: 0.3.0
         version: 0.3.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
-      '@miragon/context-maps-schema-model':
-        specifier: 0.3.0
-        version: 0.3.0(zod@4.6.7)
       '@miragon/event-storming-renderer':
         specifier: 0.3.0
         version: 0.3.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
+      '@miragon/modeler-api':
+        specifier: 1.1.0
+        version: 1.1.0
       '@miragon/team-topologies-renderer':
         specifier: 0.11.2
         version: 0.11.2(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
-      '@miragon/team-topologies-schema-model':
-        specifier: 0.11.2
-        version: 0.11.2(zod@4.6.7)
       '@miragon/wardley-renderer':
         specifier: 0.8.0
         version: 0.8.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
@@ -403,6 +400,9 @@ importers:
       '@hocuspocus/provider':
         specifier: 4.7.1
         version: 4.7.1(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
+      '@miragon/modeler-api':
+        specifier: 1.1.0
+        version: 1.1.0
       yjs:
         specifier: 13.6.33
         version: 13.6.33
@@ -485,6 +485,9 @@ importers:
         specifier: 2.9.1
         version: 2.9.1
     devDependencies:
+      '@miragon/context-maps-schema-model':
+        specifier: 0.3.0
+        version: 0.3.0(zod@4.6.7)
       '@miragon/team-topologies-schema-model':
         specifier: 0.11.2
         version: 0.11.2(zod@4.6.7)

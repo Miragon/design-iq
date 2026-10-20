@@ -63,8 +63,9 @@ updates:
           - "@miragon/modeler-*"
         update-types: ["minor", "patch"]
       # a renderer and its schema model move together (the renderer pins the
-      # schema model exactly; apps/web pins both), so one PR per family, its
-      # majors included
+      # schema model exactly; packages/notations pins it as a devDependency to
+      # hold the new-file templates to it), so one PR per family, its majors
+      # included
       miragon-wardley:
         applies-to: version-updates
         patterns: ["@miragon/wardley-*"]
@@ -82,8 +83,9 @@ updates:
       miragon-value-chain:
         applies-to: version-updates
         patterns: ["@miragon/value-chain-*"]
-      # the contract the renderers implement (@miragon/modeler-api) and the
-      # shell around them, once apps/web takes them directly (#136, #265)
+      # the contract the renderers implement (@miragon/modeler-api), which
+      # apps/web and live-client take directly (#136), and the shell around
+      # them once apps/web takes it (#265)
       miragon-modeler:
         applies-to: version-updates
         patterns: ["@miragon/modeler-*"]

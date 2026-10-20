@@ -1,15 +1,17 @@
 /**
- * The Miragon widget engine without a browser (src/mcp-app/engines/miragon.ts):
- * the DSL lane's dirty suppression and viewer mount, the document lane's
- * silent history erase and codec gate, the live binding through the real
- * live-client adapter, and the ONE schema-model codec both the SPA and the
- * widget serialize through (src/notations/miragon/codec.ts). Plus the fit and
- * zoom math every diagram engine shares (src/mcp-app/engines/fit.ts) and the
- * import fit with the chrome's insets (engines/diagram-js.ts diagramView).
+ * The Miragon widget engine without a browser (src/mcp-app/engines/miragon.ts)
+ * against a fake collaborative modeler that keeps the @miragon/modeler-api
+ * laws: which factory a mount takes and with what, the contract check, the
+ * change event as the widget's dirty signal, the selection from the element
+ * surface, and the live binding through the real live-client adapter. Plus
+ * the fit and zoom math every diagram engine shares (src/mcp-app/engines/fit.ts)
+ * and the import fit with the chrome's insets (engines/diagram-js.ts
+ * diagramView).
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { MODELER_API_VERSION } from "@miragon/modeler-api";
 import * as Y from "yjs";
 
 import type { Insets } from "../src/mcp-app/core/engine.ts";
@@ -26,116 +28,194 @@ import {
   zoomPercent,
 } from "../src/mcp-app/engines/fit.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
-import { schemaModelCodec } from "../src/notations/miragon/codec.ts";
-import type { LoadedMiragonRenderer, MiragonRendererCtor, MiragonRendererLike } from "../src/notations/miragon/spec.ts";
+import type {
+  LoadedMiragonRenderer,
+  MiragonDiagram,
+  MiragonModeler,
+  MiragonMountOptions,
+} from "../src/notations/miragon/spec.ts";
 
 const tick = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const container = {} as HTMLElement;
+const SPEC = { contractNotation: "wardley" };
 
-/** a DSL renderer whose importDSL EMITS commandStack.changed (the Miragon
- *  trait) and whose exportDSL is NOT a byte fixpoint (it wraps) */
-function fakeDsl(
-  o: {
-    selection?: Array<{ id: string; labelTarget?: { id: string } }>;
-    changeEvents?: readonly string[];
-    importFails?: boolean;
-  } = {},
-) {
-  const handlers = new Map<string, Set<() => void>>();
-  const state = {
-    imported: [] as string[],
-    fitted: 0,
-    destroyed: 0,
-    /** what the read-only mount handed the viewer */
-    viewerModules: undefined as unknown[] | undefined,
-    modelerMounts: 0,
-    dsl: "",
-  };
-  const emit = (event: string): void => handlers.get(event)?.forEach((cb) => cb());
-  const instance: MiragonRendererLike = {
-    get: (service: string) => {
-      if (service === "canvas") {
-        return {
-          zoom: () => {
-            state.fitted++;
-          },
-          viewbox: () => ({ x: 0, y: 0, width: 100, height: 100 }),
-        };
-      }
-      if (service === "selection" && o.selection) return { get: () => o.selection };
-      throw new Error(`No provider for "${service}"`);
+/** a canvas that keeps a real viewbox: the setter emits canvas.viewbox.changed
+ *  synchronously, like diagram-js 15 */
+function fakeCanvas(inner: Box, outer: { width: number; height: number }, emit: (event: string) => void) {
+  let current: Box = { x: 0, y: 0, width: outer.width, height: outer.height };
+  const writes: Box[] = [];
+  return {
+    writes,
+    viewbox(box?: Box | false) {
+      if (!box) return { ...current, scale: outer.width / current.width, inner, outer };
+      current = { ...box };
+      writes.push(current);
+      emit("canvas.viewbox.changed");
+      return undefined;
     },
-    on: (event: string, cb: () => void) =>
-      void (handlers.get(event) ?? handlers.set(event, new Set()).get(event)!).add(cb),
-    off: (event: string, cb: () => void) => void handlers.get(event)?.delete(cb),
-    destroy: () => {
-      state.destroyed++;
-    },
-    async importDSL(text: string) {
-      if (o.importFails) throw new Error("parse");
-      state.imported.push(text);
-      state.dsl = text;
-      emit("commandStack.changed"); // the clear() echo
-    },
-    exportDSL: (): string => `export(${state.dsl})`,
+    zoom: () => {},
   };
-  const ctor = (onNew: (opts: { additionalModules?: unknown[] }) => void): MiragonRendererCtor =>
-    function (this: unknown, opts: { additionalModules?: unknown[] }) {
-      onNew(opts);
-      return instance;
-    } as unknown as MiragonRendererCtor;
-  const renderer: LoadedMiragonRenderer = {
-    Modeler: ctor(() => state.modelerMounts++),
-    NavigatedViewer: ctor((opts) => {
-      state.viewerModules = opts.additionalModules;
-    }),
-    lane: { kind: "dsl", changeEvents: o.changeEvents ?? ["commandStack.changed"] },
-  };
-  return { state, renderer, emit };
 }
 
-test("dsl lane: the import echo never fires onDirty, a later edit does; exportText is the renderer's DSL", async () => {
-  const { state, renderer, emit } = fakeDsl();
-  const engine = mountMiragonEngine(renderer, container, false);
-  assert.equal(state.modelerMounts, 1);
-  assert.equal(state.viewerModules, undefined, "the editable mount never touches the viewer");
+/**
+ * A renderer whose factories build lawful collaborative modelers over one
+ * fake diagram: a silent import that fires the diagram's import events and
+ * leaves the view at the renderer's own fit (`fitted`), a canonical export
+ * that is not a byte copy of the import, a change event per user edit, and
+ * no change event ever from the viewer. `importFails` rejects every import.
+ */
+function fakeRenderer(
+  o: {
+    notation?: string;
+    selection?: string[];
+    importFails?: boolean;
+    inner?: Box;
+    outer?: { width: number; height: number };
+    fitted?: Box;
+  } = {},
+) {
+  const handlers = new Map<string, Set<(event?: unknown) => void>>();
+  const emit = (event: string): void => handlers.get(event)?.forEach((cb) => cb());
+  const outer = o.outer ?? { width: 720, height: 520 };
+  const canvas = fakeCanvas(o.inner ?? { x: 0, y: 0, width: 100, height: 100 }, outer, emit);
+  const state = {
+    mounts: [] as Array<{ factory: "create" | "createViewer"; options: MiragonMountOptions | undefined }>,
+    attached: [] as HTMLElement[],
+    imported: [] as string[],
+    destroyed: 0,
+    text: "",
+  };
+  const contentListeners = new Set<() => void>();
+  const diagram: MiragonDiagram = {
+    get: (service) => {
+      if (service === "canvas") return canvas;
+      throw new Error(`No provider for "${service}"`);
+    },
+    on: (event, cb) => void (handlers.get(event) ?? handlers.set(event, new Set()).get(event)!).add(cb),
+    off: (event, cb) => void handlers.get(event)?.delete(cb),
+  };
+  const modeler = (editable: boolean): MiragonModeler => ({
+    meta: { notation: o.notation ?? "wardley", apiVersion: MODELER_API_VERSION, editable },
+    elements: {
+      list: () => [],
+      reveal: () => false,
+      selection: () => o.selection ?? [],
+      onSelection: () => () => {},
+    },
+    diagram,
+    attachTo: (host) => void state.attached.push(host as HTMLElement),
+    async importText(text) {
+      if (o.importFails) throw new Error("parse");
+      emit("import.parse.start");
+      state.imported.push(text);
+      state.text = text;
+      if (o.fitted) canvas.viewbox(o.fitted);
+      emit("import.done");
+      return { warnings: [] };
+    },
+    exportText: () => `canonical(${state.text})`,
+    onContentChanged(cb) {
+      if (!editable) return () => {};
+      contentListeners.add(cb);
+      return () => contentListeners.delete(cb);
+    },
+    getViewState: () => {
+      const { x, y, width, height } = canvas.viewbox() as Box;
+      return { x, y, width, height };
+    },
+    setViewState: (view) => void canvas.viewbox(view as Box),
+    destroy: () => void state.destroyed++,
+  });
+  const renderer: LoadedMiragonRenderer = {
+    create(options) {
+      state.mounts.push({ factory: "create", options });
+      return modeler(true);
+    },
+    createViewer(options) {
+      state.mounts.push({ factory: "createViewer", options });
+      return modeler(false);
+    },
+  };
+  /** a user's edit on the canvas */
+  const edit = (text: string): void => {
+    state.text = text;
+    for (const cb of [...contentListeners]) cb();
+  };
+  return { state, renderer, edit, emit, canvas, outer };
+}
+
+test("editable mount: create() with the chrome's insets, attached to the host; the change event is the dirty signal", async () => {
+  const insets: Insets = { top: 60, right: 16, bottom: 56, left: 16 };
+  const { state, renderer, edit } = fakeRenderer();
+  const host = {} as HTMLElement;
+  const engine = mountMiragonEngine(SPEC, renderer, host, false, { insets: () => insets });
+  assert.equal(state.mounts.length, 1);
+  assert.equal(state.mounts[0]!.factory, "create");
+  assert.deepEqual(state.mounts[0]!.options?.insets?.(), insets, "the renderer's free area is the chrome's");
+  assert.deepEqual(state.attached, [host]);
   assert.equal(engine.editable, true);
   let dirty = 0;
   const off = engine.onDirty(() => dirty++);
   await engine.importText("component A [0.1, 0.2]");
-  assert.equal(dirty, 0, "the importDSL clear() echo is suppressed");
-  assert.equal(state.fitted, 1);
-  emit("wardley.config.changed");
-  assert.equal(dirty, 0, "a resize preview is no edit — autosave must never store a preview size");
-  emit("commandStack.changed");
-  assert.equal(dirty, 1, "the committed edit is");
+  assert.equal(dirty, 0, "L1: an import is no edit — the engine needs no latch for it");
+  edit("component A [0.1, 0.2]\ncomponent B [0.5, 0.5]");
+  assert.equal(dirty, 1, "a user's edit is");
   off();
-  emit("commandStack.changed");
+  edit("x");
   assert.equal(dirty, 1, "unsubscribed");
-  assert.equal(await engine.exportText(), "export(component A [0.1, 0.2])");
+  assert.equal(await engine.exportText(), "canonical(x)", "the modeler's canonical text, not the imported one");
   engine.destroy();
   assert.equal(state.destroyed, 1);
 });
 
-test("dsl lane read-only: the viewer gets the spec's modules and nothing else, no change events, no export", async () => {
-  const { state, renderer, emit } = fakeDsl({ changeEvents: ["commandStack.changed"] });
-  const engine = mountMiragonEngine(renderer, container, true);
-  assert.equal(state.modelerMounts, 0);
-  assert.deepEqual(state.viewerModules, [], "no command-stack shim: the renderers no longer need one");
+test("read-only mount: createViewer(), no change events, no export; without the chrome no insets", async () => {
+  const { state, renderer, edit } = fakeRenderer();
+  const engine = mountMiragonEngine(SPEC, renderer, container, true);
+  assert.deepEqual(
+    state.mounts.map((m) => [m.factory, m.options?.insets]),
+    [["createViewer", undefined]],
+  );
   assert.equal(engine.editable, false);
   let dirty = 0;
   engine.onDirty(() => dirty++);
   await engine.importText("x");
-  emit("commandStack.changed");
-  assert.equal(dirty, 0, "a viewer never subscribes");
+  edit("y");
+  assert.equal(dirty, 0, "a viewer reports no change");
   await assert.rejects(() => engine.exportText(), /read-only/);
 });
 
-test("dsl lane: bindLive hands the canvas to live-client's miragon-sync — the Y.Text imports, canvas edits export, hooks are threaded", async () => {
-  const { state, renderer, emit } = fakeDsl({ selection: [{ id: "label_1", labelTarget: { id: "node_1" } }] });
-  const engine = mountMiragonEngine(renderer, container, false);
-  assert.equal(engine.selectedElementId?.(), "node_1", "a label resolves to its target");
+test("the contract check: a renderer of another notation never mounts, and its instance is torn down", () => {
+  const { state, renderer } = fakeRenderer({ notation: "context-maps" });
+  assert.throws(
+    () => mountMiragonEngine({ contractNotation: "team-topologies" }, renderer, container, false),
+    /expected a 'team-topologies' modeler, got 'context-maps'/,
+  );
+  assert.equal(state.destroyed, 1);
+  assert.deepEqual(state.attached, [], "never attached");
+});
 
+test("selectedElementId: the element surface's selection when it is one element, else undefined", () => {
+  const one = mountMiragonEngine(SPEC, fakeRenderer({ selection: ["cmp_tea"] }).renderer, container, false);
+  assert.equal(one.selectedElementId?.(), "cmp_tea");
+  const two = mountMiragonEngine(SPEC, fakeRenderer({ selection: ["a", "b"] }).renderer, container, false);
+  assert.equal(two.selectedElementId?.(), undefined);
+  const none = mountMiragonEngine(SPEC, fakeRenderer().renderer, container, false);
+  assert.equal(none.selectedElementId?.(), undefined);
+});
+
+test("a rejected import rejects the engine's importText, and later edits still count", async () => {
+  const { renderer, edit } = fakeRenderer({ importFails: true });
+  const engine = mountMiragonEngine(SPEC, renderer, container, false);
+  let dirty = 0;
+  engine.onDirty(() => dirty++);
+  await assert.rejects(() => engine.importText("x"), /parse/);
+  edit("y");
+  assert.equal(dirty, 1);
+});
+
+test("bindLive hands the modeler to live-client's miragon-sync: the Y.Text imports, canvas edits export, hooks are threaded", async () => {
+  const { state, renderer, edit } = fakeRenderer();
+  const engine = mountMiragonEngine(SPEC, renderer, container, false);
   const doc = new Y.Doc();
   const ytext = doc.getText("content");
   ytext.insert(0, "component A [0.1, 0.2]\n");
@@ -143,16 +223,13 @@ test("dsl lane: bindLive hands the canvas to live-client's miragon-sync — the 
   const unbind = engine.bindLive!(ytext, doc, { onConflict: () => {}, onImportError: (m) => errors.push(m) });
   await tick(50);
   assert.deepEqual(state.imported, ["component A [0.1, 0.2]\n"], "the Y.Text landed on the canvas");
-  assert.equal(errors.length, 0);
-  // a canvas edit exports into the Y.Text (through the lane's change events)
-  state.dsl = "component A [0.1, 0.2]\ncomponent B [0.5, 0.5]\n";
-  emit("commandStack.changed");
-  await tick(50);
-  assert.match(ytext.toString(), /component B/);
+  assert.equal(ytext.toString(), "component A [0.1, 0.2]\n", "and was not rewritten");
+  edit("component A [0.1, 0.2]\ncomponent B [0.5, 0.5]\n");
+  await tick(20);
+  assert.equal(ytext.toString(), "canonical(component A [0.1, 0.2]\ncomponent B [0.5, 0.5]\n)");
   unbind();
-  state.dsl = "gone";
-  emit("commandStack.changed");
-  await tick(50);
+  edit("gone");
+  await tick(20);
   assert.doesNotMatch(ytext.toString(), /gone/, "unbound: canvas edits no longer export");
 
   // the import-error hook: a document that never rendered reports once
@@ -165,109 +242,18 @@ test("dsl lane: bindLive hands the canvas to live-client's miragon-sync — the 
   assert.deepEqual(errors, ["the document is empty"]);
   unbindEmpty();
 
-  const bare = mountMiragonEngine(fakeDsl().renderer, container, false);
-  assert.equal(bare.selectedElementId?.(), undefined, "no selection service → undefined, never a throw");
-});
-
-test("dsl lane: a rejected importDSL releases the latch — later edits still count", async () => {
-  const { renderer, emit } = fakeDsl({ importFails: true, changeEvents: ["commandStack.changed"] });
-  const engine = mountMiragonEngine(renderer, container, false);
-  let dirty = 0;
-  engine.onDirty(() => dirty++);
-  await assert.rejects(() => engine.importText("x"), /parse/);
-  emit("commandStack.changed");
-  assert.equal(dirty, 1, "edits after a failed import still count");
-});
-
-// ── the document lane ───────────────────────────────────────────────────────
-
-/** a JSON renderer: `services` names what its injector registers (the viewer
- *  has no command stack); clear(emit) fires 'changed' unless emit === false.
- *  Like team-topologies-renderer 0.11 and context-maps-renderer 0.3, its
- *  importDocument erases the history itself, silently, where it has one */
-function fakeDocument(services: string[]) {
-  const handlers = new Map<string, Array<() => void>>();
-  const log: unknown[] = [];
-  const service = (name: string): any => {
-    if (name === "canvas") return { zoom: () => {}, viewbox: () => ({ x: 0, y: 0, width: 1, height: 1 }) };
-    if (services.includes(name)) {
-      return {
-        clear: (emit?: boolean) => {
-          log.push(`clear:${name}:${emit}`);
-          if (emit !== false) handlers.get("commandStack.changed")?.forEach((cb) => cb());
-        },
-      };
-    }
-    throw new Error(`No provider for "${name}"!`);
-  };
-  const instance: MiragonRendererLike = {
-    get: service,
-    on: (event: string, cb: () => void) => void (handlers.get(event) ?? handlers.set(event, []).get(event)!).push(cb),
-    off: () => {},
-    destroy: () => {},
-    importDocument: (doc: unknown) => {
-      log.push(doc);
-      if (services.includes("commandStack")) service("commandStack").clear(false);
-    },
-    exportDocument: () => ({ nodes: [] }),
-  };
-  const ctor = () =>
-    function (this: unknown) {
-      return instance;
-    } as unknown as MiragonRendererCtor;
-  const codec = {
-    parse: (text: string) => (text === "bad" ? { ok: false as const } : { ok: true as const, document: { text } }),
-    serialize: (document: unknown) => JSON.stringify(document),
-  };
-  const renderer: LoadedMiragonRenderer = {
-    Modeler: ctor(),
-    NavigatedViewer: ctor(),
-    lane: { kind: "document", notation: "team-topology", codec },
-  };
-  return { renderer, log, emit: (event: string) => handlers.get(event)?.forEach((cb) => cb()) };
-}
-
-test("document lane read-only: no command-stack lookup on the viewer (the renderer's get() forwards no strict flag)", async () => {
-  const viewer = fakeDocument([]); // no commandStack on a viewer
-  const engine = mountMiragonEngine(viewer.renderer, container, true);
-  await engine.importText("x");
-  assert.deepEqual(viewer.log, [{ text: "x" }], "imported without touching the stack");
-  await assert.rejects(() => engine.importText("bad"), /not a team-topology document/);
-});
-
-test("document lane editable: the post-import clear is SILENT, a rejected parse never reaches importDocument, a real edit dirties", async () => {
-  const r = fakeDocument(["commandStack"]);
-  const engine = mountMiragonEngine(r.renderer, container, false);
-  let dirty = 0;
-  engine.onDirty(() => dirty++);
-  await engine.importText("ok");
-  assert.deepEqual(
-    r.log,
-    [{ text: "ok" }, "clear:commandStack:false", "clear:commandStack:false"],
-    "the renderer's own erase, then the engine's: both clear(false)",
-  );
-  assert.equal(dirty, 0, "engine invariant 1: the import (and its history erase) never dirties");
-  await assert.rejects(() => engine.importText("bad"));
-  assert.equal(r.log.length, 3, "a rejected parse never reached importDocument");
-  r.emit("commandStack.changed");
-  assert.equal(dirty, 1, "a real edit does");
-  assert.equal(await engine.exportText(), '{"nodes":[]}');
-});
-
-// ── the codec ───────────────────────────────────────────────────────────────
-
-for (const pkg of ["@miragon/team-topologies-schema-model", "@miragon/context-maps-schema-model"] as const) {
-  test(`schemaModelCodec(${pkg}): lenient parse, rejected garbage, deterministic round-trip`, async () => {
-    const codec = schemaModelCodec(await import(pkg));
-    const empty = codec.parse("{}");
-    assert.ok(empty.ok, "an empty object migrates to a valid document");
-    assert.equal(codec.parse("not json").ok, false);
-    const once = codec.serialize(empty.ok ? empty.document : undefined);
-    const again = codec.parse(once);
-    assert.ok(again.ok);
-    assert.equal(codec.serialize(again.document), once);
+  // a rejection's own reason, unchanged
+  const failing = mountMiragonEngine(SPEC, fakeRenderer({ importFails: true }).renderer, container, false);
+  const refused = new Y.Doc();
+  refused.getText("content").insert(0, "component");
+  const unbindRefused = failing.bindLive!(refused.getText("content"), refused, {
+    onConflict: () => {},
+    onImportError: (m) => errors.push(m),
   });
-}
+  await tick(50);
+  assert.deepEqual(errors, ["the document is empty", "parse"]);
+  unbindRefused();
+});
 
 // ── fit and zoom (engines/fit.ts) ───────────────────────────────────────────
 
@@ -362,69 +348,28 @@ test("the re-fit easing: --cd-ease parsed, endpoints exact, a linear curve is th
 
 // ── the import fit with insets (engines/diagram-js.ts diagramView) ──────────
 
-/** a DSL renderer whose canvas keeps a real viewbox: the setter emits
- *  canvas.viewbox.changed synchronously, like diagram-js 15 */
-function fakeCanvasDsl(inner: Box, outer = { width: 720, height: 520 }) {
-  const handlers = new Map<string, Set<() => void>>();
-  const emit = (event: string): void => handlers.get(event)?.forEach((cb) => cb());
-  let current: Box = { x: 0, y: 0, width: outer.width, height: outer.height };
-  const writes: Box[] = [];
-  let zooms = 0;
-  const canvas = {
-    viewbox(box?: Box) {
-      if (!box) return { ...current, scale: outer.width / current.width, inner, outer };
-      current = { ...box };
-      writes.push(current);
-      emit("canvas.viewbox.changed");
-      return undefined;
-    },
-    zoom: () => void zooms++,
-  };
-  const instance: MiragonRendererLike = {
-    get: (service: string) => {
-      if (service === "canvas") return canvas;
-      throw new Error(`No provider for "${service}"`);
-    },
-    on: (event: string, cb: () => void) =>
-      void (handlers.get(event) ?? handlers.set(event, new Set()).get(event)!).add(cb),
-    off: (event: string, cb: () => void) => void handlers.get(event)?.delete(cb),
-    destroy: () => {},
-    importDSL: async () => {},
-    exportDSL: () => "",
-  };
-  const ctor = function (this: unknown) {
-    return instance;
-  } as unknown as MiragonRendererCtor;
-  const renderer: LoadedMiragonRenderer = {
-    Modeler: ctor,
-    NavigatedViewer: ctor,
-    lane: { kind: "dsl", changeEvents: ["commandStack.changed"] },
-  };
-  return { renderer, canvas, writes, zooms: () => zooms, outer, instance, emit };
-}
-
 test("importText fits with the chrome's insets until the user moves the view; fit() resets touched", async () => {
   const inner = { x: 40, y: 20, width: 1400, height: 600 };
   const insets: Insets = { top: 104, right: 16, bottom: 56, left: 16 }; // a tier-2 palette
-  const r = fakeCanvasDsl(inner);
-  const engine = mountMiragonEngine(r.renderer, container, false, { insets: () => insets });
+  const r = fakeRenderer({ inner });
+  const engine = mountMiragonEngine(SPEC, r.renderer, container, false, { insets: () => insets });
   await engine.importText("board");
-  assert.equal(r.zooms(), 0, "no fit-viewport — the fit leaves room for the chrome");
-  assert.deepEqual(r.writes.at(-1), fitViewbox(inner, r.outer, insets));
+  assert.deepEqual(r.canvas.writes.at(-1), fitViewbox(inner, r.outer, insets), "the fit leaves room for the chrome");
   assert.equal(engine.view.isTouched(), false);
 
   // a scroll the fit did not cause marks the view touched — the next import keeps it
   const vb = r.canvas.viewbox() as Box;
   r.canvas.viewbox({ x: vb.x + 50, y: vb.y, width: vb.width, height: vb.height });
   assert.equal(engine.view.isTouched(), true);
-  const writes = r.writes.length;
+  const writes = r.canvas.writes.length;
   await engine.importText("board, edited");
-  assert.equal(r.writes.length, writes, "a touched view is never re-fitted by an import");
+  await tick(5);
+  assert.equal(r.canvas.writes.length, writes, "a touched view is never re-fitted by an import");
 
   // the Fit button: always, and untouched again
   engine.view.fit(insets, false);
   assert.equal(engine.view.isTouched(), false);
-  assert.deepEqual(r.writes.at(-1), fitViewbox(inner, r.outer, insets));
+  assert.deepEqual(r.canvas.writes.at(-1), fitViewbox(inner, r.outer, insets));
 
   // the zoom group: around the centre, a touch
   engine.view.zoomTo(1);
@@ -432,41 +377,51 @@ test("importText fits with the chrome's insets until the user moves the view; fi
   assert.equal(engine.view.isTouched(), true);
 });
 
-test("an import's own viewbox writes are never a touch: the renderer's zoom and the live binding's fit-viewport yield to the chrome's fit", async () => {
+test("a live re-import's own viewbox writes are never a touch: the renderer's fit and the binding's view restore yield to the chrome's fit", async () => {
   const inner = { x: 40, y: 20, width: 1400, height: 600 };
   const insets: Insets = { top: 104, right: 16, bottom: 56, left: 16 };
-  const r = fakeCanvasDsl(inner);
-  const engine = mountMiragonEngine(r.renderer, container, false, { insets: () => insets });
+  // the renderer leaves every import at its own fit, not the chrome's
+  const r = fakeRenderer({ inner, fitted: { ...inner } });
+  const engine = mountMiragonEngine(SPEC, r.renderer, container, false, { insets: () => insets });
   await engine.importText("board");
   const fitted = fitViewbox(inner, r.outer, insets);
-  // a re-import as the live binding runs it (live-client keepDiagramViewbox):
-  // the renderer zooms to its board while it renders, import.done fires, and
-  // the binding's continuation zooms to fit-viewport right after
-  r.instance.importDSL = async () => {
-    r.emit("import.parse.start");
-    r.canvas.viewbox({ ...inner });
-    r.emit("import.done");
-  };
-  await r.instance.importDSL("board, remote");
-  r.canvas.viewbox({ x: 0, y: 0, width: inner.width, height: inner.width * (r.outer.height / r.outer.width) });
-  assert.equal(engine.view.isTouched(), false, "nothing the import wrote counts as the user's move");
-  await new Promise((done) => setTimeout(done, 5));
-  assert.deepEqual(r.writes.at(-1), fitted, "the chrome's fit comes last");
-  assert.equal(engine.view.isTouched(), false);
+  assert.deepEqual(r.canvas.writes.at(-1), fitted);
 
-  // after the import window a move is the user's again
+  const doc = new Y.Doc();
+  const ytext = doc.getText("content");
+  ytext.insert(0, "board");
+  const unbind = engine.bindLive!(ytext, doc, { onConflict: assert.fail, onImportError: assert.fail });
+  await tick(50);
+  doc.transact(() => {
+    ytext.delete(0, ytext.length);
+    ytext.insert(0, "board, remote");
+  });
+  // the re-import: the renderer writes its fit, the binding restores the view right after
+  await tick(400);
+  assert.deepEqual(r.state.imported.at(-1), "board, remote");
+  assert.equal(engine.view.isTouched(), false, "nothing the import wrote counts as the user's move");
+  assert.deepEqual(r.canvas.writes.at(-1), fitted, "the chrome's fit comes last");
+
+  // after the import window a move is the user's again, and a peer's next edit keeps it
   r.canvas.viewbox({ ...fitted, x: fitted.x + 50 });
   assert.equal(engine.view.isTouched(), true);
+  const moved = r.canvas.viewbox() as Box;
+  doc.transact(() => ytext.insert(ytext.length, ", again"));
+  await tick(400);
+  assert.equal(r.state.imported.at(-1), "board, remote, again");
+  const after = r.canvas.viewbox() as Box;
+  assert.deepEqual([after.x, after.y, after.width, after.height], [moved.x, moved.y, moved.width, moved.height]);
+  unbind();
   engine.destroy();
 });
 
 test("fit() on an empty canvas (mounted, not yet imported) does nothing — no fit to compare a later move against", () => {
-  const r = fakeCanvasDsl({ x: 0, y: 0, width: 0, height: 0 });
-  const engine = mountMiragonEngine(r.renderer, container, false, {
+  const r = fakeRenderer({ inner: { x: 0, y: 0, width: 0, height: 0 } });
+  const engine = mountMiragonEngine(SPEC, r.renderer, container, false, {
     insets: () => ({ top: 60, right: 16, bottom: 56, left: 16 }),
   });
   engine.view.fit({ top: 60, right: 16, bottom: 56, left: 16 }, false);
-  assert.equal(r.writes.length, 0);
+  assert.equal(r.canvas.writes.length, 0);
   assert.equal(engine.view.isTouched(), false);
   engine.destroy();
 });

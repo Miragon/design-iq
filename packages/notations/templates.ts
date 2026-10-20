@@ -151,13 +151,14 @@ export function newStormText(_id: string, name: string): string {
 
 /**
  * The initial content of a new Context Map — EXACTLY the schema-model's
- * canonical serialization (version 1, 2-space indent, key order
- * version/title/contexts/relationships, no trailing newline): the modeler's
+ * canonical file text (version 1, 2-space indent, key order
+ * version/title/contexts/relationships, a trailing newline): the modeler's
  * first save re-serializes canonically, and a byte-identical template keeps
  * that save from showing up as a phantom diff (the team-topology rule).
  */
 export function newCmJson(_id: string, name: string): string {
-  return JSON.stringify({ version: 1, title: oneLine(name), contexts: [], relationships: [] }, null, 2);
+  return `${JSON.stringify({ version: 1, title: oneLine(name), contexts: [], relationships: [] }, null, 2)}
+`;
 }
 
 /** the initial content of a new markdown document — a heading with the title */

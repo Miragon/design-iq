@@ -6,36 +6,54 @@
  *
  *   ./plugin.ts               → the web editor plugin (WebNotationPlugin)
  *   ../../mcp-app/engines/miragon.ts → the MCP-App widget engine
- *   ./vendor-css.ts           → the SPA's vendor-CSS scoping (pkg + vendorRoot), in vite.config.ts
+ *   ./vendor-css.ts           → the SPA's vendor-CSS scoping (pkg + canvas class), in vite.config.ts
  *   ../../../scripts/build-widgets.ts → one single-file widget bundle per spec
  *
- * The eager part is DATA (id, package, css classes); the renderer, its
- * stylesheet and its text lane ride behind `load()` — the engine chunk loads
- * on mount in the SPA, and is inlined whole into the widget bundle. What
- * differs between the renderers is their text lane (@designiq/live-client
- * miragon-sync MiragonLane); issue #136 (@miragon/modeler-api) retires that
- * split upstream, after which a spec is `{ id, pkg, css, load }` alone.
+ * The eager part is DATA (id, package, css class, contract notation); the
+ * renderer and its stylesheet ride behind `load()` — the engine chunk loads
+ * on mount in the SPA, and is inlined whole into the widget bundle. Every
+ * renderer implements @miragon/modeler-api, so `load()` yields its two
+ * contract factories and both hosts bind them the same way
+ * (@designiq/live-client/miragon-sync); the only per-renderer knowledge left
+ * is how its factory options spell what a host's chrome covers.
  */
-import type { DocumentModelerLike, DslModelerLike, MiragonLane } from "@designiq/live-client/miragon-sync";
+import type { CollaborativeModeler, ElementsSurface } from "@miragon/modeler-api";
 
-/** a mounted Miragon renderer as the platform touches it — STRUCTURALLY
- *  (each renderer pins its own diagram-js copy; nothing may instanceof) */
-export type MiragonRendererLike = (DslModelerLike | DocumentModelerLike) & { destroy(): void };
+import type { Insets } from "../../mcp-app/core/engine.ts";
 
-export interface MiragonRendererCtor {
-  new (options: { container: HTMLElement; additionalModules?: unknown[] }): MiragonRendererLike;
+/** the diagram-js instance a renderer's factory wraps — STRUCTURALLY: the
+ *  platform wires presence outlines and the widget's view controls to it */
+export interface MiragonDiagram {
+  /** didi's strict lookup: a service the mount does not register THROWS */
+  get(service: string): unknown;
+  on(event: string, callback: (event?: unknown) => void): void;
+  off(event: string, callback: (event?: unknown) => void): void;
 }
 
-/** what `load()` yields: the renderer package's editor + read-only viewer and
- *  the text lane the platform binds them through */
+/** a mounted Miragon renderer: the contract, its element surface and the
+ *  diagram it wraps (each renderer's `createCollaborative*` return type) */
+export interface MiragonModeler extends CollaborativeModeler {
+  readonly elements: ElementsSurface;
+  readonly diagram: MiragonDiagram;
+}
+
+/** what designIQ hands every mount — each spec maps it onto its renderer's
+ *  own factory options */
+export interface MiragonMountOptions {
+  /** what the host's chrome covers along the canvas edges (px), read
+   *  whenever the renderer needs it — the widget's layout insets. The host
+   *  then also fits the view after every import itself. Absent (the SPA,
+   *  whose chrome sits outside the canvas): the renderer's defaults apply */
+  insets?: () => Insets;
+}
+
+/** what `load()` yields: the renderer package's two contract factories */
 export interface LoadedMiragonRenderer {
-  Modeler: MiragonRendererCtor;
-  NavigatedViewer: MiragonRendererCtor;
-  /** parts the renderer leaves to its host that designIQ wants on every
-   *  mount, editor and viewer alike — designIQ has no chrome of its own for
-   *  them (the Context Maps legend card) */
-  additionalModules?: readonly unknown[];
-  lane: MiragonLane;
+  /** the editing mount (`meta.editable: true`) */
+  create(options?: MiragonMountOptions): MiragonModeler;
+  /** the read-only mount (`meta.editable: false`): no command stack, never
+   *  a change event */
+  createViewer(options?: MiragonMountOptions): MiragonModeler;
 }
 
 export interface MiragonRendererSpec {
@@ -46,10 +64,11 @@ export interface MiragonRendererSpec {
   pkg: string;
   /** css class of the canvas host (the SPA scopes the vendor sheet under it) */
   canvasClassName: string;
-  /** the renderer's own root class, added to the SAME element as the canvas
-   *  host class — the scoping prefixes it as a compound, not a descendant */
-  vendorRoot: string;
-  /** the engine: renderer module + stylesheet + text lane — lazy, so the
-   *  SPA's eager bundle carries no engine */
+  /** the renderer's `meta.notation` — its own name for the notation, which
+   *  may differ from designIQ's id ("team-topologies" for "team-topology");
+   *  checked when a mount binds, together with the contract version */
+  contractNotation: string;
+  /** the engine: the factories + the stylesheet — lazy, so the SPA's eager
+   *  bundle carries no engine */
   load(): Promise<LoadedMiragonRenderer>;
 }

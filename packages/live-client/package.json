@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Shared live-session client: the ONE Hocuspocus wiring (socket + provider + sync lifecycle) for the web editor, the VS Code extension and headless guests \u2014 plus minimal-diff Y.Text writing and the Y.Text \u2194 bpmn-js / dmn-js / Miragon-renderer sync bridges.",
+  "description": "Shared live-session client: the ONE Hocuspocus wiring (socket + provider + sync lifecycle) for the web editor, the VS Code extension and headless guests \u2014 plus minimal-diff Y.Text writing and the Y.Text \u2194 bpmn-js / dmn-js / collaborative-modeler (@miragon/modeler-api) sync bridges.",
   "engines": {
     "node": ">=23.6"
   },
@@ -23,6 +23,7 @@
   "dependencies": {
     "@designiq/contracts": "workspace:*",
     "@hocuspocus/provider": "4.7.1",
+    "@miragon/modeler-api": "1.1.0",
     "yjs": "13.6.33"
   },
   "devDependencies": {
