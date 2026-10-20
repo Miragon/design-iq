@@ -1267,6 +1267,32 @@ test("generic model tools: get/save ANY notation with CAS, validate_model, creat
   });
   assert.equal(warned.ok, true);
   assert.ok(warned.errors.length > 0);
+  // …and so is a .tt the canvas cannot open: the schema model's refusal, at the offending value's path
+  const team = (id: string) => ({
+    id,
+    type: "platform",
+    label: id,
+    position: { x: 0, y: 0 },
+    size: { width: 9, height: 9 },
+  });
+  const duplicate = JSON.stringify({
+    version: 3,
+    title: "Order",
+    nodes: [team("a"), team("a")],
+    interactions: [],
+    flows: [],
+  });
+  const ttNow = await callJson("get_model_content", { repo: REPO.fullName, path: tt.model.path });
+  const schemaRefused = await call("save_model_content", {
+    repo: REPO.fullName,
+    path: tt.model.path,
+    content: duplicate,
+    baseVersion: ttNow.baseVersion,
+  });
+  assert.ok(
+    schemaRefused.isError && /validation failed:\n- nodes\.1\.id: duplicate id "a"/.test(schemaRefused.text),
+    schemaRefused.text,
+  );
 
   // validate_model: notation by extension, by explicit id, the repo link check, and the no-notation error
   const bad = await callJson("validate_model", { content: "{ broken", path: "processes/teams.tt" });
@@ -1274,6 +1300,24 @@ test("generic model tools: get/save ANY notation with CAS, validate_model, creat
   assert.ok(bad.findings.some((f: { severity: string }) => f.severity === "ERROR"));
   const good = await callJson("validate_model", { content: OWM, notation: "wardley" });
   assert.equal(good.ok, true);
+  const schema = await callJson("validate_model", { content: duplicate, path: "processes/teams.tt" });
+  assert.equal(schema.ok, false);
+  assert.deepEqual(
+    schema.findings.map((f: { severity: string; ruleId: string }) => [f.severity, f.ruleId]),
+    [["ERROR", "team-topology/schema"]],
+  );
+  // a context map's strategic-DDD rules are advice: the map opens, so the check stays ok
+  const advisory = await callJson("validate_model", {
+    content: JSON.stringify({ relationships: [{ id: "r", from: "a", to: "b", pattern: "partnership" }] }),
+    notation: "context-map",
+  });
+  assert.equal(advisory.ok, true);
+  assert.ok(
+    advisory.findings.every(
+      (f: { severity: string; ruleId: string }) => f.severity === "WARN" && f.ruleId === "context-map/semantics",
+    ),
+    JSON.stringify(advisory.findings),
+  );
   const dangling = await callJson("validate_model", {
     repo: REPO.fullName,
     content: USER_BPMN.replace('calledDecision="rabatt"', 'calledDecision="nope"'),
