@@ -315,6 +315,49 @@ test("Team Topologies: typing a label is no edit until it commits, and a peer's 
   engine.destroy();
 });
 
+/** the document with one element's id replaced */
+function withId(json: string, list: "nodes" | "contexts", index: number, id: string): string {
+  const document = JSON.parse(json) as Record<string, Array<{ id: string }>>;
+  document[list]![index]!.id = id;
+  return JSON.stringify(document);
+}
+
+test("the SPA editor names the reason the schema model refuses a document: a duplicate or reserved id", async () => {
+  const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
+  const refused: Array<[id: string, text: string, reason: RegExp]> = [
+    [
+      "team-topology",
+      withId(TEAMS, "nodes", 1, "team_platform"),
+      /^not a team-topology document: nodes\.1\.id: duplicate id "team_platform"/,
+    ],
+    [
+      "team-topology",
+      withId(TEAMS, "nodes", 0, "tt-root"),
+      /^not a team-topology document: nodes\.0\.id: "tt-root" is reserved/,
+    ],
+    [
+      "context-map",
+      withId(CONTEXT_MAP, "contexts", 0, "cm-root"),
+      /^not a context-map document: contexts\.0\.id: the id "cm-root" is reserved/,
+    ],
+  ];
+  for (const [id, text, reason] of refused) {
+    const doc = new Y.Doc();
+    doc.getText("content").insert(0, text);
+    const failed: string[] = [];
+    const editor = mountMiragonEditor(await load(id), host(), {
+      ytext: doc.getText("content"),
+      doc,
+      onSyncError: assert.fail,
+      onImportFailed: (message: string) => failed.push(message),
+    } as unknown as EditorContext);
+    await wait(50);
+    assert.equal(failed.length, 1, id);
+    assert.match(failed[0]!, reason);
+    editor.destroy();
+  }
+});
+
 test("Context Maps: every mount shows the legend card, which the 0.3.0 Modeler leaves to its host", async () => {
   const renderer = await load("context-map");
   const text = newCmJson("map", "Conference Planner");

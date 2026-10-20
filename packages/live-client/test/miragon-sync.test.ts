@@ -227,6 +227,43 @@ test("document lane: the injected codec gates imports — parsed documents in, b
   unbind();
 });
 
+test("document lane: a document the codec refuses from the start reports the codec's reason, half-typed JSON the format", async () => {
+  const refused: Array<[text: string, reason: string]> = [
+    [JSON.stringify({ version: 1 }), "not a team-topology document: version"],
+    ['{ "version": 2, "nodes": [', "the document is not well-formed JSON"],
+  ];
+  for (const [text, reason] of refused) {
+    const doc = new Y.Doc();
+    const ytext = doc.getText("content");
+    ytext.insert(0, text);
+    const modeler = makeFakeDocumentModeler(TT_DOC);
+    const reported: string[] = [];
+    const unbind = bindMiragon(modeler as never, TEAM_TOPOLOGY, ytext, doc, undefined, (m) => reported.push(m));
+    await wait(100);
+    assert.deepEqual(reported, [reason]);
+    assert.equal(modeler.imports.length, 0, "nothing reaches the canvas");
+    unbind();
+  }
+});
+
+test("document lane: a refused document after a good one keeps the last good canvas and reports nothing", async () => {
+  const doc = new Y.Doc();
+  const ytext = doc.getText("content");
+  ytext.insert(0, TT_DOC);
+  const modeler = makeFakeDocumentModeler(TT_DOC);
+  const reported: string[] = [];
+  const unbind = bindMiragon(modeler as never, TEAM_TOPOLOGY, ytext, doc, undefined, (m) => reported.push(m));
+  await wait(100);
+  doc.transact(() => {
+    ytext.delete(0, ytext.length);
+    ytext.insert(0, JSON.stringify({ version: 1 }));
+  });
+  await wait(700);
+  assert.equal(modeler.imports.length, 1, "the last good canvas stays");
+  assert.deepEqual(reported, [], "a later rejection is a transient interleaving");
+  unbind();
+});
+
 test("document lane: a canvas edit serializes through the codec into ytext (commandStack.changed)", async () => {
   const doc = new Y.Doc();
   const ytext = doc.getText("content");

@@ -34,11 +34,14 @@
  *    renderers erase the history themselves, silently (context maps since
  *    0.3.0, team topology since 0.11.0). The lane still erases it after every
  *    import like bpmn-js does, silently (clear(false): no 'changed' echo), a
- *    no-op behind both until #136. The codec's parse IS the rule-4
- *    pre-gate: half-typed JSON keeps the last good canvas without an import
- *    round-trip. Every canvas edit runs through the command stack, and the
- *    document meta (title) has no editing surface on the canvas —
- *    commandStack.changed is the ONE change event.
+ *    no-op behind both until #136. The rule-4 pre-gate is JSON
+ *    well-formedness, as XML well-formedness is for bpmn: half-typed JSON
+ *    keeps the last good canvas without an import attempt, and the codec in
+ *    importText stays the judge, so a document it refuses (a duplicate or
+ *    reserved id) keeps the last good canvas too and names its reason
+ *    instead of a generic one. Every canvas edit runs through the command
+ *    stack, and the document meta (title) has no editing surface on the
+ *    canvas — commandStack.changed is the ONE change event.
  *
  * Both lanes share the diagram-js canvas whose viewbox survives a re-import.
  * Issue #136 (@miragon/modeler-api) retires the lane split upstream: once the
@@ -161,6 +164,17 @@ function dslLane(modeler: DslModelerLike, changeEvents: readonly string[]): Lane
   };
 }
 
+const NOT_WELL_FORMED_JSON = "the document is not well-formed JSON";
+
+function looksWellFormedJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function documentLane(modeler: DocumentModelerLike, lane: { notation: string; codec: DocumentCodec }): LaneAdapter {
   return {
     importText: async (text) => {
@@ -173,9 +187,10 @@ function documentLane(modeler: DocumentModelerLike, lane: { notation: string; co
       modeler.get("commandStack").clear(false);
     },
     exportText: async () => lane.codec.serialize(modeler.exportDocument()),
-    // rule-4 pre-gate: the codec's parse IS the gate — run it cheaply here so a
-    // half-typed JSON keeps the last good canvas without an import round-trip
-    looksRenderable: (text) => lane.codec.parse(text).ok,
+    // rule-4 pre-gate (see the module header): only well-formedness, so the
+    // codec's reason for a refused document reaches onImportError
+    looksRenderable: looksWellFormedJson,
+    unrenderableReason: NOT_WELL_FORMED_JSON,
     observeModel(onChanged) {
       modeler.on("commandStack.changed", onChanged);
       return () => modeler.off("commandStack.changed", onChanged);
