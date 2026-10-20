@@ -17,7 +17,9 @@ minimumReleaseAgeExclude:
   - "@miragon/context-maps-schema-model@0.3.0"
   - "@miragon/wardley-renderer@0.8.0"
   - "@miragon/wardley-dsl@0.7.0"
-  # the shared modeler contract, an exact dependency of all three renderers
+  - "@miragon/team-topologies-renderer@0.11.2"
+  - "@miragon/team-topologies-schema-model@0.11.2"
+  # the shared modeler contract, an exact dependency of all four renderers
   - "@miragon/modeler-api@1.1.0"
   # the BPMN editing engine (#236) — 0.7.0 published 2026-10-14, adopted the same day (#248)
   - "@miragon/bpmn-cli@0.7.0"

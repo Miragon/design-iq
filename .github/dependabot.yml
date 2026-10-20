@@ -43,12 +43,6 @@ updates:
       # moving to inferno 6+ — then this bump follows theirs.
       - dependency-name: "inferno"
         versions: [">=6"]
-      # 0.11.0 and 0.11.1 ship their design-system tokens outside a cascade
-      # layer, so they override the app's status colours app-wide (warning
-      # text #FFB000 at 1.83:1; apps/web/test/vendor-css.test.ts fails on
-      # them). Unblock: a release that layers the tokens (#264).
-      - dependency-name: "@miragon/team-topologies-*"
-        versions: ["0.11.0", "0.11.1"]
     groups:
       npm-minor-patch:
         applies-to: version-updates

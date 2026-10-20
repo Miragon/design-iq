@@ -203,11 +203,11 @@ importers:
         specifier: 0.3.0
         version: 0.3.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/team-topologies-renderer':
-        specifier: 0.10.1
-        version: 0.10.1(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
+        specifier: 0.11.2
+        version: 0.11.2(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/team-topologies-schema-model':
-        specifier: 0.10.1
-        version: 0.10.1(zod@4.6.7)
+        specifier: 0.11.2
+        version: 0.11.2(zod@4.6.7)
       '@miragon/wardley-renderer':
         specifier: 0.8.0
         version: 0.8.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
@@ -485,9 +485,15 @@ importers:
         specifier: 2.9.1
         version: 2.9.1
     devDependencies:
+      '@miragon/team-topologies-schema-model':
+        specifier: 0.11.2
+        version: 0.11.2(zod@4.6.7)
       '@types/node':
         specifier: 26.6.5
         version: 26.6.5
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/ui-kit:
     dependencies:
@@ -1407,16 +1413,16 @@ packages:
     resolution: {integrity: sha512-K/8x2NGEUvn1lRIh2XEdyxgcGsQ2MSnrOTs+5bUZ+8xN16WL96CB4mojgCzynPi4xhg2EwOPYAPkygYyQX8BFA==}
     engines: {node: '>=22.13.0'}
 
-  '@miragon/team-topologies-renderer@0.10.1':
-    resolution: {integrity: sha512-GxC05MZw0UvPyY0VQTUo6AMP/C6tkJqwTTsczE1GfI3c9W1rMpoAsED6znc0Nv1Z/JQNSwrSBjbpMVggTkdtUA==}
+  '@miragon/team-topologies-renderer@0.11.2':
+    resolution: {integrity: sha512-EcjVvCoIcTp8q8BT6xukOI7Ve7sgDhzpQJurO6ntOQwnOSFPoeBvTl4ZV6LRKupVdr+h7TrlWdlHjdBA0K5+oA==}
     peerDependencies:
-      diagram-js: ^15.26.0
-      didi: ^11.0.0
+      diagram-js: ^15.28.0
+      didi: ^11.0.0 || ^12.0.0
       tiny-svg: ^4.1.4
       zod: ^4.6.0
 
-  '@miragon/team-topologies-schema-model@0.10.1':
-    resolution: {integrity: sha512-zlYF1OZyout7nmEYZnUn8yvS1GnfFkWqN5fmJXrbtg01iLo88MCskEAt/UMl6+M1YO2GffQrrQnQ9ri2GcxQ9Q==}
+  '@miragon/team-topologies-schema-model@0.11.2':
+    resolution: {integrity: sha512-t+tdMc5Jto1Raxhw8L8xpv6td2XoJhiZU2mBPWqCb2gdOJZWnqPt7qEJDlYjStQtpa9tQF539cBHX+3jOYGUaA==}
     peerDependencies:
       zod: ^4.6.0
 
@@ -3857,11 +3863,6 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@6.0.1:
-    resolution: {integrity: sha512-3wVS3i51pE2pi1k5FFL/95BGfVS0kSsvDVuGXHOtxox/TywUmtgq+3qiTOTbs9J7KfHaXPiN171k/A6dBnaXFw==}
-    engines: {node: ^22 || ^24 || >=26}
-    hasBin: true
-
   nanoid@6.0.2:
     resolution: {integrity: sha512-hIvVOb9Qr1p/9CNNLOe0OlWvgx/ziTsVwKN/GDSsuArN2K0wDiafP3s0SWmsm7o2BdnyS8Z9Z64NFBUbn6ziBg==}
     engines: {node: ^22 || ^24 || >=26}
@@ -5575,17 +5576,18 @@ snapshots:
 
   '@miragon/modeler-api@1.1.0': {}
 
-  '@miragon/team-topologies-renderer@0.10.1(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/team-topologies-renderer@0.11.2(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
-      '@miragon/team-topologies-schema-model': 0.10.1(zod@4.6.7)
+      '@miragon/modeler-api': 1.1.0
+      '@miragon/team-topologies-schema-model': 0.11.2(zod@4.6.7)
       diagram-js: 15.28.1
       didi: 11.0.1
       tiny-svg: 4.1.4
       zod: 4.6.7
 
-  '@miragon/team-topologies-schema-model@0.10.1(zod@4.6.7)':
+  '@miragon/team-topologies-schema-model@0.11.2(zod@4.6.7)':
     dependencies:
-      nanoid: 6.0.1
+      nanoid: 6.0.2
       zod: 4.6.7
 
   '@miragon/wardley-dsl@0.7.0(zod@4.6.7)':
@@ -8004,8 +8006,6 @@ snapshots:
   ms@2.1.3: {}
 
   nanoid@3.3.20: {}
-
-  nanoid@6.0.1: {}
 
   nanoid@6.0.2: {}
 
