@@ -221,6 +221,7 @@ test("the blank templates and the shipped examples are clean", () => {
   assert.deepEqual(checkModel(templateFor("context-map", "m", "Map") ?? "", { path: "m.cm.json" }), []);
   assert.deepEqual(checkModel(fixture("../../notations/test/fixtures/sample.tt"), { path: "t.tt" }), []);
   assert.deepEqual(checkModel(fixture("../../notations/test/fixtures/conference.cm.json"), { path: "m.cm.json" }), []);
+  assert.deepEqual(checkModel(fixture("../../notations/test/fixtures/porter.vc.json"), { path: "c.vc.json" }), []);
   assert.deepEqual(checkModel(fixture("fixtures/content-repo/landscape/team-topology.tt"), { path: "t.ttm.json" }), []);
   assert.deepEqual(
     checkModel(fixture("fixtures/content-repo/landscape/value-chain.vc.json"), { path: "c.vc.json" }),

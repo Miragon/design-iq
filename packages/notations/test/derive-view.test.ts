@@ -57,7 +57,8 @@ test("deriveView(wardley/tt/vc): node/edge stats from the shipped fixtures", () 
   assert.equal(wardley?.summary, "Wardley Map with 7 components, 8 dependencies");
 
   const tt = deriveView(extractModelGraph("teams/sample.tt", fixture("sample.tt")) as ModelGraph);
-  assert.deepEqual(tt?.stats, { teams: 5, interactions: 0 });
+  assert.deepEqual(tt?.stats, { teams: 5, interactions: 4 });
+  assert.equal(tt?.summary, "Team Topology with 5 teams, 4 interactions");
 
   const es = deriveView(
     extractModelGraph("boards/order-checkout.storm", fixture("order-checkout.storm")) as ModelGraph,
@@ -104,9 +105,9 @@ test("deriveView(wardley/tt/vc): node/edge stats from the shipped fixtures", () 
     "Event Storming board with no elements",
   );
 
-  const vc = deriveView(extractModelGraph("chains/supply.vc.json", fixture("supply.vc.json")) as ModelGraph);
-  assert.deepEqual(vc?.stats, { elements: 3, connections: 2 });
-  assert.equal(vc?.summary, "Value Chain with 3 elements, 2 connections");
+  const vc = deriveView(extractModelGraph("chains/porter.vc.json", fixture("porter.vc.json")) as ModelGraph);
+  assert.deepEqual(vc?.stats, { elements: 8, connections: 7 });
+  assert.equal(vc?.summary, "Value Chain with 8 elements, 7 connections");
 });
 
 test("deriveView(context-map): title as name, per-subdomain + per-pattern stats, contexts + relationships in detail", () => {

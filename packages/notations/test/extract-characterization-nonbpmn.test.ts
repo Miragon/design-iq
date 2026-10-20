@@ -6,22 +6,22 @@
  * exercised them). The fixtures are the de-facto format spec: tea.owm,
  * sample.tt, order-checkout.storm and conference.cm.json are the shipped
  * examples of the Miragon modeler repos (wardley-maps-modeler,
- * team-topologies-modeler, event-storming-modeler, context-maps-modeler),
- * whose deterministic serializers define what real files look like.
+ * team-topologies-modeler, event-storming-modeler, context-maps-modeler,
+ * value-chain-modeler: porter.vc.json), whose deterministic serializers
+ * define what real files look like.
  *
  * Deliberately pinned quirks (documenting gaps, not endorsing them):
  *
  *  - wardley: only `component` lines become nodes — `anchor`/`pipeline`/
  *    `evolve`/`title` are ignored, so edges may reference ids with NO node
  *    (Business/Public below), and the `(outsource)` suffix is dropped;
- *  - team-topology: the extractor expects `{nodes, edges}` — the modeler's
- *    real version-3 TtDocument carries `interactions`/`flows` instead of
- *    `edges` (relations are spatial), so a real .tt yields ZERO edges and
- *    position/size/title are dropped; its `annotations` (free-text notes)
- *    are no nodes either;
+ *  - team-topology: relations are spatial, so a .tt yields ZERO edges: an
+ *    interaction is a placed shape between its teams and becomes a node of
+ *    type "interaction" (its `mode` in extra); position/size/title, the
+ *    `flows` and the `annotations` (free-text notes) are dropped;
  *  - value-chain: elementType/connectionType default to "element"/
- *    "connection", `label` wins over `name`, missing connection ids become
- *    `conn-<index>`.
+ *    "connection" and missing connection ids become `conn-<index>`
+ *    (lenient like the other extractors; the schema requires all three).
  *
  * Compared through a JSON round-trip: the WIRE representation is what is
  * pinned (in memory, absent fields ride as `undefined` properties).
@@ -80,7 +80,7 @@ test("extractWardley: the shipped tea.owm example is pinned", () => {
   });
 });
 
-test("extractTeamTopology: the shipped sample.tt example is pinned — real .tt files yield NO edges", () => {
+test("extractTeamTopology: the shipped sample.tt example is pinned — interactions are nodes, real .tt files yield NO edges", () => {
   const graph = extractModelGraph("teams/sample.tt", fixture("sample.tt"));
   assert.deepEqual(JSON.parse(JSON.stringify(graph)), {
     notation: "team-topology",
@@ -115,9 +115,35 @@ test("extractTeamTopology: the shipped sample.tt example is pinned — real .tt 
         name: "Test Automation",
         extra: { description: "Coaches stream-aligned teams in test automation, then steps back." },
       },
+      { id: "int_checkout_fraud", type: "interaction", name: "fraud rules", extra: { mode: "collaboration" } },
+      { id: "int_platform_checkout", type: "interaction", extra: { mode: "x-as-a-service" } },
+      { id: "int_platform_discovery", type: "interaction", extra: { mode: "x-as-a-service" } },
+      { id: "int_testing_discovery", type: "interaction", extra: { mode: "facilitating" } },
     ],
     edges: [],
   });
+});
+
+test("extractTeamTopology: a legacy interaction without geometry is dropped like the schema model drops it", () => {
+  const graph = extractModelGraph(
+    "teams/old.tt",
+    JSON.stringify({
+      nodes: [{ id: "a", type: "platform", label: "A" }],
+      interactions: [
+        { id: "edge", mode: "collaboration", source: "a", target: "b" },
+        { id: "placed", mode: "facilitating", position: { x: 0, y: 0 }, size: { width: 9, height: 9 } },
+        null,
+      ],
+    }),
+  );
+  assert.deepEqual(
+    graph?.nodes.map((n) => [n.id, n.type]),
+    [
+      ["a", "platform"],
+      ["placed", "interaction"],
+    ],
+  );
+  assert.deepEqual(extractModelGraph("teams/blank.tt", '{"nodes": {}}')?.nodes, []);
 });
 
 test("extractEventStorming: the shipped order-checkout.storm example is pinned — ids equal the renderer's", () => {
@@ -400,19 +426,44 @@ test("extractContextMap: lenient like the schema-model's migrate — missing con
   }
 });
 
-test("extractValueChain: defaults, label-over-name and conn-<i> ids are pinned", () => {
-  const graph = extractModelGraph("chains/supply.vc.json", fixture("supply.vc.json"));
+test("extractValueChain: the shipped porter.vc.json example is pinned — ids and names are the document's own", () => {
+  const graph = extractModelGraph("chains/porter.vc.json", fixture("porter.vc.json"));
   assert.deepEqual(JSON.parse(JSON.stringify(graph)), {
     notation: "value-chain",
     nodes: [
-      { id: "sourcing", type: "primary", name: "Sourcing" },
-      { id: "assembly", type: "element", name: "Assembly" },
-      { id: "qa", type: "support", name: "Quality Assurance" },
+      { id: "org-development", type: "orgUnit", name: "Entwicklung" },
+      { id: "step-assembly", type: "step", name: "Assembly" },
+      { id: "step-inbound", type: "step", name: "Inbound Logistics" },
+      { id: "step-marketing", type: "step", name: "Marketing & Sales" },
+      { id: "step-operations", type: "step", name: "Operations" },
+      { id: "step-outbound", type: "step", name: "Outbound Logistics" },
+      { id: "step-service", type: "step", name: "Service" },
+      { id: "step-testing", type: "step", name: "Testing" },
     ],
     edges: [
-      { id: "c1", from: "sourcing", to: "assembly", kind: "feeds" },
-      { id: "conn-1", from: "assembly", to: "qa", kind: "connection" },
+      { id: "assign-1", from: "step-testing", to: "org-development", kind: "assignment" },
+      { id: "hier-1", from: "step-operations", to: "step-assembly", kind: "hierarchy" },
+      { id: "hier-2", from: "step-operations", to: "step-testing", kind: "hierarchy" },
+      { id: "seq-1", from: "step-inbound", to: "step-operations", kind: "sequence" },
+      { id: "seq-2", from: "step-operations", to: "step-outbound", kind: "sequence" },
+      { id: "seq-3", from: "step-outbound", to: "step-marketing", kind: "sequence" },
+      { id: "seq-4", from: "step-marketing", to: "step-service", kind: "sequence" },
     ],
+  });
+});
+
+test("extractValueChain: lenient on what the schema requires — type and id defaults", () => {
+  const graph = extractModelGraph(
+    "chains/loose.vc.json",
+    JSON.stringify({
+      elements: [{ id: "a", name: "A", label: "not the name" }],
+      connections: [{ source: "a", target: "a" }],
+    }),
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(graph)), {
+    notation: "value-chain",
+    nodes: [{ id: "a", type: "element", name: "A" }],
+    edges: [{ id: "conn-0", from: "a", to: "a", kind: "connection" }],
   });
 });
 
