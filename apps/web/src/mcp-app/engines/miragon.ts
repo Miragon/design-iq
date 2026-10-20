@@ -66,7 +66,9 @@ export function mountMiragonEngine(
       const unbind = bindMiragon(modeler, spec.contractNotation, ytext, doc, hooks.onConflict, hooks.onImportError);
       // the SPA's presence controller, on the diagram the renderer wraps
       // (notations/miragon/editor.ts does the same)
-      const presence = hooks.presence ? attachPresenceCanvas(modeler.diagram, hooks.presence) : undefined;
+      const presence = hooks.presence
+        ? attachPresenceCanvas(modeler.diagram, hooks.presence, modeler.elements)
+        : undefined;
       return () => {
         presence?.destroy();
         unbind();

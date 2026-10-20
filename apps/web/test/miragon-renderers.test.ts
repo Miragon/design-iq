@@ -12,6 +12,7 @@ import { after, test } from "node:test";
 import { newCmJson, newOwmText, newStormText, newTtJson } from "@designiq/notations/templates";
 import * as Y from "yjs";
 
+import type { RemotePresence } from "../src/lib/presence-canvas.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
 import type { LoadedMiragonRenderer, MiragonRendererSpec } from "../src/notations/miragon/spec.ts";
@@ -52,6 +53,13 @@ interface DiagramServices {
 
 interface WardleyModeler {
   setMapSize(width: number, height: number, options?: { transient?: boolean }): void;
+}
+
+interface WardleyServices {
+  get(name: "elementRegistry"): { get(id: string): { x: number; y: number } | undefined };
+  get(name: "selection"): { select(element: unknown): void };
+  get(name: "wardleyModeling"): { updateLabel(element: unknown, label: string): void };
+  get(name: "canvas"): { getLayer(name: string): SVGElement };
 }
 
 const MAP =
@@ -288,6 +296,60 @@ test("Wardley: a resize preview never reaches the shared text, the size it commi
   assert.doesNotMatch(ytext.toString(), /size \[(900|1200), /);
   unbind();
   engine.destroy();
+});
+
+test("presence on a Wardley map: the selection travels as document ids, a peer's component NAME (the Live Host's) is outlined", async () => {
+  const raf = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0) as unknown as number;
+  const engine = await engineOf("wardley", host("wardley-canvas"));
+  const doc = new Y.Doc();
+  const ytext = doc.getText("content");
+  ytext.insert(0, MAP);
+  const published: string[][] = [];
+  let deliver: (peers: RemotePresence[]) => void = () => {};
+  const unbind = engine.bindLive!(ytext, doc, {
+    onConflict: assert.fail,
+    onImportError: assert.fail,
+    presence: {
+      setLocal: (local) => void (local && published.push(local.selection)),
+      onRemote(callback) {
+        deliver = callback;
+        callback([]);
+        return () => {};
+      },
+    },
+  });
+  await wait(50);
+  const diagram = engine.modeler.diagram as unknown as WardleyServices;
+  const cup = diagram.get("elementRegistry").get("cmp_cup_of_tea");
+  diagram.get("selection").select(cup);
+  assert.deepEqual(published.at(-1), ["cmp_cup_of_tea"]);
+  // renamed on this canvas: the canvas keeps its id until the next import,
+  // the document (and so every peer) ids the element by its new name
+  diagram.get("wardleyModeling").updateLabel(cup, "Pot of Tea");
+  diagram.get("selection").select(cup);
+  assert.deepEqual(published.at(-1), ["cmp_pot_of_tea"]);
+  await wait(20);
+  assert.match(ytext.toString(), /^component Pot of Tea /m);
+
+  deliver([
+    {
+      clientId: 7,
+      user: { name: "AI · Dominik", color: "#1D4ED8", kind: "agent" },
+      canvas: { cursor: null, selection: ["Hot Water", "dep-0"] },
+    },
+  ]);
+  await wait(20);
+  const outlines = [...diagram.get("canvas").getLayer("designiq-presence").querySelectorAll("rect[stroke-dasharray]")];
+  const water = diagram.get("elementRegistry").get("cmp_hot_water")!;
+  assert.deepEqual(
+    outlines.map((rect) => [Number(rect.getAttribute("x")), Number(rect.getAttribute("y"))]),
+    [[water.x - 3, water.y - 3]],
+    "the component the agent changed, by its name; the positional edge id outlines nothing",
+  );
+  unbind();
+  engine.destroy();
+  globalThis.requestAnimationFrame = raf;
 });
 
 test("Team Topologies takes no key while its canvas is inert or a modal dialog is open, as the live editor's hidden layer and dialogs are", async () => {

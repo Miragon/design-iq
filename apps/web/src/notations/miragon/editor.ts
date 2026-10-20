@@ -27,7 +27,9 @@ export function mountMiragonEditor(
     modeler.destroy();
     throw error;
   }
-  const presenceCanvas = ctx.presence ? attachPresenceCanvas(modeler.diagram, ctx.presence) : undefined;
+  const presenceCanvas = ctx.presence
+    ? attachPresenceCanvas(modeler.diagram, ctx.presence, modeler.elements)
+    : undefined;
   return {
     destroy: () => {
       presenceCanvas?.destroy();
