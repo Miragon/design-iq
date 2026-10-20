@@ -221,7 +221,7 @@ for (const spec of MIRAGON_RENDERERS) {
 /** designIQ's own stylesheets: the SPA's and the widgets' */
 function ownStylesheets(): string[] {
   const src = fileURLToPath(new URL("../src/", import.meta.url));
-  return readdirSync(src, { recursive: true })
+  return readdirSync(src, { recursive: true, encoding: "utf8" })
     .filter((file) => file.endsWith(".css"))
     .map((file) => join(src, file));
 }
