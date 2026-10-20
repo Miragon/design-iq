@@ -377,7 +377,9 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
     return { notation: "wardley", name: null, summary: `Wardley Map with ${counted(stats)}`, stats };
   },
   "team-topology": (graph) => {
-    const stats = { teams: graph.nodes.length, interactions: graph.edges.length };
+    // an interaction is a placed shape, so a node of its own (extract.ts)
+    const interactions = graph.nodes.filter((n) => n.type === "interaction").length;
+    const stats = { teams: graph.nodes.length - interactions, interactions };
     return { notation: "team-topology", name: null, summary: `Team Topology with ${counted(stats)}`, stats };
   },
   "event-storming": (graph) => {

@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { checkBpmnXml, checkDmnXml, checkModelBaseline, type Finding } from "../src/validate.ts";
+import { checkBpmnXml, checkDmnXml, checkModelBaseline, checkSchemaModel, type Finding } from "../src/validate.ts";
 
 const ruleOf = (findings: Finding[], pattern: RegExp): string | undefined =>
   findings.find((f) => pattern.test(f.message))?.ruleId;
@@ -60,4 +60,15 @@ test("baseline rule family", () => {
     ruleOf(checkModelBaseline("{ nope", { file: "t.tt", notation: "team-topology" }), /not parseable as JSON/),
     "baseline/parse",
   );
+});
+
+test("schema-model rule families", () => {
+  const ids = (raw: string, notation: string): string[] => checkSchemaModel(raw, { notation }).map((f) => f.ruleId);
+  assert.deepEqual(ids('{"nodes": [{"id": "tt-root"}]}', "team-topology").slice(0, 1), ["team-topology/schema"]);
+  assert.deepEqual(ids("[]", "context-map"), ["context-map/schema"]);
+  assert.deepEqual(
+    ids('{"relationships": [{"id": "r", "from": "a", "to": "b", "pattern": "partnership"}]}', "context-map"),
+    ["context-map/semantics", "context-map/semantics"],
+  );
+  assert.deepEqual(ids("[]", "value-chain"), ["value-chain/schema"]);
 });

@@ -19,6 +19,8 @@ minimumReleaseAgeExclude:
   - "@miragon/wardley-dsl@0.7.0"
   - "@miragon/team-topologies-renderer@0.11.2"
   - "@miragon/team-topologies-schema-model@0.11.2"
+  # the validator's Value Chain schema check (#266) — 0.5.0 published 2026-10-19, adopted 2026-10-20
+  - "@miragon/value-chain-schema-model@0.5.0"
 overrides:
   # vitepress 1.6.4 (docs/) is the latest release and still requests vite
   # ^5.4.14, which is stuck below the server.fs.deny bypass fix (>=6.4.3).

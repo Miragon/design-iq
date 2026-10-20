@@ -1,0 +1,219 @@
+{
+  "connections": [
+    {
+      "connectionType": "assignment",
+      "id": "assign-1",
+      "source": "step-testing",
+      "target": "org-development",
+      "waypoints": [
+        {
+          "x": 460,
+          "y": 379
+        },
+        {
+          "x": 460,
+          "y": 424
+        }
+      ]
+    },
+    {
+      "connectionType": "hierarchy",
+      "id": "hier-1",
+      "source": "step-operations",
+      "target": "step-assembly",
+      "waypoints": [
+        {
+          "x": 355,
+          "y": 184
+        },
+        {
+          "x": 355,
+          "y": 259
+        },
+        {
+          "x": 410,
+          "y": 259
+        }
+      ]
+    },
+    {
+      "connectionType": "hierarchy",
+      "id": "hier-2",
+      "source": "step-operations",
+      "target": "step-testing",
+      "waypoints": [
+        {
+          "x": 355,
+          "y": 184
+        },
+        {
+          "x": 355,
+          "y": 349
+        },
+        {
+          "x": 410,
+          "y": 349
+        }
+      ]
+    },
+    {
+      "connectionType": "sequence",
+      "id": "seq-1",
+      "source": "step-inbound",
+      "target": "step-operations",
+      "waypoints": [
+        {
+          "x": 230,
+          "y": 152
+        },
+        {
+          "x": 302,
+          "y": 152
+        }
+      ]
+    },
+    {
+      "connectionType": "sequence",
+      "id": "seq-2",
+      "source": "step-operations",
+      "target": "step-outbound",
+      "waypoints": [
+        {
+          "x": 440,
+          "y": 152
+        },
+        {
+          "x": 512,
+          "y": 152
+        }
+      ]
+    },
+    {
+      "connectionType": "sequence",
+      "id": "seq-3",
+      "source": "step-outbound",
+      "target": "step-marketing",
+      "waypoints": [
+        {
+          "x": 650,
+          "y": 152
+        },
+        {
+          "x": 722,
+          "y": 152
+        }
+      ]
+    },
+    {
+      "connectionType": "sequence",
+      "id": "seq-4",
+      "source": "step-marketing",
+      "target": "step-service",
+      "waypoints": [
+        {
+          "x": 860,
+          "y": 152
+        },
+        {
+          "x": 932,
+          "y": 152
+        }
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "bounds": {
+        "height": 60,
+        "width": 130,
+        "x": 395,
+        "y": 424
+      },
+      "elementType": "orgUnit",
+      "id": "org-development",
+      "name": "Entwicklung"
+    },
+    {
+      "bounds": {
+        "height": 60,
+        "width": 160,
+        "x": 380,
+        "y": 229
+      },
+      "elementType": "step",
+      "id": "step-assembly",
+      "name": "Assembly"
+    },
+    {
+      "bounds": {
+        "height": 64,
+        "width": 170,
+        "x": 60,
+        "y": 120
+      },
+      "elementType": "step",
+      "id": "step-inbound",
+      "name": "Inbound Logistics"
+    },
+    {
+      "bounds": {
+        "height": 64,
+        "width": 170,
+        "x": 690,
+        "y": 120
+      },
+      "elementType": "step",
+      "id": "step-marketing",
+      "name": "Marketing & Sales"
+    },
+    {
+      "bounds": {
+        "height": 64,
+        "width": 170,
+        "x": 270,
+        "y": 120
+      },
+      "elementType": "step",
+      "id": "step-operations",
+      "name": "Operations"
+    },
+    {
+      "bounds": {
+        "height": 64,
+        "width": 170,
+        "x": 480,
+        "y": 120
+      },
+      "elementType": "step",
+      "id": "step-outbound",
+      "name": "Outbound Logistics"
+    },
+    {
+      "bounds": {
+        "height": 64,
+        "width": 150,
+        "x": 900,
+        "y": 120
+      },
+      "color": "hsl(205, 100%, 45%)",
+      "elementType": "step",
+      "id": "step-service",
+      "name": "Service"
+    },
+    {
+      "bounds": {
+        "height": 60,
+        "width": 160,
+        "x": 380,
+        "y": 319
+      },
+      "elementType": "step",
+      "id": "step-testing",
+      "name": "Testing"
+    }
+  ],
+  "meta": {
+    "name": "Porter Value Chain"
+  },
+  "schemaVersion": 1
+}

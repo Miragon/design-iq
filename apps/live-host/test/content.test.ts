@@ -314,6 +314,86 @@ test("putContent gates EVERY notation through checkModel — the save path and `
   );
 });
 
+test("putContent refuses what a Miragon canvas cannot open, like an invalid BPMN — advisory findings only warn", async () => {
+  const { ws, deps } = setup();
+  const box = { position: { x: 0, y: 0 }, size: { width: 100, height: 50 } };
+  const team = (id: string) => ({ id, type: "platform", label: id, ...box });
+  const refusals: Array<[string, string, RegExp]> = [
+    [
+      "processes/teams.tt",
+      JSON.stringify({ version: 3, title: "T", nodes: [team("a"), team("a")], interactions: [], flows: [] }),
+      /nodes\.1\.id: duplicate id "a"/,
+    ],
+    [
+      "processes/map.cm.json",
+      JSON.stringify({ version: 1, title: "M", contexts: [{ id: "cm-root", label: "R", ...box }], relationships: [] }),
+      /contexts\.0\.id: the id "cm-root" is reserved/,
+    ],
+    [
+      "processes/chain.vc.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        meta: { name: "C" },
+        elements: [{ id: "vc-root", elementType: "step", name: "S", bounds: { x: 0, y: 0, width: 160, height: 60 } }],
+        connections: [],
+      }),
+      /elements\.0\.id: Id "vc-root" is reserved/,
+    ],
+    // ids naming a built-in object property break the canvas import although the schema model takes them
+    [
+      "processes/ctor.tt",
+      JSON.stringify({ version: 3, title: "T", nodes: [team("constructor")], interactions: [], flows: [] }),
+      /nodes\.0\.id: the id "constructor" is reserved: it names a built-in property/,
+    ],
+    [
+      "processes/ctor.cm.json",
+      JSON.stringify({ version: 1, title: "M", contexts: [{ id: "toString", label: "S", ...box }], relationships: [] }),
+      /contexts\.0\.id: the id "toString" is reserved: it names a built-in property/,
+    ],
+    // nested past the schema model's stack: a refusal, not a 500
+    [
+      "processes/deep.vc.json",
+      JSON.stringify({ schemaVersion: 1, meta: { name: "C" }, elements: [], connections: [] }).replace(
+        /}$/,
+        `, "extra": ${"[".repeat(50_000)}${"]".repeat(50_000)}}`,
+      ),
+      /\(root\): could not be checked: Maximum call stack size exceeded/,
+    ],
+  ];
+  for (const [path, content, reason] of refusals) {
+    writeFileSync(join(ws, path), "{}");
+    const got = await getContent(deps, REPO, path);
+    await assert.rejects(
+      () => putContent(deps, REPO, path, { content, baseVersion: got.baseVersion }),
+      (e: AppError) => e.code === "content/invalid-model" && e.status === 422 && reason.test(e.message),
+      path,
+    );
+    // the modeler widget's autosave lane reports the same error instead
+    const warned = await putContent(deps, REPO, path, { content, baseVersion: got.baseVersion, lint: "warn" });
+    assert.ok(warned.ok, path);
+    assert.ok(
+      warned.result.errors?.some((m) => reason.test(m)),
+      path,
+    );
+  }
+
+  // a dangling relationship is advisory: the map opens, the finding is marked
+  const advisory = JSON.stringify({
+    version: 1,
+    title: "M",
+    contexts: [{ id: "a", label: "A", ...box }],
+    relationships: [{ id: "r", from: "a", to: "gone", pattern: "partnership" }],
+  });
+  writeFileSync(join(ws, "processes", "advisory.cm.json"), "{}");
+  const cm = await getContent(deps, REPO, "processes/advisory.cm.json");
+  const saved = await putContent(deps, REPO, "processes/advisory.cm.json", {
+    content: advisory,
+    baseVersion: cm.baseVersion,
+  });
+  assert.ok(saved.ok);
+  assert.deepEqual(saved.result.warnings, ['relationship "r": References unknown context "gone". (endpoints-on-map)']);
+});
+
 test("putContent lint:'warn' saves an invalid model and reports the errors instead of refusing", async () => {
   const { ws, deps } = setup();
   writeFileSync(join(ws, PATH), VALID);

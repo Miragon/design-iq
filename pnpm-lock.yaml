@@ -552,12 +552,24 @@ importers:
 
   packages/validator:
     dependencies:
+      '@miragon/context-maps-schema-model':
+        specifier: 0.3.0
+        version: 0.3.0(zod@4.6.7)
+      '@miragon/team-topologies-schema-model':
+        specifier: 0.11.2
+        version: 0.11.2(zod@4.6.7)
+      '@miragon/value-chain-schema-model':
+        specifier: 0.5.0
+        version: 0.5.0
       fast-xml-parser:
         specifier: 5.11.2
         version: 5.11.2
       yaml:
         specifier: 2.9.1
         version: 2.9.1
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       '@designiq/notations':
         specifier: workspace:*
@@ -1428,6 +1440,9 @@ packages:
     resolution: {integrity: sha512-t+tdMc5Jto1Raxhw8L8xpv6td2XoJhiZU2mBPWqCb2gdOJZWnqPt7qEJDlYjStQtpa9tQF539cBHX+3jOYGUaA==}
     peerDependencies:
       zod: ^4.6.0
+
+  '@miragon/value-chain-schema-model@0.5.0':
+    resolution: {integrity: sha512-SCcHa+5GXfyW+zXb+it1xfidRvvI5OOv0BWKQ12Fp97pT+n2CP/bdOZ9uVFL4hSFsNGqU4kFao1c9utSiYoIhQ==}
 
   '@miragon/wardley-dsl@0.7.0':
     resolution: {integrity: sha512-ZxXhCAaaq6IUT4QrN2HKlyRqpLEB3wF5JxadFGFKcLybGf7Vf30XKqoSIUW/rZS1tM/ekS3PKHQjdHztm92TmQ==}
@@ -4743,6 +4758,9 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
@@ -5592,6 +5610,10 @@ snapshots:
     dependencies:
       nanoid: 6.0.2
       zod: 4.6.7
+
+  '@miragon/value-chain-schema-model@0.5.0':
+    dependencies:
+      zod: 4.6.5
 
   '@miragon/wardley-dsl@0.7.0(zod@4.6.7)':
     dependencies:
@@ -8817,6 +8839,8 @@ snapshots:
       zod: 4.4.3
 
   zod@4.4.3: {}
+
+  zod@4.6.5: {}
 
   zod@4.6.7: {}
 

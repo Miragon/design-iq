@@ -424,23 +424,28 @@ function extractWardley(raw: string): ModelGraph {
   return { notation: "wardley", nodes, edges };
 }
 
+// ── the .tt document (Miragon team-topologies-modeler) ───────────────────────
+// `{ version, title, nodes, interactions, flows, annotations }`
+// (@miragon/team-topologies-schema-model TtDocument). A team is a node; an
+// interaction is a shape of its own, placed between the teams it connects,
+// with a `mode` (collaboration, x-as-a-service, facilitating) and no
+// endpoints: the relation is spatial, so it is a node too, never an edge. A
+// legacy interaction without geometry (a version 1 edge) is dropped, like
+// the schema model's migrate() drops it.
+
 function extractTeamTopology(raw: string): ModelGraph {
-  const data = JSON.parse(raw) as { nodes?: any[]; edges?: any[] };
-  return {
-    notation: "team-topology",
-    nodes: (data.nodes ?? []).map((n) => ({
-      id: n.id,
-      type: n.type ?? "team",
-      name: n.label ?? n.name,
-      extra: n.description ? { description: n.description } : undefined,
-    })),
-    edges: (data.edges ?? []).map((e, i) => ({
-      id: e.id ?? `edge-${i}`,
-      from: e.source ?? e.from,
-      to: e.target ?? e.to,
-      kind: e.interaction ?? e.type ?? "interaction",
-    })),
-  };
+  const data = JSON.parse(raw) as { nodes?: unknown; interactions?: unknown };
+  const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
+  const teams: ModelNode[] = list(data.nodes).map((n) => ({
+    id: n.id,
+    type: n.type ?? "team",
+    name: n.label ?? n.name,
+    extra: n.description ? { description: n.description } : undefined,
+  }));
+  const interactions: ModelNode[] = list(data.interactions)
+    .filter((i) => i !== null && typeof i === "object" && "position" in i && "size" in i)
+    .map((i) => ({ id: i.id, type: "interaction", name: i.label, extra: { mode: i.mode } }));
+  return { notation: "team-topology", nodes: [...teams, ...interactions], edges: [] };
 }
 
 // ── the .storm DSL (Miragon event-storming-modeler) ──────────────────────────
@@ -671,6 +676,11 @@ function extractContextMap(raw: string): ModelGraph {
   return { notation: "context-map", nodes, edges, meta: { title: text(data.title) ?? null } };
 }
 
+// ── the .vc.json document (Miragon value-chain-modeler) ──────────────────────
+// `{ schemaVersion, meta, elements, connections }`
+// (@miragon/value-chain-schema-model ValueChainDocument): a `step` or
+// `orgUnit` element is labelled by its `name`, the schema has no other label.
+
 function extractValueChain(raw: string): ModelGraph {
   const data = JSON.parse(raw) as { elements?: any[]; connections?: any[] };
   return {
@@ -678,7 +688,7 @@ function extractValueChain(raw: string): ModelGraph {
     nodes: (data.elements ?? []).map((el) => ({
       id: el.id,
       type: el.elementType ?? "element",
-      name: el.label ?? el.name,
+      name: el.name,
     })),
     edges: (data.connections ?? []).map((c, i) => ({
       id: c.id ?? `conn-${i}`,

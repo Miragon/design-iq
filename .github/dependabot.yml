@@ -59,6 +59,7 @@ updates:
           - "@miragon/event-storming-*"
           - "@miragon/context-maps-*"
           - "@miragon/team-topologies-*"
+          - "@miragon/value-chain-*"
           - "@miragon/modeler-*"
         update-types: ["minor", "patch"]
       # a renderer and its schema model move together (the renderer pins the
@@ -77,6 +78,11 @@ updates:
       miragon-team-topologies:
         applies-to: version-updates
         patterns: ["@miragon/team-topologies-*"]
+      # no value-chain renderer yet, but the validator checks .vc.json files
+      # with the schema model (#266): a 0.x minor can change what a save refuses
+      miragon-value-chain:
+        applies-to: version-updates
+        patterns: ["@miragon/value-chain-*"]
       # the contract the renderers implement (@miragon/modeler-api), which
       # apps/web and live-client take directly (#136), and the shell around
       # them once apps/web takes it (#265)

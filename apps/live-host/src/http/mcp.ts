@@ -184,6 +184,17 @@ const NOTATION_IDS = NOTATIONS.map((n) => n.id).join(", ");
 const CREATABLE_IDS = NOTATIONS.filter((n) => hasTemplate(n.id))
   .map((n) => n.id)
   .join(", ");
+/** what the schema models of the Miragon JSON notations refuse (the
+ *  validator's checkSchemaModel) — an agent cannot see a canvas fail, so the
+ *  tools that check and save say up front which files they will not take */
+const SCHEMA_REFUSALS =
+  "A .tt/.ttm.json, .cm.json or .vc.json file is checked with its notation's schema model, and whatever " +
+  "the model refuses is an ERROR at its JSON path (e.g. `nodes.1.id: duplicate id`), because the canvas " +
+  "cannot open that file: a duplicate id; the ids the diagram keeps for itself (tt-root, cm-root, vc-root, " +
+  "any id starting with __implicitroot, assoc_<annotation id> in a Team Topology, and in all three the names " +
+  "of built-in object properties such as constructor or toString); in a Context Map a list instead of an " +
+  "object, a version above 1 or coordinates and sizes beyond 1,000,000; in a Value Chain extra keys in bounds " +
+  "or waypoints, coordinates beyond ±1e9 and __proto__ keys. A Context Map's strategic-DDD rules are WARNs only.";
 
 /** edit_process's copy: the contract, then the op table and the kinds the
  *  engine derives from its own schema (they follow the pinned version) */
@@ -1027,8 +1038,10 @@ export function createLiveMcpServer(
       description:
         "Dry-run the platform validator on the text of a model of ANY notation WITHOUT writing anything — " +
         "the same check every save and the designiq-validate CLI run (structure + DI coverage for the XML " +
-        "notations, the baseline parse for the others, dangling references against the repo's models " +
-        "when `repo` is given). The notation comes from `path`'s extension or an explicit `notation`. " +
+        "notations, the schema model for Team Topology, Context Map and Value Chain JSON, the baseline parse " +
+        "for the others, dangling references against the repo's models when `repo` is given). " +
+        `${SCHEMA_REFUSALS} ` +
+        "The notation comes from `path`'s extension or an explicit `notation`. " +
         "Iterate here until ok before calling save_model_content.",
       inputSchema: z.object({
         content: z.string().describe("the complete document text to check"),
@@ -1060,7 +1073,9 @@ export function createLiveMcpServer(
         const findings = checkModel(content, { path: path ?? `<${notation ?? "model"}>`, notation, modelIds });
         if (!findings) {
           return fail(
-            `no registered notation for ${path ? `'${path}'` : "the payload"} — pass \`notation\` (one of: ${NOTATION_IDS}).`,
+            notation
+              ? `'${notation}' is no registered notation — pass one of: ${NOTATION_IDS}.`
+              : `no registered notation for ${path ? `'${path}'` : "the payload"} — pass \`notation\` (one of: ${NOTATION_IDS}).`,
           );
         }
         return ok({ ok: !findings.some((f) => f.severity === "ERROR"), findings });
@@ -1361,7 +1376,11 @@ export function createLiveMcpServer(
       description:
         "Validate and save the complete text of a model of ANY notation into the LIVE document " +
         "(co-editors see it immediately). The same platform check as validate_model gates it (structure + " +
-        "DI for the XML notations, the baseline parse for the others, dangling references against the repo). " +
+        "DI for the XML notations, the schema model for Team Topology, Context Map and Value Chain JSON, the " +
+        "baseline parse for the others, dangling references against the repo); its ERROR findings refuse the " +
+        "save. A .tt/.ttm.json, .cm.json or .vc.json its schema model rejects is refused that way, since its " +
+        "canvas could not open it: a duplicate id, a reserved id (tt-root, cm-root, vc-root, __implicitroot…, " +
+        "assoc_<annotation id>, constructor) and the other rejections validate_model lists. " +
         "baseVersion (from get_model_content) is REQUIRED; a stale one returns {conflict:true, " +
         "currentContent} instead of overwriting — re-derive your edit against currentContent and retry. " +
         "For BPMN and DMN, save_bpmn_xml / save_dmn_xml do the same.",
