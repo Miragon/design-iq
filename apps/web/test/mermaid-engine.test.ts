@@ -155,7 +155,7 @@ test("layout stays the author's: a directive may still set the look and the wrap
   assert.equal(config.theme, "base");
 });
 
-test("a diagram draws as before mermaid 12 until it asks otherwise: the classic look, laid out by dagre", async () => {
+test("a diagram keeps the look and layout of mermaid 11 until it asks otherwise: classic, laid out by dagre", async () => {
   const flow = "flowchart LR\n  A[Order received] --> B{In stock?}\n  B --> C[Ship]\n  B --> D[Reorder]\n  D --> C\n";
   const plain = await drawing(flow);
   assert.deepEqual(plain.looks, ["classic"]);
