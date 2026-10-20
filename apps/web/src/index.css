@@ -18,6 +18,17 @@
   height: 100%;
   width: 100%;
 }
+/* the Miragon renderers stack their own chrome high (palette 110, context
+   pad 100, popups 200 and up) for hosts that only frame the canvas; here it
+   would paint over the side panels (z-10) and over the dialogs and menus
+   (z-50). Isolated, the canvas is one layer under all of them, a popup that
+   reaches into an open side panel included */
+.wardley-canvas,
+.tt-canvas,
+.es-canvas,
+.cm-canvas {
+  isolation: isolate;
+}
 /* decision tables grow with their rules — scroll inside the editor pane
    (the DRD fills 100% height, so no scrollbars appear there) */
 .dmn-canvas {
