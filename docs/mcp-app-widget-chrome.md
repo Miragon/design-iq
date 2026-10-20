@@ -749,7 +749,7 @@ All three entries: `mcp-app.html`, `mcp-app-dmn.html`, `mcp-app-miragon.html`.
 Per entry:
 
 - `mcp-app-dmn.html`: tests panel → `#checks` (sections), toggle `#checks-toggle` (shield-check).
-- `mcp-app-miragon.html`: no panel; `#canvas` gets `spec.canvasClassName` at boot (miragon-main.ts). This fixes the dev-preview trap.
+- `mcp-app-miragon.html`: no panel; each mount gets a host inside `#canvas` that carries `spec.canvasClassName` (miragon-main.ts), so the dev preview's vendor-CSS scoping matches the renderer's root inside it.
 
 ### `apps/web/src/mcp-app` — pure, tested modules (`.ts` imports, no DOM, no `@/`)
 

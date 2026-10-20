@@ -168,10 +168,10 @@ against the contract in `core/engine.ts` — `importText` / `exportText` /
 renderers). Its extras (`WidgetExtras`: the Todos and Checks cards) hear
 `onRead` (the path is known: discovery runs in parallel with the import),
 `onDocument` and `onSaved`. Two engine invariants the core relies on:
-`importText` never fires `onDirty` (the Wardley renderer emits
-`commandStack.changed` from its own `clear()`, and `engines/miragon.ts`
-suppresses the echo), and `bindLive` is a capability (absent = CAS autosave
-only — the dmn engine's deliberate mode). Full behaviour:
+`importText` never fires `onDirty` (the Miragon engine has it from the
+`@miragon/modeler-api` contract, law L1: a silent import), and `bindLive` is a
+capability (absent = CAS autosave only — the dmn engine's deliberate mode).
+Full behaviour:
 [docs/mcp-integration.md](../../docs/mcp-integration.md).
 
 **One chrome.** The iframe is all canvas; the controls float in corner
@@ -215,11 +215,14 @@ rules (a keyboard user never lands on `<body>`) are tested on a small fake DOM
 
 **One spec per Miragon renderer.** The four Miragon widgets are not four
 entries: `src/notations/miragon/<id>.ts` holds ONE `MiragonRendererSpec` per
-renderer (package, css classes, a lazy `load()` yielding Modeler + viewer +
-the text lane), and everything derives from it — the SPA's editor plugin
-(`notations/miragon/plugin.ts`), the widget engine (`engines/miragon.ts` over
-`@designiq/live-client/miragon-sync`), the SPA's vendor-CSS scoping
-(`notations/miragon/vendor-css.ts`, its global selectors pinned in `test/vendor-css.test.ts`),
+renderer (package, canvas class, the renderer's `meta.notation`, a lazy
+`load()` yielding its two `@miragon/modeler-api` factories, `create` and
+`createViewer`), and everything derives from it — the SPA's editor plugin
+(`notations/miragon/plugin.ts`), the widget engine (`engines/miragon.ts`),
+both bound to the shared text through ONE contract adapter
+(`@designiq/live-client/miragon-sync`), the SPA's vendor-CSS scoping
+(`notations/miragon/vendor-css.ts`, a descendant prefix for every rule, its global
+selectors and the renderer root's rules pinned in `test/vendor-css.test.ts`),
 and the widget bundle: `mcp-app-miragon.html` + `src/mcp-app/miragon-main.ts`
 are the ONE template + entry, built once per spec with the spec aliased in
 through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
@@ -233,18 +236,23 @@ deliberately absent here. Never bundle two engines (or bpmn-js next to a Miragon
 sheet) into one widget.
 
 **Read-only hosts** (`LIVE_MCP_READONLY=1` on the Live Host) mount each engine's
-`NavigatedViewer`, with the spec's `additionalModules` like the editor (the
-Context Maps legend). No renderer needs a command stack on the viewer any more
+viewer (a Miragon spec's `createViewer`, which takes the Context Maps legend
+like the editor). No viewer needs a command stack
 (`test/miragon-renderers.test.ts`). The superseded freeze takes the same viewer
-path. Every Miragon renderer adopts the element it is handed as its root and
-removes it on `destroy()`, so `miragon-main.ts` gives each mount a host element
-of its own inside `#canvas` (carrying the scope class).
+path. A Miragon renderer mounts its own root INSIDE the element it is attached
+to and removes only that root on `destroy()`, so `miragon-main.ts` gives each
+mount a host element of its own inside `#canvas` (carrying the scope class,
+sized by `miragon-styles.css`) and removes it with the engine.
 
 ### Adding a Miragon notation
 
 1. The descriptor in `@designiq/notations` (extensions, noun, media kind).
-2. One spec file `src/notations/miragon/<id>.ts` (copy `wardley.ts` for a DSL
-   renderer, `team-topology.ts` for a JSON one) and its line in
+2. One spec file `src/notations/miragon/<id>.ts` (copy `event-storming.ts`):
+   the package, the canvas class, the renderer's `meta.notation`
+   (`contractNotation`) and a `load()` mapping `create`/`createViewer` onto the
+   package's `createCollaborativeModeler`/`createCollaborativeViewer` and its
+   own spelling of the free area (`freeRectInsets`, or `freeRectCenter` and
+   `fitOnImport` like `team-topology.ts`). Then its line in
    `src/notations/miragon/index.ts` — the SPA editor plugin, the widget engine,
    the CSS scoping and the widget bundle derive from it.
 3. The notation id in `GENERATED_WIDGET_NOTATIONS` (`apps/live-host/src/http/mcp.ts`)
@@ -255,10 +263,8 @@ of its own inside `#canvas` (carrying the scope class).
    shows up in a reviewed diff).
 4. `docs/mcp-integration.md` (tool table + the widgets section).
 
-A renderer with a different API than the two lanes (or a non-Miragon engine)
-gets a bespoke engine adapter + entry, the bpmn/dmn way — until
-[#136](https://github.com/Miragon/design-iq/issues/136) (`@miragon/modeler-api`)
-makes the lane split disappear.
+A renderer without the `@miragon/modeler-api` factories (or a non-Miragon
+engine) gets a bespoke engine adapter + entry, the bpmn/dmn way.
 
 ### Mixed deployments
 

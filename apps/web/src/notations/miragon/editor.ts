@@ -3,7 +3,9 @@
  * manifest (plugin.ts) together with the spec's `load()`: the renderer's
  * contract factory mounted into the SPA's canvas host and bound to the shared
  * Y.Text through live-client's miragon-sync, with live presence attached.
- * Nothing of the SPA covers the canvas, so the factory gets no insets.
+ * The SPA's chrome sits outside the canvas (only a side panel opens over
+ * its edge, on demand), so the factory gets no insets: the renderer's
+ * defaults apply.
  */
 import { bindMiragon } from "@designiq/live-client/miragon-sync";
 

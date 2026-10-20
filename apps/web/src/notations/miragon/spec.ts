@@ -42,8 +42,8 @@ export interface MiragonModeler extends CollaborativeModeler {
 export interface MiragonMountOptions {
   /** what the host's chrome covers along the canvas edges (px), read
    *  whenever the renderer needs it — the widget's layout insets. The host
-   *  then also fits the view after every import itself. Absent: nothing of
-   *  the host covers the canvas (the SPA), the renderer's defaults apply */
+   *  then also fits the view after every import itself. Absent (the SPA,
+   *  whose chrome sits outside the canvas): the renderer's defaults apply */
   insets?: () => Insets;
 }
 
