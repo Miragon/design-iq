@@ -5,23 +5,25 @@
  *
  *  - "dsl" (wardley OWM, event storming .storm): the text lane IS the DSL
  *    (importDSL/exportDSL round-trip losslessly), and the one trap is shared
- *    with the live binding: importDSL runs commandStack.clear(), which EMITS
- *    'commandStack.changed' (bpmn-js clears silently). Without suppression
+ *    with the live binding: wardley's importDSL runs commandStack.clear(),
+ *    which EMITS 'commandStack.changed' (bpmn-js clears silently, event
+ *    storming too since 0.3.0). Without suppression
  *    the echo would mark the canvas dirty on every load and conflict reload
  *    and autosave the CANONICAL serialization over the hand-authored file —
  *    so onDirty ignores everything raised while importText runs (engine
- *    invariant 1). The read-only mount needs the inert command stack
- *    (diagram-js.ts): the import clears a stack only the Modeler registers.
+ *    invariant 1). The read-only mount needs no command stack: both
+ *    renderers look the stack up optionally since wardley 0.7.0 and event
+ *    storming 0.3.0 (test/miragon-renderers.test.ts).
  *  - "document" (team topology .tt, context map .cm.json): the document is a
  *    typed object, so the text lane goes through the spec's codec — the SAME
  *    codec the SPA's live binding uses, so a widget save and the live export
- *    serialize the same bytes. importDocument replaces every shape but leaves
- *    the command stack UNTOUCHED (an undo would then act on removed objects),
- *    so the EDITABLE mount erases history after each import, silently. The
- *    viewer registers no command stack at all (and the renderer's get()
- *    forwards no strict flag: a lookup would throw), so the clear is gated on
- *    the mount, not on a lookup; importDocument never touches the stack, so
- *    no shim either.
+ *    serialize the same bytes. team topology's importDocument replaces every
+ *    shape but leaves the command stack UNTOUCHED (an undo would then act on
+ *    removed objects; context maps erases it itself since 0.3.0), so the
+ *    EDITABLE mount erases history after each import, silently. The viewer
+ *    registers no command stack at all (and the renderer's get() forwards no
+ *    strict flag: a lookup would throw), so the clear is gated on the mount,
+ *    not on a lookup.
  *
  * Renderer constructors come from the loaded spec (the node --test suite
  * hands in fakes); this module imports neither a renderer nor a stylesheet.
@@ -39,7 +41,7 @@ import type * as Y from "yjs";
 import { attachPresenceCanvas } from "../../lib/presence-canvas.ts";
 import type { LoadedMiragonRenderer, MiragonRendererLike } from "../../notations/miragon/spec.ts";
 import type { EngineOptions, LiveBindHooks, WidgetEngine } from "../core/engine.ts";
-import { type DiagramView, diagramView, selectedElementOf, viewerCommandStackShim } from "./diagram-js.ts";
+import { type DiagramView, diagramView, selectedElementOf } from "./diagram-js.ts";
 
 export interface MiragonEngine extends WidgetEngine {
   /** the renderer instance — for tests and future extras */
@@ -55,13 +57,8 @@ export function mountMiragonEngine(
   opts?: EngineOptions,
 ): MiragonEngine {
   const { lane } = renderer;
-  const modules = renderer.additionalModules ?? [];
-  const instance = readonly
-    ? new renderer.NavigatedViewer({
-        container,
-        additionalModules: lane.kind === "dsl" ? [...modules, viewerCommandStackShim] : [...modules],
-      })
-    : new renderer.Modeler({ container, additionalModules: [...modules] });
+  const options = { container, additionalModules: [...(renderer.additionalModules ?? [])] };
+  const instance = readonly ? new renderer.NavigatedViewer(options) : new renderer.Modeler(options);
   const text =
     lane.kind === "dsl"
       ? dslText(asDslModeler(instance), lane)

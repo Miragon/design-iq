@@ -34,6 +34,7 @@ interface WardleyModeler {
 
 const MAP =
   "title Tea Shop\ncomponent Cup of Tea [0.79, 0.61]\ncomponent Hot Water [0.82, 0.45]\nCup of Tea->Hot Water\n";
+const BOARD = "title Checkout\ncommand Place Order [240, 300]\nevent Order Placed [620, 300]\n";
 
 test("the new-file templates are the renderers' own serialization: the first canvas save is no phantom diff", async () => {
   const templates: Array<[id: string, text: string]> = [
@@ -53,7 +54,7 @@ test("the new-file templates are the renderers' own serialization: the first can
 test("importing never dirties the widget (engine invariant 1), the renderer's own import echo included", async () => {
   const boards: Array<[id: string, text: string]> = [
     ["wardley", MAP],
-    ["event-storming", "title Checkout\ncommand Place Order [240, 300]\nevent Order Placed [620, 300]\n"],
+    ["event-storming", BOARD],
     ["context-map", newCmJson("map", "Conference Planner")],
   ];
   for (const [id, text] of boards) {
@@ -63,6 +64,20 @@ test("importing never dirties the widget (engine invariant 1), the renderer's ow
     await engine.importText(text);
     await engine.importText(text);
     assert.equal(dirty, 0, id);
+    engine.destroy();
+  }
+});
+
+test("the read-only viewers import without a command stack: Event Storming and Wardley need no shim", async () => {
+  const boards: Array<[id: string, text: string]> = [
+    ["wardley", MAP],
+    ["event-storming", BOARD],
+  ];
+  for (const [id, text] of boards) {
+    const engine = mountMiragonEngine(await load(id), host(), true);
+    assert.throws(() => engine.raw.get("commandStack"), /No provider for "commandStack"/, id);
+    await engine.importText(text);
+    await engine.importText(text);
     engine.destroy();
   }
 });

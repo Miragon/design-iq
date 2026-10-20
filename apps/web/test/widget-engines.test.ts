@@ -1,6 +1,6 @@
 /**
  * The Miragon widget engine without a browser (src/mcp-app/engines/miragon.ts):
- * the DSL lane's dirty suppression and viewer shim, the document lane's
+ * the DSL lane's dirty suppression and viewer mount, the document lane's
  * silent history erase and codec gate, the live binding through the real
  * live-client adapter, and the ONE schema-model codec both the SPA and the
  * widget serialize through (src/notations/miragon/codec.ts). Plus the fit and
@@ -13,7 +13,7 @@ import { test } from "node:test";
 import * as Y from "yjs";
 
 import type { Insets } from "../src/mcp-app/core/engine.ts";
-import { diagramView, viewerCommandStackShim } from "../src/mcp-app/engines/diagram-js.ts";
+import { diagramView } from "../src/mcp-app/engines/diagram-js.ts";
 import {
   type Box,
   cubicBezier,
@@ -117,11 +117,11 @@ test("dsl lane: the import echo never fires onDirty, a later edit does; exportTe
   assert.equal(state.destroyed, 1);
 });
 
-test("dsl lane read-only: the viewer gets the inert command stack, no change events, no export", async () => {
+test("dsl lane read-only: the viewer gets the spec's modules and nothing else, no change events, no export", async () => {
   const { state, renderer, emit } = fakeDsl({ changeEvents: ["commandStack.changed"] });
   const engine = mountMiragonEngine(renderer, container, true);
   assert.equal(state.modelerMounts, 0);
-  assert.deepEqual(state.viewerModules, [viewerCommandStackShim]);
+  assert.deepEqual(state.viewerModules, [], "no command-stack shim: the renderers no longer need one");
   assert.equal(engine.editable, false);
   let dirty = 0;
   engine.onDirty(() => dirty++);
@@ -177,14 +177,6 @@ test("dsl lane: a rejected importDSL releases the latch — later edits still co
   await assert.rejects(() => engine.importText("x"), /parse/);
   emit("commandStack.changed");
   assert.equal(dirty, 1, "edits after a failed import still count");
-});
-
-test("viewerCommandStackShim is an inert didi value module", () => {
-  const [kind, stack] = viewerCommandStackShim.commandStack;
-  assert.equal(kind, "value");
-  assert.equal(stack.clear(), undefined);
-  assert.equal(stack.canUndo(), false);
-  assert.equal(stack.canRedo(), false);
 });
 
 // ── the document lane ───────────────────────────────────────────────────────
