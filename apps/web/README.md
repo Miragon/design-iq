@@ -218,7 +218,8 @@ entries: `src/notations/miragon/<id>.ts` holds ONE `MiragonRendererSpec` per
 renderer (package, css classes, a lazy `load()` yielding Modeler + viewer +
 the text lane), and everything derives from it — the SPA's editor plugin
 (`notations/miragon/plugin.ts`), the widget engine (`engines/miragon.ts` over
-`@designiq/live-client/miragon-sync`), the vendor-CSS scoping in `vite.config.ts`,
+`@designiq/live-client/miragon-sync`), the SPA's vendor-CSS scoping
+(`notations/miragon/vendor-css.ts`, its global selectors pinned in `test/vendor-css.test.ts`),
 and the widget bundle: `mcp-app-miragon.html` + `src/mcp-app/miragon-main.ts`
 are the ONE template + entry, built once per spec with the spec aliased in
 through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
