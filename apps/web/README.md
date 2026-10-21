@@ -215,8 +215,15 @@ pans; a display-mode change always re-fits. The view math and the readout are
 `interpolateViewbox`, `zoomReadout`), and so are the Miragon widgets' zoom keys
 and ⇧1 (`decideKey`, `chrome/keys.ts` through `src/lib/chrome-keys.ts`, which
 the SPA's Miragon editors bind too): the renderers bind no zoom keys, bpmn-js
-and dmn-js keep their own. The widget's geometry (the 36px corners, the
-12/16px insets) stays designIQ's; the full shell is not mounted. The inline height is declared after
+and dmn-js keep their own. Zoom out stops at a fit below 20 % instead of
+zooming in to 20 %. The widget's geometry (the 36px corners, the
+12/16px insets) stays designIQ's; the full shell is not mounted.
+In the SPA a Miragon editor's ⇧1 fits 24px clear of the renderer's palette as
+measured, of the canvas's sides and bottom, and of an open side panel (the
+panels dock over the canvas's right edge, `src/lib/side-panel-room.ts`);
+opening or closing a side panel re-fits a view nobody moved since the import
+or the last fit, as the widget does with its cards. The ⋯ menu repeats the
+Legend toggle as a checkbox in its Model block. The inline height is declared after
 connect (480, or 420 below 600 wide), and again only on a width-class flip or
 the return to inline; no state change resizes the iframe.
 Colours come from the `@designiq/ui-kit` aliases only (`chrome.css` for what
