@@ -1,5 +1,23 @@
 # Changelog
 
+## [5.7.0](https://github.com/Miragon/design-iq/compare/v5.6.0...v5.7.0) (2026-10-21)
+
+
+### Features
+
+* **web:** keyboard zoom, the renderers' menus and the Context Maps legend panel on modeler-shell core ([#280](https://github.com/Miragon/design-iq/issues/280)) ([48ee73f](https://github.com/Miragon/design-iq/commit/48ee73fbdac81fd6c7e1c8870ccb254f31793379))
+* **web:** move to the contract 1.2 renderer releases and drop the workarounds ([bcd8868](https://github.com/Miragon/design-iq/commit/bcd88688a513a0cb9dd0e03767b77f1559276c8c))
+
+
+### Bug Fixes
+
+* **live-client:** repair a shared text that concurrent canvas edits broke ([#277](https://github.com/Miragon/design-iq/issues/277)) ([beb0d5a](https://github.com/Miragon/design-iq/commit/beb0d5afc81448713096f7bc3394adae0e265f63))
+* **notations:** move to mermaid 12.2.0 and read diagrams the way it does ([#276](https://github.com/Miragon/design-iq/issues/276)) ([1769822](https://github.com/Miragon/design-iq/commit/17698227453ff669e9c0dfb76d67363cd58431a0))
+* refuse a Team Topology interaction without position or size unless the file is version 1 ([bcd8868](https://github.com/Miragon/design-iq/commit/bcd88688a513a0cb9dd0e03767b77f1559276c8c))
+* **validator:** report what the Team Topologies 0.12 and Context Maps 0.4 schema models refuse, in their own words ([bcd8868](https://github.com/Miragon/design-iq/commit/bcd88688a513a0cb9dd0e03767b77f1559276c8c))
+* **web:** draw Mermaid diagrams with mermaid 12, keeping mermaid 11's look and layout ([6d8c66f](https://github.com/Miragon/design-iq/commit/6d8c66ff287670b424e263f95289f7d3efaa5ae1))
+* **web:** fit the Wardley widget to the plot with its axes, clear of the chrome ([bcd8868](https://github.com/Miragon/design-iq/commit/bcd88688a513a0cb9dd0e03767b77f1559276c8c))
+
 ## [5.6.0](https://github.com/Miragon/design-iq/compare/v5.5.0...v5.6.0) (2026-10-20)
 
 
