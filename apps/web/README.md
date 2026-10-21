@@ -258,9 +258,10 @@ sized by `miragon-styles.css`) and removes it with the engine.
 2. One spec file `src/notations/miragon/<id>.ts` (copy `event-storming.ts`):
    the package, the canvas class, the renderer's `meta.notation`
    (`contractNotation`) and a `load()` mapping `create`/`createViewer` onto the
-   package's `createCollaborativeModeler`/`createCollaborativeViewer` and its
-   own spelling of the free area (`freeRectInsets`, or `freeRectCenter` and
-   `fitOnImport` like `team-topology.ts`). Then its line in
+   package's `createCollaborativeModeler`/`createCollaborativeViewer` with the
+   contract's factory options (`contractOptions` in `spec.ts`: the free area
+   and `fitOnImport`, plus `undoRedoKeys` for the editor), the names every
+   renderer on `@miragon/modeler-api` 1.2 takes. Then its line in
    `src/notations/miragon/index.ts` — the SPA editor plugin, the widget engine,
    the CSS scoping and the widget bundle derive from it. The scoping is
    reviewed per renderer in `test/vendor-css.test.ts`: the new spec needs its

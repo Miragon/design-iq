@@ -1,9 +1,7 @@
 /** @miragon/wardley-renderer — the OWM DSL. Its factory reports content
  *  changes from the command stack only, and its export is the committed
  *  document: during a plot-resize drag or a size preview it is the map as
- *  it was before, the dropped size is the edit. It gets no `freeRectInsets` yet: with them its pan constraint pulls
- *  the widget's fit towards its own content bounds, which are not the bounds
- *  the chrome fits (#265 aligns the fit). The viewer takes no options.
+ *  it was before, the dropped size is the edit.
  *
  *  Its name and link editors commit on every viewbox change, the host's own
  *  included, and its import reopens an open editor before it returns: the
@@ -14,7 +12,7 @@
  *  past the host's restore). */
 import type { Modeler, WardleyLabelEditing, WardleyLinkEditing } from "@miragon/wardley-renderer";
 
-import type { LoadedMiragonRenderer, MiragonRendererSpec } from "./spec.ts";
+import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
 
 export const spec: MiragonRendererSpec = {
   id: "wardley",
@@ -25,8 +23,8 @@ export const spec: MiragonRendererSpec = {
     const [{ createCollaborativeModeler, createCollaborativeViewer, restoreEditorState, setAsideEditorState }] =
       await Promise.all([import("@miragon/wardley-renderer"), import("@miragon/wardley-renderer/assets/wardley.css")]);
     return {
-      create: () => {
-        const modeler = createCollaborativeModeler({ keyboard: { undoRedo: true } });
+      create: (mount) => {
+        const modeler = createCollaborativeModeler({ ...contractOptions(mount), undoRedoKeys: true });
         const diagram = modeler.diagram as Modeler;
         const editing = (): boolean =>
           diagram.get<WardleyLabelEditing>("wardleyLabelEditing").getActiveEdit() !== null ||
@@ -42,7 +40,7 @@ export const spec: MiragonRendererSpec = {
           },
         };
       },
-      createViewer: () => createCollaborativeViewer(),
+      createViewer: (mount) => createCollaborativeViewer(contractOptions(mount)),
     };
   },
 };

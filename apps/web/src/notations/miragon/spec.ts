@@ -14,10 +14,11 @@
  * on mount in the SPA, and is inlined whole into the widget bundle. Every
  * renderer implements @miragon/modeler-api, so `load()` yields its two
  * contract factories and both hosts bind them the same way
- * (@designiq/live-client/miragon-sync); the only per-renderer knowledge left
- * is how its factory options spell what a host's chrome covers.
+ * (@designiq/live-client/miragon-sync). Since contract 1.2 every factory
+ * also takes the contract's option names (`contractOptions`), so a spec only
+ * adds what its renderer needs beyond them.
  */
-import type { CollaborativeModeler, ElementsSurface } from "@miragon/modeler-api";
+import type { CollaborativeModeler, CollaborativeModelerOptions, ElementsSurface } from "@miragon/modeler-api";
 
 import type { Insets } from "../../mcp-app/core/engine.ts";
 
@@ -37,14 +38,25 @@ export interface MiragonModeler extends CollaborativeModeler {
   readonly diagram: MiragonDiagram;
 }
 
-/** what designIQ hands every mount — each spec maps it onto its renderer's
- *  own factory options */
+/** what designIQ hands every mount — `contractOptions` maps it onto the
+ *  factory options every renderer takes */
 export interface MiragonMountOptions {
   /** what the host's chrome covers along the canvas edges (px), read
    *  whenever the renderer needs it — the widget's layout insets. The host
    *  then also fits the view after every import itself. Absent (the SPA,
    *  whose chrome sits outside the canvas): the renderer's defaults apply */
   insets?: () => Insets;
+}
+
+/**
+ * The contract's factory options for a mount: the chrome's insets are the
+ * free area (keyboard creation lands in it, and a renderer that constrains
+ * panning keeps the host's fit where the host put it), and a host that fits
+ * the view itself after every import gets no fit of the renderer's own
+ * before it, so the view changes once per import.
+ */
+export function contractOptions({ insets }: MiragonMountOptions = {}): CollaborativeModelerOptions {
+  return insets ? { freeArea: { insets }, fitOnImport: false } : {};
 }
 
 /** what `load()` yields: the renderer package's two contract factories */

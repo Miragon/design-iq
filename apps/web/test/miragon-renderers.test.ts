@@ -349,48 +349,47 @@ test("L5: a peer's re-import keeps the view the user panned to; the first import
   }
 });
 
-test("each spec hands the chrome's insets to its renderer the way that renderer spells the free area", async () => {
+/** where each renderer reads the free area's insets from: keyboard creation
+ *  lands in what they leave free, and Wardley's pan constraint keeps a
+ *  host's fit inside it */
+const FREE_AREA_INSETS: Record<string, (diagram: MiragonModeler["diagram"]) => unknown> = {
+  wardley: (diagram) => (diagram.get("wardleyFreeRect") as { insets(): unknown }).insets(),
+  "event-storming": (diagram) =>
+    (diagram.get("config.eventStormingPalette") as { freeArea?: { insets?(): unknown } }).freeArea?.insets?.(),
+  "context-map": (diagram) => (diagram.get("config.cmPalette") as { freeRectInsets(): unknown }).freeRectInsets(),
+  "team-topology": (diagram) =>
+    (diagram.get("config.ttPalette") as { freeArea?: { insets?(): unknown } }).freeArea?.insets?.(),
+};
+
+test("each spec hands the chrome's insets to its renderer as the contract's free area", async () => {
   const insets = { top: 56, right: 0, bottom: 0, left: 300 };
-  for (const [id, palette] of [
-    ["event-storming", "config.eventStormingPalette"],
-    ["context-map", "config.cmPalette"],
-  ] as const) {
-    const [, renderer] = await load(id);
+  for (const spec of MIRAGON_RENDERERS) {
+    const renderer = await spec.load();
     const modeler = renderer.create({ insets: () => insets });
-    const config = modeler.diagram.get(palette) as { freeRectInsets(): unknown };
-    assert.deepEqual(config.freeRectInsets(), insets, id);
+    assert.deepEqual(FREE_AREA_INSETS[spec.id]!(modeler.diagram), insets, spec.id);
     modeler.destroy();
   }
+});
 
-  // Team Topologies takes the free area's centre in diagram coordinates, and
-  // leaves the fit after an import to a host that fits itself
-  const [, renderer] = await load("team-topology");
-  for (const fitsItself of [true, false]) {
-    const modeler = renderer.create(fitsItself ? { insets: () => insets } : {});
-    modeler.attachTo(host("tt-canvas"));
-    const diagram = modeler.diagram as unknown as {
-      importDocument(document: unknown, options?: { fit?: boolean }): unknown;
-      get(name: "config.ttPalette"): { freeRectCenter?(): { x: number; y: number } };
-    };
-    let fit: boolean | undefined;
-    const importDocument = diagram.importDocument.bind(diagram);
-    diagram.importDocument = (document, options) => {
-      fit = options?.fit;
-      return importDocument(document, options);
-    };
-    await modeler.importText(TEAMS);
-    assert.equal(fit, !fitsItself, `fits on import: ${!fitsItself}`);
-    const centre = diagram.get("config.ttPalette").freeRectCenter;
-    if (!fitsItself) {
-      assert.equal(centre, undefined, "the renderer's own free area");
-    } else {
-      // the 1000×640 canvas at 100 %: the middle of what the insets leave
-      assert.deepEqual(centre!(), { x: 300 + 700 / 2, y: 56 + 584 / 2 });
-      // panned and at 50 %, the same screen point in diagram coordinates
-      modeler.setViewState({ x: 100, y: 50, width: 2000, height: 1280 });
-      assert.deepEqual(centre!(), { x: 100 + (300 + 700 / 2) * 2, y: 50 + (56 + 584 / 2) * 2 });
+test("with the chrome's insets the view after an import is the host's to set, without them the renderer fits it", async () => {
+  for (const [id, text] of DOCUMENTS) {
+    const [spec, renderer] = await load(id);
+    for (const readonly of [false, true]) {
+      for (const fitsItself of [true, false]) {
+        const mount = fitsItself ? { insets: () => ({ top: 56, right: 0, bottom: 0, left: 300 }) } : {};
+        const modeler = readonly ? renderer.createViewer(mount) : renderer.create(mount);
+        modeler.attachTo(host(spec.canvasClassName));
+        await modeler.importText(text);
+        const ownFit = modeler.getViewState();
+        modeler.setViewState({ x: 5000, y: 5000, width: 1000, height: 640 });
+        const hosts = modeler.getViewState();
+        assert.notDeepEqual(hosts, ownFit, `${id}: a view of the host's own`);
+        await modeler.importText(text);
+        const where = `${id}${readonly ? " viewer" : ""}, ${fitsItself ? "the widget" : "the SPA"}`;
+        assert.deepEqual(modeler.getViewState(), fitsItself ? hosts : ownFit, where);
+        modeler.destroy();
+      }
     }
-    modeler.destroy();
   }
 });
 
