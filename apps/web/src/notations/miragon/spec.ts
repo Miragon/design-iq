@@ -21,6 +21,7 @@
 import type { CollaborativeModeler, CollaborativeModelerOptions, ElementsSurface } from "@miragon/modeler-api";
 
 import type { Insets } from "../../mcp-app/core/engine.ts";
+import type { Box } from "../../mcp-app/engines/fit.ts";
 
 /** the diagram-js instance a renderer's factory wraps — STRUCTURALLY: the
  *  platform wires presence outlines and the widget's view controls to it */
@@ -66,6 +67,11 @@ export interface LoadedMiragonRenderer {
   /** the read-only mount (`meta.editable: false`): no command stack, never
    *  a change event */
   createViewer(options?: MiragonMountOptions): MiragonModeler;
+  /** what a host fits the view to, in diagram coordinates, where that is
+   *  more than the canvas's elements (diagram-js's content box): a fit to
+   *  the elements alone would push the rest under the chrome or out of the
+   *  frame, and a renderer that keeps a host's fit in place leaves it there */
+  contentBounds?(modeler: MiragonModeler): Box | undefined;
 }
 
 export interface MiragonRendererSpec {

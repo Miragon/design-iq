@@ -9,8 +9,9 @@
  * reports a change. The chrome's insets reach every renderer as its free
  * area (notations/miragon/spec.ts contractOptions), so keyboard creation
  * lands clear of the chrome and a pan constraint keeps the chrome's fit; the
- * chrome fits the view itself (diagramView, on the wrapped diagram), so the
- * renderer does not fit on import first.
+ * chrome fits the view itself (diagramView, on the wrapped diagram, to the
+ * spec's content bounds where it names them), so the renderer does not fit
+ * on import first.
  *
  * The factories come from the loaded spec (the node --test suite hands in
  * fakes); this module imports neither a renderer nor a stylesheet.
@@ -46,7 +47,8 @@ export function mountMiragonEngine(
     throw error;
   }
   modeler.attachTo(container);
-  const view = diagramView(modeler.diagram, opts ? { insets: opts.insets } : {});
+  const contentBounds = renderer.contentBounds && (() => renderer.contentBounds?.(modeler));
+  const view = diagramView(modeler.diagram, opts ? { insets: opts.insets, contentBounds } : {});
   return {
     modeler,
     editable: !readonly,

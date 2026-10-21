@@ -13,6 +13,7 @@ import { newCmJson, newOwmText, newStormText, newTtJson } from "@designiq/notati
 import * as Y from "yjs";
 
 import type { PresenceSurface, RemotePresence } from "../src/lib/presence-canvas.ts";
+import { fitViewbox } from "../src/mcp-app/engines/fit.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
 import type { LoadedMiragonRenderer, MiragonModeler, MiragonRendererSpec } from "../src/notations/miragon/spec.ts";
@@ -399,6 +400,34 @@ test("with the chrome's insets the view after an import is the host's to set, wi
         modeler.destroy();
       }
     }
+  }
+});
+
+test("Wardley in the widget: the chrome fits the plot with its axes into the free area, and the pan constraint keeps that fit", async () => {
+  const insets = { top: 120, right: 16, bottom: 56, left: 16 };
+  const [spec, renderer] = await load("wardley");
+  for (const readonly of [false, true]) {
+    const engine = mountMiragonEngine(spec, renderer, host(spec.canvasClassName), readonly, { insets: () => insets });
+    await engine.importText(MAP);
+    await wait(20);
+    const diagram = engine.modeler.diagram as unknown as {
+      get(name: "canvas"): { viewbox(): { x: number; y: number; width: number; height: number; scale: number } };
+      get(name: "panConstraint"): { contentBounds(): { x: number; y: number; width: number; height: number } };
+    };
+    const content = diagram.get("panConstraint").contentBounds();
+    assert.deepEqual(content, renderer.contentBounds!(engine.modeler), "the spec's content bounds");
+    const { x, y, scale } = diagram.get("canvas").viewbox();
+    const fitted = fitViewbox(content, { width: 1000, height: 640 }, insets, 1);
+    const mount = readonly ? "viewer" : "editor";
+    // diagram-js keeps the zoom to three decimals
+    assert.ok(Math.abs(scale - 1000 / fitted.width) < 0.001, `${mount}: the widget's zoom`);
+    assert.ok(Math.abs(x - fitted.x) < 0.5 && Math.abs(y - fitted.y) < 0.5, `${mount}: the widget's position`);
+    // on screen, the plot and its axes sit in what the chrome leaves free
+    const left = (content.x - x) * scale;
+    const top = (content.y - y) * scale;
+    assert.ok(left >= insets.left - 1 && left + content.width * scale <= 1000 - insets.right + 1, `${mount}: across`);
+    assert.ok(top >= insets.top - 1 && top + content.height * scale <= 640 - insets.bottom + 1, `${mount}: down`);
+    engine.destroy();
   }
 });
 
