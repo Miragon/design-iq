@@ -113,7 +113,9 @@ export interface LiveHandle {
   snapshot(): string;
 }
 export interface LiveHooks {
-  /** overlapping concurrent edit — the remote change won (model-sync rule 4) */
+  /** a canvas edit lost to a peer's: an overlapping remote edit won, or a
+   *  peer's repair of a merge broken by crossing canvas writes replaced it
+   *  (model-sync rule 4) */
   onConflict(message: string): void;
   /** a remote snapshot did not import — the binds that take the parameter
    *  report it; bpmn's never does */

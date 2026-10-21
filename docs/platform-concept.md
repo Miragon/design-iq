@@ -203,6 +203,60 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
    string-equality guard (echo prevention via Yjs transaction origins).
 4. **Validate merged XML before import** (cheap parse); on the rare interleaved-merge
    corruption, fall back to the last-good snapshot the Live Host keeps anyway.
+   **Repair a merge that canvas writes alone broke** (#274). Two canvas exports that cross
+   on the wire, each one large region (bpmn-js reorders lane refs and DI on export, so one
+   move rewrites lines 11 to 176 of order-to-cash), merge into a text that keeps both
+   replacements: one no peer can import (BPMN, DMN, the JSON notations), or one the Wardley
+   and Event Storming parsers read garbled, every element twice. Every canvas keeps its own
+   last good state, and no later update heals that. Each canvas write therefore records
+   itself in a shared Y.Map next to the text (`CANVAS_WRITES_KEY`, same transaction): its
+   count, a Lamport time, the writes its canvas held, its Yjs clock range and how many
+   characters it deleted. A write takes out the entries its canvas holds, so the map keeps
+   the writes nobody has built on (the open writes), and what it held stays named in its
+   entry.
+   - A peer counts a remote transaction as canvas writes only if each client that advanced
+     its clock in it did so by exactly the range its entry declares, and the text lost no
+     more characters than those writes deleted. Typing in the source view, an agent's or the
+     Live Host's save (`updateText`) and a restore write no entry; a re-sync that bundles one
+     of them with a canvas write counts as theirs.
+   - A received canvas write that deleted characters a concurrent canvas write had already
+     deleted marks the merge as two replacements of the same text, whether or not the
+     parser reads it.
+   - When the text fails the gate or the import, or merged two replacements, nothing but
+     canvas writes changed it since the canvas last matched it, and two or more writes are
+     open, all peers rank the open writes the same way: the latest first (Lamport time: the
+     canvas that took in the longest chain of writes, its own included), then the one whose
+     canvas held more writes, then the lowest Yjs client id. Only the first one's writer
+     acts: after a 500 ms settle delay, and only if the text, the map, the rank and the
+     count of other changes are as they were, it writes its canvas export over the text. A
+     first-ranked writer that cannot (its canvas has not taken in someone's typing or save)
+     marks its entry as standing down, and the next one acts.
+   - The repair names every writer whose write the text holds and its canvas does not, in
+     a second map (`CANVAS_LOSSES_KEY`). Each of them shows the conflict toast once per lost
+     write, also when the notice reaches it only on reconnect, and clears the notice; the
+     repairer keeps its edit. A canvas that could import a merge of two replacements keeps
+     its own state for up to 3 s, waiting for the repair, before it takes the merge in.
+   - Typing, saves and restores are never written over: half-typed text is a legitimate
+     state, and a save was confirmed to its author, who has no toast to learn of its loss.
+
+   What it does not guarantee:
+   - One repair per state of the map, not per broken text: a writer whose updates reach the
+     others more than about 1.5 s late (the 600 ms quiet period, the 350 ms import debounce
+     and the settle delay) can repair the merge as it sees it while another writer repairs
+     the merge they see. The two repairs cross, a second round settles them, and a writer
+     whose edit both overwrote is told once.
+   - If the first-ranked writer leaves before its delay ends, nobody repairs and the text
+     stays as it is, as before this rule. So does a break that coincides with typing or a
+     save, and a merge of crossing writes that replaced nothing in common, whatever the
+     parser makes of it.
+   - A re-sync that bundles canvas writes with a deletion typed in the source view counts
+     as canvas writes when the deletion only removes characters those writes inserted (a
+     deletion has no clock range of its own). One that bundles a canvas write with a later
+     merge that edited what the first one inserted reads as two replacements, and one of
+     the two edits is replaced, with the toast.
+   - An entry names the 64 most recent other writers: after more than 64 writers wrote
+     since the repairer's canvas last matched the text, an older writer's lost edit can go
+     without a toast.
 
 Accepted v1 costs (the honest trade-offs): local undo history resets when remote changes
 arrive (diagram-js clears the command stack on re-import), and remote keystrokes on
@@ -259,14 +313,14 @@ needed or wanted in v1; OCT's server doesn't cluster either. One landscape = one
 
 ## Risks & mitigations
 
-| Risk                                                       | Mitigation                                                                                                                            |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| OCT is pre-1.0 (0.3.x)                                     | Pin versions; MIT license keeps the fork option; the protocol surface we use is small (room, fs, sync)                                |
-| Session dies if Live Host restarts                         | We own the host: persisted Y-updates + auto room re-creation + client auto-rejoin via the session API; 30 s socket grace covers blips |
-| Miragon modeler ↔ OCT text sync unproven                   | M0 spike task #1; known fix path (minimal-diff writes) is upstream work in our own plugin                                             |
-| Y.Text merge can produce invalid XML in rare interleavings | Rule 4: validate + last-good fallback; soft element-locks reduce the collision window                                                 |
-| OCT encrypts with AES-CBC (not AEAD)                       | Acceptable for v1 (transport is TLS anyway); track upstream                                                                           |
-| Live state exists only on one volume                       | Fly volume snapshots + the update log doubles as journal; releases drain risk continuously — encourage small, frequent releases       |
+| Risk                                                       | Mitigation                                                                                                                                              |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OCT is pre-1.0 (0.3.x)                                     | Pin versions; MIT license keeps the fork option; the protocol surface we use is small (room, fs, sync)                                                  |
+| Session dies if Live Host restarts                         | We own the host: persisted Y-updates + auto room re-creation + client auto-rejoin via the session API; 30 s socket grace covers blips                   |
+| Miragon modeler ↔ OCT text sync unproven                   | M0 spike task #1; known fix path (minimal-diff writes) is upstream work in our own plugin                                                               |
+| Y.Text merge can produce invalid XML in rare interleavings | Rule 4: validate + last-good fallback; a merge that canvas writes alone broke is repaired by one writer; soft element-locks reduce the collision window |
+| OCT encrypts with AES-CBC (not AEAD)                       | Acceptable for v1 (transport is TLS anyway); track upstream                                                                                             |
+| Live state exists only on one volume                       | Fly volume snapshots + the update log doubles as journal; releases drain risk continuously — encourage small, frequent releases                         |
 
 ## Milestones
 

@@ -28,6 +28,20 @@ export const CONTENT_KEY = "content";
 export const ELEMENTS_KEY = "elements";
 export const META_KEY = "meta";
 
+/**
+ * Beside CONTENT_KEY, the canvas write log of a text-shaped document: a Y.Map
+ * the canvas bindings of @designiq/live-client write in the same transaction
+ * as their text change, holding the canvas writes no canvas has built on yet
+ * and what each of their canvases held. It lets every peer tell crossing
+ * canvas exports apart from a person's typing or an agent's save, and agree on
+ * the one writer that repairs a merge the crossing exports broke (#274). The
+ * document's content stays CONTENT_KEY.
+ */
+export const CANVAS_WRITES_KEY = "canvasWrites";
+/** the repairs' loss notices: a Y.Map of writer → its latest write a repair
+ *  wrote over, kept until that writer's canvas has told its person (#274) */
+export const CANVAS_LOSSES_KEY = "canvasLosses";
+
 /** room name = "<repo-full-name>/<repo-relative-path>" (multi-repo contract) */
 export const roomName = (repoFullName: string, path: string): string => `${repoFullName}/${path}`;
 
