@@ -99,7 +99,7 @@ test("team topology: a shape the schema rejects is an ERROR, the lenient migrati
   assert.deepEqual(checkSchemaModel("{}", { notation: "team-topology" }), []);
 });
 
-test("team topology: from version 2 on an interaction without position or size is refused, a version 1 edge is dropped", () => {
+test("team topology: unless the file is version 1, an interaction without position or size is refused; a version 1 edge is dropped", () => {
   const interactions = [
     { id: "edge", mode: "collaboration", source: "a", target: "b" },
     { id: "placed", mode: "facilitating", ...box },
@@ -107,20 +107,29 @@ test("team topology: from version 2 on an interaction without position or size i
     { id: "pairing", mode: "pairing", ...box },
   ];
   const MODE = 'interactions.3.mode: Invalid option: expected one of "collaboration"|"x-as-a-service"|"facilitating"';
-  const check = (version: number) =>
+  const check = (version: unknown) =>
     brief(
       checkSchemaModel(JSON.stringify({ version, title: "Teams", nodes: [], interactions }), {
         notation: "team-topology",
       }),
     );
-  // the canvas used to open these files without the interaction, and the next save wrote it out of the file
-  for (const version of [2, 3]) {
-    assert.deepEqual(check(version), [
-      ["ERROR", "team-topology/schema", "interactions.0.position: Invalid input: expected object, received undefined"],
-      ["ERROR", "team-topology/schema", "interactions.0.size: Invalid input: expected object, received undefined"],
-      ["ERROR", "team-topology/schema", "interactions.2.size: Invalid input: expected object, received undefined"],
-      ["ERROR", "team-topology/schema", MODE],
-    ]);
+  // the canvas used to open these files without the interaction, and the next save wrote it out of the
+  // file; only the number 1 marks the edge format, so a file without a version is refused too
+  for (const version of [2, 3, undefined, 0, "1"]) {
+    assert.deepEqual(
+      check(version),
+      [
+        [
+          "ERROR",
+          "team-topology/schema",
+          "interactions.0.position: Invalid input: expected object, received undefined",
+        ],
+        ["ERROR", "team-topology/schema", "interactions.0.size: Invalid input: expected object, received undefined"],
+        ["ERROR", "team-topology/schema", "interactions.2.size: Invalid input: expected object, received undefined"],
+        ["ERROR", "team-topology/schema", MODE],
+      ],
+      `version ${String(version)}`,
+    );
   }
   // a version 1 file drops every interaction without geometry, and names
   // what follows at its index in the file

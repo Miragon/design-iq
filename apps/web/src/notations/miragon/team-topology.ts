@@ -1,7 +1,7 @@
 /** @miragon/team-topologies-renderer — one JSON document, the factory's text
  *  is its canonical serialization with a closing line break; a document with
- *  duplicate or reserved ids, or from version 2 on an interaction without a
- *  position or size, is refused with the path named. Every committed edit,
+ *  duplicate or reserved ids, or an interaction without a position or size
+ *  in a file that is not version 1, is refused with the path named. Every committed edit,
  *  the label editor's included, runs through the command stack; drags and an
  *  open label editor stay previews until they commit. */
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";

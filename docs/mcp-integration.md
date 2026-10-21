@@ -207,8 +207,9 @@ the canvas could not open. Rejected are a duplicate id and the ids a diagram kee
 `tt-root`, `cm-root`, `vc-root`, every id starting with `__implicitroot`, `assoc_<annotation id>`
 in a Team Topology, and in all three notations the names of built-in object properties such as
 `constructor` or `toString`.
-A Team Topology from `version` 2 on is also rejected with an interaction that has no `position` or
-`size` (a version 1 file still opens without its edge interactions); a Context Map as a list, with
+A Team Topology whose `version` is not 1 (a file without `version` included) is also rejected with
+an interaction that has no `position` or `size` (a version 1 file still opens without its edge
+interactions); a Context Map as a list, with
 a `version` above 1 or with coordinates or sizes beyond 1,000,000; a Value Chain with extra keys in
 `bounds` or in a waypoint, with coordinates beyond ±1e9, with a `__proto__` key or nested deeper
 than 100 levels. A Context Map's strategic-DDD rules (`protect-or-conform`, `endpoints-on-map`, …)

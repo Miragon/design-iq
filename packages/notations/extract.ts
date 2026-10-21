@@ -431,9 +431,9 @@ function extractWardley(raw: string): ModelGraph {
 // with a `mode` (collaboration, x-as-a-service, facilitating) and no
 // endpoints: the relation is spatial, so it is a node too, never an edge. A
 // version 1 file's interactions without geometry (its edges) are dropped,
-// like the schema model's migrate() drops them. From version 2 on the schema
-// model refuses such an interaction instead, so it stays in the view of the
-// file the validator names it in.
+// like the schema model's migrate() drops them. In any other file, one
+// without a version included, the schema model refuses such an interaction
+// instead, so it stays in the view of the file the validator names it in.
 
 const TT_EDGE_INTERACTIONS_VERSION = 1;
 
