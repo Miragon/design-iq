@@ -24,7 +24,7 @@
  */
 
 /** the mermaid release this file mirrors: apps/web's exact pin */
-export const MERMAID_VERSION = "12.1.0";
+export const MERMAID_VERSION = "12.2.0";
 
 /**
  * Every diagram type MERMAID_VERSION renders, spelled as its header keyword

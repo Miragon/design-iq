@@ -96,8 +96,9 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   and the layout it had before mermaid 12 unless its front matter picks otherwise (`look: neo`,
   `layout: elk`): the classic look, and dagre for flowchart, class, state, ER and requirement
   diagrams. mermaid 12's own sizing still applies: in flowchart and state diagrams a label
-  gets at least 120 px (`minNodeWidth`) and wraps at 120 px (`wrappingWidth`, 200 before),
-  so their nodes come out wider and long labels wrap sooner. The renderer and
+  gets at least 120 px (`minNodeWidth`; a circle, since 12.2, only the room its label needs)
+  and wraps at 120 px (`wrappingWidth`, 200 before), so their nodes come out wider and long
+  labels wrap sooner. The renderer and
   mermaid load on the first document that has such a fence, never for any other. The drawn SVG is sanitized once more (`createDiagramSanitizer` in
   `sanitize.ts`, the profile mermaid applies itself) and cached by source: a re-render for an
   edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram

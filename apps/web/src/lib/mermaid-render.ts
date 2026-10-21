@@ -94,8 +94,9 @@ export const MERMAID_SECURE_KEYS = [
  * every diagram already written. dagre is set per diagram type that had it:
  * a top-level layout would also take mindmaps off cose-bilkent and swimlanes
  * off their lanes. mermaid 12's sizing is left as it is (in flowchart and
- * state diagrams a label gets at least 120 px and wraps at 120, not 200):
- * it is not part of mermaid's migration advice, and an author can set it.
+ * state diagrams every label but a circle's gets at least 120 px and wraps
+ * at 120, not 200): it is not part of mermaid's migration advice, and an
+ * author can set it.
  */
 export const MERMAID_CONFIG = {
   startOnLoad: false,

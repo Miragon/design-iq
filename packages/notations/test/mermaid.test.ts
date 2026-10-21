@@ -1,5 +1,5 @@
 /**
- * The Mermaid text conventions (../mermaid.ts): the code mermaid 12.1's
+ * The Mermaid text conventions (../mermaid.ts): the code mermaid 12.2's
  * parser reads after its preprocess, the way back from a line of that code to
  * the source line (parse errors count code lines), and the header that names
  * the diagram type. The validator's check of a ```mermaid fence and the web
@@ -54,7 +54,7 @@ test("mermaidSourceLine: a line of the parsed code back in the source", () => {
 
 test("eventmodeling and agentflow-beta keep their comment lines: mermaid 12 parses them with the code", () => {
   const COMMENTS = "%% one\n%% two\n%% three\n";
-  // the line numbers mermaid 12.1 reports for the bad line of each (mermaid-engine.test.ts)
+  // the line numbers mermaid 12.2 reports for the bad line of each (mermaid-engine.test.ts)
   const EVENTS = "eventmodeling\n\ntf 01 ui CartUI\ntf 02 cmd AddItem\ntf 03 evt ItemAdded\ntf 01 ??? !!!\n";
   const AGENTS = 'agentflow-beta TB\n  brief["Brief"]@{ shape: input }\n\n  brief --> --> ]]\n';
   for (const [diagram, codeLine] of [
