@@ -27,11 +27,14 @@
 /* a renderer's popover (Wardley: Map size…, X-axis labels…) opens where the
    menu dropped down: under designIQ's 36px corner row, not the shell's 40px,
    and over the renderer's palette (110), as a popover stands over the
-   shell's palette */
+   shell's palette. The canvas lies under the corner clusters, so it ends
+   where the lane does, above the bottom row: the sync pill and the zoom
+   group never paint over its fields */
 #app[data-kind="miragon"] #canvas .wardley-popover {
   top: var(--under-row);
   left: var(--inset-l);
   z-index: 150;
+  max-height: calc(100% - var(--under-row) - var(--lane-bottom));
 }
 
 /* the per-mount host (miragon-main.ts) fills the frame; the renderer's root

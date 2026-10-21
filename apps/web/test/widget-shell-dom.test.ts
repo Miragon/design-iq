@@ -3,7 +3,9 @@
  * real skeletons (mcp-app-miragon.html, mcp-app.html): what only the
  * composition decides. A Miragon widget binds the zoom keys and ⇧1 to the
  * view and keeps them off behind a state card; the bpmn widget leaves them
- * to its canvas. The menu's Legend toggles the registered panel.
+ * to its canvas. The menu's Legend toggles the registered panel, and a
+ * renderer's web link in the canvas goes through the host instead of the
+ * sandbox's blocked new window.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -133,7 +135,7 @@ test("the bpmn widget: its canvas keeps the zoom keys", async () => {
   w.close();
 });
 
-test("the menu's Legend toggles the registered panel", async () => {
+test("the menu's Legend toggles the registered panel; a renderer's web link in the canvas opens through the host", async () => {
   const w = await chromeOf("miragon");
   const { mountLegend } = await import("../src/mcp-app/legend.ts");
   const legend = mountLegend(w.chrome, (body) => {
@@ -153,6 +155,42 @@ test("the menu's Legend toggles the registered panel", async () => {
   legendItem()!.click();
   assert.equal(panel.hidden, true, "and again closes it");
 
+  const link = w.document.createElement("a");
+  link.href = "https://learnwardleymapping.com/landscape/";
+  link.target = "_blank";
+  link.textContent = "Learn Wardley Mapping";
+  w.document.getElementById("canvas")!.append(link);
+  const click = new w.window.MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+  link.dispatchEvent(click);
+  assert.equal(click.defaultPrevented, true, "no new window the sandbox would block");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(w.links, ["https://learnwardleymapping.com/landscape/"], "the host opens it");
   legend.destroy();
   w.close();
+});
+
+test("externalLinkOf: a primary click on a web link, nothing else", async () => {
+  const { externalLinkOf } = await import("../src/mcp-app/chrome/links.ts");
+  const p = page("miragon");
+  const { document } = p;
+  const MouseEvent = p.window.MouseEvent;
+  const scope = document.getElementById("canvas")!;
+  const link = document.createElement("a");
+  link.href = "https://learnwardleymapping.com/landscape/";
+  const label = document.createElement("span");
+  link.append(label);
+  const mail = document.createElement("a");
+  mail.href = "mailto:someone@example.com";
+  scope.append(link, mail);
+  const click = (target: Element, init: MouseEventInit = {}): string | undefined => {
+    let seen: string | undefined;
+    scope.addEventListener("click", (event) => void (seen = externalLinkOf(event)), { once: true });
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ...init }));
+    return seen;
+  };
+  assert.equal(click(label), "https://learnwardleymapping.com/landscape/", "the link around the clicked text");
+  assert.equal(click(link, { button: 1 }), undefined, "not a primary click");
+  assert.equal(click(mail), undefined, "not a web address");
+  assert.equal(click(scope), undefined, "no link");
+  p.close();
 });

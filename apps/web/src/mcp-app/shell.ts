@@ -29,6 +29,7 @@ import { focusReturn } from "./chrome/focus.ts";
 import { mountHost } from "./chrome/host.ts";
 import { chromeKeysFor, mountKeys } from "./chrome/keys.ts";
 import { mountLayout } from "./chrome/layout-dom.ts";
+import { mountExternalLinks } from "./chrome/links.ts";
 import { mountMenu } from "./chrome/menu.ts";
 import { mountModeChip } from "./chrome/mode-chip.ts";
 import { mountPanels } from "./chrome/panel.ts";
@@ -212,6 +213,15 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
     escape: [() => menu.close(true), () => sync.closePopover(), () => layout.closeTools(), () => panels.escape()],
     ...(chromeKeys ? { chromeKeys } : {}),
   });
+  // a renderer's dialog or popover links out (Wardley's X-axis labels…): the
+  // sandbox blocks the new window, so the host opens it, never silently
+  if (kind === "miragon") {
+    mountExternalLinks(els.canvas, (url) => {
+      void openExternal(opts.app, url, () =>
+        toasts.show({ tone: "danger", title: "Your client blocked the link", detail: url }),
+      );
+    });
+  }
 
   // ── the panels the extras registered: their badge and availability feed
   // the menu's Todos / Checks item (one source, the TR toggle repeats it) ──
