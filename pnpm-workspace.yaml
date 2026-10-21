@@ -10,17 +10,15 @@ allowBuilds:
   esbuild: true
   inferno: false
 minimumReleaseAgeExclude:
-  # the Miragon renderer rollout (modeler-api 1.1, #136): published 2026-10-19/20, adopted 2026-10-20
-  - "@miragon/event-storming-renderer@0.3.0"
-  - "@miragon/event-storming-dsl@0.3.0"
-  - "@miragon/context-maps-renderer@0.3.0"
-  - "@miragon/context-maps-schema-model@0.3.0"
-  - "@miragon/wardley-renderer@0.8.0"
-  - "@miragon/wardley-dsl@0.7.0"
-  - "@miragon/team-topologies-renderer@0.11.2"
-  - "@miragon/team-topologies-schema-model@0.11.2"
-  # the validator's Value Chain schema check (#266) — 0.5.0 published 2026-10-19, adopted 2026-10-20
-  - "@miragon/value-chain-schema-model@0.5.0"
+  # the Miragon renderers on @miragon/modeler-api 1.2: published 2026-10-21, adopted 2026-10-21
+  - "@miragon/modeler-api@1.2.0"
+  - "@miragon/wardley-renderer@0.9.0"
+  - "@miragon/event-storming-renderer@0.4.0"
+  - "@miragon/context-maps-renderer@0.4.0"
+  - "@miragon/context-maps-schema-model@0.4.0"
+  - "@miragon/team-topologies-renderer@0.12.0"
+  - "@miragon/team-topologies-schema-model@0.12.0"
+  - "@miragon/value-chain-schema-model@0.6.0"
 overrides:
   # vitepress 1.6.4 (docs/) is the latest release and still requests vite
   # ^5.4.14, which is stuck below the server.fs.deny bypass fix (>=6.4.3).
