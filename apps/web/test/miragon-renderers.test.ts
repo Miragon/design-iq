@@ -799,6 +799,59 @@ test("L5: a view change the host makes, setViewState or a fit, never commits an 
   }
 });
 
+interface WardleyLinkEditor {
+  get(name: "elementRegistry"): { get(id: string): unknown };
+  get(name: "wardleyLinkEditing"): {
+    activate(element: unknown): void;
+    getActiveEdit(): { elementId: string; value: string } | null;
+  };
+}
+
+test("Wardley, in both hosts: a typed link address survives the host's view change and a peer's re-import, and commits once", async () => {
+  const address = "https://example.com/tea";
+  const [, text, peer] = DOCUMENTS.find(([id]) => id === "wardley")!;
+  const [, peerChange] = LABEL_EDITS.wardley!;
+  for (const where of HOSTS) {
+    const doc = new Y.Doc();
+    const ytext = doc.getText("content");
+    ytext.insert(0, text);
+    const { container, modeler, destroy } = await mountLive(where, "wardley", ytext, doc);
+    await wait(50);
+    const diagram = modeler.diagram as unknown as WardleyLinkEditor;
+    const links = diagram.get("wardleyLinkEditing");
+    links.activate(diagram.get("elementRegistry").get("cmp_cup_of_tea"));
+    const field = container.querySelector<HTMLInputElement>("input.wardley-link-input");
+    assert.ok(field, `${where}: the link editor is open`);
+    typeInto(field, address.slice(0, 15));
+
+    const view = modeler.getViewState() as { x: number; y: number; width: number; height: number };
+    modeler.setViewState({ ...view, x: view.x + 80, y: view.y - 40 });
+    await wait(20);
+    assert.equal(ytext.toString(), text, `${where}: the host's view change commits nothing`);
+    assert.deepEqual(links.getActiveEdit(), { elementId: "cmp_cup_of_tea", value: address.slice(0, 15) }, where);
+
+    doc.transact(() => {
+      ytext.delete(0, ytext.length);
+      ytext.insert(0, peer);
+    });
+    await wait(500);
+    assert.equal(ytext.toString(), peer, `${where}: the peer's text, nothing of what was typed`);
+    const reopened = container.querySelector<HTMLInputElement>("input.wardley-link-input");
+    assert.ok(reopened, `${where}: the link editor stays open over the re-import`);
+    assert.equal(reopened.value, address.slice(0, 15), `${where}: with what was typed`);
+
+    let writes = 0;
+    ytext.observe(() => writes++);
+    typeInto(reopened, address);
+    reopened.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await wait(20);
+    assert.equal(writes, 1, `${where}: the commit is one write`);
+    assert.ok(ytext.toString().includes(address), `${where}: the commit is the edit`);
+    assert.ok(ytext.toString().includes(peerChange), `${where}: the peer's change stays`);
+    destroy();
+  }
+});
+
 test("Team Topologies: typing a label is no edit until it commits, and a peer's re-import keeps what was typed", async () => {
   const widget = host("tt-canvas");
   const engine = await engineOf("team-topology", widget);
