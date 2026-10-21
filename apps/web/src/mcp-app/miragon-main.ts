@@ -6,8 +6,10 @@
  * single-file bundle per spec — exactly one engine per emitted file is the
  * widgets' whole CSS scoping; the dev server resolves it to widget-spec.dev.ts
  * for `/mcp-app-miragon.html?notation=<id>`). The engine is engines/miragon.ts
- * on the shared widget core: no extras, no icon font (the renderers draw
- * inline SVG), the file-route deep link (core/widget.ts defaults).
+ * on the shared widget core: no icon font (the renderers draw inline SVG)
+ * but Geist Mono for the key chips, the file-route deep link (core/widget.ts
+ * defaults); the one extra is the legend panel of a notation that has one
+ * (legend.ts).
  */
 import "./miragon-styles.css";
 
@@ -19,6 +21,8 @@ import type { LoadedMiragonRenderer } from "@/notations/miragon/spec";
 import { h } from "./chrome/dom";
 import { bootWidget } from "./core/widget";
 import { mountMiragonEngine } from "./engines/miragon";
+import { WIDGET_FONT_MONO } from "./font";
+import { mountLegend } from "./legend";
 
 const notation = byId(spec.id);
 if (!notation) throw new Error(`widget: no notation descriptor for renderer spec '${spec.id}'`);
@@ -28,6 +32,8 @@ let renderer: LoadedMiragonRenderer | undefined;
 bootWidget({
   notation: spec.id,
   noun: notation.noun.singular,
+  // the shortcuts dialog sets its key chips in Geist Mono (guide §5.6)
+  fonts: [WIDGET_FONT_MONO],
   // the engine module is inlined into the bundle, so this resolves in a
   // microtask; a rejection is the "modeler could not start" card (Try again)
   prepare: async () => {
@@ -57,4 +63,7 @@ bootWidget({
       throw error;
     }
   },
+  ...(spec.hasLegend
+    ? { extras: ({ chrome }) => mountLegend(chrome, (body) => renderer?.legend?.(body) ?? (() => {})) }
+    : {}),
 });

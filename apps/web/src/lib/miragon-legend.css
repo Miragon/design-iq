@@ -1,0 +1,49 @@
+/* The legend of a Miragon notation that has one (context map), in the
+   widget's Legend panel (mcp-app/legend.ts) and the SPA's Legend side panel
+   (notations/miragon/legend-panel.tsx): the renderer draws its rows with the
+   modeler shell's row classes (renderLegend), which designIQ does not load,
+   so they are laid out here as guide §5.10 does — 24px rows of a 24px
+   preview 8px from the text, 4px between rows, a rule with 8px around it
+   between the groups. */
+.miragon-legend {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px 14px;
+}
+
+.miragon-legend > [role="group"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.miragon-legend .cd-shell-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.miragon-legend .cd-shell-legend-preview {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.miragon-legend .cd-shell-legend-preview svg {
+  max-width: 24px;
+  max-height: 24px;
+}
+
+.miragon-legend .cd-shell-legend-separator {
+  flex: none;
+  height: 1px;
+  margin: 8px 0;
+  background: var(--border);
+}

@@ -18,12 +18,13 @@
  * Bundle-only (imports the App and the DOM): never loaded by a test.
  */
 import { fileDeepLink, repoDeepLink } from "@designiq/contracts/deep-link";
+import { modelStem } from "@designiq/notations";
 import type { App } from "@modelcontextprotocol/ext-apps";
 
 import { bootConfig, claimDocument, getModelContent, makeApp, mintWsTicket, saveModelContent } from "../bridge.ts";
 import type { WidgetChrome } from "../chrome/contracts.ts";
 import { loadInlinedFont, WIDGET_FONT } from "../font.ts";
-import { mountChrome, openExternal, showLoadFailure, wireApp } from "../shell.ts";
+import { downloadExport, mountChrome, openExternal, showLoadFailure, wireApp } from "../shell.ts";
 import type { DecisionViews, EngineFactory, LiveEngine, WidgetEngine } from "./engine.ts";
 import {
   createWidgetLifecycle,
@@ -160,6 +161,7 @@ export function bootWidget<E extends WidgetEngine>(spec: WidgetSpec<E>): void {
         };
       },
       displayName: () => lc?.engine()?.displayName?.(),
+      modelerMenu: () => lc?.engine()?.menu,
     },
   });
 
@@ -185,7 +187,18 @@ export function bootWidget<E extends WidgetEngine>(spec: WidgetSpec<E>): void {
     readonly: cfg.readonly,
     noun: spec.noun,
     // the editor (or the boot-flag viewer) first; a viewer for the superseded freeze
-    mountEngine: (readonly) => spec.engine(chrome.els.canvas, readonly, { insets: () => chrome.fitInsets() }),
+    mountEngine: (readonly) =>
+      spec.engine(chrome.els.canvas, readonly, {
+        insets: () => chrome.fitInsets(),
+        menuHost: {
+          trigger: chrome.els.trigger,
+          fileStem: () => {
+            const doc = lc?.linkTarget();
+            return doc ? modelStem(doc.path) : spec.notation;
+          },
+          download: (build) => downloadExport(app, build, (t) => chrome.toast(t)),
+        },
+      }),
     bridge,
     live: (doc, engine: LiveEngine, hooks) => tryLive({ mint: () => mintWsTicket(app, doc) }, engine, hooks),
     claim: claimDocument,

@@ -20,7 +20,8 @@
  */
 import type { CollaborativeModeler, CollaborativeModelerOptions, ElementsSurface } from "@miragon/modeler-api";
 
-import type { Insets } from "../../mcp-app/core/engine.ts";
+import type { Insets, MenuHost } from "../../mcp-app/core/engine.ts";
+import type { ModelerMenu } from "../../mcp-app/core/menu-model.ts";
 import type { Box } from "../../mcp-app/engines/fit.ts";
 
 /** the diagram-js instance a renderer's factory wraps — STRUCTURALLY: the
@@ -60,6 +61,21 @@ export function contractOptions({ insets }: MiragonMountOptions = {}): Collabora
   return insets ? { freeArea: { insets }, fitOnImport: false } : {};
 }
 
+/** what a mount's menu content gets from its host */
+export interface MiragonMenuHost extends MenuHost {
+  /** where the renderer's dialogs and popovers live: inside the canvas
+   *  host, whose class scopes the renderer's stylesheet in the SPA */
+  readonly root: HTMLElement;
+  /** a viewer: the entries that change the document stay disabled */
+  readonly readOnly: boolean;
+}
+
+/** a mount's menu content and the dialogs it built, which go with the mount */
+export interface MiragonMenu {
+  readonly groups: ModelerMenu;
+  destroy(): void;
+}
+
 /** what `load()` yields: the renderer package's two contract factories */
 export interface LoadedMiragonRenderer {
   /** the editing mount (`meta.editable: true`) */
@@ -72,6 +88,14 @@ export interface LoadedMiragonRenderer {
    *  the elements alone would push the rest under the chrome or out of the
    *  frame, and a renderer that keeps a host's fit in place leaves it there */
   contentBounds?(modeler: MiragonModeler): Box | undefined;
+  /** the document's own title, for the menu header; undefined = none set */
+  title?(modeler: MiragonModeler): string | undefined;
+  /** the renderer's own menu content (Model, Export, Help), where its
+   *  package ships it */
+  menu?(modeler: MiragonModeler, host: MiragonMenuHost): MiragonMenu;
+  /** draws the notation's legend into `body` (MiragonRendererSpec.hasLegend);
+   *  returns what takes its tooltips off again */
+  legend?(body: HTMLElement): () => void;
 }
 
 export interface MiragonRendererSpec {
@@ -86,6 +110,9 @@ export interface MiragonRendererSpec {
    *  may differ from designIQ's id ("team-topologies" for "team-topology");
    *  checked when a mount binds, together with the contract version */
   contractNotation: string;
+  /** the notation has a legend the host shows as a panel (LoadedMiragonRenderer.legend):
+   *  known before the engine loads, so both hosts can offer its toggle */
+  hasLegend?: boolean;
   /** the engine: the factories + the stylesheet — lazy, so the SPA's eager
    *  bundle carries no engine */
   load(): Promise<LoadedMiragonRenderer>;

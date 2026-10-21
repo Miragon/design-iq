@@ -4,6 +4,12 @@
  * WAI-ARIA menu-button key model. chrome/menu.ts renders and wires it; the
  * item ids are the contract between the two.
  *
+ * A Miragon renderer brings its own Model, Export and Help entries (Wardley
+ * `mapMenu`, Event Storming `boardMenu`, Context Maps `contextMapMenu`),
+ * typed for the modeler shell's menu: they join designIQ's groups as
+ * `modeler:` items, so a renderer release that adds or renames an entry
+ * needs no change here (runModelerItem dispatches them back).
+ *
  * On purpose NOT here: undo/redo (keyboard, like the SPA), Rename, Duplicate,
  * History, Notes, Diagram|Source — web-app moves one click away through Open
  * in designIQ. Superseded: Open only (the instance is a viewer now).
@@ -29,20 +35,41 @@ export type MenuIcon =
   | "network"
   | "scan"
   | "maximize-2"
-  | "minimize-2";
+  | "minimize-2"
+  | "book-open"
+  | ModelerMenuIcon;
 
-/** "open" | "save" | "reload" | "workshop" | "todos" | "checks" | "fit" |
- *  "fullscreen" | `view:<dmn view id>` */
+/** "open" | "save" | "reload" | "workshop" | "todos" | "checks" | "legend" |
+ *  "fit" | "fullscreen" | `view:<dmn view id>` | `modeler:<entry id>` (a
+ *  radio option: `modeler:<group id>:<value>`) */
 export type MenuItemId =
-  "open" | "save" | "reload" | "workshop" | "todos" | "checks" | "fit" | "fullscreen" | `view:${string}`;
+  | "open"
+  | "save"
+  | "reload"
+  | "workshop"
+  | "todos"
+  | "checks"
+  | "legend"
+  | "fit"
+  | "fullscreen"
+  | `view:${string}`
+  | `modeler:${string}`;
 
 export interface MenuItem {
   id: MenuItemId;
   label: string;
-  icon: MenuIcon;
+  /** absent: the icon column stays empty, so the labels still line up */
+  icon?: MenuIcon;
   role: "menuitem" | "menuitemcheckbox" | "menuitemradio";
   /** checkbox / radio state */
   checked?: boolean;
+  /** the check shows the state where no count, verdict or switch does;
+   *  hidden while unchecked, so the width stays */
+  checkMark?: boolean;
+  /** it opens a dialog or popover (aria-haspopup) */
+  dialog?: boolean;
+  /** a radio option: its group's heading and accessible name */
+  radioGroup?: { id: string; label: string };
   disabled?: boolean;
   /** why it is disabled ("All changes saved") — also the title */
   hint?: string;
@@ -59,8 +86,125 @@ export interface MenuItem {
 }
 
 export interface MenuGroup {
-  id: "document" | "work" | "view";
+  id: "document" | "work" | "model" | "export" | "view" | "help";
   items: MenuItem[];
+}
+
+// ── a renderer's own menu content (typed structurally, as for the shell) ────
+
+export type ModelerMenuIcon = "file-image" | "file-code-corner" | "keyboard";
+
+interface ModelerMenuItem {
+  readonly id: string;
+  readonly label: string;
+  readonly icon?: ModelerMenuIcon;
+  /** a view-only entry (Type captions) stays usable on a read-only canvas */
+  readonly keepEnabledWhenReadOnly?: boolean;
+}
+export interface ModelerMenuAction extends ModelerMenuItem {
+  readonly kind: "action";
+  readonly shortcut?: string;
+  onSelect(): void;
+}
+export interface ModelerMenuDialog extends ModelerMenuItem {
+  readonly kind: "dialog";
+  readonly shortcut?: string;
+  onSelect(): void;
+}
+export interface ModelerMenuCheckbox extends ModelerMenuItem {
+  readonly kind: "checkbox";
+  checked(): boolean;
+  onToggle(checked: boolean): void;
+}
+export interface ModelerMenuRadioGroup {
+  readonly kind: "radio";
+  readonly id: string;
+  readonly label: string;
+  readonly keepEnabledWhenReadOnly?: boolean;
+  readonly options: ReadonlyArray<{ readonly value: string; readonly label: string }>;
+  value(): string | undefined;
+  onSelect(value: string): void;
+}
+export type ModelerMenuEntry = ModelerMenuAction | ModelerMenuDialog | ModelerMenuCheckbox | ModelerMenuRadioGroup;
+export interface ModelerMenu {
+  readonly model: readonly ModelerMenuEntry[];
+  readonly export: readonly ModelerMenuEntry[];
+  readonly help: readonly ModelerMenuEntry[];
+}
+
+const READ_ONLY_HINT = "Read-only";
+
+/**
+ * A renderer's entries as items of one designIQ group. On a read-only canvas
+ * the Model entries that change the document are disabled (guide §13.5),
+ * view-only ones stay; Export and Help never change it.
+ */
+function modelerItems(entries: readonly ModelerMenuEntry[], changesDocument: boolean): MenuItem[] {
+  const items: MenuItem[] = [];
+  for (const entry of entries) {
+    const off =
+      changesDocument && entry.keepEnabledWhenReadOnly !== true ? { disabled: true, hint: READ_ONLY_HINT } : {};
+    if (entry.kind === "radio") {
+      const value = entry.value();
+      for (const option of entry.options) {
+        items.push({
+          id: `modeler:${entry.id}:${option.value}`,
+          label: option.label,
+          role: "menuitemradio",
+          checked: option.value === value,
+          checkMark: true,
+          keepsOpen: true,
+          radioGroup: { id: entry.id, label: entry.label },
+          ...off,
+        });
+      }
+      continue;
+    }
+    const shared = {
+      id: `modeler:${entry.id}` as const,
+      label: entry.label,
+      ...(entry.icon ? { icon: entry.icon } : {}),
+    };
+    if (entry.kind === "checkbox") {
+      items.push({
+        ...shared,
+        role: "menuitemcheckbox",
+        checked: entry.checked(),
+        checkMark: true,
+        keepsOpen: true,
+        ...off,
+      });
+    } else {
+      items.push({
+        ...shared,
+        role: "menuitem",
+        ...(entry.kind === "dialog" ? { dialog: true } : {}),
+        ...(entry.shortcut ? { kbd: entry.shortcut } : {}),
+        ...off,
+      });
+    }
+  }
+  return items;
+}
+
+/** runs the renderer entry behind a `modeler:` item; false for any other id */
+export function runModelerItem(menu: ModelerMenu, id: MenuItemId): boolean {
+  if (!id.startsWith("modeler:")) return false;
+  const key = id.slice("modeler:".length);
+  for (const entry of [...menu.model, ...menu.export, ...menu.help]) {
+    if (entry.kind === "radio") {
+      if (!key.startsWith(`${entry.id}:`)) continue;
+      const value = key.slice(entry.id.length + 1);
+      if (!entry.options.some((option) => option.value === value)) return false;
+      if (entry.value() !== value) entry.onSelect(value);
+      return true;
+    }
+    if (entry.id !== key) continue;
+    if (entry.kind === "checkbox") entry.onToggle(!entry.checked());
+    else entry.onSelect();
+    return true;
+  }
+  return false;
 }
 
 /** a dmn view as the menu lists it (engines/dmn.ts views()) */
@@ -88,6 +232,10 @@ export interface MenuContext {
   checks?: { open: boolean; verdict?: MenuItem["verdict"] };
   /** dmn: the views and the active one */
   views?: { items: DmnView[]; active?: string };
+  /** a Miragon renderer's own entries */
+  modeler?: ModelerMenu;
+  /** context map: the Legend panel is offered */
+  legend?: { open: boolean };
   /** a diagram view is shown (not the DMN table) — Fit is offered */
   viewport: boolean;
   /** availableDisplayModes includes "fullscreen" */
@@ -108,7 +256,10 @@ export const DISCARD_CONFIRM = {
 export function buildMenu(ctx: MenuContext): MenuGroup[] {
   const document: MenuItem[] = [];
   const work: MenuItem[] = [];
+  const model: MenuItem[] = [];
+  const exports: MenuItem[] = [];
   const view: MenuItem[] = [];
+  const help: MenuItem[] = [];
 
   if (ctx.deepLink) document.push({ id: "open", label: "Open in designIQ", icon: "external-link", role: "menuitem" });
   if (!ctx.inactive) {
@@ -194,6 +345,23 @@ export function buildMenu(ctx: MenuContext): MenuGroup[] {
       }
     }
 
+    if (ctx.modeler) {
+      model.push(...modelerItems(ctx.modeler.model, !ctx.editable));
+      exports.push(...modelerItems(ctx.modeler.export, false));
+      help.push(...modelerItems(ctx.modeler.help, false));
+    }
+    // the guide's Legend checkbox closes the Model group (§5.4)
+    if (ctx.legend) {
+      model.push({
+        id: "legend",
+        label: "Legend",
+        icon: "book-open",
+        role: "menuitemcheckbox",
+        checked: ctx.legend.open,
+        checkMark: true,
+      });
+    }
+
     if (ctx.viewport) view.push({ id: "fit", label: "Fit diagram", icon: "scan", role: "menuitem", kbd: "⇧1" });
     if (ctx.fullscreenOffered) {
       const fs = ctx.displayMode === "fullscreen";
@@ -205,10 +373,14 @@ export function buildMenu(ctx: MenuContext): MenuGroup[] {
       });
     }
   }
+  // the guide's order (§5.4): Model, then Export, the display moves, Help last
   const groups: MenuGroup[] = [
     { id: "document", items: document },
     { id: "work", items: work },
+    { id: "model", items: model },
+    { id: "export", items: exports },
     { id: "view", items: view },
+    { id: "help", items: help },
   ];
   return groups.filter((g) => g.items.length > 0);
 }

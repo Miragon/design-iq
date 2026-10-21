@@ -7,13 +7,16 @@
  * its edge, on demand), so the factory gets no insets: the renderer's
  * defaults apply.
  * The zoom keys and ⇧1 are the MCP-App widget's (lib/chrome-keys.ts): the
- * renderers bind none, and without them Cmd/Ctrl + `+` zooms the page.
+ * renderers bind none, and without them Cmd/Ctrl + `+` zooms the page. A
+ * renderer's own menu entries reach the shell's ⋯ menu (MountedEditor.menu).
  */
 import { bindMiragon } from "@designiq/live-client/miragon-sync";
+import { modelStem } from "@designiq/notations";
 import { fitInsets, SHELL } from "@miragon/modeler-shell/core";
 
 import { handleChromeKey } from "@/lib/chrome-keys";
 import { attachPresenceCanvas } from "@/lib/presence-canvas";
+import type { ExportFile } from "@/mcp-app/core/engine";
 import { diagramView } from "@/mcp-app/engines/diagram-js";
 import { ZOOM_STEP } from "@/mcp-app/engines/fit";
 
@@ -32,6 +35,28 @@ export function spaFitInsets(width: number, height: number): ReturnType<typeof f
     paletteRow: width <= SHELL.narrow ? "second-row" : "top",
     problemsVisible: false,
   });
+}
+
+/** an export as a browser download; a failure is reported, never silent */
+async function saveFile(
+  doc: Document,
+  build: () => Promise<ExportFile>,
+  failed: ((message: string) => void) | undefined,
+): Promise<void> {
+  try {
+    const file = await build();
+    const url = URL.createObjectURL(
+      file.data instanceof Blob ? file.data : new Blob([file.data], { type: file.mimeType }),
+    );
+    const link = doc.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    link.click();
+    // the click starts the download in a later task: revoking now could cancel it
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  } catch (error) {
+    failed?.(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 export function mountMiragonEditor(
@@ -74,8 +99,21 @@ export function mountMiragonEditor(
     });
   };
   doc.addEventListener("keydown", onKey);
+  // the dialogs sit inside the canvas host: the SPA scopes the renderer's
+  // stylesheet under its class (vendor-css.ts)
+  const menu = renderer.menu?.(modeler, {
+    root: container,
+    readOnly: false,
+    get trigger(): HTMLElement {
+      return ctx.menuTrigger?.() ?? container;
+    },
+    fileStem: () => modelStem(ctx.docPath),
+    download: (build) => saveFile(doc, build, ctx.onActionFailed),
+  });
   return {
+    ...(menu ? { menu: menu.groups } : {}),
     destroy: () => {
+      menu?.destroy();
       doc.removeEventListener("keydown", onKey);
       view.destroy();
       presenceCanvas?.destroy();

@@ -22,6 +22,7 @@ import type * as Y from "yjs";
 import type { TodoElementWire } from "@/lib/api";
 import type { PresenceSurface } from "@/lib/presence-canvas";
 import type { TodoCanvas } from "@/lib/todo-canvas";
+import type { ModelerMenu } from "@/mcp-app/core/menu-model";
 
 import { bpmnPlugin } from "./bpmn";
 import { dmnPlugin } from "./dmn";
@@ -64,6 +65,11 @@ export interface EditorContext {
    *  hand it to attachPresenceCanvas; optional keeps them mountable without
    *  a live session (tests, previews). */
   presence?: PresenceSurface;
+  /** the shell's ⋯ menu trigger, where an engine's dialogs give the focus
+   *  back when they close (MountedEditor.menu); null while not rendered */
+  menuTrigger?(): HTMLElement | null;
+  /** an action of the engine's menu failed (an export): surface it */
+  onActionFailed?(message: string): void;
 }
 
 /** the model list as the shell has it: it may arrive after the editor
@@ -103,6 +109,9 @@ export interface MountedEditor {
   elements?: TodoCanvas;
   /** header actions this editor contributes (rendered by the shell) */
   actions?: EditorToolbarAction[];
+  /** the renderer's own Model, Export and Help entries, which the shell's ⋯
+   *  menu lists (a Miragon renderer that ships menu content) */
+  menu?: ModelerMenu;
   destroy(): void;
 }
 

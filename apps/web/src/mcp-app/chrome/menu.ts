@@ -76,7 +76,9 @@ export const mountMenu: MountMenu = (deps) => {
       slot.append(chip);
     }
     if (item.id === "workshop") slot.append(h("span", { class: "switch", "aria-hidden": "true" }));
-    if (item.role === "menuitemradio" && item.checked) slot.append(icon("check", 14, "tick"));
+    // hidden, not left out, while unchecked: the width stays (guide §5.4)
+    if (item.checkMark) slot.append(icon("check", 14, item.checked ? "tick" : "tick off"));
+    else if (item.role === "menuitemradio" && item.checked) slot.append(icon("check", 14, "tick"));
     return slot.childElementCount > 0 ? slot : undefined;
   }
 
@@ -84,12 +86,13 @@ export const mountMenu: MountMenu = (deps) => {
     const b = h(
       "button",
       { type: "button", class: "mi", role: item.role, tabindex: "-1", "data-key": item.id },
-      icon(item.icon, 16),
+      item.icon ? icon(item.icon, 16) : h("span", { class: "icon-gap", "aria-hidden": "true" }),
       h("span", { class: "label" }, item.label),
     );
     const tail = end(item);
     if (tail) b.append(tail);
     if (item.checked !== undefined) b.setAttribute("aria-checked", String(item.checked));
+    if (item.dialog) b.setAttribute("aria-haspopup", "dialog");
     if (item.disabled) b.setAttribute("aria-disabled", "true");
     if (item.hint) b.title = item.hint;
     b.onclick = () => activate(item);
@@ -173,10 +176,23 @@ export const mountMenu: MountMenu = (deps) => {
     }
     for (const group of groups) {
       if (menu.childElementCount > 0) menu.append(h("hr", { role: "separator" }));
+      // a radio group's options sit in a named group under its heading (guide §5.4)
+      let radio: { id: string; node: HTMLElement } | undefined;
       for (const item of group.items) {
         const node = row(item);
         entries.push({ key: item.id, node, label: item.label, ...(item.disabled ? { disabled: true } : {}) });
-        menu.append(node);
+        if (item.radioGroup && radio?.id !== item.radioGroup.id) {
+          radio = {
+            id: item.radioGroup.id,
+            node: h(
+              "div",
+              { class: "mi-group", role: "group", "aria-label": item.radioGroup.label },
+              h("div", { class: "mi-heading", "aria-hidden": "true" }, item.radioGroup.label),
+            ),
+          };
+          menu.append(radio.node);
+        } else if (!item.radioGroup) radio = undefined;
+        (radio?.node ?? menu).append(node);
         if (item.confirm && confirming === item.id) menu.append(confirmRow({ ...item, confirm: item.confirm }));
       }
     }

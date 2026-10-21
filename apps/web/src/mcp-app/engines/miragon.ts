@@ -11,7 +11,8 @@
  * lands clear of the chrome and a pan constraint keeps the chrome's fit; the
  * chrome fits the view itself (diagramView, on the wrapped diagram, to the
  * spec's content bounds where it names them), so the renderer does not fit
- * on import first.
+ * on import first. A renderer's own menu entries and the document's title
+ * reach the widget menu as `menu` and `displayName`.
  *
  * The factories come from the loaded spec (the node --test suite hands in
  * fakes); this module imports neither a renderer nor a stylesheet.
@@ -20,8 +21,13 @@ import { assertContract, bindMiragon, EMPTY_DOCUMENT, isBlank } from "@designiq/
 import type * as Y from "yjs";
 
 import { attachPresenceCanvas } from "../../lib/presence-canvas.ts";
-import type { LoadedMiragonRenderer, MiragonModeler, MiragonRendererSpec } from "../../notations/miragon/spec.ts";
-import type { EngineOptions, LiveBindHooks, WidgetEngine } from "../core/engine.ts";
+import type {
+  LoadedMiragonRenderer,
+  MiragonMenuHost,
+  MiragonModeler,
+  MiragonRendererSpec,
+} from "../../notations/miragon/spec.ts";
+import type { EngineOptions, LiveBindHooks, MenuHost, WidgetEngine } from "../core/engine.ts";
 import { type DiagramView, diagramView } from "./diagram-js.ts";
 
 export interface MiragonEngine extends WidgetEngine {
@@ -29,6 +35,20 @@ export interface MiragonEngine extends WidgetEngine {
   modeler: MiragonModeler;
   /** fit / zoom; `palette` is the renderer's own (top-centre, tier 1/2) */
   view: DiagramView;
+}
+
+/** the dialogs live in the mount's own host, so they go with it; the
+ *  trigger is read when a dialog closes, never copied */
+function menuHostIn(host: MenuHost, root: HTMLElement, readOnly: boolean): MiragonMenuHost {
+  return {
+    get trigger() {
+      return host.trigger;
+    },
+    fileStem: () => host.fileStem(),
+    download: (build) => host.download(build),
+    root,
+    readOnly,
+  };
 }
 
 export function mountMiragonEngine(
@@ -49,10 +69,22 @@ export function mountMiragonEngine(
   modeler.attachTo(container);
   const contentBounds = renderer.contentBounds && (() => renderer.contentBounds?.(modeler));
   const view = diagramView(modeler.diagram, opts ? { insets: opts.insets, contentBounds } : {});
+  const menu =
+    opts?.menuHost && renderer.menu
+      ? renderer.menu(modeler, menuHostIn(opts.menuHost, container, readonly))
+      : undefined;
   return {
     modeler,
     editable: !readonly,
     view,
+    ...(menu ? { menu: menu.groups } : {}),
+    displayName(): string | undefined {
+      try {
+        return renderer.title?.(modeler);
+      } catch {
+        return undefined; // no document imported yet: nothing to name
+      }
+    },
     async importText(content: string): Promise<void> {
       // refused like the SPA's live binding refuses it: the widget shows its
       // import card instead of an empty canvas
@@ -82,6 +114,7 @@ export function mountMiragonEngine(
       };
     },
     destroy(): void {
+      menu?.destroy();
       view.destroy();
       modeler.destroy();
     },

@@ -13,9 +13,10 @@
  *     the DMN widget's deliberate mode (engines/dmn.ts); any renderer without
  *     a live-client binding mounts the same way.
  *
- * The frameless chrome (spec §2.5) adds two optional capabilities: `view`
- * (fit with insets, zoom, the renderer palette — what the zoom group, the
- * Tools button and the layout drive) and `displayName` (the menu header).
+ * The frameless chrome (spec §2.5) adds optional capabilities: `view` (fit
+ * with insets, zoom, the renderer palette — what the zoom group, the Tools
+ * button and the layout drive), `displayName` (the menu header) and `menu`
+ * (a Miragon renderer's own menu entries).
  * Anything a notation's extras need beyond this (bpmn: the raw bpmn-js
  * instance for todos / t.BPM; dmn: the simulator surface and the views) rides
  * on the concrete engine type, never here.
@@ -25,6 +26,7 @@
 import type * as Y from "yjs";
 
 import type { PresenceSurface } from "../../lib/presence-canvas.ts";
+import type { ModelerMenu } from "./menu-model.ts";
 
 /** px from each frame edge the fitted content keeps clear (core/layout.ts fitInsets) */
 export interface Insets {
@@ -117,9 +119,12 @@ export interface WidgetEngine {
   /** fit / zoom / palette — absent = no zoom group, no Tools */
   view?: ViewControls;
   /** the model's own name for the menu header ("Order to Cash"): bpmn the
-   *  participant or process name, dmn the definitions name; undefined = the
-   *  header shows the notation label alone */
+   *  participant or process name, dmn the definitions name, a Miragon
+   *  renderer the document's title; undefined = the header shows the
+   *  notation label alone */
   displayName?(): string | undefined;
+  /** a Miragon renderer's own Model, Export and Help entries */
+  readonly menu?: ModelerMenu;
   destroy(): void;
 }
 
@@ -129,6 +134,26 @@ export type LiveEngine = WidgetEngine & Required<Pick<WidgetEngine, "bindLive">>
 export interface EngineOptions {
   /** the layout's current fit insets (core/layout.ts fitInsets), read at every fit */
   insets(): Insets;
+  /** for a renderer that brings menu content (WidgetEngine.menu) */
+  menuHost?: MenuHost;
+}
+
+/** a file an export hands to the user */
+export interface ExportFile {
+  name: string;
+  mimeType: string;
+  data: Blob | string;
+}
+
+/** what a renderer's menu content needs from the chrome around it */
+export interface MenuHost {
+  /** its dialogs and popovers give the focus back here when they close */
+  readonly trigger: HTMLElement;
+  /** export files are named after the model's file */
+  fileStem(): string;
+  /** builds the file and hands it to the user; the host reports a failure
+   *  (the build's or the download's), so no export fails silently */
+  download(build: () => Promise<ExportFile>): Promise<void>;
 }
 
 /** mounts the engine into the widget's #canvas — editor or viewer */

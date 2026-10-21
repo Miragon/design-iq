@@ -42,7 +42,7 @@ import type {
   SyncState,
   ToastSpec,
 } from "../core/lifecycle.ts";
-import type { MenuContext, MenuItemId } from "../core/menu-model.ts";
+import type { MenuContext, MenuItemId, ModelerMenu } from "../core/menu-model.ts";
 import type { PopoverActionId, PopoverContext } from "../core/sync-view.ts";
 import type { IconName } from "../icons.ts";
 
@@ -131,6 +131,7 @@ export type MountHost = (app: App, deps: { teardown(): Promise<void> }) => HostC
  *   #tl[data-step], #tr[data-step]   0…9
  *   #zoom-pct[hidden]        the readout hides when compact (Layout.showZoomPct)
  *   on #app (px): --inset-t / --inset-r / --inset-b / --inset-l, --under-row,
+ *   --panel-top (under a tier-2 palette while one shows),
  *   --lane-bottom, --lane-left / --lane-w (the lane's place: centred, or
  *   beside an open card), --lane-max (its height: never up to the corner
  *   row nor an open sheet's head), --panel-w, --zoom-right, --table-right,
@@ -327,7 +328,7 @@ export type MountZoom = (deps: {
 // ── chrome/panel.ts ─────────────────────────────────────────────────────────
 
 export interface PanelSpec {
-  id: "todos" | "checks";
+  id: "todos" | "checks" | "legend";
   /** the aside (#todos / #checks) */
   panel: HTMLElement;
   /** the TR toggle (#todo-toggle / #checks-toggle) — starts hidden */
@@ -441,6 +442,8 @@ export interface ChromeActions {
   };
   /** engine.displayName() */
   displayName(): string | undefined;
+  /** engine.menu: a Miragon renderer's own Model, Export and Help entries */
+  modelerMenu(): ModelerMenu | undefined;
 }
 
 export interface ChromeOptions {

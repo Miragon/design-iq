@@ -163,6 +163,7 @@ export const mountLayout: MountLayout = (deps) => {
       ["--inset-b", l.inset.bottom],
       ["--inset-l", l.inset.left],
       ["--under-row", l.underRow],
+      ["--panel-top", l.panelTop],
       ["--lane-bottom", l.laneBottom],
       ["--panel-w", l.panel.width],
       ["--lane-left", l.lane.left],

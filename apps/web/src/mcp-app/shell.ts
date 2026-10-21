@@ -37,12 +37,12 @@ import { mountLiveRegions, mountSync } from "./chrome/sync.ts";
 import { mountToasts } from "./chrome/toasts.ts";
 import { mountViewSwitch } from "./chrome/view-switch.ts";
 import { mountZoom } from "./chrome/zoom.ts";
-import type { DecisionViews, ViewControls } from "./core/engine.ts";
+import type { DecisionViews, ExportFile, ViewControls } from "./core/engine.ts";
 import { stateActionPlan } from "./core/feedback.ts";
 import type { ChromeKey } from "./core/keymap.ts";
 import { sheetFolds, type WidgetKind } from "./core/layout.ts";
-import { type DocLabel, LoadError, type ModelInput, type SyncState } from "./core/lifecycle.ts";
-import { docName, type MenuContext, type MenuItemId } from "./core/menu-model.ts";
+import { type DocLabel, LoadError, type ModelInput, type SyncState, type ToastSpec } from "./core/lifecycle.ts";
+import { docName, type MenuContext, type MenuItemId, runModelerItem } from "./core/menu-model.ts";
 import type { PopoverActionId } from "./core/sync-view.ts";
 import { ZOOM_STEP } from "./engines/fit.ts";
 import { icon, mountIcons } from "./icons.ts";
@@ -265,6 +265,8 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
     const s = actions.state();
     const todos = panelState("todos");
     const checks = panelState("checks");
+    const legend = panelState("legend");
+    const modelerMenu = actions.modelerMenu();
     const verdict = checks?.badge?.verdict;
     return {
       kind,
@@ -287,6 +289,8 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
           }
         : {}),
       ...(views ? { views: { items: views.views(), active: views.activeView()?.id } } : {}),
+      ...(modelerMenu ? { modeler: modelerMenu } : {}),
+      ...(legend ? { legend: { open: legend.open } } : {}),
       viewport: view?.hasViewport() ?? false,
       fullscreenOffered: fullscreenShown(),
       displayMode: host.state().displayMode,
@@ -300,6 +304,8 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
       void views?.openView(id.slice("view:".length));
       return;
     }
+    const modelerMenu = actions.modelerMenu();
+    if (modelerMenu && runModelerItem(modelerMenu, id)) return;
     switch (id) {
       case "open":
         return actions.openInDesignIQ();
@@ -311,6 +317,7 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
         return modeChip?.toggle();
       case "todos":
       case "checks":
+      case "legend":
         return registered.get(id)?.handle.toggle();
       case "fit":
         return layout.refit(true);
@@ -545,6 +552,48 @@ export async function openExternal(app: App, url: string, onBlocked: (msg: strin
     return;
   }
   onBlocked(`Could not open ${url} — your client blocked it.`);
+}
+
+/**
+ * Hand an export to the user from inside the app sandbox, which blocks
+ * downloads: the HOST saves it (`ui/download-file`), with its own
+ * confirmation. A host without that capability, a refusal and a failed
+ * build each get a toast: an export never fails silently (guide §9).
+ */
+export async function downloadExport(
+  app: App,
+  build: () => Promise<ExportFile>,
+  toast: (spec: ToastSpec) => void,
+): Promise<void> {
+  if (!app.getHostCapabilities()?.downloadFile) {
+    toast({
+      tone: "danger",
+      title: "Your client cannot save files from this widget",
+      detail: "Open the model in designIQ to export it.",
+    });
+    return;
+  }
+  try {
+    const file = await build();
+    const uri = `file:///${encodeURIComponent(file.name)}`;
+    const resource =
+      typeof file.data === "string"
+        ? { uri, mimeType: file.mimeType, text: file.data }
+        : { uri, mimeType: file.mimeType, blob: await base64Of(file.data) };
+    const { isError } = await app.downloadFile({ contents: [{ type: "resource", resource }] });
+    if (isError)
+      toast({ tone: "info", title: `${file.name} was not saved`, detail: "Your client declined the download." });
+  } catch (err) {
+    toast({ tone: "danger", title: "Export failed", detail: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+async function base64Of(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  // in slices: String.fromCharCode takes its bytes as arguments
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
 }
 
 /** a load that did not land → its state card (the stage picks it); the

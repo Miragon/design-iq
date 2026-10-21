@@ -1,8 +1,9 @@
 /**
  * Just enough browser for the REAL Miragon renderers under node --test: a
  * jsdom document on the globals, an SVG geometry without layout (diagram-js
- * moves every shape through SVG transforms and matrices, jsdom has none), and
- * module hooks for what only a bundler resolves (the renderers import
+ * moves every shape through SVG transforms and matrices, jsdom has none),
+ * dialogs that open modal (jsdom has no showModal), and module hooks for
+ * what only a bundler resolves (the renderers import
  * diagram-js subpaths without an extension, the specs' load() imports the
  * stylesheet, the SPA editors the "@/" alias and the bpmn editor its own
  * sources without one). Import it before any renderer, and import the renderers
@@ -173,6 +174,18 @@ svg.createSVGPoint = () => ({
   },
 });
 globals.SVGMatrix = Matrix;
+
+/** the renderers' dialogs open modal; jsdom has no showModal: open and close
+ *  set the attribute (what `open` reads) and close fires its event */
+const dialog = window.HTMLDialogElement.prototype as unknown as Record<string, unknown>;
+dialog.showModal ??= function (this: HTMLDialogElement) {
+  this.setAttribute("open", "");
+};
+dialog.close ??= function (this: HTMLDialogElement) {
+  if (!this.hasAttribute("open")) return;
+  this.removeAttribute("open");
+  this.dispatchEvent(new window.Event("close"));
+};
 
 /** the client size of every element — a canvas without one has no viewbox */
 const CLIENT_SIZE = { width: 1000, height: 640 };

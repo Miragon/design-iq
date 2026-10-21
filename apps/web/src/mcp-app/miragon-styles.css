@@ -2,6 +2,8 @@
  * chrome plus the renderer palette's slot — the renderers bring their own CI
  * styling, only the slot is ours. */
 @import "./chrome.css";
+@import "./geist-mono.css";
+@import "../lib/miragon-legend.css";
 
 /* top-centre (the renderer sheets centre it), under the row (tier 2) unless
    it fits between the clusters (tier 1); `max-content` lifts the leaked
@@ -22,17 +24,14 @@
   row-gap: 4px;
 }
 
-/* the Context Maps legend card (notations/miragon/context-map.ts) stands
-   8px above the bottom row, so never over the sync pill (40px: the 32px row,
-   BOTTOM_H in core/layout.ts, and the gap the sync popover keeps too), and
-   ends below the top row (--under-row) */
-#app[data-kind="miragon"] #canvas :is(.cm-legend, .cm-legend-toggle) {
-  bottom: calc(var(--inset-b) + 40px);
+/* a renderer's popover (Wardley: Map size…, X-axis labels…) opens where the
+   menu dropped down: under designIQ's 36px corner row, not the shell's 40px,
+   and over the renderer's palette (110), as a popover stands over the
+   shell's palette */
+#app[data-kind="miragon"] #canvas .wardley-popover {
+  top: var(--under-row);
   left: var(--inset-l);
-}
-
-#app[data-kind="miragon"] #canvas .cm-legend {
-  max-height: calc(100% - var(--under-row) - var(--inset-b) - 40px);
+  z-index: 150;
 }
 
 /* the per-mount host (miragon-main.ts) fills the frame; the renderer's root

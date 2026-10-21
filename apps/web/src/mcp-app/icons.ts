@@ -14,6 +14,10 @@
  * Phase 2 adds git-pull-request (Release → PR) and undo-2 / redo-2 (touch).
  */
 export const LUCIDE_ICONS = {
+  // the Context Maps legend: what the notation's shapes and marks mean
+  "book-open":
+    '<path d="M12 5v16"/>' +
+    '<path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   "chevron-right": '<path d="m9 18 6-6-6-6"/>',
   "circle-alert":
@@ -31,10 +35,21 @@ export const LUCIDE_ICONS = {
   "external-link":
     '<path d="M15 3h6v6"/><path d="M10 14 21 3"/>' +
     '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  // the renderers' Export entries (guide §5.14): Export as SVG, Export as PNG
+  "file-code-corner":
+    '<path d="M4 12.15V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-3.35"/>' +
+    '<path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="m5 16-3 3 3 3"/><path d="m9 22 3-3-3-3"/>',
+  "file-image":
+    '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/>' +
+    '<path d="M14 2v5a1 1 0 0 0 1 1h5"/><circle cx="10" cy="12" r="2"/><path d="m20 17-1.296-1.296a2.41 2.41 0 0 0-3.408 0L9 22"/>',
   eye:
     '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/>' +
     '<circle cx="12" cy="12" r="3"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  // Keyboard shortcuts… (guide §5.14)
+  keyboard:
+    '<path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/>' +
+    '<path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>',
   // Add todo — the SPA's name and icon
   "list-plus": '<path d="M16 5H3"/><path d="M11 12H3"/><path d="M16 19H3"/><path d="M18 9v6"/><path d="M21 12h-6"/>',
   // the SPA's todo icon

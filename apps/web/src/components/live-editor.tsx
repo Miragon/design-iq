@@ -66,6 +66,7 @@ import { invalidateModelLists, useFileHistory, useModels, useTodos } from "@/lib
 import { createRemoteCaretStyles } from "@/lib/remote-carets";
 import { clampRatio, DEFAULT_RATIO, ratioBounds } from "@/lib/split-ratio";
 import type { TodoCanvas } from "@/lib/todo-canvas";
+import type { ModelerMenu } from "@/mcp-app/core/menu-model";
 import {
   type AttachedSource,
   type EditorToolbarAction,
@@ -136,6 +137,9 @@ export function LiveEditor({
   const [hasElements, setHasElements] = useState(false);
   /** header actions the mounted editor contributes (e.g. the t.BPM toggle) */
   const [editorActions, setEditorActions] = useState<EditorToolbarAction[]>([]);
+  /** the mounted renderer's own menu entries, for the ⋯ menu */
+  const [editorMenu, setEditorMenu] = useState<ModelerMenu | undefined>(undefined);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   /** header menus the source tooling contributes (Markdown: Insert diagram) */
   const [sourceMenus, setSourceMenus] = useState<SourceMenu[]>([]);
   /** where a rename moved this document (#208) — set by the session's notice */
@@ -319,6 +323,10 @@ export function LiveEditor({
               },
             },
             presence: presenceSurface,
+            menuTrigger: () => menuTriggerRef.current,
+            onActionFailed: (message) => {
+              if (!cancelled) toast.error(message);
+            },
           });
         } catch (e) {
           if (!cancelled) {
@@ -335,6 +343,7 @@ export function LiveEditor({
         }
         mounted = editor;
         setEditorActions(editor?.actions ?? []);
+        setEditorMenu(editor?.menu);
         if (editor?.elements) {
           setHasElements(true);
           todoCanvasRef.current = editor.elements;
@@ -414,6 +423,7 @@ export function LiveEditor({
       contentRef.current = null;
       todoCanvasRef.current = null;
       setEditorActions([]);
+      setEditorMenu(undefined);
       setSourceMenus([]);
       mounted?.destroy();
       sourceTools?.dispose();
@@ -646,6 +656,8 @@ export function LiveEditor({
         onRelease={() => setReleaseOpen(true)}
         onRename={() => setRenameOpen(true)}
         onDuplicate={() => setDuplicateOpen(true)}
+        modelerMenu={editorMenu}
+        menuTriggerRef={menuTriggerRef}
       />
       {error && <div className="bg-destructive-soft text-destructive border-b px-4 py-2 text-sm">{error}</div>}
       <div
