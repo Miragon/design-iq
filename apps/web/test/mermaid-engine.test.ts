@@ -153,6 +153,14 @@ test("layout stays the author's: a directive may still set the look and the wrap
   assert.equal(config.look, "handDrawn");
   assert.equal(config.wrap, true);
   assert.equal(config.theme, "base");
+  // mermaid 12.2's mindmap colorBy only picks which of the theme's section colours a node takes
+  const mindmap = "mindmap\n  root\n    A\n      A1\n    B\n";
+  for (const source of [
+    `---\nconfig:\n  mindmap:\n    colorBy: depth\n---\n${mindmap}`,
+    `%%{init: {"mindmap": {"colorBy": "depth"}}}%%\n${mindmap}`,
+  ]) {
+    assert.equal((await configFor(source)).mindmap?.colorBy, "depth", source);
+  }
 });
 
 test("a diagram keeps the look and layout of mermaid 11 until it asks otherwise: classic, laid out by dagre", async () => {
