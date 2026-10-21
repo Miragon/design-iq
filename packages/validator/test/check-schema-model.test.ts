@@ -99,6 +99,34 @@ test("team topology: a shape the schema rejects is an ERROR, the lenient migrati
   assert.deepEqual(checkSchemaModel("{}", { notation: "team-topology" }), []);
 });
 
+test("team topology: from version 2 on an interaction without position or size is refused, a version 1 edge is dropped", () => {
+  const interactions = [
+    { id: "edge", mode: "collaboration", source: "a", target: "b" },
+    { id: "placed", mode: "facilitating", ...box },
+    { id: "unsized", mode: "x-as-a-service", position: { x: 0, y: 0 } },
+    { id: "pairing", mode: "pairing", ...box },
+  ];
+  const MODE = 'interactions.3.mode: Invalid option: expected one of "collaboration"|"x-as-a-service"|"facilitating"';
+  const check = (version: number) =>
+    brief(
+      checkSchemaModel(JSON.stringify({ version, title: "Teams", nodes: [], interactions }), {
+        notation: "team-topology",
+      }),
+    );
+  // the canvas used to open these files without the interaction, and the next save wrote it out of the file
+  for (const version of [2, 3]) {
+    assert.deepEqual(check(version), [
+      ["ERROR", "team-topology/schema", "interactions.0.position: Invalid input: expected object, received undefined"],
+      ["ERROR", "team-topology/schema", "interactions.0.size: Invalid input: expected object, received undefined"],
+      ["ERROR", "team-topology/schema", "interactions.2.size: Invalid input: expected object, received undefined"],
+      ["ERROR", "team-topology/schema", MODE],
+    ]);
+  }
+  // a version 1 file drops every interaction without geometry, and names
+  // what follows at its index in the file
+  assert.deepEqual(check(1), [["ERROR", "team-topology/schema", MODE]]);
+});
+
 test("context map: a list, a newer version, a coordinate or size out of range and reserved ids are refused", () => {
   const check = (raw: string) => brief(checkSchemaModel(raw, { file: "models/m.cm.json", notation: "context-map" }));
   assert.deepEqual(check("[]"), [["ERROR", "context-map/schema", "(root): expected an object, got a list"]]);

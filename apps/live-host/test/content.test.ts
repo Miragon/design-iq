@@ -350,6 +350,18 @@ test("putContent refuses what a Miragon canvas cannot open, like an invalid BPMN
       JSON.stringify({ version: 1, title: "M", contexts: [{ id: "toString", label: "S", ...box }], relationships: [] }),
       /contexts\.0\.id: the id "toString" is reserved: it names a built-in property/,
     ],
+    // the canvas used to open it without the interaction, and the next save dropped it from the file
+    [
+      "processes/unsized.tt",
+      JSON.stringify({
+        version: 3,
+        title: "T",
+        nodes: [team("a")],
+        interactions: [{ id: "i", mode: "collaboration", position: { x: 0, y: 0 } }],
+        flows: [],
+      }),
+      /interactions\.0\.size: Invalid input: expected object, received undefined/,
+    ],
     // nested past the schema model's limit: a refusal, not a 500
     [
       "processes/deep.vc.json",

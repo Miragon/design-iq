@@ -26,6 +26,9 @@ so each refusal is an ERROR (`team-topology/schema`, `context-map/schema`,
 - in all three notations, an id that names a built-in JavaScript object property such as
   `constructor`, `toString` or `__proto__`: the canvas keeps its elements in a plain object and
   cannot import it;
+- in a Team Topology from `version` 2 on: an interaction without `position` or `size`, at the
+  missing field (`interactions.0.size`). Opened anyway, it would drop out of the file with the
+  next save. A version 1 file still loses its edge interactions, which have no geometry;
 - in a Context Map: a JSON list instead of an object, a `version` newer than 1, coordinates or
   sizes beyond 1,000,000, and a repeated id at the path of the repeat, e.g.
   `contexts.2.id: duplicate id "a"; ids must be unique across contexts and relationships`;
@@ -37,12 +40,10 @@ A Context Map's strategic-DDD rules (`validateDocument`, e.g. `protect-or-confor
 `endpoints-on-map`) are WARNs, `context-map/semantics`, with the rule named at the end of the
 message: the canvas opens such a map and marks the finding.
 
-Paths count in the document as the schema model reads it. A Team Topology drops a legacy
-interaction without `position` or `size` before the check, so the index of a later interaction
-counts without it. Some rules only run once the document's shape is valid: the id rules of a Team
-Topology and a Value Chain, and a Context Map's strategic-DDD rules.
-Fixing the reported errors can therefore bring up further ones, so check again until the file is
-clean.
+Paths count in the file, a Team Topology's interactions included. Some rules only run once the
+document's shape is valid: the id rules of a Team Topology and a Value Chain, and a Context Map's
+strategic-DDD rules. Fixing the reported errors can therefore bring up further ones, so check
+again until the file is clean.
 
 ## Usage
 

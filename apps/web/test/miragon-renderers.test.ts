@@ -252,9 +252,18 @@ const REFUSED: Array<[id: string, good: string, refused: string, reason: RegExp]
     /^contexts\.0\.id: the id "cm-root" is reserved/,
   ],
   ["team-topology", TEAMS, withId(TEAMS, "nodes", 1, "team_platform"), /^nodes\.1\.id: duplicate id "team_platform"/],
+  // opened without the interaction before 0.12, and the next edit saved the file without it
+  ["team-topology", TEAMS, withUnsizedInteraction(TEAMS), /^interactions\.0\.size: Invalid input: expected object/],
   ["context-map", CONTEXT_MAP, CONTEXT_MAP.slice(0, 40), /^\(root\): not valid JSON/],
   ["team-topology", TEAMS, TEAMS.slice(0, 40), /JSON/],
 ];
+
+/** the document with an interaction that has a position and no size */
+function withUnsizedInteraction(json: string): string {
+  const document = JSON.parse(json) as Record<string, unknown>;
+  document.interactions = [{ id: "int_checkout_platform", mode: "x-as-a-service", position: { x: 300, y: 200 } }];
+  return JSON.stringify(document);
+}
 
 /** the document with one element's id replaced */
 function withId(json: string, list: "nodes" | "contexts", index: number, id: string): string {
