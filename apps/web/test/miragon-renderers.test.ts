@@ -519,6 +519,23 @@ test("presence on a Wardley map, in both hosts: the selection travels as documen
     await wait(20);
     assert.match(ytext.toString(), /^component Pot of Tea /m, where);
 
+    const outlinesOf = (selector: string): Array<[number, number]> =>
+      [...diagram.get("canvas").getLayer("designiq-presence").querySelectorAll(selector)].map((rect) => [
+        Number(rect.getAttribute("x")),
+        Number(rect.getAttribute("y")),
+      ]);
+    // a peer selects the renamed component by the id every peer reads from
+    // the text, before this canvas imports the text again
+    deliver([
+      {
+        clientId: 8,
+        user: { name: "Ada", color: "#1D4ED8", kind: "human" },
+        canvas: { cursor: null, selection: ["cmp_pot_of_tea"] },
+      },
+    ]);
+    await wait(20);
+    assert.deepEqual(outlinesOf("rect[stroke]"), [[cup!.x - 3, cup!.y - 3]], `${where}: the renamed component's box`);
+
     deliver([
       {
         clientId: 7,
