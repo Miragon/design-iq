@@ -171,7 +171,8 @@ the roster of peers) and `widget.ts` (the DOM composition: `bootWidget(spec)`).
 A notation contributes an **engine adapter** (`src/mcp-app/engines/*.ts`)
 against the contract in `core/engine.ts` — `importText` / `exportText` /
 `onDirty` / optional `selectedElementId` / optional `bindLive` / optional
-`view` (fit, zoom, the palette) / optional `displayName` — plus a `WidgetSpec`
+`view` (fit, zoom, the palette) / optional `displayName` / optional `menu` (a
+Miragon renderer's own Model, Export and Help entries) — plus a `WidgetSpec`
 (`main.ts` for bpmn, `dmn-main.ts` for dmn, `miragon-main.ts` for the
 renderers). Its extras (`WidgetExtras`: the Todos and Checks cards) hear
 `onRead` (the path is known: discovery runs in parallel with the import),
@@ -189,15 +190,15 @@ the reasons behind them are in
 [`docs/mcp-app-widget-chrome.md`](../../docs/mcp-app-widget-chrome.md) —
 `spec §n` in the widget sources refers to it.
 
-| Where         | What                                                                                                                                                            |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| top-left      | the document menu (name, Save now, Reload, Workshop, the panel, Fit, fullscreen); compact: **Tools**; the Workshop chip (bpmn) or the DRD \| Table switch (dmn) |
-| top-right     | the panel toggle (Todos with its count, Checks with its verdict), fullscreen, **Open in designIQ** — the one blue button                                        |
-| bottom-left   | the sync pill: Live (+ avatars), Saved, Unsaved changes, Not saved + Retry, Autosave paused, Read-only, Inactive; a click opens the details                     |
-| bottom-right  | zoom − / % / + / fit, beside the bpmn.io watermark (never covered)                                                                                              |
-| bottom-centre | toasts and the decision cards (CAS conflict, live interrupted, superseded) — beside an open card, never over a panel; a sheet ends above them                   |
-| centre        | the state cards: starting, loading, no input, load failed (Try again), import failed (Ask the assistant), renderer failed                                       |
-| right         | the Todos / Checks card — a full-width sheet when compact, or when a card would leave the toasts under 300px of canvas                                          |
+| Where         | What                                                                                                                                                                                                                 |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| top-left      | the document menu (name, Save now, Reload, Workshop, the panel, a Miragon renderer's Model, Export and Help entries, Fit, fullscreen); compact: **Tools**; the Workshop chip (bpmn) or the DRD \| Table switch (dmn) |
+| top-right     | the panel toggle (Todos with its count, Checks with its verdict, Legend for a context map), fullscreen, **Open in designIQ** — the one blue button                                                                   |
+| bottom-left   | the sync pill: Live (+ avatars), Saved, Unsaved changes, Not saved + Retry, Autosave paused, Read-only, Inactive; a click opens the details                                                                          |
+| bottom-right  | zoom − / % / + / fit, beside the bpmn.io watermark (never covered)                                                                                                                                                   |
+| bottom-centre | toasts and the decision cards (CAS conflict, live interrupted, superseded) — beside an open card, never over a panel; a sheet ends above them                                                                        |
+| centre        | the state cards: starting, loading, no input, load failed (Try again), import failed (Ask the assistant), renderer failed                                                                                            |
+| right         | the Todos / Checks / Legend card — a full-width sheet when compact, or when a card would leave the toasts under 300px of canvas                                                                                      |
 
 The split is pure-and-tested vs. DOM: `src/mcp-app/core/` holds what each
 surface says and when (`layout.ts` — the measured degrade, compact below 600 ×
@@ -206,10 +207,16 @@ surface says and when (`layout.ts` — the measured degrade, compact below 600 �
 `checks-view.ts`), node-tested in `test/widget-*.test.ts`; `src/mcp-app/chrome/`
 binds them to the skeleton every entry carries (`mcp-app*.html` — the ids are
 the contract) behind the types in `chrome/contracts.ts`, and `shell.ts`
-composes them into ONE `WidgetChrome`. `engines/fit.ts` fits the diagram
-clear of the clusters, the palette and an open card, and re-fits it on resize,
-on a panel toggle and on a live re-import until the user zooms or pans; a
-display-mode change always re-fits. The inline height is declared after
+composes them into ONE `WidgetChrome`. `engines/diagram-js.ts` fits the
+diagram clear of the clusters, the palette and an open card, and re-fits it on
+resize, on a panel toggle and on a live re-import until the user zooms or
+pans; a display-mode change always re-fits. The view math and the readout are
+`@miragon/modeler-shell/core`'s (`fitViewbox`, `sameView`,
+`interpolateViewbox`, `zoomReadout`), and so are the Miragon widgets' zoom keys
+and ⇧1 (`decideKey`, `chrome/keys.ts` through `src/lib/chrome-keys.ts`, which
+the SPA's Miragon editors bind too): the renderers bind no zoom keys, bpmn-js
+and dmn-js keep their own. The widget's geometry (the 36px corners, the
+12/16px insets) stays designIQ's; the full shell is not mounted. The inline height is declared after
 connect (480, or 420 below 600 wide), and again only on a width-class flip or
 the return to inline; no state change resizes the iframe.
 Colours come from the `@designiq/ui-kit` aliases only (`chrome.css` for what
@@ -244,8 +251,9 @@ deliberately absent here. Never bundle two engines (or bpmn-js next to a Miragon
 sheet) into one widget.
 
 **Read-only hosts** (`LIVE_MCP_READONLY=1` on the Live Host) mount each engine's
-viewer (a Miragon spec's `createViewer`, which takes the Context Maps legend
-like the editor). No viewer needs a command stack
+viewer (a Miragon spec's `createViewer`; the menu disables the renderer's
+entries that write the document, Type captions and the exports stay). No
+viewer needs a command stack
 (`test/miragon-renderers.test.ts`). The superseded freeze takes the same viewer
 path. A Miragon renderer mounts its own root INSIDE the element it is attached
 to and removes only that root on `destroy()`, so `miragon-main.ts` gives each
@@ -263,6 +271,10 @@ sized by `miragon-styles.css`) and removes it with the engine.
    and `fitOnImport`, plus `undoRedoKeys` for the editor), the names every
    renderer on `@miragon/modeler-api` 1.2 takes, and `contentBounds` if what
    a host fits is more than the canvas's elements (Wardley's plot and axes).
+   Optional: `title` (the document's title, the menu header's display name),
+   `menu` (the package's own menu content, its dialogs built with the
+   helpers in `menu-content.ts` inside the mount's host) and, with
+   `hasLegend`, `legend` (the rows of the Legend panel both hosts show).
    Then its line in
    `src/notations/miragon/index.ts` — the SPA editor plugin, the widget engine,
    the CSS scoping and the widget bundle derive from it. The scoping is
