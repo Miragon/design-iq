@@ -2,8 +2,8 @@
  * The host context and what follows from it (spec §2.5, §2.6): the merge of
  * partial `hostcontextchanged` updates (src/mcp-app/core/host-context.ts),
  * the once-only inline height, when the view re-fits and where the renderer
- * palette is open (src/mcp-app/core/layout.ts), the zoom readout
- * (src/mcp-app/engines/fit.ts).
+ * palette is open (src/mcp-app/core/layout.ts). The zoom readout is the
+ * modeler shell's (test/widget-engines.test.ts).
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -15,7 +15,6 @@ import {
   sameHostState,
 } from "../src/mcp-app/core/host-context.ts";
 import { paletteForLayout, paletteShouldOpen, planRefit } from "../src/mcp-app/core/layout.ts";
-import { zoomReadout } from "../src/mcp-app/engines/fit.ts";
 
 const base = initialHostState({ touch: false, hover: true });
 
@@ -155,16 +154,4 @@ test("palette size: measured while visible, the last natural size while hidden, 
   assert.deepEqual(paletteForLayout(true, { w: 0, h: 0 }, seen), seen, "behind Tools: the last natural size");
   assert.deepEqual(paletteForLayout(true, { w: 0, h: 0 }, { w: 0, h: 0 }), { w: 1, h: 1 }, "booted compact");
   assert.deepEqual(paletteForLayout(false, seen, seen), { w: 0, h: 0 }, "a viewer has none");
-});
-
-test("zoom readout: the percentage, its accessible name, dead buttons at the limits", () => {
-  assert.deepEqual(zoomReadout(0.564, 0.2, 4), {
-    text: "56%",
-    label: "Zoom 56% — reset to 100%",
-    canOut: true,
-    canIn: true,
-  });
-  assert.equal(zoomReadout(0.2, 0.2, 4).canOut, false);
-  assert.equal(zoomReadout(4, 0.2, 4).canIn, false);
-  assert.equal(zoomReadout(3.99, 0.2, 4).canIn, true);
 });

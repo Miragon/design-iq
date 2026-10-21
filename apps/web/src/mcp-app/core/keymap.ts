@@ -7,29 +7,21 @@
  * the inline form — the topmost layer while one is open. ⌘S is honoured
  * everywhere: it has no meaning inside text, and the browser's own "save
  * page" is never what someone in a modeler wants.
+ * The zoom keys and ⇧1 of the Miragon notations (chromeKeyAction) follow the
+ * modeler shell's keymap (`decideKey`, host "embedded"), so they act exactly
+ * as in the Miragon modelers' own chrome; bpmn-js and dmn-js keep their own
+ * zoom keys on the focused canvas, and ⇧1 there stays keyCommand's.
  * Plus the WAI-ARIA menu-button keys of the trigger (§3).
  * DOM-free (`.ts` relative imports): node --test loads it.
  */
+import { type ChromeKey, decideKey, type KeyLike, matchChromeKey } from "@miragon/modeler-shell/core";
+
+export type { ChromeKey, KeyLike };
 
 export type KeyCommand = "save" | "fit" | "escape";
 
-/** what counts as text: its keys belong to the field (a selector string, so
- *  this module stays DOM-free — chrome/keys.ts and chrome/panel.ts match it) */
-export const TEXT_FIELD = "input, textarea, select, [contenteditable]:not([contenteditable='false'])";
-
 /** where the key landed: not in text / in a chrome text field / in the canvas's own text */
 export type KeyTarget = "plain" | "chrome-text" | "canvas-text";
-
-export interface KeyLike {
-  key: string;
-  code: string;
-  metaKey: boolean;
-  ctrlKey: boolean;
-  shiftKey: boolean;
-  altKey: boolean;
-  /** an IME composition is running — every key belongs to it */
-  isComposing?: boolean;
-}
 
 export function keyCommand(e: KeyLike, target: KeyTarget): KeyCommand | undefined {
   if (e.isComposing) return undefined;
@@ -38,9 +30,42 @@ export function keyCommand(e: KeyLike, target: KeyTarget): KeyCommand | undefine
   if (mod && !e.altKey && !e.shiftKey && (e.key.toLowerCase() === "s" || e.code === "KeyS")) return "save";
   if (target === "canvas-text") return undefined;
   if (e.key === "Escape" && !mod && !e.altKey) return "escape";
-  // ⇧1 — by code: "!" on most layouts, something else on a few
-  if (target === "plain" && e.shiftKey && !mod && !e.altKey && e.code === "Digit1") return "fit";
+  if (target === "plain" && matchChromeKey(e) === "fit") return "fit";
   return undefined;
+}
+
+/** what the zoom keys and ⇧1 depend on besides the key itself */
+export interface ChromeKeyState {
+  /** the key landed in a text field (TEXT_FIELD_SELECTOR, or contenteditable) */
+  inTextField: boolean;
+  menuOpen: boolean;
+  /** a popover or dialog (`[role="dialog"]`, `<dialog open>`) shows */
+  dialogOpen: boolean;
+  /** one of them is modal */
+  modalOpen: boolean;
+  /** a diagram to zoom is on screen; without one the browser keeps the keys */
+  viewport: boolean;
+}
+
+/**
+ * Cmd/Ctrl + `+` / `-` / `0` and ⇧1 for a Miragon canvas: the shell's
+ * decision for an embedded modeler, so an IME composition, a text field and
+ * an open modal keep the key, and a widget without a diagram (a state card)
+ * leaves it to the browser. undefined = not acted on, nothing prevented.
+ */
+export function chromeKeyAction(e: KeyLike, state: ChromeKeyState): ChromeKey | undefined {
+  if (matchChromeKey(e) === undefined) return undefined;
+  const decision = decideKey(e, {
+    host: "embedded",
+    inTextField: state.inTextField,
+    menuOpen: state.menuOpen,
+    dialogOpen: state.dialogOpen,
+    modalOpen: state.modalOpen,
+    // the listener returns before this on a prevented key: one press acts once
+    defaultPrevented: false,
+    startScreen: !state.viewport,
+  });
+  return decision.action === "closeMenu" ? undefined : decision.action;
 }
 
 /** the menu trigger: ↓ opens on the first enabled item, ↑ on the last

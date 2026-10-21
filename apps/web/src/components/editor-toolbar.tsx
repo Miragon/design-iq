@@ -22,7 +22,10 @@
  *   actions    what you can do here (add todo, analyse with AI)
  *   menu       the ⋯ overflow, last: the occasional moves — panel toggles that
  *              earn no permanent button (Notes, History; open state shows as a
- *              check), the model's own Rename… / Duplicate… and Release → PR
+ *              check), the model's own Rename… / Duplicate… and Release → PR,
+ *              and a Miragon renderer's own Model, Export and Help entries
+ *              (Map size…, Level, Export as PNG, Keyboard shortcuts…) in the
+ *              guide's group order around them
  *
  * The model name itself is the rename handle (#208): a quiet button that
  * shows a pencil on hover/focus and opens the Rename dialog on click. Not a
@@ -45,7 +48,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@designiq/ui-kit/components/dropdown-menu";
 import { cn } from "@designiq/ui-kit/lib/utils";
@@ -56,17 +62,22 @@ import {
   Columns2,
   Copy,
   Ellipsis,
+  FileCodeCorner,
+  FileImage,
   GitPullRequest,
+  Keyboard,
   ListPlus,
   Loader2,
+  type LucideIcon,
   MessageSquareText,
   Pencil,
   Shapes,
 } from "lucide-react";
-import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
+import { type ComponentType, type ReactNode, type Ref, useEffect, useReducer, useRef, useState } from "react";
 
 import type { EditorView } from "@/lib/editor-view";
 import { safeAvatarUrl, safePresenceColor } from "@/lib/presence-format";
+import type { ModelerMenu, ModelerMenuEntry, ModelerMenuIcon } from "@/mcp-app/core/menu-model";
 import type { CanvasViewLabel, EditorToolbarAction, SourceMenu } from "@/notations/registry";
 
 export type EditorStatus = "connecting" | "slow" | "live" | "error";
@@ -81,6 +92,8 @@ export interface ToolbarPanelItem {
   icon: ComponentType<{ className?: string }>;
   /** live count on the button (open todos); 0/undefined renders nothing */
   count?: number;
+  /** the ⋯ menu's Model block repeats the toggle as a checkbox (the Legend) */
+  modelMenu?: boolean;
 }
 
 /** faces beyond this collapse into a +N chip — a busy workshop must not push
@@ -107,6 +120,8 @@ export function EditorToolbar({
   onRelease,
   onRename,
   onDuplicate,
+  modelerMenu,
+  menuTriggerRef,
 }: {
   /** repository full name, "owner/name" */
   repo: string;
@@ -140,6 +155,10 @@ export function EditorToolbar({
   /** open the Rename dialog — the title becomes its handle */
   onRename?: () => void;
   onDuplicate?: () => void;
+  /** the mounted renderer's own entries (MountedEditor.menu) */
+  modelerMenu?: ModelerMenu;
+  /** the ⋯ trigger, where the renderer's dialogs give the focus back */
+  menuTriggerRef?: Ref<HTMLButtonElement>;
 }) {
   const [owner = "", name = ""] = repo.split("/");
   // a menu item that opens a DIALOG must not have radix hand the focus back
@@ -149,6 +168,7 @@ export function EditorToolbar({
     openingDialog.current = true;
     setTimeout(open, 0);
   };
+  const modelPanels = panels.filter((p) => p.modelMenu);
   const shownPeers = presence.slice(0, MAX_AVATARS);
   const hiddenPeers = presence.slice(MAX_AVATARS);
 
@@ -293,7 +313,7 @@ export function EditorToolbar({
         <Divider />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-8" aria-label="More" title="More">
+            <Button ref={menuTriggerRef} variant="ghost" size="icon" className="size-8" aria-label="More" title="More">
               <Ellipsis />
             </Button>
           </DropdownMenuTrigger>
@@ -318,6 +338,26 @@ export function EditorToolbar({
               </DropdownMenuCheckboxItem>
             ))}
             <DropdownMenuSeparator />
+            {((modelerMenu?.model.length ?? 0) > 0 || modelPanels.length > 0) && (
+              <>
+                {modelerMenu && <ModelerEntries entries={modelerMenu.model} openDialog={openDialog} />}
+                {/* the guide's Model checkbox (§5.4, §5.10); it stays open on a
+                    toggle like the renderer's own checkboxes */}
+                {modelPanels.map((p) => (
+                  <DropdownMenuCheckboxItem
+                    key={p.id}
+                    checked={activePanel === p.id}
+                    title={p.title}
+                    onCheckedChange={() => onTogglePanel(p.id)}
+                    onSelect={(event) => event.preventDefault()}
+                  >
+                    <IconGap />
+                    {p.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                <DropdownMenuSeparator />
+              </>
+            )}
             {/* inset: the icon lines up with the panel entries' icons above.
                 Rename/Duplicate open DIALOGS — mounted a tick after radix
                 finished its close handling (the New menu's convention) */}
@@ -334,15 +374,107 @@ export function EditorToolbar({
               </DropdownMenuItem>
             )}
             {(onRename || onDuplicate) && <DropdownMenuSeparator />}
+            {modelerMenu && modelerMenu.export.length > 0 && (
+              <>
+                <ModelerEntries entries={modelerMenu.export} openDialog={openDialog} />
+                <DropdownMenuSeparator />
+              </>
+            )}
             <DropdownMenuItem inset onSelect={onRelease}>
               <GitPullRequest />
               Release → PR
             </DropdownMenuItem>
+            {modelerMenu && modelerMenu.help.length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <ModelerEntries entries={modelerMenu.help} openDialog={openDialog} />
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </header>
   );
+}
+
+const MODELER_ICONS: Record<ModelerMenuIcon, LucideIcon> = {
+  "file-image": FileImage,
+  "file-code-corner": FileCodeCorner,
+  keyboard: Keyboard,
+};
+
+/** A renderer's menu entries in the ⋯ menu. Rendered inside the open menu,
+ *  so a checkbox or a radio group reads the canvas's state as the menu
+ *  opens; both stay open on a toggle (guide §5.4) and re-read it. A dialog
+ *  entry opens a tick after radix let go of the focus, as Rename… does. */
+function ModelerEntries({
+  entries,
+  openDialog,
+}: {
+  entries: readonly ModelerMenuEntry[];
+  openDialog: (open: () => void) => () => void;
+}) {
+  const [, reread] = useReducer((n: number) => n + 1, 0);
+  const keepOpen = (event: Event) => event.preventDefault();
+  return entries.map((entry) => {
+    if (entry.kind === "radio") {
+      return (
+        <DropdownMenuRadioGroup
+          key={entry.id}
+          aria-label={entry.label}
+          value={entry.value() ?? ""}
+          onValueChange={(value) => {
+            if (value !== entry.value()) entry.onSelect(value);
+            reread();
+          }}
+        >
+          <DropdownMenuLabel aria-hidden="true" className="text-muted-foreground font-semibold">
+            {entry.label}
+          </DropdownMenuLabel>
+          {entry.options.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value} onSelect={keepOpen}>
+              <IconGap />
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      );
+    }
+    if (entry.kind === "checkbox") {
+      return (
+        <DropdownMenuCheckboxItem
+          key={entry.id}
+          checked={entry.checked()}
+          onCheckedChange={(checked) => {
+            entry.onToggle(checked);
+            reread();
+          }}
+          onSelect={keepOpen}
+        >
+          <IconGap />
+          {entry.label}
+        </DropdownMenuCheckboxItem>
+      );
+    }
+    const Icon = entry.icon ? MODELER_ICONS[entry.icon] : undefined;
+    return (
+      <DropdownMenuItem
+        key={entry.id}
+        inset
+        aria-haspopup={entry.kind === "dialog" ? "dialog" : undefined}
+        onSelect={entry.kind === "dialog" ? openDialog(() => entry.onSelect()) : () => entry.onSelect()}
+      >
+        {Icon ? <Icon /> : <IconGap />}
+        {entry.label}
+        {entry.shortcut ? <DropdownMenuShortcut>{entry.shortcut}</DropdownMenuShortcut> : null}
+      </DropdownMenuItem>
+    );
+  });
+}
+
+/** an entry without an icon keeps the icon's room, so the labels line up */
+function IconGap() {
+  return <span className="size-4 shrink-0" aria-hidden="true" />;
 }
 
 function Divider() {

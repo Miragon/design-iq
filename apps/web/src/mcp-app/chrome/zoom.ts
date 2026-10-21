@@ -4,18 +4,30 @@
  * superseded remount — a viewer keeps zoom and fit). Shown only while the
  * view has a viewport (not the DMN table). Compact mode hides the readout
  * (layout-dom.ts applies Layout.showZoomPct); the fit button runs the
- * layout's forced re-fit, which resets "touched". Keyboard zoom (Ctrl/⌘ + /
- * − / 0) is diagram-js's own while the canvas has focus; touch undo/redo is
- * phase 2.
+ * layout's forced re-fit, which resets "touched". The readout and its limits
+ * are the modeler shell's (`zoomReadout`), so it reads and speaks like the
+ * Miragon modelers' own zoom panel. Keyboard zoom (Ctrl/⌘ + / − / 0) and ⇧1
+ * are chrome/keys.ts: the widget's own keymap in the Miragon widgets, whose
+ * buttons then name their keys (`keys`), the diagram-js keyboard on the
+ * focused canvas in bpmn and the DMN DRD view.
+ * Touch undo/redo is phase 2.
  */
-import { MAX_ZOOM, MIN_ZOOM } from "../engines/diagram-js.ts";
-import { zoomReadout } from "../engines/fit.ts";
+import {
+  ariaKeyShortcuts,
+  type ChromeKey,
+  defaultMessages,
+  formatPercent,
+  shortcutLabel,
+  zoomReadout,
+} from "@miragon/modeler-shell/core";
+
+import { ZOOM_STEP } from "../engines/fit.ts";
 import type { MountZoom } from "./contracts.ts";
 
-/** the −/+ step: multiplicative (engines/fit.ts steppedLevel) */
-const STEP = 0.2;
+/** the widget's one UI language (spec: UI copy is English), also for numbers */
+const LANG = "en";
 
-export const mountZoom: MountZoom = ({ els, fit }) => {
+export const mountZoom: MountZoom = ({ els, fit, keys }) => {
   let view: Parameters<ReturnType<MountZoom>["bind"]>[0];
   let off: (() => void) | undefined;
   let frame = 0;
@@ -26,16 +38,16 @@ export const mountZoom: MountZoom = ({ els, fit }) => {
     const on = view?.hasViewport() ?? false;
     els.zoom.hidden = !on;
     if (!on || !view) return;
-    const r = zoomReadout(view.level(), MIN_ZOOM, MAX_ZOOM);
+    const r = zoomReadout(view.level(), LANG, defaultMessages);
     if (r.text !== shown) {
       shown = r.text;
       els.zoomPct.textContent = r.text;
-      els.zoomPct.setAttribute("aria-label", r.label);
+      els.zoomPct.setAttribute("aria-label", r.ariaLabel);
     }
     // aria-disabled, not disabled: a button pressed up to the limit keeps the
     // keyboard focus (a disabled one drops it on <body>); zoomBy clamps anyway
-    els.zoomOut.setAttribute("aria-disabled", String(!r.canOut));
-    els.zoomIn.setAttribute("aria-disabled", String(!r.canIn));
+    els.zoomOut.setAttribute("aria-disabled", String(!r.canZoomOut));
+    els.zoomIn.setAttribute("aria-disabled", String(!r.canZoomIn));
   };
   // a pan or a wheel zoom fires a change per event — read once per frame
   const schedule = (): void => {
@@ -50,9 +62,25 @@ export const mountZoom: MountZoom = ({ els, fit }) => {
       act();
       if (e.detail > 0) view?.focus?.();
     };
-  els.zoomPct.title = "Reset zoom to 100%";
-  els.zoomOut.onclick = thenCanvas(() => view?.zoomBy(-STEP));
-  els.zoomIn.onclick = thenCanvas(() => view?.zoomBy(STEP));
+  els.zoomPct.title = defaultMessages.zoomToActual(formatPercent(1, LANG));
+  // where the widget binds the zoom keys, each button names its key in the
+  // tooltip and to assistive tech (guide §5.6, §5.8), in the shell's words
+  if (keys) {
+    const named: Array<[HTMLElement, ChromeKey, string]> = [
+      [els.zoomOut, "zoomOut", defaultMessages.zoomOut],
+      [els.zoomPct, "zoomToActual", els.zoomPct.title],
+      [els.zoomIn, "zoomIn", defaultMessages.zoomIn],
+      [els.zoomFit, "fit", defaultMessages.fit],
+    ];
+    for (const [button, key, name] of named) {
+      button.title = `${name} (${shortcutLabel(key, keys.platform, defaultMessages.keyNames)})`;
+      button.setAttribute("aria-keyshortcuts", ariaKeyShortcuts(key, keys.platform));
+      // the readout's name says where it stands ("Zoom to 100% (now 56%)")
+      if (button !== els.zoomPct) button.setAttribute("aria-label", name);
+    }
+  }
+  els.zoomOut.onclick = thenCanvas(() => view?.zoomBy(-ZOOM_STEP));
+  els.zoomIn.onclick = thenCanvas(() => view?.zoomBy(ZOOM_STEP));
   els.zoomPct.onclick = thenCanvas(() => view?.zoomTo(1));
   els.zoomFit.onclick = thenCanvas(fit);
 

@@ -10,10 +10,10 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { newCmJson, newOwmText, newStormText, newTtJson } from "@designiq/notations/templates";
+import { fitViewbox } from "@miragon/modeler-shell/core";
 import * as Y from "yjs";
 
 import type { PresenceSurface, RemotePresence } from "../src/lib/presence-canvas.ts";
-import { fitViewbox } from "../src/mcp-app/engines/fit.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
 import type { LoadedMiragonRenderer, MiragonModeler, MiragonRendererSpec } from "../src/notations/miragon/spec.ts";
@@ -417,10 +417,11 @@ test("Wardley in the widget: the chrome fits the plot with its axes into the fre
     const content = diagram.get("panConstraint").contentBounds();
     assert.deepEqual(content, renderer.contentBounds!(engine.modeler), "the spec's content bounds");
     const { x, y, scale } = diagram.get("canvas").viewbox();
-    const fitted = fitViewbox(content, { width: 1000, height: 640 }, insets, 1);
+    const fitted = fitViewbox(content, { width: 1000, height: 640 }, insets);
+    assert.ok(fitted);
     const mount = readonly ? "viewer" : "editor";
     // diagram-js keeps the zoom to three decimals
-    assert.ok(Math.abs(scale - 1000 / fitted.width) < 0.001, `${mount}: the widget's zoom`);
+    assert.ok(Math.abs(scale - fitted.scale) < 0.001, `${mount}: the widget's zoom`);
     assert.ok(Math.abs(x - fitted.x) < 0.5 && Math.abs(y - fitted.y) < 0.5, `${mount}: the widget's position`);
     // on screen, the plot and its axes sit in what the chrome leaves free
     const left = (content.x - x) * scale;
@@ -956,17 +957,10 @@ test("Context Maps and Team Topologies: two peers' first edits at once, on a fil
   }
 });
 
-test("Context Maps: every mount shows the legend card, which the 0.3.0 Modeler leaves to its host", async () => {
+test("Context Maps: no mount draws the renderer's legend card; the spec draws the legend into a host's panel", async () => {
   const [spec, renderer] = await load("context-map");
+  assert.equal(spec.hasLegend, true, "both hosts offer the Legend toggle before the engine loads");
   const text = newCmJson("map", "Conference Planner");
-
-  const { createCollaborativeModeler } = await import("@miragon/context-maps-renderer");
-  const bareHost = host("cm-canvas");
-  const bare = createCollaborativeModeler();
-  bare.attachTo(bareHost);
-  await bare.importText(text);
-  assert.equal(bareHost.querySelector(".cm-legend"), null, "the renderer alone draws none");
-  bare.destroy();
 
   const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
   const spa = host("cm-canvas");
@@ -979,14 +973,39 @@ test("Context Maps: every mount shows the legend card, which the 0.3.0 Modeler l
     onImportFailed: assert.fail,
   } as unknown as EditorContext);
   await wait(50);
-  assert.ok(spa.querySelector(".cm-legend"), "the SPA editor");
+  assert.equal(spa.querySelector(".cm-legend, .cm-legend-toggle"), null, "the SPA editor: no card over the diagram");
   editor.destroy();
-
   for (const readonly of [false, true]) {
     const widget = host("cm-canvas");
     const engine = mountMiragonEngine(spec, renderer, widget, readonly);
     await engine.importText(text);
-    assert.ok(widget.querySelector(".cm-legend"), readonly ? "the widget viewer" : "the widget editor");
+    assert.equal(widget.querySelector(".cm-legend, .cm-legend-toggle"), null, readonly ? "the viewer" : "the editor");
     engine.destroy();
   }
+
+  // the panel's body: three named groups of rows, a rule between them, and
+  // each row's meaning as a tooltip and in its text for a screen reader
+  const body = host();
+  const untip = renderer.legend!(body);
+  const groups = [...body.querySelectorAll('[role="group"]')];
+  assert.deepEqual(
+    groups.map((g) => g.getAttribute("aria-label")),
+    ["Subdomain types", "Integration roles", "Relationship patterns"],
+  );
+  assert.equal(body.querySelectorAll('[role="separator"]').length, 2);
+  const rows = [...body.querySelectorAll<HTMLElement>(".cd-shell-legend-row")];
+  assert.ok(rows.length >= 10, `${rows.length} rows`);
+  for (const row of rows) {
+    const meaning = row.querySelector(".sr-only")?.textContent ?? "";
+    assert.match(meaning, /^: \S/, `${row.textContent}: the meaning is part of the row's text`);
+    assert.equal(row.title, meaning.slice(2), "and its tooltip");
+    assert.ok(row.querySelector(".cd-shell-legend-preview svg"), "a preview as on the canvas");
+  }
+  assert.ok(rows.some((row) => row.textContent?.includes("OHS · Open Host Service: ")));
+  untip();
+  assert.ok(
+    rows.every((row) => !row.title && !row.querySelector(".sr-only")),
+    "taken off again",
+  );
+  body.remove();
 });

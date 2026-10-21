@@ -90,8 +90,8 @@ updates:
         applies-to: version-updates
         patterns: ["@miragon/value-chain-*"]
       # the contract the renderers implement (@miragon/modeler-api), which
-      # apps/web and live-client take directly (#136), and the shell around
-      # them once apps/web takes it (#265)
+      # apps/web and live-client take directly (#136), and the shell whose
+      # view math and keymap apps/web takes (@miragon/modeler-shell, #265)
       miragon-modeler:
         applies-to: version-updates
         patterns: ["@miragon/modeler-*"]

@@ -23,7 +23,8 @@
  *  - every change is an onChange: the shell re-measures the layout (an open
  *    card's right inset re-fits an untouched diagram) and refreshes the menu
  */
-import { TEXT_FIELD } from "../core/keymap.ts";
+import { TEXT_FIELD_SELECTOR } from "@miragon/modeler-shell/core";
+
 import { icon } from "../icons.ts";
 import type { MountPanels, PanelBadge, PanelHandle, PanelSpec } from "./contracts.ts";
 /** the scroll container(s) a collapse remembers — one per panel (chrome.css) */
@@ -154,7 +155,7 @@ export const mountPanels: MountPanels = (deps) => {
     toggle.onclick = () => handle.toggle();
     panel.addEventListener("keydown", (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.isComposing) return;
-      if (!(e.target as Element | null)?.closest?.(TEXT_FIELD)) return; // the document's Escape layering
+      if (!(e.target as Element | null)?.closest?.(TEXT_FIELD_SELECTOR)) return; // the document's Escape layering
       if (!spec.escape?.()) hide(true);
       e.preventDefault();
       e.stopPropagation();

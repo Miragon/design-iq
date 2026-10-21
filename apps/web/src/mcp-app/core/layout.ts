@@ -153,6 +153,8 @@ export interface Layout {
   lane: { left: number; width: number; max: number; room: number };
   /** top of everything under the corner row: the left palette, panels, the Miragon tier-2 palette */
   underRow: number;
+  /** a panel's top: under the row, or under a tier-2 palette it would cover */
+  panelTop: number;
   /** bottom of the lane (toasts, decision cards) and of the panels */
   laneBottom: number;
   /** the zoom group's right offset (beside the bpmn.io watermark, or the inset) */
@@ -267,11 +269,14 @@ export function computeLayout(input: LayoutInput): Layout {
   const cardOpen = input.panelOpen && panel.mode === "card";
   const sheetOpen = input.panelOpen && panel.mode === "sheet";
   const underRow = inset.top + CORNER_H + 8;
+  // a panel at the right would cover the end of a palette centred in the
+  // second row (the context map's Legend at 720): it starts under it instead
+  const panelTop = paletteMode === "tier2" ? underRow + input.palette.h + 8 : underRow;
   const laneBottom = inset.bottom + BOTTOM_H + 12;
   const laneColumn = cardOpen ? besideCard : avail;
   const laneWidth = Math.min(LANE_W, laneColumn);
   // from the bottom row up to the corner row — over a sheet, up to its head
-  const laneMax = Math.max(0, H - laneBottom - underRow - (sheetOpen ? SHEET_HEAD + LANE_GAP : 0));
+  const laneMax = Math.max(0, H - laneBottom - (sheetOpen ? panelTop + SHEET_HEAD + LANE_GAP : underRow));
   const lane = {
     left: inset.left + (laneColumn - laneWidth) / 2,
     width: laneWidth,
@@ -300,6 +305,7 @@ export function computeLayout(input: LayoutInput): Layout {
     panel,
     lane,
     underRow,
+    panelTop,
     laneBottom,
     zoomRight: kind === "miragon" ? inset.right : WATERMARK_RIGHT + (safe.right ?? 0),
     fitInsets,

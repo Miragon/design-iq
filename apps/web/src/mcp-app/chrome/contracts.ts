@@ -14,7 +14,7 @@
  *   chrome/state-card.ts  MountStateCards  the centred dead ends (§5.3)
  *   chrome/zoom.ts        MountZoom        the zoom group, bound to engine.view
  *   chrome/panel.ts       MountPanels      the Todos / Checks card shell (sheet when compact)
- *   chrome/keys.ts        MountKeys        ⌘S, ⇧1, Escape layering
+ *   chrome/keys.ts        MountKeys        ⌘S, ⇧1, the Miragon zoom keys, Escape layering
  *
  * Plus chrome/mode-chip.ts (the Workshop chip-switch), chrome/view-switch.ts
  * (the DMN DRD | Table switch), chrome/focus.ts (the focus hand-back around a
@@ -25,8 +25,10 @@
  * classes and data attributes, never inline colours (the one exception: a
  * peer avatar's presence colour, through safePresenceColor).
  */
+import type { Platform } from "@miragon/modeler-shell/core";
 import type { App } from "@modelcontextprotocol/ext-apps";
 
+import type { ChromeKeyDeps } from "../../lib/chrome-keys.ts";
 import type { DecisionViews, Insets, ViewControls } from "../core/engine.ts";
 import type { PanelBadge, StateCardKind } from "../core/feedback.ts";
 import type { HostState } from "../core/host-context.ts";
@@ -41,7 +43,7 @@ import type {
   SyncState,
   ToastSpec,
 } from "../core/lifecycle.ts";
-import type { MenuContext, MenuItemId } from "../core/menu-model.ts";
+import type { MenuContext, MenuItemId, ModelerMenu } from "../core/menu-model.ts";
 import type { PopoverActionId, PopoverContext } from "../core/sync-view.ts";
 import type { IconName } from "../icons.ts";
 
@@ -130,6 +132,7 @@ export type MountHost = (app: App, deps: { teardown(): Promise<void> }) => HostC
  *   #tl[data-step], #tr[data-step]   0…9
  *   #zoom-pct[hidden]        the readout hides when compact (Layout.showZoomPct)
  *   on #app (px): --inset-t / --inset-r / --inset-b / --inset-l, --under-row,
+ *   --panel-top (under a tier-2 palette while one shows),
  *   --lane-bottom, --lane-left / --lane-w (the lane's place: centred, or
  *   beside an open card), --lane-max (its height: never up to the corner
  *   row nor an open sheet's head), --panel-w, --zoom-right, --table-right,
@@ -321,12 +324,15 @@ export type MountZoom = (deps: {
   els: Pick<ChromeElements, "zoom" | "zoomOut" | "zoomPct" | "zoomIn" | "zoomFit">;
   /** the Fit button: layout.refit(true) */
   fit(): void;
+  /** the Miragon widgets, whose zoom keys the chrome binds (KeyDeps.chromeKeys):
+   *  the buttons name their keys for this keyboard */
+  keys?: { platform: Platform };
 }) => ZoomChrome;
 
 // ── chrome/panel.ts ─────────────────────────────────────────────────────────
 
 export interface PanelSpec {
-  id: "todos" | "checks";
+  id: "todos" | "checks" | "legend";
   /** the aside (#todos / #checks) */
   panel: HTMLElement;
   /** the TR toggle (#todo-toggle / #checks-toggle) — starts hidden */
@@ -382,8 +388,12 @@ export type MountPanels = (deps: {
 export interface KeyDeps {
   /** ⌘S / Ctrl+S — false = not handled (read-only: the browser default) */
   save(): boolean;
-  /** ⇧1 */
+  /** ⇧1 where `chromeKeys` is absent */
   fit(): boolean;
+  /** the Miragon widgets: Cmd/Ctrl + `+` / `-` / `0` and ⇧1 by the shell's
+   *  keymap (core/keymap.ts chromeKeyAction): their renderers bind no zoom
+   *  keys, bpmn-js and dmn-js do */
+  chromeKeys?: ChromeKeyDeps;
   /** topmost first: menu → popover → compact palette → panel (its form first);
    *  never a decision card */
   escape: Array<() => boolean>;
@@ -436,6 +446,8 @@ export interface ChromeActions {
   };
   /** engine.displayName() */
   displayName(): string | undefined;
+  /** engine.menu: a Miragon renderer's own Model, Export and Help entries */
+  modelerMenu(): ModelerMenu | undefined;
 }
 
 export interface ChromeOptions {

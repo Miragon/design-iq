@@ -8,6 +8,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { fitViewbox } from "@miragon/modeler-shell/core";
+
 import {
   CARD_GAP,
   computeLayout,
@@ -64,7 +66,15 @@ const MEASURED = {
     tr: [198, 198, 125, 125, 125, 80, 80, 80, 36, 36],
     name: 87,
   },
+  /** the context map: its Legend toggle leads the TR cluster (step 4 drops its label) */
+  contextMap: {
+    tl: [169, 122, 122, 122, 122, 122, 122, 122, 122, 36],
+    tr: [300, 300, 227, 227, 169, 124, 124, 124, 80, 80],
+    name: 70,
+  },
 };
+/** the Context Maps palette (one row) */
+const CM_PALETTE = { w: 161, h: 40 };
 /** the bpmn-js palette in its left column (two columns), the storm palette (one row) */
 const BPMN_PALETTE = { w: 94, h: 300 };
 const STORM_PALETTE = { w: 509, h: 51 };
@@ -494,6 +504,54 @@ test("fit insets: the corner row, the left palette, an open card and the bottom 
     panelOpen: true,
   });
   assert.equal(table.tableRight, 320 + 12 + 12);
+});
+
+test("the context map's Legend panel is a card the fit leaves room for at 1000×640 and 720×520: no diagram ends under it", () => {
+  const contextMap = (W: number, H: number, panelOpen: boolean) =>
+    computeLayout({
+      W,
+      H,
+      displayMode: "inline",
+      kind: "miragon",
+      steps: MEASURED.contextMap,
+      nameWidth: MEASURED.contextMap.name,
+      palette: CM_PALETTE,
+      panelOpen,
+    });
+  for (const [W, H, width] of [
+    [1000, 640, 360],
+    [720, 520, 320],
+  ] as const) {
+    const l = contextMap(W, H, true);
+    assert.deepEqual(l.panel, { mode: "card", width }, `${W}×${H}`);
+    // at 720 the palette drops to the second row: the card starts under it, never over its end
+    assert.equal(l.panelTop, l.paletteMode === "tier2" ? l.underRow + CM_PALETTE.h + 8 : l.underRow);
+    assert.equal(l.paletteMode, W === 720 ? "tier2" : "tier1");
+    assert.equal(l.fitInsets.right, width + 12 + CARD_GAP);
+    const cardLeft = W - 12 - width;
+    for (const bbox of [
+      { x: 0, y: 0, width: 2400, height: 300 },
+      { x: -80, y: 40, width: 300, height: 2400 },
+      { x: 10, y: 10, width: 120, height: 80 },
+    ]) {
+      const vb = fitViewbox(bbox, { width: W, height: H }, l.fitInsets);
+      assert.ok(vb);
+      const right = (bbox.x + bbox.width - vb.x) * vb.scale;
+      const bottom = (bbox.y + bbox.height - vb.y) * vb.scale;
+      assert.ok(
+        right <= cardLeft - CARD_GAP + 1e-6,
+        `${W}×${H}: the diagram ends ${cardLeft - right}px left of the card`,
+      );
+      assert.ok(bottom <= H - l.fitInsets.bottom + 1e-6, "and above the bottom row");
+    }
+    assert.equal(contextMap(W, H, false).fitInsets.right, 16, "closed, the diagram takes the frame back");
+  }
+  // 640 wide a card would leave the lane too little: a sheet, under the second-row palette,
+  // and the lane still never reaches its head
+  const sheet = contextMap(640, 500, true);
+  assert.deepEqual([sheet.panel.mode, sheet.paletteMode], ["sheet", "tier2"]);
+  assert.equal(sheet.panelTop, sheet.underRow + CM_PALETTE.h + 8);
+  assert.equal(sheet.lane.max, 500 - sheet.laneBottom - sheet.panelTop - SHEET_HEAD - LANE_GAP);
 });
 
 test("insets: 12 inline / 16 fullscreen, plus the host's safe area per side; the zoom group docks beside the watermark", () => {

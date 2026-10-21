@@ -666,6 +666,27 @@ textarea {
   cursor: default;
 }
 
+/* a renderer's entry without an icon keeps the icon column, so the labels
+   line up (guide §5.4) */
+.mi .icon-gap {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* an unchecked checkbox keeps its check's width */
+.mi .icon.tick.off {
+  visibility: hidden;
+}
+
+/* the heading over a radio group (guide §5.4: 13px/600, muted, no capitals) */
+.mi-heading {
+  padding: 8px 8px 4px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* the trailing key hint, count, verdict, switch or check */
 .mi .end {
   display: inline-flex;
@@ -817,12 +838,12 @@ textarea {
 .panel {
   position: absolute;
   z-index: 30;
-  top: var(--under-row);
+  top: var(--panel-top, var(--under-row));
   right: var(--inset-r);
   display: flex;
   flex-direction: column;
   width: var(--panel-w);
-  max-height: calc(100% - var(--under-row) - var(--lane-bottom));
+  max-height: calc(100% - var(--panel-top, var(--under-row)) - var(--lane-bottom));
   /* never scrolled itself, not even by a focus: the head stays — what does
      not fit scrolls in .panel-scroll (clip; hidden where clip is unknown) */
   overflow: hidden;

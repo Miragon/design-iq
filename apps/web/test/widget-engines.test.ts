@@ -4,29 +4,32 @@
  * laws: which factory a mount takes and with what, the contract check, the
  * change event as the widget's dirty signal, the selection from the element
  * surface, and the live binding through the real live-client adapter. Plus
- * the fit and zoom math every diagram engine shares (src/mcp-app/engines/fit.ts)
- * and the import fit with the chrome's insets (engines/diagram-js.ts
- * diagramView).
+ * the fit and zoom math every diagram engine shares (the modeler shell's
+ * view math, designIQ's zoom step in src/mcp-app/engines/fit.ts) and the
+ * import fit with the chrome's insets (engines/diagram-js.ts diagramView).
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { MODELER_API_VERSION } from "@miragon/modeler-api";
+import {
+  defaultMessages,
+  easeStandard,
+  FIT_ANIMATION_MS,
+  fitViewbox,
+  formatPercent,
+  interpolateViewbox,
+  sameView,
+  VIEW_TOLERANCE,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  zoomReadout,
+} from "@miragon/modeler-shell/core";
 import * as Y from "yjs";
 
 import type { Insets } from "../src/mcp-app/core/engine.ts";
 import { diagramView } from "../src/mcp-app/engines/diagram-js.ts";
-import {
-  type Box,
-  cubicBezier,
-  fitViewbox,
-  isUntouched,
-  parseCubicBezier,
-  scaleOf,
-  steppedLevel,
-  zoomAround,
-  zoomPercent,
-} from "../src/mcp-app/engines/fit.ts";
+import { type Box, scaleOf, steppedLevel, zoomAround } from "../src/mcp-app/engines/fit.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import type {
   LoadedMiragonRenderer,
@@ -255,7 +258,10 @@ test("bindLive hands the modeler to live-client's miragon-sync: the Y.Text impor
   unbindRefused();
 });
 
-// ── fit and zoom (engines/fit.ts) ───────────────────────────────────────────
+// ── fit and zoom: the shell's view math (@miragon/modeler-shell/core) and
+// designIQ's own step (engines/fit.ts). The cases are the ones engines/fit.ts
+// held its own fitViewbox, isUntouched, easing and readout to; each now holds
+// the shell's function to the same numbers ───────────────────────────────────
 
 /** where a diagram box lands on screen under a viewbox (px, frame-relative) */
 function onScreen(box: Box, viewbox: Box, outer: { width: number; height: number }) {
@@ -269,13 +275,20 @@ function onScreen(box: Box, viewbox: Box, outer: { width: number; height: number
   };
 }
 const close = (a: number, b: number, eps = 1e-6): void => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
+/** the shell's fit as the box diagramView writes to the canvas */
+function fitted(bbox: Box, outer: { width: number; height: number }, insets: Insets): Box {
+  const target = fitViewbox(bbox, outer, insets);
+  assert.ok(target, "a fit");
+  const { x, y, width, height } = target;
+  return { x, y, width, height };
+}
 
 test("fitViewbox: the content lands inside the insets, centred in the inner rect, width-limited at 720x520", () => {
   const outer = { width: 720, height: 520 };
   // the 720 bpmn inline frame: corner row, left palette column, bottom row
   const insets: Insets = { top: 60, right: 16, bottom: 56, left: 122 };
   const bbox = { x: 150, y: 80, width: 1000, height: 500 };
-  const vb = fitViewbox(bbox, outer, insets);
+  const vb = fitted(bbox, outer, insets);
   const s = onScreen(bbox, vb, outer);
   close(s.scale, 0.582); // (720 − 138) / 1000 — narrower than (520 − 116) / 500
   close(s.left, 122);
@@ -283,38 +296,91 @@ test("fitViewbox: the content lands inside the insets, centred in the inner rect
   // height-centred in the 404px inner rect
   close(s.top - 60, 520 - 56 - s.bottom);
   assert.equal(vb.width, outer.width / s.scale, "the viewbox spans the WHOLE frame");
+  // the numbers designIQ's own fitViewbox gave for this frame
+  close(vb.x, 150 - 122 / 0.582, 1e-9);
+  close(vb.y, 80 - (60 + (404 - 500 * 0.582) / 2) / 0.582, 1e-9);
 });
 
 test("fitViewbox: never above 100 % — small content is centred at scale 1", () => {
   const outer = { width: 1280, height: 760 };
   const insets: Insets = { top: 64, right: 388, bottom: 60, left: 16 }; // a 360 card open
   const bbox = { x: -40, y: 10, width: 200, height: 100 };
-  const vb = fitViewbox(bbox, outer, insets, 1);
+  const vb = fitted(bbox, outer, insets);
   const s = onScreen(bbox, vb, outer);
   close(s.scale, 1);
   close(s.left - 16, 1280 - 388 - s.right);
   close(s.top - 64, 760 - 60 - s.bottom);
 });
 
-test("fitViewbox: an empty diagram centres its origin at maxScale; a degenerate frame never yields NaN", () => {
-  const outer = { width: 480, height: 480 };
-  const insets: Insets = { top: 60, right: 16, bottom: 56, left: 16 };
-  const vb = fitViewbox({ x: 0, y: 0, width: 0, height: 0 }, outer, insets);
-  const s = onScreen({ x: 0, y: 0, width: 0, height: 0 }, vb, outer);
-  close(s.scale, 1);
-  close(s.left, 16 + (480 - 32) / 2);
-  const tiny = fitViewbox({ x: 0, y: 0, width: 100, height: 100 }, { width: 50, height: 40 }, insets);
-  for (const v of Object.values(tiny)) assert.ok(Number.isFinite(v), "finite");
+test("fitViewbox: identical to designIQ's own fit for every frame whose insets leave room", () => {
+  // designIQ's former math: the inner rect, the smaller ratio, capped at 1, centred
+  const own = (bbox: Box, outer: { width: number; height: number }, insets: Insets): Box => {
+    const innerW = outer.width - insets.left - insets.right;
+    const innerH = outer.height - insets.top - insets.bottom;
+    const scale = Math.min(
+      bbox.width > 0 ? innerW / bbox.width : Infinity,
+      bbox.height > 0 ? innerH / bbox.height : Infinity,
+      1,
+    );
+    return {
+      x: bbox.x - (insets.left + (innerW - bbox.width * scale) / 2) / scale,
+      y: bbox.y - (insets.top + (innerH - bbox.height * scale) / 2) / scale,
+      width: outer.width / scale,
+      height: outer.height / scale,
+    };
+  };
+  let seed = 7;
+  const random = (): number => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 2000; i++) {
+    const outer = { width: 300 + random() * 1500, height: 200 + random() * 1000 };
+    const insets: Insets = { top: random() * 150, right: random() * 400, bottom: random() * 100, left: random() * 150 };
+    if (outer.width - insets.left - insets.right < 1 || outer.height - insets.top - insets.bottom < 1) continue;
+    const bbox = {
+      x: random() * 2000 - 1000,
+      y: random() * 2000 - 1000,
+      width: i % 40 === 0 ? 0 : 1 + random() * 4000,
+      height: i % 40 === 20 ? 0 : 1 + random() * 3000,
+    };
+    const shell = fitted(bbox, outer, insets);
+    const mine = own(bbox, outer, insets);
+    for (const key of ["x", "y", "width", "height"] as const) {
+      close(shell[key], mine[key], 1e-9 * Math.max(1, Math.abs(mine[key])));
+    }
+  }
 });
 
-test("isUntouched: the last fit within rounding is untouched; a scroll or zoom is a touch; no fit yet = touched", () => {
-  const fit = { x: -210.5, y: -103.2, width: 1237.1, height: 893.5 };
-  assert.equal(isUntouched(fit, fit), true);
-  // diagram-js rounds the transform to 1/1000 — never a touch
-  assert.equal(isUntouched({ ...fit, x: fit.x + 0.4, width: fit.width * (1 + 5e-4) }, fit), true);
-  assert.equal(isUntouched({ ...fit, x: fit.x + 30 }, fit), false, "a scroll");
-  assert.equal(isUntouched({ ...fit, width: fit.width * 0.8, height: fit.height * 0.8 }, fit), false, "a zoom");
-  assert.equal(isUntouched(fit, undefined), false);
+test("fitViewbox: nothing to fit is no fit, and a frame lower or narrower than its chrome centres in the whole frame", () => {
+  const insets: Insets = { top: 60, right: 16, bottom: 56, left: 16 };
+  // designIQ's fit centred an empty diagram's origin at 100 %; diagramView
+  // never asked it to (an empty canvas has nothing to fit), and the shell says so
+  assert.equal(fitViewbox({ x: 0, y: 0, width: 0, height: 0 }, { width: 480, height: 480 }, insets), undefined);
+  assert.equal(fitViewbox({ x: 0, y: 0, width: 100, height: 100 }, { width: 0, height: 0 }, insets), undefined);
+  // 50×40 under 32px of sides and 116px of rows: designIQ's fit squeezed the
+  // content into 1px of it (0.01); the shell fits it into the whole frame
+  const tiny = fitted({ x: 0, y: 0, width: 100, height: 100 }, { width: 50, height: 40 }, insets);
+  for (const v of Object.values(tiny)) assert.ok(Number.isFinite(v), "finite");
+  close(scaleOf(tiny, { width: 50, height: 40 }), 0.18);
+});
+
+test("sameView: the last fit as diagram-js reads it back is untouched; a scroll or a zoom is a touch", () => {
+  const outer = { width: 720, height: 520 };
+  const fit = fitViewbox({ x: 40, y: 20, width: 1400, height: 600 }, outer, {
+    top: 104,
+    right: 16,
+    bottom: 56,
+    left: 16,
+  });
+  assert.ok(fit);
+  assert.equal(sameView(fit, fit), true);
+  // diagram-js keeps the scale and the translation (px) to three decimals
+  const round = (n: number): number => Math.round(n * 1000) / 1000;
+  const scale = round(fit.scale);
+  const readBack = { x: round(fit.x * fit.scale) / scale, y: round(fit.y * fit.scale) / scale, scale };
+  assert.notEqual(readBack.x, fit.x, "the read-back differs from what was written");
+  assert.equal(sameView(readBack, fit), true, "never a touch");
+  assert.equal(sameView({ ...fit, x: fit.x + 30 / fit.scale }, fit), false, "a 30px scroll");
+  assert.equal(sameView({ ...fit, scale: fit.scale * 0.8 }, fit), false, "a zoom");
+  assert.equal(VIEW_TOLERANCE, 1e-3);
 });
 
 test("zoomAround: the diagram point under the screen point stays put, the level is exact", () => {
@@ -328,22 +394,50 @@ test("zoomAround: the diagram point under the screen point stays put, the level 
   close(next.y + centre.y / 1, before.y);
 });
 
-test("steppedLevel: in and out are symmetric and clamped; the readout rounds", () => {
-  close(steppedLevel(steppedLevel(0.56, 0.2), -0.2), 0.56);
-  assert.ok(steppedLevel(0.56, 0.2) > 0.56);
-  assert.equal(steppedLevel(0.21, -1), 0.2, "clamped at the minimum");
-  assert.equal(steppedLevel(3.9, 1), 4, "clamped at the maximum");
-  assert.equal(zoomPercent(0.5649), "56%");
+test("steppedLevel: in and out are symmetric and clamped to the shell's 20 … 400 %", () => {
+  close(steppedLevel(steppedLevel(0.56, 0.2, ZOOM_MIN, ZOOM_MAX), -0.2, ZOOM_MIN, ZOOM_MAX), 0.56);
+  assert.ok(steppedLevel(0.56, 0.2, ZOOM_MIN, ZOOM_MAX) > 0.56);
+  assert.equal(steppedLevel(0.21, -1, ZOOM_MIN, ZOOM_MAX), 0.2, "clamped at the minimum");
+  assert.equal(steppedLevel(3.9, 1, ZOOM_MIN, ZOOM_MAX), 4, "clamped at the maximum");
+  assert.deepEqual([ZOOM_MIN, ZOOM_MAX, FIT_ANIMATION_MS], [0.2, 4, 250], "designIQ's own limits and re-fit time");
 });
 
-test("the re-fit easing: --cd-ease parsed, endpoints exact, a linear curve is the identity, garbage falls back", () => {
-  const ease = parseCubicBezier("cubic-bezier(0.4, 0, 0.2, 1)");
-  assert.equal(ease(0), 0);
-  assert.equal(ease(1), 1);
-  assert.ok(ease(0.5) > 0.5, "ease-out heavy in the middle");
-  const linear = cubicBezier(0, 0, 1, 1);
-  for (const t of [0.1, 0.33, 0.5, 0.9]) close(linear(t), t, 1e-4);
-  close(parseCubicBezier(undefined)(0.5), ease(0.5), 1e-9);
+test("the re-fit easing: --cd-ease, cubic-bezier(0.4, 0, 0.2, 1), endpoints exact, as designIQ's own curve gave it", () => {
+  assert.equal(easeStandard(0), 0);
+  assert.equal(easeStandard(1), 1);
+  assert.ok(easeStandard(0.5) > 0.5, "ease-out heavy in the middle");
+  // the values designIQ's parsed --cd-ease produced
+  const own: Array<[number, number]> = [
+    [0.1, 0.025863014434934748],
+    [0.25, 0.23658736043451856],
+    [0.5, 0.7755613130222939],
+    [0.75, 0.9593677367412116],
+    [0.9, 0.9943539289465293],
+  ];
+  for (const [t, value] of own) close(easeStandard(t), value, 1e-5);
+});
+
+test("the re-fit frames: the ends are the two views, the scale moves in log space", () => {
+  const from = { x: 0, y: 0, width: 720, height: 520, scale: 1 };
+  const to = { x: 100, y: 50, width: 1800, height: 1300, scale: 0.4 };
+  assert.deepEqual(interpolateViewbox(from, to, 0), from);
+  assert.deepEqual(interpolateViewbox(from, to, 1), to);
+  // designIQ's frames moved the box linearly (scale 0.571 halfway); the
+  // shell's zoom at a constant pace on screen
+  close(interpolateViewbox(from, to, 0.5).scale, Math.sqrt(0.4));
+});
+
+test("the zoom readout: the percentage, its accessible name in the shell's words, dead buttons at the limits", () => {
+  assert.deepEqual(zoomReadout(0.564, "en", defaultMessages), {
+    text: "56%",
+    ariaLabel: "Zoom to 100% (now 56%)",
+    canZoomOut: true,
+    canZoomIn: true,
+  });
+  assert.equal(zoomReadout(0.2, "en", defaultMessages).canZoomOut, false);
+  assert.equal(zoomReadout(4, "en", defaultMessages).canZoomIn, false);
+  assert.equal(zoomReadout(3.99, "en", defaultMessages).canZoomIn, true);
+  assert.equal(formatPercent(0.5649, "en"), "56%");
 });
 
 // ── the import fit with insets (engines/diagram-js.ts diagramView) ──────────
@@ -354,7 +448,7 @@ test("importText fits with the chrome's insets until the user moves the view; fi
   const r = fakeRenderer({ inner });
   const engine = mountMiragonEngine(SPEC, r.renderer, container, false, { insets: () => insets });
   await engine.importText("board");
-  assert.deepEqual(r.canvas.writes.at(-1), fitViewbox(inner, r.outer, insets), "the fit leaves room for the chrome");
+  assert.deepEqual(r.canvas.writes.at(-1), fitted(inner, r.outer, insets), "the fit leaves room for the chrome");
   assert.equal(engine.view.isTouched(), false);
 
   // a scroll the fit did not cause marks the view touched — the next import keeps it
@@ -369,7 +463,7 @@ test("importText fits with the chrome's insets until the user moves the view; fi
   // the Fit button: always, and untouched again
   engine.view.fit(insets, false);
   assert.equal(engine.view.isTouched(), false);
-  assert.deepEqual(r.canvas.writes.at(-1), fitViewbox(inner, r.outer, insets));
+  assert.deepEqual(r.canvas.writes.at(-1), fitted(inner, r.outer, insets));
 
   // the zoom group: around the centre, a touch
   engine.view.zoomTo(1);
@@ -384,8 +478,8 @@ test("a live re-import's own viewbox writes are never a touch: the renderer's fi
   const r = fakeRenderer({ inner, fitted: { ...inner } });
   const engine = mountMiragonEngine(SPEC, r.renderer, container, false, { insets: () => insets });
   await engine.importText("board");
-  const fitted = fitViewbox(inner, r.outer, insets);
-  assert.deepEqual(r.canvas.writes.at(-1), fitted);
+  const fit = fitted(inner, r.outer, insets);
+  assert.deepEqual(r.canvas.writes.at(-1), fit);
 
   const doc = new Y.Doc();
   const ytext = doc.getText("content");
@@ -400,10 +494,10 @@ test("a live re-import's own viewbox writes are never a touch: the renderer's fi
   await tick(400);
   assert.deepEqual(r.state.imported.at(-1), "board, remote");
   assert.equal(engine.view.isTouched(), false, "nothing the import wrote counts as the user's move");
-  assert.deepEqual(r.canvas.writes.at(-1), fitted, "the chrome's fit comes last");
+  assert.deepEqual(r.canvas.writes.at(-1), fit, "the chrome's fit comes last");
 
   // after the import window a move is the user's again, and a peer's next edit keeps it
-  r.canvas.viewbox({ ...fitted, x: fitted.x + 50 });
+  r.canvas.viewbox({ ...fit, x: fit.x + 50 });
   assert.equal(engine.view.isTouched(), true);
   const moved = r.canvas.viewbox() as Box;
   doc.transact(() => ytext.insert(ytext.length, ", again"));
@@ -454,13 +548,54 @@ test("fit and zoom read the viewbox FRESH: a frame resize leaves diagram-js' cac
   );
   const insets: Insets = { top: 60, right: 16, bottom: 56, left: 122 };
   view.fit(insets, false);
-  assert.deepEqual(current, fitViewbox(inner, outer, insets));
+  assert.deepEqual(current, fitted(inner, outer, insets));
   canvas.viewbox(); // the cache holds the inline frame
   outer = { width: 1280, height: 760 }; // the host went fullscreen — nobody wrote the viewbox
   view.fit(insets, false);
-  assert.deepEqual(current, fitViewbox(inner, outer, insets), "fitted into the new frame, not the cached one");
+  assert.deepEqual(current, fitted(inner, outer, insets), "fitted into the new frame, not the cached one");
   assert.equal(view.isTouched(), false);
   view.zoomTo(1);
   assert.deepEqual(current, { x: current.x, y: current.y, width: 1280, height: 760 }, "100 % of the new frame");
+  view.destroy();
+});
+
+test("zoomBy never turns a step around: a fit below 20 % keeps its level on a step out, a step in goes to 20 %; 400 % keeps it on a step in", () => {
+  // a board of two events 12000 units apart fits at about 8 % into the 1000x640 frame
+  const inner = { x: 0, y: 0, width: 12_000, height: 400 };
+  const outer = { width: 1000, height: 640 };
+  let current: Box = { x: 0, y: 0, width: 1000, height: 640 };
+  const handlers = new Map<string, Set<() => void>>();
+  const canvas = {
+    viewbox(box?: Box | false) {
+      if (box === undefined || box === false) return { ...current, scale: outer.width / current.width, inner, outer };
+      current = { ...box };
+      handlers.get("canvas.viewbox.changed")?.forEach((cb) => cb());
+      return undefined;
+    },
+  };
+  const insets: Insets = { top: 60, right: 16, bottom: 56, left: 16 };
+  const view = diagramView(
+    {
+      get: () => canvas,
+      on: (e, cb) => void (handlers.get(e) ?? handlers.set(e, new Set()).get(e)!).add(cb),
+      off: (e, cb) => void handlers.get(e)?.delete(cb),
+    },
+    { insets: () => insets },
+  );
+  view.fit(insets, false);
+  const fittedLevel = view.level();
+  assert.ok(fittedLevel < ZOOM_MIN, `the fit sits below 20 % (${fittedLevel})`);
+  const fittedView = { ...current };
+  view.zoomBy(-0.2);
+  assert.deepEqual(current, fittedView, "a step out below 20 % leaves the view");
+  assert.equal(view.isTouched(), false);
+  view.zoomBy(0.2);
+  close(view.level(), ZOOM_MIN, 1e-9);
+  view.zoomTo(ZOOM_MAX);
+  const atMax = { ...current };
+  view.zoomBy(0.2);
+  assert.deepEqual(current, atMax, "a step in at 400 % leaves the view");
+  view.zoomBy(-0.2);
+  assert.ok(view.level() < ZOOM_MAX);
   view.destroy();
 });

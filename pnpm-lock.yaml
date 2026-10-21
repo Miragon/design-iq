@@ -202,6 +202,9 @@ importers:
       '@miragon/modeler-api':
         specifier: 1.2.0
         version: 1.2.0
+      '@miragon/modeler-shell':
+        specifier: 0.2.2
+        version: 0.2.2
       '@miragon/team-topologies-renderer':
         specifier: 0.12.0
         version: 0.12.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
@@ -1446,6 +1449,10 @@ packages:
   '@miragon/modeler-api@1.2.0':
     resolution: {integrity: sha512-X+WAEy+CWhY6TZ1MhfQB/dJU+Gu4WhvLitVBXf1kmXFg7rML6tmxtTxcNOFFKiZ/Bh7g9Uk7fFjnSWDn5OzbEw==}
     engines: {node: '>=22.13.0'}
+
+  '@miragon/modeler-shell@0.2.2':
+    resolution: {integrity: sha512-V4nzAvz4hXkyGHJce0lwezagcumj/T96TLSvvtyP2BkXL1NzNj7E0H/gw1o3ikdJc95Wwy5SVfSgt4bPTwqDww==}
+    engines: {node: '>=20'}
 
   '@miragon/team-topologies-renderer@0.12.0':
     resolution: {integrity: sha512-JqgM2JAvijofnkFB69YpKdwu5GmVGTwQTjKhjFrg498uGscHapnpNp3G0KOSNG6OrzX/LgP6Cq1+4JQa1opSjQ==}
@@ -5652,6 +5659,8 @@ snapshots:
       zod: 4.6.7
 
   '@miragon/modeler-api@1.2.0': {}
+
+  '@miragon/modeler-shell@0.2.2': {}
 
   '@miragon/team-topologies-renderer@0.12.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:

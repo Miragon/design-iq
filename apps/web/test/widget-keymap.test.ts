@@ -1,13 +1,14 @@
 /**
  * The widget keyboard as data (src/mcp-app/core/keymap.ts): ⌘S / Ctrl+S, ⇧1
  * and Escape, the text-field guard (a modeler's own text keeps its keys, a
- * chrome field keeps ⇧1 but answers Escape), IME composition, and the menu
- * trigger's open keys and type-ahead filter.
+ * chrome field keeps ⇧1 but answers Escape), IME composition, the menu
+ * trigger's open keys and type-ahead filter, and the zoom keys and ⇧1 a
+ * Miragon canvas takes from the modeler shell's keymap, each key and guard.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { isTypeAhead, keyCommand, type KeyLike, triggerOpen } from "../src/mcp-app/core/keymap.ts";
+import { chromeKeyAction, isTypeAhead, keyCommand, type KeyLike, triggerOpen } from "../src/mcp-app/core/keymap.ts";
 
 const key = (k: string, code: string, mods: Partial<KeyLike> = {}): KeyLike => ({
   key: k,
@@ -70,4 +71,72 @@ test("the menu trigger: ↓ opens on the first item, ↑ on the last; type-ahead
   assert.equal(isTypeAhead(k("Enter")), false);
   assert.equal(isTypeAhead(k("s", { metaKey: true })), false, "⌘S saves, never jumps to Save now");
   assert.equal(isTypeAhead(k("s", { ctrlKey: true })), false);
+});
+
+// ── the zoom keys and ⇧1 of a Miragon canvas (chromeKeyAction): the shell's
+// keymap for an embedded modeler ──────────────────────────────────────────
+
+const free = { inTextField: false, menuOpen: false, dialogOpen: false, modalOpen: false, viewport: true };
+
+test("each zoom key and ⇧1, as the guide names them: Cmd or Ctrl, the main row and the numpad", () => {
+  const cases: Array<[KeyLike, string]> = [
+    [key("+", "Equal", { metaKey: true, shiftKey: true }), "zoomIn"],
+    [key("=", "Equal", { metaKey: true }), "zoomIn"],
+    [key("=", "Equal", { ctrlKey: true }), "zoomIn"],
+    [key("+", "NumpadAdd", { ctrlKey: true }), "zoomIn"],
+    [key("+", "BracketRight", { ctrlKey: true }), "zoomIn"], // QWERTZ: + has a key of its own
+    [key("-", "Minus", { metaKey: true }), "zoomOut"],
+    [key("_", "Minus", { ctrlKey: true, shiftKey: true }), "zoomOut"],
+    [key("-", "NumpadSubtract", { metaKey: true }), "zoomOut"],
+    [key("0", "Digit0", { metaKey: true }), "zoomToActual"],
+    [key("0", "Digit0", { ctrlKey: true }), "zoomToActual"],
+    [key("Insert", "Numpad0", { ctrlKey: true }), "zoomToActual"], // NumLock off
+    [key("!", "Digit1", { shiftKey: true }), "fit"],
+    [key("1", "Digit1", { shiftKey: true }), "fit"], // AZERTY types 1 with Shift
+  ];
+  for (const [event, action] of cases) {
+    assert.equal(chromeKeyAction(event, free), action, `${event.key} ${event.code}`);
+  }
+});
+
+test("what is not a chrome key passes: a bare + or 0, ⌘1, ⌘⇧1, the numpad's 1, AltGr", () => {
+  for (const event of [
+    key("+", "Equal", { shiftKey: true }),
+    key("0", "Digit0"),
+    key("1", "Digit1", { metaKey: true }),
+    key("!", "Digit1", { metaKey: true, shiftKey: true }),
+    key("1", "Numpad1", { shiftKey: true }),
+    key("+", "Equal", { ctrlKey: true, altKey: true }),
+    key("s", "KeyS", { metaKey: true }),
+    key("Escape", "Escape"),
+  ]) {
+    assert.equal(chromeKeyAction(event, free), undefined, `${event.key} ${event.code}`);
+  }
+});
+
+test("each guard: an IME composition, a text field and an open modal keep the key; a popover or the menu do not", () => {
+  const zoomIn = key("=", "Equal", { metaKey: true });
+  const fit = key("!", "Digit1", { shiftKey: true });
+  for (const event of [zoomIn, fit]) {
+    assert.equal(chromeKeyAction({ ...event, isComposing: true }, free), undefined, "composing");
+    assert.equal(
+      chromeKeyAction(event, { ...free, inTextField: true }),
+      undefined,
+      "a text field: the browser zooms, ⇧1 types",
+    );
+    assert.equal(chromeKeyAction(event, { ...free, dialogOpen: true, modalOpen: true }), undefined, "a modal dialog");
+    assert.ok(chromeKeyAction(event, { ...free, dialogOpen: true }), "a popover (Map size…) keeps the zoom");
+    assert.ok(chromeKeyAction(event, { ...free, menuOpen: true }), "the open menu too");
+  }
+});
+
+test("without a diagram on screen (a state card) the browser keeps the zoom keys and ⇧1", () => {
+  assert.equal(chromeKeyAction(key("=", "Equal", { metaKey: true }), { ...free, viewport: false }), undefined);
+  assert.equal(chromeKeyAction(key("0", "Digit0", { ctrlKey: true }), { ...free, viewport: false }), undefined);
+  assert.equal(chromeKeyAction(key("!", "Digit1", { shiftKey: true }), { ...free, viewport: false }), undefined);
+});
+
+test("keyCommand finds ⇧1 in every layout by the key's position, as the shell does", () => {
+  assert.equal(keyCommand(key("1", "Digit1", { shiftKey: true }), "plain"), "fit", "AZERTY");
+  assert.equal(keyCommand(key("!", "Digit1", { shiftKey: true, altKey: true }), "plain"), undefined, "AltGr");
 });

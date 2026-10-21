@@ -1,7 +1,8 @@
 /**
  * The document menu as data (src/mcp-app/core/menu-model.ts): which items a
- * widget offers in which state, the header identity, and the WAI-ARIA
- * menu-button key model chrome/menu.ts renders.
+ * widget offers in which state, the header identity, the WAI-ARIA
+ * menu-button key model chrome/menu.ts renders, and a Miragon renderer's own
+ * Model, Export and Help entries among designIQ's.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -13,6 +14,9 @@ import {
   type MenuContext,
   menuHeader,
   menuKeyNav,
+  type ModelerMenu,
+  panelOfItem,
+  runModelerItem,
   triggerLabels,
 } from "../src/mcp-app/core/menu-model.ts";
 
@@ -213,4 +217,200 @@ test("key model: ↑/↓ wrap past disabled items, Home/End jump, first-letter t
   assert.equal(menuKeyNav(items, 4, "O"), 0, "and wraps, case-insensitive");
   assert.equal(menuKeyNav(items, 0, "s"), 0, "a disabled match is skipped — focus stays");
   assert.equal(menuKeyNav(items, 3, "Tab"), 3, "not a navigation key");
+});
+
+// ── a Miragon renderer's own entries (mapMenu / boardMenu / contextMapMenu) ──
+
+/** the shape of a renderer's menu content, with what each entry reports */
+function rendererMenu() {
+  const ran: string[] = [];
+  let level = "design";
+  let captions = true;
+  const menu: ModelerMenu = {
+    model: [
+      {
+        kind: "radio",
+        id: "level",
+        label: "Level",
+        options: [
+          { value: "big-picture", label: "Big picture" },
+          { value: "process", label: "Process modeling" },
+          { value: "design", label: "Software design" },
+        ],
+        value: () => level,
+        onSelect: (value) => {
+          ran.push(`level=${value}`);
+          level = value;
+        },
+      },
+      {
+        kind: "checkbox",
+        id: "type-captions",
+        label: "Type captions",
+        keepEnabledWhenReadOnly: true,
+        checked: () => captions,
+        onToggle: (checked) => {
+          ran.push(`captions=${checked}`);
+          captions = checked;
+        },
+      },
+      { kind: "dialog", id: "map-size", label: "Map size…", onSelect: () => ran.push("map-size") },
+    ],
+    export: [
+      { kind: "action", id: "export-png", label: "Export as PNG", icon: "file-image", onSelect: () => ran.push("png") },
+      {
+        kind: "action",
+        id: "export-svg",
+        label: "Export as SVG",
+        icon: "file-code-corner",
+        shortcut: "⌘S",
+        onSelect: () => ran.push("svg"),
+      },
+    ],
+    help: [
+      {
+        kind: "dialog",
+        id: "keyboard-shortcuts",
+        label: "Keyboard shortcuts…",
+        icon: "keyboard",
+        onSelect: () => ran.push("shortcuts"),
+      },
+    ],
+  };
+  return { menu, ran };
+}
+
+const miragon: MenuContext = {
+  ...base,
+  kind: "miragon",
+  workshop: undefined,
+  todos: undefined,
+  live: true,
+  dirty: false,
+};
+
+test("a renderer's entries join in the guide's group order: Model, Export, designIQ's view moves, Help last", () => {
+  const { menu } = rendererMenu();
+  const ctx: MenuContext = { ...miragon, modeler: menu, legend: { open: false } };
+  assert.deepEqual(
+    buildMenu(ctx).map((g) => g.id),
+    ["document", "model", "export", "view", "help"],
+  );
+  assert.deepEqual(ids(ctx), [
+    ["open"],
+    [
+      "modeler:level:big-picture",
+      "modeler:level:process",
+      "modeler:level:design",
+      "modeler:type-captions",
+      "modeler:map-size",
+      "legend",
+    ],
+    ["modeler:export-png", "modeler:export-svg"],
+    ["fit", "fullscreen"],
+    ["modeler:keyboard-shortcuts"],
+  ]);
+});
+
+test("each entry kind becomes its item: a named radio group, a checkbox that stays open, a dialog, an action with its icon and key", () => {
+  const { menu } = rendererMenu();
+  const ctx: MenuContext = { ...miragon, modeler: menu };
+  assert.deepEqual(item(ctx, "modeler:level:design"), {
+    id: "modeler:level:design",
+    label: "Software design",
+    role: "menuitemradio",
+    checked: true,
+    checkMark: true,
+    keepsOpen: true,
+    radioGroup: { id: "level", label: "Level" },
+  });
+  assert.equal(item(ctx, "modeler:level:process")?.checked, false);
+  assert.deepEqual(item(ctx, "modeler:type-captions"), {
+    id: "modeler:type-captions",
+    label: "Type captions",
+    role: "menuitemcheckbox",
+    checked: true,
+    checkMark: true,
+    keepsOpen: true,
+  });
+  assert.deepEqual(item(ctx, "modeler:map-size"), {
+    id: "modeler:map-size",
+    label: "Map size…",
+    role: "menuitem",
+    dialog: true,
+  });
+  assert.deepEqual(item(ctx, "modeler:export-svg"), {
+    id: "modeler:export-svg",
+    label: "Export as SVG",
+    icon: "file-code-corner",
+    role: "menuitem",
+    kbd: "⌘S",
+  });
+  assert.equal(item(ctx, "modeler:map-size")?.icon, undefined, "no icon: the column stays empty");
+});
+
+test("a read-only canvas disables the Model entries that write the document; Type captions, Export and Help stay", () => {
+  const { menu } = rendererMenu();
+  const viewer: MenuContext = { ...miragon, editable: false, modeler: menu, legend: { open: true } };
+  for (const id of ["modeler:level:big-picture", "modeler:level:design", "modeler:map-size"]) {
+    assert.deepEqual([item(viewer, id)?.disabled, item(viewer, id)?.hint], [true, "Read-only"], id);
+  }
+  for (const id of [
+    "modeler:type-captions",
+    "legend",
+    "modeler:export-png",
+    "modeler:export-svg",
+    "modeler:keyboard-shortcuts",
+  ]) {
+    assert.equal(item(viewer, id)?.disabled, undefined, id);
+  }
+});
+
+test("superseded: the renderer's entries and the Legend go with everything else but Open", () => {
+  const { menu } = rendererMenu();
+  assert.deepEqual(ids({ ...miragon, inactive: true, modeler: menu, legend: { open: true } }), [["open"]]);
+});
+
+test("the Legend panel: the Model group's last entry, a checkbox with its check while open, without an icon", () => {
+  const legend = item({ ...miragon, legend: { open: true } }, "legend");
+  assert.deepEqual(legend, {
+    id: "legend",
+    label: "Legend",
+    role: "menuitemcheckbox",
+    checked: true,
+    checkMark: true,
+  });
+  assert.equal(item({ ...miragon, legend: { open: false } }, "legend")?.checked, false);
+  assert.equal(item(miragon, "legend"), undefined, "a notation without a legend has none");
+});
+
+test("Fit: a Miragon widget names it in the modeler shell's words, bpmn and dmn keep theirs", () => {
+  assert.equal(item(miragon, "fit")?.label, "Fit to view");
+  assert.equal(item(miragon, "fit")?.kbd, "⇧1");
+  assert.equal(item({ ...miragon, kind: "bpmn" }, "fit")?.label, "Fit diagram");
+});
+
+test("panelOfItem: the items that toggle a panel, and only those", () => {
+  assert.deepEqual((["todos", "checks", "legend", "fit", "fullscreen", "modeler:legend"] as const).map(panelOfItem), [
+    "todos",
+    "checks",
+    "legend",
+    undefined,
+    undefined,
+    undefined,
+  ]);
+});
+
+test("runModelerItem runs the entry behind an item, and nothing else", () => {
+  const { menu, ran } = rendererMenu();
+  assert.equal(runModelerItem(menu, "modeler:level:process"), true);
+  assert.equal(runModelerItem(menu, "modeler:level:process"), true, "the level it has: no second edit");
+  assert.equal(runModelerItem(menu, "modeler:type-captions"), true);
+  assert.equal(runModelerItem(menu, "modeler:map-size"), true);
+  assert.equal(runModelerItem(menu, "modeler:export-svg"), true);
+  assert.equal(runModelerItem(menu, "modeler:keyboard-shortcuts"), true);
+  assert.deepEqual(ran, ["level=process", "captions=false", "map-size", "svg", "shortcuts"]);
+  assert.equal(runModelerItem(menu, "modeler:level:unknown"), false, "an option the group does not have");
+  assert.equal(runModelerItem(menu, "modeler:gone"), false);
+  assert.equal(runModelerItem(menu, "fit"), false, "designIQ's own items are the shell's");
 });

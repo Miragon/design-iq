@@ -21,7 +21,9 @@ import type * as Y from "yjs";
 
 import type { TodoElementWire } from "@/lib/api";
 import type { PresenceSurface } from "@/lib/presence-canvas";
+import type { SidePanelRoom } from "@/lib/side-panel-room";
 import type { TodoCanvas } from "@/lib/todo-canvas";
+import type { ModelerMenu } from "@/mcp-app/core/menu-model";
 
 import { bpmnPlugin } from "./bpmn";
 import { dmnPlugin } from "./dmn";
@@ -64,6 +66,14 @@ export interface EditorContext {
    *  hand it to attachPresenceCanvas; optional keeps them mountable without
    *  a live session (tests, previews). */
   presence?: PresenceSurface;
+  /** the shell's ⋯ menu trigger, where an engine's dialogs give the focus
+   *  back when they close (MountedEditor.menu); null while not rendered */
+  menuTrigger?(): HTMLElement | null;
+  /** an action of the engine's menu failed (an export): surface it */
+  onActionFailed?(message: string): void;
+  /** what an open side panel covers of the canvas, which a fit keeps clear
+   *  of. Optional: absent = no panel ever covers it */
+  sidePanels?: SidePanelRoom;
 }
 
 /** the model list as the shell has it: it may arrive after the editor
@@ -103,6 +113,9 @@ export interface MountedEditor {
   elements?: TodoCanvas;
   /** header actions this editor contributes (rendered by the shell) */
   actions?: EditorToolbarAction[];
+  /** the renderer's own Model, Export and Help entries, which the shell's ⋯
+   *  menu lists (a Miragon renderer that ships menu content) */
+  menu?: ModelerMenu;
   destroy(): void;
 }
 
@@ -130,6 +143,9 @@ export interface PanelSpec {
    *  the toolbar's overflow menu — for panels a session needs occasionally,
    *  not constantly (the Notes panel pattern) */
   placement?: "toolbar" | "menu";
+  /** the ⋯ menu's Model block repeats the toggle as a checkbox, as the
+   *  guide lists the Legend there (§5.4) */
+  modelMenu?: boolean;
   /** lazy panel body — only whoever opens the panel pays for its deps */
   component: LazyExoticComponent<ComponentType<NotationPanelProps>>;
 }

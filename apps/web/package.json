@@ -23,6 +23,7 @@
     "@miragon/context-maps-renderer": "0.4.0",
     "@miragon/event-storming-renderer": "0.4.0",
     "@miragon/modeler-api": "1.2.0",
+    "@miragon/modeler-shell": "0.2.2",
     "@miragon/team-topologies-renderer": "0.12.0",
     "@miragon/wardley-renderer": "0.9.0",
     "@modelcontextprotocol/client": "2.3.1",

@@ -19,6 +19,8 @@ minimumReleaseAgeExclude:
   - "@miragon/team-topologies-renderer@0.12.0"
   - "@miragon/team-topologies-schema-model@0.12.0"
   - "@miragon/value-chain-schema-model@0.6.0"
+  # the shell's view math and keymap (#265): published 2026-10-21, adopted 2026-10-21
+  - "@miragon/modeler-shell@0.2.2"
 overrides:
   # vitepress 1.6.4 (docs/) is the latest release and still requests vite
   # ^5.4.14, which is stuck below the server.fs.deny bypass fix (>=6.4.3).
