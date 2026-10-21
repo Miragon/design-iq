@@ -35,7 +35,9 @@ so each refusal is an ERROR (`team-topology/schema`, `context-map/schema`,
   `contexts.2.id: duplicate id "a"; ids must be unique across contexts and relationships`;
 - in a Value Chain: keys other than `x`, `y`, `width`, `height` in `bounds` and other than `x`,
   `y` in a waypoint, coordinates beyond ±1e9, a `__proto__` key anywhere, and nesting deeper than
-  100 levels.
+  100 levels;
+- in a Team Topology and a Context Map: a document nested too deep for the schema model's
+  serializer, which every canvas save runs, as `(root): could not be checked: …`.
 
 A Context Map's strategic-DDD rules (`validateDocument`, e.g. `protect-or-conform`,
 `endpoints-on-map`) are WARNs, `context-map/semantics`, with the rule named at the end of the

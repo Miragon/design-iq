@@ -351,6 +351,21 @@ test("a document nested too deep for its schema model is one ERROR at the first 
   assert.deepEqual(checkSchemaModel(deepValueChain(10), { notation: "value-chain" }), []);
 });
 
+/** a foreign field nested `depth` levels deep on the first team or context */
+const deepForeignField = (json: string, depth: number): string =>
+  json.replace(/"label":/, `"extra": ${'{"a":'.repeat(depth)}1${"}".repeat(depth)}, "label":`);
+
+test("a Team Topology or Context Map nested too deep for its serializer, the canvas's export, is an ERROR, not a pass", () => {
+  for (const [notation, json, ruleId] of [
+    ["team-topology", teamTopology({ nodes: [team("a")] }), "team-topology/schema"],
+    ["context-map", contextMap({ contexts: [context("a")] }), "context-map/schema"],
+  ] as const) {
+    assert.deepEqual(checkSchemaModel(deepForeignField(json, 100), { notation }), [], notation);
+    const findings = brief(checkSchemaModel(deepForeignField(json, 50_000), { notation }));
+    assert.deepEqual(findings, [["ERROR", ruleId, "(root): could not be checked: Maximum call stack size exceeded"]]);
+  }
+});
+
 test("text that is no JSON keeps the baseline finding, whatever the notation", () => {
   for (const [notation, file] of [
     ["team-topology", "t.tt"],
