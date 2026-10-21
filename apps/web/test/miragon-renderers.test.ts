@@ -447,17 +447,20 @@ function dragPlotCorner(modeler: WardleyModeler): void {
   }
 }
 
-test("Wardley: a resize preview is no edit for the widget's autosave, the size it commits is", async () => {
+test("Wardley: a resize preview is no edit for the widget's autosave and not in what it saves, the size it commits is", async () => {
   const engine = await engineOf("wardley", host("wardley-canvas"));
   await engine.importText(MAP);
+  const committed = await engine.exportText();
   let dirty = 0;
   engine.onDirty(() => dirty++);
   const modeler = engine.modeler.diagram as unknown as WardleyModeler;
   dragPlotCorner(modeler);
-  assert.match(await engine.exportText(), /size \[1500, 900\]/, "the export already carries the preview");
   assert.equal(dirty, 0, "no autosave of a preview size");
+  // an autosave another edit triggers mid-drag saves the committed map
+  assert.equal(await engine.exportText(), committed, "the export is the map before the drag");
   modeler.setMapSize(1500, 900);
   assert.ok(dirty > 0);
+  assert.match(await engine.exportText(), /size \[1500, 900\]/);
   engine.destroy();
 });
 

@@ -1,7 +1,7 @@
 /** @miragon/wardley-renderer — the OWM DSL. Its factory reports content
- *  changes from the command stack only: the steps of a plot-resize drag,
- *  which the export already carries, are previews, the dropped size is the
- *  edit. It gets no `freeRectInsets` yet: with them its pan constraint pulls
+ *  changes from the command stack only, and its export is the committed
+ *  document: during a plot-resize drag or a size preview it is the map as
+ *  it was before, the dropped size is the edit. It gets no `freeRectInsets` yet: with them its pan constraint pulls
  *  the widget's fit towards its own content bounds, which are not the bounds
  *  the chrome fits (#265 aligns the fit). The viewer takes no options.
  *
