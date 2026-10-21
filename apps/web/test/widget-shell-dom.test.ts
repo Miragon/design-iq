@@ -2,10 +2,10 @@
  * The widget chrome as shell.ts composes it (mountChrome), under jsdom on the
  * real skeletons (mcp-app-miragon.html, mcp-app.html): what only the
  * composition decides. A Miragon widget binds the zoom keys and ⇧1 to the
- * view and keeps them off behind a state card; the bpmn widget leaves them
- * to its canvas. The menu's Legend toggles the registered panel, and a
- * renderer's web link in the canvas goes through the host instead of the
- * sandbox's blocked new window.
+ * view, keeps them off behind a state card and names them on the zoom
+ * buttons; the bpmn widget leaves them to its canvas. The menu's Legend
+ * toggles the registered panel, and a renderer's web link in the canvas
+ * goes through the host instead of the sandbox's blocked new window.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -113,7 +113,7 @@ async function chromeOf(kind: keyof typeof ENTRIES) {
   return { ...p, chrome, zoomed, press };
 }
 
-test("a Miragon widget: the zoom keys run the view, a state card leaves them to the browser", async () => {
+test("a Miragon widget: the zoom keys run the view, a state card leaves them to the browser, the buttons name them", async () => {
   const w = await chromeOf("miragon");
   assert.equal(w.press("=", "Equal", { ctrlKey: true }), true, "the page does not zoom");
   assert.equal(w.press("-", "Minus", { ctrlKey: true }), true);
@@ -124,14 +124,31 @@ test("a Miragon widget: the zoom keys run the view, a state card leaves them to 
   assert.equal(w.press("=", "Equal", { ctrlKey: true }), false, "a state card hides the diagram");
   assert.deepEqual(w.zoomed, ["in", "out", "to 1"]);
 
+  const button = (id: string) => w.document.getElementById(id)!;
+  assert.deepEqual(
+    ["zoom-out", "zoom-pct", "zoom-in", "zoom-fit"].map((id) => [
+      button(id).title,
+      button(id).getAttribute("aria-keyshortcuts"),
+    ]),
+    [
+      ["Zoom out (Ctrl+Minus)", "Control+-"],
+      ["Zoom to 100% (Ctrl+0)", "Control+0"],
+      ["Zoom in (Ctrl+Plus)", "Control+= Control+Plus"],
+      ["Fit to view (Shift+1)", "Shift+1"],
+    ],
+    "jsdom's navigator is no Mac: the Ctrl names",
+  );
+  assert.equal(button("zoom-fit").getAttribute("aria-label"), "Fit to view");
   w.close();
 });
 
-test("the bpmn widget: its canvas keeps the zoom keys", async () => {
+test("the bpmn widget: its canvas keeps the zoom keys, and its buttons stay as they were", async () => {
   const w = await chromeOf("bpmn");
   assert.equal(w.press("=", "Equal", { ctrlKey: true }), false);
   assert.equal(w.press("0", "Digit0", { ctrlKey: true }), false);
   assert.deepEqual(w.zoomed, [], "bpmn-js binds them on the focused canvas");
+  assert.equal(w.document.getElementById("zoom-in")!.hasAttribute("aria-keyshortcuts"), false);
+  assert.equal(w.document.getElementById("zoom-fit")!.title, "Fit diagram (Shift+1)");
   w.close();
 });
 
@@ -148,6 +165,10 @@ test("the menu's Legend toggles the registered panel; a renderer's web link in t
   w.document.getElementById("menu-trigger")!.click();
   assert.ok(legendItem(), "the Model group lists the Legend");
   assert.equal(legendItem()!.getAttribute("aria-checked"), "false");
+  assert.ok(
+    legendItem()!.firstElementChild!.classList.contains("icon-gap"),
+    "no icon, as the guide's Model entries go",
+  );
   legendItem()!.click();
   assert.equal(panel.hidden, false, "selecting it opens the panel");
   w.document.getElementById("menu-trigger")!.click();

@@ -16,6 +16,7 @@
  * DOM-free (`.ts` relative imports): node --test loads it.
  */
 import { byId, modelStem } from "@designiq/notations";
+import { defaultMessages } from "@miragon/modeler-shell/core";
 
 import type { DecisionView } from "./engine.ts";
 import type { DocLabel } from "./lifecycle.ts";
@@ -355,19 +356,30 @@ export function buildMenu(ctx: MenuContext): MenuGroup[] {
       exports.push(...modelerItems(ctx.modeler.export, false));
       help.push(...modelerItems(ctx.modeler.help, false));
     }
-    // the guide's Legend checkbox closes the Model group (§5.4)
+    // the guide's Legend checkbox closes the Model group (§5.4), without an
+    // icon as the group's entries go (§5.14). It closes the menu as Todos and
+    // Checks do: the panel takes the focus as it opens
     if (ctx.legend) {
       model.push({
         id: "legend",
         label: "Legend",
-        icon: "book-open",
         role: "menuitemcheckbox",
         checked: ctx.legend.open,
         checkMark: true,
       });
     }
 
-    if (ctx.viewport) view.push({ id: "fit", label: "Fit diagram", icon: "scan", role: "menuitem", kbd: "⇧1" });
+    if (ctx.viewport) {
+      view.push({
+        id: "fit",
+        // a Miragon widget names it as the modeler shell and the renderer's
+        // Keyboard shortcuts… dialog do
+        label: ctx.kind === "miragon" ? defaultMessages.fit : "Fit diagram",
+        icon: "scan",
+        role: "menuitem",
+        kbd: "⇧1",
+      });
+    }
     if (ctx.fullscreenOffered) {
       const fs = ctx.displayMode === "fullscreen";
       view.push({

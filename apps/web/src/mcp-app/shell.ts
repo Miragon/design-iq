@@ -194,7 +194,11 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
       else view?.zoomBy(key === "zoomIn" ? ZOOM_STEP : -ZOOM_STEP);
     },
   });
-  const zoom = mountZoom({ els, fit: () => layout.refit(true) });
+  const zoom = mountZoom({
+    els,
+    fit: () => layout.refit(true),
+    ...(chromeKeys ? { keys: { platform: mac ? "mac" : "other" } } : {}),
+  });
   mountKeys(document, {
     save: () => {
       const s = actions.state();

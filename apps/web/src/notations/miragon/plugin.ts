@@ -16,6 +16,7 @@ function legendPanel(spec: MiragonRendererSpec): PanelSpec {
     label: "Legend",
     buttonTitle: "What the shapes and marks mean",
     icon: BookOpen,
+    modelMenu: true,
     component: lazy(async () => {
       const { MiragonLegendPanel } = await import("./legend-panel");
       return { default: (props) => createElement(MiragonLegendPanel, { ...props, spec }) };

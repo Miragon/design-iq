@@ -25,6 +25,7 @@
  * classes and data attributes, never inline colours (the one exception: a
  * peer avatar's presence colour, through safePresenceColor).
  */
+import type { Platform } from "@miragon/modeler-shell/core";
 import type { App } from "@modelcontextprotocol/ext-apps";
 
 import type { ChromeKeyDeps } from "../../lib/chrome-keys.ts";
@@ -323,6 +324,9 @@ export type MountZoom = (deps: {
   els: Pick<ChromeElements, "zoom" | "zoomOut" | "zoomPct" | "zoomIn" | "zoomFit">;
   /** the Fit button: layout.refit(true) */
   fit(): void;
+  /** the Miragon widgets, whose zoom keys the chrome binds (KeyDeps.chromeKeys):
+   *  the buttons name their keys for this keyboard */
+  keys?: { platform: Platform };
 }) => ZoomChrome;
 
 // ── chrome/panel.ts ─────────────────────────────────────────────────────────

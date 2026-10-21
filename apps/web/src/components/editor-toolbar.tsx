@@ -92,6 +92,8 @@ export interface ToolbarPanelItem {
   icon: ComponentType<{ className?: string }>;
   /** live count on the button (open todos); 0/undefined renders nothing */
   count?: number;
+  /** the ⋯ menu's Model block repeats the toggle as a checkbox (the Legend) */
+  modelMenu?: boolean;
 }
 
 /** faces beyond this collapse into a +N chip — a busy workshop must not push
@@ -166,6 +168,7 @@ export function EditorToolbar({
     openingDialog.current = true;
     setTimeout(open, 0);
   };
+  const modelPanels = panels.filter((p) => p.modelMenu);
   const shownPeers = presence.slice(0, MAX_AVATARS);
   const hiddenPeers = presence.slice(MAX_AVATARS);
 
@@ -335,9 +338,23 @@ export function EditorToolbar({
               </DropdownMenuCheckboxItem>
             ))}
             <DropdownMenuSeparator />
-            {modelerMenu && modelerMenu.model.length > 0 && (
+            {((modelerMenu?.model.length ?? 0) > 0 || modelPanels.length > 0) && (
               <>
-                <ModelerEntries entries={modelerMenu.model} openDialog={openDialog} />
+                {modelerMenu && <ModelerEntries entries={modelerMenu.model} openDialog={openDialog} />}
+                {/* the guide's Model checkbox (§5.4, §5.10); it stays open on a
+                    toggle like the renderer's own checkboxes */}
+                {modelPanels.map((p) => (
+                  <DropdownMenuCheckboxItem
+                    key={p.id}
+                    checked={activePanel === p.id}
+                    title={p.title}
+                    onCheckedChange={() => onTogglePanel(p.id)}
+                    onSelect={(event) => event.preventDefault()}
+                  >
+                    <IconGap />
+                    {p.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
                 <DropdownMenuSeparator />
               </>
             )}

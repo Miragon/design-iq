@@ -143,6 +143,9 @@ export interface PanelSpec {
    *  the toolbar's overflow menu — for panels a session needs occasionally,
    *  not constantly (the Notes panel pattern) */
   placement?: "toolbar" | "menu";
+  /** the ⋯ menu's Model block repeats the toggle as a checkbox, as the
+   *  guide lists the Legend there (§5.4) */
+  modelMenu?: boolean;
   /** lazy panel body — only whoever opens the panel pays for its deps */
   component: LazyExoticComponent<ComponentType<NotationPanelProps>>;
 }

@@ -598,6 +598,7 @@ export function LiveEditor({
     title: p.buttonTitle,
     icon: p.icon,
     placement: p.placement,
+    ...(p.modelMenu ? { modelMenu: true } : {}),
   }));
   const toolbarPanels: ToolbarPanelItem[] = [
     ...pluginPanels.filter((p) => p.placement !== "menu"),

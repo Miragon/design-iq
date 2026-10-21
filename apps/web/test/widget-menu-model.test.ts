@@ -371,18 +371,23 @@ test("superseded: the renderer's entries and the Legend go with everything else 
   assert.deepEqual(ids({ ...miragon, inactive: true, modeler: menu, legend: { open: true } }), [["open"]]);
 });
 
-test("the Legend panel: the Model group's last entry, a checkbox with its check while open", () => {
+test("the Legend panel: the Model group's last entry, a checkbox with its check while open, without an icon", () => {
   const legend = item({ ...miragon, legend: { open: true } }, "legend");
   assert.deepEqual(legend, {
     id: "legend",
     label: "Legend",
-    icon: "book-open",
     role: "menuitemcheckbox",
     checked: true,
     checkMark: true,
   });
   assert.equal(item({ ...miragon, legend: { open: false } }, "legend")?.checked, false);
   assert.equal(item(miragon, "legend"), undefined, "a notation without a legend has none");
+});
+
+test("Fit: a Miragon widget names it in the modeler shell's words, bpmn and dmn keep theirs", () => {
+  assert.equal(item(miragon, "fit")?.label, "Fit to view");
+  assert.equal(item(miragon, "fit")?.kbd, "⇧1");
+  assert.equal(item({ ...miragon, kind: "bpmn" }, "fit")?.label, "Fit diagram");
 });
 
 test("panelOfItem: the items that toggle a panel, and only those", () => {
