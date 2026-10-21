@@ -157,10 +157,12 @@ export function diagramView(
   // it, one frame later (inside the observer the palette's own re-layout
   // would re-trigger the layout's observers in the same pass). What it
   // scrolls in response (keep-selection-visible) is not the user's move.
+  // Only for a chrome that fits the view itself (insets): the SPA's view
+  // keys read the viewbox fresh and leave its editors' resizing as it was
   let resizeFrame = 0;
   const container = canvas().getContainer?.();
   const resizes =
-    container && typeof ResizeObserver === "function" && typeof requestAnimationFrame === "function"
+    opts.insets && container && typeof ResizeObserver === "function" && typeof requestAnimationFrame === "function"
       ? new ResizeObserver(() => {
           cancelAnimationFrame(resizeFrame);
           resizeFrame = requestAnimationFrame(() => {

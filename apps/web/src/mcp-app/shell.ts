@@ -39,10 +39,12 @@ import { mountViewSwitch } from "./chrome/view-switch.ts";
 import { mountZoom } from "./chrome/zoom.ts";
 import type { DecisionViews, ViewControls } from "./core/engine.ts";
 import { stateActionPlan } from "./core/feedback.ts";
+import type { ChromeKey } from "./core/keymap.ts";
 import { sheetFolds, type WidgetKind } from "./core/layout.ts";
 import { type DocLabel, LoadError, type ModelInput, type SyncState } from "./core/lifecycle.ts";
 import { docName, type MenuContext, type MenuItemId } from "./core/menu-model.ts";
 import type { PopoverActionId } from "./core/sync-view.ts";
+import { ZOOM_STEP } from "./engines/fit.ts";
 import { icon, mountIcons } from "./icons.ts";
 
 export const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -182,6 +184,11 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
     onSelect: (id) => onMenu(id),
   });
   const zoom = mountZoom({ els, fit: () => layout.refit(true) });
+  const zoomKey = (key: ChromeKey): void => {
+    if (key === "fit") layout.refit(true);
+    else if (key === "zoomToActual") view?.zoomTo(1);
+    else view?.zoomBy(key === "zoomIn" ? ZOOM_STEP : -ZOOM_STEP);
+  };
   mountKeys(document, {
     save: () => {
       const s = actions.state();
@@ -198,6 +205,15 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
       return true;
     },
     escape: [() => menu.close(true), () => sync.closePopover(), () => layout.closeTools(), () => panels.escape()],
+    ...(kind === "miragon"
+      ? {
+          chromeKeys: {
+            menuOpen: () => menu.isOpen(),
+            viewport: () => (view?.hasViewport() ?? false) && stateCards.current() === undefined,
+            run: zoomKey,
+          },
+        }
+      : {}),
   });
 
   // ── the panels the extras registered: their badge and availability feed
