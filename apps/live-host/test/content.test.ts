@@ -339,25 +339,25 @@ test("putContent refuses what a Miragon canvas cannot open, like an invalid BPMN
       }),
       /elements\.0\.id: Id "vc-root" is reserved/,
     ],
-    // ids naming a built-in object property break the canvas import although the schema model takes them
+    // ids naming a built-in object property: the canvas keeps its elements in a plain object
     [
       "processes/ctor.tt",
       JSON.stringify({ version: 3, title: "T", nodes: [team("constructor")], interactions: [], flows: [] }),
-      /nodes\.0\.id: the id "constructor" is reserved: it names a built-in property/,
+      /nodes\.0\.id: "constructor" is reserved: it names a built-in property/,
     ],
     [
       "processes/ctor.cm.json",
       JSON.stringify({ version: 1, title: "M", contexts: [{ id: "toString", label: "S", ...box }], relationships: [] }),
       /contexts\.0\.id: the id "toString" is reserved: it names a built-in property/,
     ],
-    // nested past the schema model's stack: a refusal, not a 500
+    // nested past the schema model's limit: a refusal, not a 500
     [
       "processes/deep.vc.json",
       JSON.stringify({ schemaVersion: 1, meta: { name: "C" }, elements: [], connections: [] }).replace(
         /}$/,
         `, "extra": ${"[".repeat(50_000)}${"]".repeat(50_000)}}`,
       ),
-      /\(root\): could not be checked: Maximum call stack size exceeded/,
+      /extra(\.0)+: Objects and arrays may nest at most 100 levels deep/,
     ],
   ];
   for (const [path, content, reason] of refusals) {
