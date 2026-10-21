@@ -126,7 +126,7 @@ Not compact: the palette is always visible at its slot and is included in the fi
 
 ### 2.5 Fit and zoom
 
-**`fitInto(instance, insets)`** replaces the import-time `fit-viewport`. It is pure math in `engines/fit.ts`: content bbox → viewbox, `maxScale 1`.
+**`fitInto(instance, insets)`** replaces the import-time `fit-viewport`. It is pure math in `engines/fit.ts`: content bbox → viewbox, `maxScale 1`. The content bbox is diagram-js's box around the elements, unless a Miragon spec names its own `contentBounds`: Wardley's are the plot with its axes and everything drawn on or beyond it, the bounds its pan constraint keeps in the free area.
 
 Insets:
 
@@ -151,7 +151,7 @@ Measured on the built widgets: order-to-cash fits at 0.56 at 720x520 (left palet
 
 The re-fit animates the viewbox over 250ms with `--cd-ease` (rAF interpolation). Under `prefers-reduced-motion` it jumps.
 
-No re-fit runs while someone types a label on the canvas (a text field in it has the focus). Every renderer saves an open label editor when the viewbox changes, so a re-fit after a peer's re-import or a resize would save the name typed so far.
+No re-fit runs while someone types a label on the canvas (a text field in it has the focus). bpmn-js and dmn-js save an open label editor when the viewbox changes, so a re-fit after a peer's re-import or a resize would save the name typed so far. The Miragon renderers keep the editor open with what was typed across a view change (modeler-api contract 1.2, law L5); in their widgets the rule only keeps the field from moving while someone types.
 
 Zoom group (BR), 28px targets:
 

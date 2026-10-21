@@ -94,7 +94,7 @@ export interface DiagramView extends ViewControls {
  */
 export function diagramView(
   instance: Pick<DiagramLike, "get" | "on" | "off">,
-  opts: { insets?: () => Insets; hasViewport?: () => boolean } = {},
+  opts: { insets?: () => Insets; hasViewport?: () => boolean; contentBounds?: () => Box | undefined } = {},
 ): DiagramView {
   const canvas = (): CanvasLike => instance.get("canvas") as CanvasLike;
   let lastFit: { x: number; y: number; scale: number } | undefined;
@@ -180,9 +180,10 @@ export function diagramView(
       : undefined;
   if (container) resizes?.observe(container);
 
-  // every renderer commits an open label editor on a viewbox change, so a
+  // bpmn-js and dmn-js commit an open label editor on a viewbox change, so a
   // fit the host makes on its own (after a peer's re-import, on a frame
-  // resize) would save what the user has typed so far
+  // resize) would save what the user has typed so far; the Miragon renderers
+  // keep theirs open (contract L5), and the field stays where it is typed
   const typingOnCanvas = (): boolean => {
     const focused = container?.ownerDocument.activeElement;
     return !!focused && !!container?.contains(focused) && focused.matches(TEXT_FIELD);
@@ -196,10 +197,11 @@ export function diagramView(
   function fit(insets: Insets, animate: boolean): void {
     if (typingOnCanvas()) return;
     const vb = canvas().viewbox(false);
+    const content = opts.contentBounds?.() ?? vb.inner;
     // a hidden or unlaid-out container has no size to fit into, and an
     // empty canvas (mounted, not yet imported) nothing to fit
-    if (!vb.outer.width || !vb.outer.height || (!vb.inner.width && !vb.inner.height)) return;
-    const target = fitViewbox(vb.inner, vb.outer, insets, 1);
+    if (!vb.outer.width || !vb.outer.height || (!content.width && !content.height)) return;
+    const target = fitViewbox(content, vb.outer, insets, 1);
     stopAnimation();
     lastFit = { x: target.x, y: target.y, scale: vb.outer.width / target.width };
     touched = false;

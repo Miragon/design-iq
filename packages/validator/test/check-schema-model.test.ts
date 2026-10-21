@@ -2,10 +2,9 @@
  * checkSchemaModel — the Miragon JSON notations (.tt/.ttm.json, .cm.json,
  * .vc.json) checked with the schema model their canvas parses them with
  * (#266). Pinned here: every refusal of the schema model is an ERROR at its
- * JSON path, a Context Map's advisory strategic-DDD rules are WARNs (only a
- * repeated id is refused, as the canvas refuses it), text that is no JSON
- * keeps the baseline finding, and the shipped templates and examples stay
- * clean.
+ * JSON path, a Context Map's strategic-DDD rules are WARNs (the canvas
+ * opens such a map and marks the finding), text that is no JSON keeps the
+ * baseline finding, and the shipped templates and examples stay clean.
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -100,6 +99,43 @@ test("team topology: a shape the schema rejects is an ERROR, the lenient migrati
   assert.deepEqual(checkSchemaModel("{}", { notation: "team-topology" }), []);
 });
 
+test("team topology: unless the file is version 1, an interaction without position or size is refused; a version 1 edge is dropped", () => {
+  const interactions = [
+    { id: "edge", mode: "collaboration", source: "a", target: "b" },
+    { id: "placed", mode: "facilitating", ...box },
+    { id: "unsized", mode: "x-as-a-service", position: { x: 0, y: 0 } },
+    { id: "pairing", mode: "pairing", ...box },
+  ];
+  const MODE = 'interactions.3.mode: Invalid option: expected one of "collaboration"|"x-as-a-service"|"facilitating"';
+  const check = (version: unknown) =>
+    brief(
+      checkSchemaModel(JSON.stringify({ version, title: "Teams", nodes: [], interactions }), {
+        notation: "team-topology",
+      }),
+    );
+  // the canvas used to open these files without the interaction, and the next save wrote it out of the
+  // file; only the number 1 marks the edge format, so a file without a version is refused too
+  for (const version of [2, 3, undefined, 0, "1"]) {
+    assert.deepEqual(
+      check(version),
+      [
+        [
+          "ERROR",
+          "team-topology/schema",
+          "interactions.0.position: Invalid input: expected object, received undefined",
+        ],
+        ["ERROR", "team-topology/schema", "interactions.0.size: Invalid input: expected object, received undefined"],
+        ["ERROR", "team-topology/schema", "interactions.2.size: Invalid input: expected object, received undefined"],
+        ["ERROR", "team-topology/schema", MODE],
+      ],
+      `version ${String(version)}`,
+    );
+  }
+  // a version 1 file drops every interaction without geometry, and names
+  // what follows at its index in the file
+  assert.deepEqual(check(1), [["ERROR", "team-topology/schema", MODE]]);
+});
+
 test("context map: a list, a newer version, a coordinate or size out of range and reserved ids are refused", () => {
   const check = (raw: string) => brief(checkSchemaModel(raw, { file: "models/m.cm.json", notation: "context-map" }));
   assert.deepEqual(check("[]"), [["ERROR", "context-map/schema", "(root): expected an object, got a list"]]);
@@ -126,18 +162,19 @@ test("context map: a list, a newer version, a coordinate or size out of range an
 });
 
 test("context map: a repeated id is refused like the canvas refuses it, at the repeat's path; the advisory rules only warn", () => {
+  const repeat = (path: string, id: string): [string, string, string] => [
+    "ERROR",
+    "context-map/schema",
+    `${path}: duplicate id "${id}"; ids must be unique across contexts and relationships`,
+  ];
   const duplicate = contextMap({
     contexts: [context("a"), context("a")],
     relationships: [{ id: "a", from: "a", to: "a", pattern: "partnership" }],
   });
-  const findings = checkSchemaModel(duplicate, { notation: "context-map" });
-  assert.deepEqual(
-    brief(findings).filter(([severity]) => severity === "ERROR"),
-    [
-      ["ERROR", "context-map/schema", 'contexts.1.id: Duplicate id "a". (unique-ids)'],
-      ["ERROR", "context-map/schema", 'relationships.0.id: Duplicate id "a". (unique-ids)'],
-    ],
-  );
+  assert.deepEqual(brief(checkSchemaModel(duplicate, { notation: "context-map" })), [
+    repeat("contexts.1.id", "a"),
+    repeat("relationships.0.id", "a"),
+  ]);
   const repeats = contextMap({
     contexts: [context("a"), context("b"), context("a")],
     relationships: [
@@ -145,18 +182,35 @@ test("context map: a repeated id is refused like the canvas refuses it, at the r
       { id: "r", from: "b", to: "a", pattern: "partnership" },
     ],
   });
+  assert.deepEqual(brief(checkSchemaModel(repeats, { notation: "context-map" })), [
+    repeat("contexts.2.id", "a"),
+    repeat("relationships.1.id", "r"),
+  ]);
+  // in the same round as a sibling field's error: fixing that one brings up no new error
   assert.deepEqual(
-    brief(checkSchemaModel(repeats, { notation: "context-map" })).filter(([severity]) => severity === "ERROR"),
+    brief(
+      checkSchemaModel(contextMap({ contexts: [context("a", { label: 3 }), context("a")] }), {
+        notation: "context-map",
+      }),
+    ),
     [
-      ["ERROR", "context-map/schema", 'contexts.2.id: Duplicate id "a". (unique-ids)'],
-      ["ERROR", "context-map/schema", 'relationships.1.id: Duplicate id "r". (unique-ids)'],
+      ["ERROR", "context-map/schema", "contexts.0.label: Invalid input: expected string, received number"],
+      repeat("contexts.1.id", "a"),
     ],
   );
   // the self-relationship is one of validateDocument's errors, but the
   // canvas opens such a map and marks it: no refusal
   assert.deepEqual(
-    brief(findings).filter(([severity]) => severity === "WARN"),
-    [["WARN", "context-map/semantics", 'relationship "a": Connects a context to itself. (no-self-relationship)']],
+    brief(
+      checkSchemaModel(
+        contextMap({
+          contexts: [context("a")],
+          relationships: [{ id: "r", from: "a", to: "a", pattern: "partnership" }],
+        }),
+        { notation: "context-map" },
+      ),
+    ),
+    [["WARN", "context-map/semantics", 'relationship "r": Connects a context to itself. (no-self-relationship)']],
   );
 
   const advisory = contextMap({
@@ -178,9 +232,12 @@ test("context map: a repeated id is refused like the canvas refuses it, at the r
 });
 
 test("team topology and context map: an id that names a built-in object property is refused at its path", () => {
-  // the canvases keep their elements in a plain object, so such an id fails the import
+  // the canvases keep their elements in a plain object, so such an id fails the import;
+  // each schema model words it the way its canvas does
   const builtIn = (path: string, id: string): string =>
     `${path}: the id "${id}" is reserved: it names a built-in property of JavaScript objects`;
+  const ttBuiltIn = (path: string, id: string): string =>
+    `${path}: "${id}" is reserved: it names a built-in property of JavaScript objects`;
   assert.deepEqual(
     brief(
       checkSchemaModel(
@@ -194,10 +251,10 @@ test("team topology and context map: an id that names a built-in object property
       ),
     ),
     [
-      ["ERROR", "team-topology/schema", builtIn("nodes.0.id", "constructor")],
-      ["ERROR", "team-topology/schema", builtIn("interactions.0.id", "toString")],
-      ["ERROR", "team-topology/schema", builtIn("flows.0.id", "valueOf")],
-      ["ERROR", "team-topology/schema", builtIn("annotations.0.id", "__proto__")],
+      ["ERROR", "team-topology/schema", ttBuiltIn("nodes.0.id", "constructor")],
+      ["ERROR", "team-topology/schema", ttBuiltIn("interactions.0.id", "toString")],
+      ["ERROR", "team-topology/schema", ttBuiltIn("flows.0.id", "valueOf")],
+      ["ERROR", "team-topology/schema", ttBuiltIn("annotations.0.id", "__proto__")],
     ],
   );
   assert.deepEqual(
@@ -223,9 +280,9 @@ test("team topology and context map: an id that names a built-in object property
       }),
     ),
     [
+      ["ERROR", "context-map/schema", builtIn("contexts.0.id", "toString")],
       ["ERROR", "context-map/schema", "contexts.0.label: Invalid input: expected string, received number"],
       ["ERROR", "context-map/schema", 'contexts.1.id: the id "cm-root" is reserved for the diagram itself'],
-      ["ERROR", "context-map/schema", builtIn("contexts.0.id", "toString")],
     ],
   );
   // …but not in a file refused as a whole
@@ -286,11 +343,27 @@ test("value chain: reserved ids, extra keys in bounds and waypoints, far coordin
 const deepValueChain = (depth: number): string =>
   valueChain({}).replace(/}$/, `, "extra": ${"[".repeat(depth)}${"]".repeat(depth)}}`);
 
-test("a document nested too deep for its schema model is one ERROR, not a crash", () => {
-  assert.deepEqual(brief(checkSchemaModel(deepValueChain(50_000), { notation: "value-chain" })), [
-    ["ERROR", "value-chain/schema", "(root): could not be checked: Maximum call stack size exceeded"],
-  ]);
+test("a document nested too deep for its schema model is one ERROR at the first level too deep, not a crash", () => {
+  const [finding, ...more] = brief(checkSchemaModel(deepValueChain(50_000), { notation: "value-chain" }));
+  assert.deepEqual(more, []);
+  assert.deepEqual(finding?.slice(0, 2), ["ERROR", "value-chain/schema"]);
+  assert.match(finding?.[2] ?? "", /^extra(\.0)+: Objects and arrays may nest at most 100 levels deep\.$/);
   assert.deepEqual(checkSchemaModel(deepValueChain(10), { notation: "value-chain" }), []);
+});
+
+/** a foreign field nested `depth` levels deep on the first team or context */
+const deepForeignField = (json: string, depth: number): string =>
+  json.replace(/"label":/, `"extra": ${'{"a":'.repeat(depth)}1${"}".repeat(depth)}, "label":`);
+
+test("a Team Topology or Context Map nested too deep for its serializer, the canvas's export, is an ERROR, not a pass", () => {
+  for (const [notation, json, ruleId] of [
+    ["team-topology", teamTopology({ nodes: [team("a")] }), "team-topology/schema"],
+    ["context-map", contextMap({ contexts: [context("a")] }), "context-map/schema"],
+  ] as const) {
+    assert.deepEqual(checkSchemaModel(deepForeignField(json, 100), { notation }), [], notation);
+    const findings = brief(checkSchemaModel(deepForeignField(json, 50_000), { notation }));
+    assert.deepEqual(findings, [["ERROR", ruleId, "(root): could not be checked: Maximum call stack size exceeded"]]);
+  }
 });
 
 test("text that is no JSON keeps the baseline finding, whatever the notation", () => {
@@ -352,7 +425,10 @@ test("the CLI fails on what a canvas refuses and passes an advisory context-map 
   assert.match(all.out, /\[ERROR\] models\/map\.cm\.json: contexts\.0\.id: the id "cm-root" is reserved/);
   assert.match(all.out, /\[ERROR\] models\/chain\.vc\.json: elements\.0\.id: Id "vc-root" is reserved/);
   assert.match(all.out, /\[WARN\] models\/advisory\.cm\.json: relationship "r": References unknown context "x"/);
-  assert.match(all.out, /\[ERROR\] models\/deep\.vc\.json: \(root\): could not be checked: Maximum call stack/);
+  assert.match(
+    all.out,
+    /\[ERROR\] models\/deep\.vc\.json: extra(\.0)+: Objects and arrays may nest at most 100 levels/,
+  );
   assert.match(all.out, /4 error\(s\), 2 warning\(s\) — FAIL \(0 process\(es\), 5 other model\(s\) checked\)/);
 
   const advisory = run("advisory");

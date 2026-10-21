@@ -124,25 +124,34 @@ test("extractTeamTopology: the shipped sample.tt example is pinned — interacti
   });
 });
 
-test("extractTeamTopology: a legacy interaction without geometry is dropped like the schema model drops it", () => {
-  const graph = extractModelGraph(
-    "teams/old.tt",
-    JSON.stringify({
-      nodes: [{ id: "a", type: "platform", label: "A" }],
-      interactions: [
-        { id: "edge", mode: "collaboration", source: "a", target: "b" },
-        { id: "placed", mode: "facilitating", position: { x: 0, y: 0 }, size: { width: 9, height: 9 } },
-        null,
+test("extractTeamTopology: a version 1 edge is dropped like the schema model drops it, a later interaction without geometry stays", () => {
+  const interactions = [
+    { id: "edge", mode: "collaboration", source: "a", target: "b" },
+    { id: "placed", mode: "facilitating", position: { x: 0, y: 0 }, size: { width: 9, height: 9 } },
+    null,
+  ];
+  const nodesOf = (version: number | undefined) =>
+    extractModelGraph(
+      "teams/old.tt",
+      JSON.stringify({ version, nodes: [{ id: "a", type: "platform", label: "A" }], interactions }),
+    )?.nodes.map((n) => [n.id, n.type]);
+  assert.deepEqual(nodesOf(1), [
+    ["a", "platform"],
+    ["placed", "interaction"],
+  ]);
+  // the schema model refuses these files at interactions.0.size: the view
+  // keeps what the file says rather than hiding the element the finding names
+  for (const version of [2, 3, undefined]) {
+    assert.deepEqual(
+      nodesOf(version),
+      [
+        ["a", "platform"],
+        ["edge", "interaction"],
+        ["placed", "interaction"],
       ],
-    }),
-  );
-  assert.deepEqual(
-    graph?.nodes.map((n) => [n.id, n.type]),
-    [
-      ["a", "platform"],
-      ["placed", "interaction"],
-    ],
-  );
+      `version ${version}`,
+    );
+  }
   assert.deepEqual(extractModelGraph("teams/blank.tt", '{"nodes": {}}')?.nodes, []);
 });
 

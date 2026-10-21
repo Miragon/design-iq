@@ -192,9 +192,11 @@ const SCHEMA_REFUSALS =
   "the model refuses is an ERROR at its JSON path (e.g. `nodes.1.id: duplicate id`), because the canvas " +
   "cannot open that file: a duplicate id; the ids the diagram keeps for itself (tt-root, cm-root, vc-root, " +
   "any id starting with __implicitroot, assoc_<annotation id> in a Team Topology, and in all three the names " +
-  "of built-in object properties such as constructor or toString); in a Context Map a list instead of an " +
-  "object, a version above 1 or coordinates and sizes beyond 1,000,000; in a Value Chain extra keys in bounds " +
-  "or waypoints, coordinates beyond ±1e9 and __proto__ keys. A Context Map's strategic-DDD rules are WARNs only.";
+  "of built-in object properties such as constructor or toString); in a Team Topology that is not version 1 " +
+  "(a file without version included) an interaction without position or size; in a Context Map a list " +
+  "instead of an object, a version above 1 or coordinates and sizes beyond 1,000,000; in a Value Chain extra " +
+  "keys in bounds or waypoints, coordinates beyond ±1e9, __proto__ keys and nesting deeper than 100 levels. " +
+  "A Context Map's strategic-DDD rules are WARNs only.";
 
 /** edit_process's copy: the contract, then the op table and the kinds the
  *  engine derives from its own schema (they follow the pinned version) */

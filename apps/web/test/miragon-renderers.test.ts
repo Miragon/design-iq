@@ -13,6 +13,7 @@ import { newCmJson, newOwmText, newStormText, newTtJson } from "@designiq/notati
 import * as Y from "yjs";
 
 import type { PresenceSurface, RemotePresence } from "../src/lib/presence-canvas.ts";
+import { fitViewbox } from "../src/mcp-app/engines/fit.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
 import type { LoadedMiragonRenderer, MiragonModeler, MiragonRendererSpec } from "../src/notations/miragon/spec.ts";
@@ -252,9 +253,18 @@ const REFUSED: Array<[id: string, good: string, refused: string, reason: RegExp]
     /^contexts\.0\.id: the id "cm-root" is reserved/,
   ],
   ["team-topology", TEAMS, withId(TEAMS, "nodes", 1, "team_platform"), /^nodes\.1\.id: duplicate id "team_platform"/],
+  // opened without the interaction before 0.12, and the next edit saved the file without it
+  ["team-topology", TEAMS, withUnsizedInteraction(TEAMS), /^interactions\.0\.size: Invalid input: expected object/],
   ["context-map", CONTEXT_MAP, CONTEXT_MAP.slice(0, 40), /^\(root\): not valid JSON/],
   ["team-topology", TEAMS, TEAMS.slice(0, 40), /JSON/],
 ];
+
+/** the document with an interaction that has a position and no size */
+function withUnsizedInteraction(json: string): string {
+  const document = JSON.parse(json) as Record<string, unknown>;
+  document.interactions = [{ id: "int_checkout_platform", mode: "x-as-a-service", position: { x: 300, y: 200 } }];
+  return JSON.stringify(document);
+}
 
 /** the document with one element's id replaced */
 function withId(json: string, list: "nodes" | "contexts", index: number, id: string): string {
@@ -349,48 +359,75 @@ test("L5: a peer's re-import keeps the view the user panned to; the first import
   }
 });
 
-test("each spec hands the chrome's insets to its renderer the way that renderer spells the free area", async () => {
+/** where each renderer reads the free area's insets from: keyboard creation
+ *  lands in what they leave free, and Wardley's pan constraint keeps a
+ *  host's fit inside it */
+const FREE_AREA_INSETS: Record<string, (diagram: MiragonModeler["diagram"]) => unknown> = {
+  wardley: (diagram) => (diagram.get("wardleyFreeRect") as { insets(): unknown }).insets(),
+  "event-storming": (diagram) =>
+    (diagram.get("config.eventStormingPalette") as { freeArea?: { insets?(): unknown } }).freeArea?.insets?.(),
+  "context-map": (diagram) => (diagram.get("config.cmPalette") as { freeRectInsets(): unknown }).freeRectInsets(),
+  "team-topology": (diagram) =>
+    (diagram.get("config.ttPalette") as { freeArea?: { insets?(): unknown } }).freeArea?.insets?.(),
+};
+
+test("each spec hands the chrome's insets to its renderer as the contract's free area", async () => {
   const insets = { top: 56, right: 0, bottom: 0, left: 300 };
-  for (const [id, palette] of [
-    ["event-storming", "config.eventStormingPalette"],
-    ["context-map", "config.cmPalette"],
-  ] as const) {
-    const [, renderer] = await load(id);
+  for (const spec of MIRAGON_RENDERERS) {
+    const renderer = await spec.load();
     const modeler = renderer.create({ insets: () => insets });
-    const config = modeler.diagram.get(palette) as { freeRectInsets(): unknown };
-    assert.deepEqual(config.freeRectInsets(), insets, id);
+    assert.deepEqual(FREE_AREA_INSETS[spec.id]!(modeler.diagram), insets, spec.id);
     modeler.destroy();
   }
+});
 
-  // Team Topologies takes the free area's centre in diagram coordinates, and
-  // leaves the fit after an import to a host that fits itself
-  const [, renderer] = await load("team-topology");
-  for (const fitsItself of [true, false]) {
-    const modeler = renderer.create(fitsItself ? { insets: () => insets } : {});
-    modeler.attachTo(host("tt-canvas"));
-    const diagram = modeler.diagram as unknown as {
-      importDocument(document: unknown, options?: { fit?: boolean }): unknown;
-      get(name: "config.ttPalette"): { freeRectCenter?(): { x: number; y: number } };
-    };
-    let fit: boolean | undefined;
-    const importDocument = diagram.importDocument.bind(diagram);
-    diagram.importDocument = (document, options) => {
-      fit = options?.fit;
-      return importDocument(document, options);
-    };
-    await modeler.importText(TEAMS);
-    assert.equal(fit, !fitsItself, `fits on import: ${!fitsItself}`);
-    const centre = diagram.get("config.ttPalette").freeRectCenter;
-    if (!fitsItself) {
-      assert.equal(centre, undefined, "the renderer's own free area");
-    } else {
-      // the 1000×640 canvas at 100 %: the middle of what the insets leave
-      assert.deepEqual(centre!(), { x: 300 + 700 / 2, y: 56 + 584 / 2 });
-      // panned and at 50 %, the same screen point in diagram coordinates
-      modeler.setViewState({ x: 100, y: 50, width: 2000, height: 1280 });
-      assert.deepEqual(centre!(), { x: 100 + (300 + 700 / 2) * 2, y: 50 + (56 + 584 / 2) * 2 });
+test("with the chrome's insets the view after an import is the host's to set, without them the renderer fits it", async () => {
+  for (const [id, text] of DOCUMENTS) {
+    const [spec, renderer] = await load(id);
+    for (const readonly of [false, true]) {
+      for (const fitsItself of [true, false]) {
+        const mount = fitsItself ? { insets: () => ({ top: 56, right: 0, bottom: 0, left: 300 }) } : {};
+        const modeler = readonly ? renderer.createViewer(mount) : renderer.create(mount);
+        modeler.attachTo(host(spec.canvasClassName));
+        await modeler.importText(text);
+        const ownFit = modeler.getViewState();
+        modeler.setViewState({ x: 5000, y: 5000, width: 1000, height: 640 });
+        const hosts = modeler.getViewState();
+        assert.notDeepEqual(hosts, ownFit, `${id}: a view of the host's own`);
+        await modeler.importText(text);
+        const where = `${id}${readonly ? " viewer" : ""}, ${fitsItself ? "the widget" : "the SPA"}`;
+        assert.deepEqual(modeler.getViewState(), fitsItself ? hosts : ownFit, where);
+        modeler.destroy();
+      }
     }
-    modeler.destroy();
+  }
+});
+
+test("Wardley in the widget: the chrome fits the plot with its axes into the free area, and the pan constraint keeps that fit", async () => {
+  const insets = { top: 120, right: 16, bottom: 56, left: 16 };
+  const [spec, renderer] = await load("wardley");
+  for (const readonly of [false, true]) {
+    const engine = mountMiragonEngine(spec, renderer, host(spec.canvasClassName), readonly, { insets: () => insets });
+    await engine.importText(MAP);
+    await wait(20);
+    const diagram = engine.modeler.diagram as unknown as {
+      get(name: "canvas"): { viewbox(): { x: number; y: number; width: number; height: number; scale: number } };
+      get(name: "panConstraint"): { contentBounds(): { x: number; y: number; width: number; height: number } };
+    };
+    const content = diagram.get("panConstraint").contentBounds();
+    assert.deepEqual(content, renderer.contentBounds!(engine.modeler), "the spec's content bounds");
+    const { x, y, scale } = diagram.get("canvas").viewbox();
+    const fitted = fitViewbox(content, { width: 1000, height: 640 }, insets, 1);
+    const mount = readonly ? "viewer" : "editor";
+    // diagram-js keeps the zoom to three decimals
+    assert.ok(Math.abs(scale - 1000 / fitted.width) < 0.001, `${mount}: the widget's zoom`);
+    assert.ok(Math.abs(x - fitted.x) < 0.5 && Math.abs(y - fitted.y) < 0.5, `${mount}: the widget's position`);
+    // on screen, the plot and its axes sit in what the chrome leaves free
+    const left = (content.x - x) * scale;
+    const top = (content.y - y) * scale;
+    assert.ok(left >= insets.left - 1 && left + content.width * scale <= 1000 - insets.right + 1, `${mount}: across`);
+    assert.ok(top >= insets.top - 1 && top + content.height * scale <= 640 - insets.bottom + 1, `${mount}: down`);
+    engine.destroy();
   }
 });
 
@@ -447,17 +484,20 @@ function dragPlotCorner(modeler: WardleyModeler): void {
   }
 }
 
-test("Wardley: a resize preview is no edit for the widget's autosave, the size it commits is", async () => {
+test("Wardley: a resize preview is no edit for the widget's autosave and not in what it saves, the size it commits is", async () => {
   const engine = await engineOf("wardley", host("wardley-canvas"));
   await engine.importText(MAP);
+  const committed = await engine.exportText();
   let dirty = 0;
   engine.onDirty(() => dirty++);
   const modeler = engine.modeler.diagram as unknown as WardleyModeler;
   dragPlotCorner(modeler);
-  assert.match(await engine.exportText(), /size \[1500, 900\]/, "the export already carries the preview");
   assert.equal(dirty, 0, "no autosave of a preview size");
+  // an autosave another edit triggers mid-drag saves the committed map
+  assert.equal(await engine.exportText(), committed, "the export is the map before the drag");
   modeler.setMapSize(1500, 900);
   assert.ok(dirty > 0);
+  assert.match(await engine.exportText(), /size \[1500, 900\]/);
   engine.destroy();
 });
 
@@ -516,6 +556,23 @@ test("presence on a Wardley map, in both hosts: the selection travels as documen
     assert.deepEqual(published.at(-1), ["cmp_pot_of_tea"], where);
     await wait(20);
     assert.match(ytext.toString(), /^component Pot of Tea /m, where);
+
+    const outlinesOf = (selector: string): Array<[number, number]> =>
+      [...diagram.get("canvas").getLayer("designiq-presence").querySelectorAll(selector)].map((rect) => [
+        Number(rect.getAttribute("x")),
+        Number(rect.getAttribute("y")),
+      ]);
+    // a peer selects the renamed component by the id every peer reads from
+    // the text, before this canvas imports the text again
+    deliver([
+      {
+        clientId: 8,
+        user: { name: "Ada", color: "#1D4ED8", kind: "human" },
+        canvas: { cursor: null, selection: ["cmp_pot_of_tea"] },
+      },
+    ]);
+    await wait(20);
+    assert.deepEqual(outlinesOf("rect[stroke]"), [[cup!.x - 3, cup!.y - 3]], `${where}: the renamed component's box`);
 
     deliver([
       {
@@ -703,6 +760,95 @@ test("every renderer, in both hosts: a typed label is no edit until it commits, 
     }
   } finally {
     svgElement.getBBox = getBBox;
+  }
+});
+
+test("L5: a view change the host makes, setViewState or a fit, never commits an open label editor", async () => {
+  for (const [id, text] of DOCUMENTS) {
+    const [elementId] = LABEL_EDITS[id]!;
+    const container = host(specOf(id).canvasClassName);
+    const engine = await engineOf(id, container);
+    await engine.importText(text);
+    const before = await engine.exportText();
+    let dirty = 0;
+    engine.onDirty(() => dirty++);
+    const diagram = engine.modeler.diagram as unknown as EditableDiagram & {
+      get(name: "canvas"): { zoom(mode: string): void };
+    };
+    diagram.get("eventBus").fire("element.dblclick", { element: diagram.get("elementRegistry").get(elementId) });
+    typeInto(openLabelEditor(container), "Half Typ");
+
+    // the SPA's restore after a peer's re-import, then the widget's own fit
+    // (that one skips while a canvas field has the focus, so it goes to the
+    // canvas directly here)
+    const view = engine.modeler.getViewState() as { x: number; y: number; width: number; height: number };
+    engine.modeler.setViewState({ ...view, x: view.x + 80, y: view.y - 40 });
+    diagram.get("canvas").zoom("fit-viewport");
+    assert.equal(dirty, 0, `${id}: no change event`);
+    assert.equal(await engine.exportText(), before, `${id}: the export is the document before the editor opened`);
+    const field = openLabelEditor(container);
+    assert.equal(typedText(field), "Half Typ", `${id}: the editor stays open with what was typed`);
+
+    typeInto(field, "Half Typed");
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+    assert.equal(dirty, 1, `${id}: the commit is one edit`);
+    assert.match(await engine.exportText(), /Half Typed/, id);
+    engine.destroy();
+  }
+});
+
+interface WardleyLinkEditor {
+  get(name: "elementRegistry"): { get(id: string): unknown };
+  get(name: "wardleyLinkEditing"): {
+    activate(element: unknown): void;
+    getActiveEdit(): { elementId: string; value: string } | null;
+  };
+}
+
+test("Wardley, in both hosts: a typed link address survives the host's view change and a peer's re-import, and commits once", async () => {
+  const address = "https://example.com/tea";
+  const [, text, peer] = DOCUMENTS.find(([id]) => id === "wardley")!;
+  const [, peerChange] = LABEL_EDITS.wardley!;
+  for (const where of HOSTS) {
+    const doc = new Y.Doc();
+    const ytext = doc.getText("content");
+    ytext.insert(0, text);
+    const { container, modeler, destroy } = await mountLive(where, "wardley", ytext, doc);
+    await wait(50);
+    const diagram = modeler.diagram as unknown as WardleyLinkEditor;
+    const links = diagram.get("wardleyLinkEditing");
+    links.activate(diagram.get("elementRegistry").get("cmp_cup_of_tea"));
+    const field = container.querySelector<HTMLInputElement>("input.wardley-link-input");
+    assert.ok(field, `${where}: the link editor is open`);
+    typeInto(field, address.slice(0, 15));
+
+    const view = modeler.getViewState() as { x: number; y: number; width: number; height: number };
+    modeler.setViewState({ ...view, x: view.x + 80, y: view.y - 40 });
+    await wait(20);
+    assert.equal(ytext.toString(), text, `${where}: the host's view change commits nothing`);
+    assert.deepEqual(links.getActiveEdit(), { elementId: "cmp_cup_of_tea", value: address.slice(0, 15) }, where);
+
+    doc.transact(() => {
+      ytext.delete(0, ytext.length);
+      ytext.insert(0, peer);
+    });
+    await wait(500);
+    assert.equal(ytext.toString(), peer, `${where}: the peer's text, nothing of what was typed`);
+    const reopened = container.querySelector<HTMLInputElement>("input.wardley-link-input");
+    assert.ok(reopened, `${where}: the link editor stays open over the re-import`);
+    assert.equal(reopened.value, address.slice(0, 15), `${where}: with what was typed`);
+
+    let writes = 0;
+    ytext.observe(() => writes++);
+    typeInto(reopened, address);
+    reopened.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await wait(20);
+    assert.equal(writes, 1, `${where}: the commit is one write`);
+    assert.ok(ytext.toString().includes(address), `${where}: the commit is the edit`);
+    assert.ok(ytext.toString().includes(peerChange), `${where}: the peer's change stays`);
+    destroy();
   }
 });
 

@@ -24,8 +24,7 @@
  * The one thing left to check is that the modeler is the one the host meant:
  * its notation and the contract version it implements, at bind time.
  */
-import { type CollaborativeModeler, MODELER_API_VERSION } from "@miragon/modeler-api";
-import { apiVersionsCompatible } from "@miragon/modeler-api/conformance";
+import { apiVersionsCompatible, type CollaborativeModeler, MODELER_API_VERSION } from "@miragon/modeler-api";
 import type * as Y from "yjs";
 
 import { bindModelSync } from "./model-sync.ts";

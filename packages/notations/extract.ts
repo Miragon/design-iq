@@ -430,11 +430,15 @@ function extractWardley(raw: string): ModelGraph {
 // interaction is a shape of its own, placed between the teams it connects,
 // with a `mode` (collaboration, x-as-a-service, facilitating) and no
 // endpoints: the relation is spatial, so it is a node too, never an edge. A
-// legacy interaction without geometry (a version 1 edge) is dropped, like
-// the schema model's migrate() drops it.
+// version 1 file's interactions without geometry (its edges) are dropped,
+// like the schema model's migrate() drops them. In any other file, one
+// without a version included, the schema model refuses such an interaction
+// instead, so it stays in the view of the file the validator names it in.
+
+const TT_EDGE_INTERACTIONS_VERSION = 1;
 
 function extractTeamTopology(raw: string): ModelGraph {
-  const data = JSON.parse(raw) as { nodes?: unknown; interactions?: unknown };
+  const data = JSON.parse(raw) as { version?: unknown; nodes?: unknown; interactions?: unknown };
   const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
   const teams: ModelNode[] = list(data.nodes).map((n) => ({
     id: n.id,
@@ -442,8 +446,10 @@ function extractTeamTopology(raw: string): ModelGraph {
     name: n.label ?? n.name,
     extra: n.description ? { description: n.description } : undefined,
   }));
+  const placed = (i: object): boolean => "position" in i && "size" in i;
   const interactions: ModelNode[] = list(data.interactions)
-    .filter((i) => i !== null && typeof i === "object" && "position" in i && "size" in i)
+    .filter((i) => i !== null && typeof i === "object")
+    .filter((i) => data.version !== TT_EDGE_INTERACTIONS_VERSION || placed(i))
     .map((i) => ({ id: i.id, type: "interaction", name: i.label, extra: { mode: i.mode } }));
   return { notation: "team-topology", nodes: [...teams, ...interactions], edges: [] };
 }

@@ -1,7 +1,6 @@
-/** @miragon/event-storming-renderer — the .storm DSL. What the host's chrome
- *  covers is `freeRectInsets` (keyboard creation lands in the rest); the
- *  viewer takes no options. */
-import type { LoadedMiragonRenderer, MiragonRendererSpec } from "./spec.ts";
+/** @miragon/event-storming-renderer — the .storm DSL. Keyboard creation
+ *  lands in the free area the mount names. */
+import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
 
 export const spec: MiragonRendererSpec = {
   id: "event-storming",
@@ -14,8 +13,8 @@ export const spec: MiragonRendererSpec = {
       import("@miragon/event-storming-renderer/assets/event-storming.css"),
     ]);
     return {
-      create: ({ insets } = {}) => createCollaborativeModeler({ undoRedoKeys: true, freeRectInsets: insets }),
-      createViewer: () => createCollaborativeViewer(),
+      create: (mount) => createCollaborativeModeler({ ...contractOptions(mount), undoRedoKeys: true }),
+      createViewer: (mount) => createCollaborativeViewer(contractOptions(mount)),
     };
   },
 };

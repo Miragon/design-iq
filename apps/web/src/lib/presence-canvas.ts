@@ -26,7 +26,10 @@
  * know is looked up as an element name — the Live Host names a Wardley
  * map's components, the canvas ids them `cmp_<name>`. Every element that
  * carries the name is outlined (a Wardley pipeline carries its
- * component's). What the surface does not address is not shared: a
+ * component's). The outline is the box the surface reports (contract 1.2
+ * `bounds`), read from the live canvas: an element created or renamed here
+ * has a document id the canvas's own registry learns only at the next
+ * import. What the surface does not address is not shared: a
  * selected Wardley note, annotation, region or drawing, or an Event
  * Storming note or drawing, publishes nothing, because the ids the text
  * gives those move to another element when a line above them changes.
@@ -54,10 +57,19 @@ export interface PresenceSurface {
   onRemote(cb: (peers: RemotePresence[]) => void): () => void;
 }
 
+/** an element's box in model space */
+interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** the slice of a collaborative modeler's element surface presence reads */
 export interface PresenceElements {
   list(): Array<{ id: string; name?: string }>;
   onSelection(callback: (ids: string[]) => void): () => void;
+  bounds?(id: string): Box | undefined;
 }
 
 /** minimal structural view of the diagram-js services we touch */
@@ -116,6 +128,12 @@ function namePill(color: string, name: string, x: number, y: number): { group: S
   label.textContent = safePresenceLabel(name);
   group.append(pill, label);
   return { group, fit: () => pill.setAttribute("width", String(Math.ceil(label.getComputedTextLength()) + 12)) };
+}
+
+/** a shape's box — connections carry waypoints, not a box */
+function shapeBox(element: ElementLike | undefined): Box | undefined {
+  if (typeof element?.x !== "number" || typeof element.width !== "number") return undefined;
+  return { x: element.x, y: element.y ?? 0, width: element.width, height: element.height ?? 0 };
 }
 
 /** element name → the ids of every element carrying it */
@@ -223,11 +241,13 @@ export function attachPresenceCanvas(
     // a peer's entry is an element id, else (with an element surface) an
     // element name; the names are read once per render, and only on a miss
     let names: Map<string, string[]> | undefined;
-    const elementsOf = (id: string): ElementLike[] => {
-      const byId = registry.get(id);
+    const boxOf = (id: string): Box | undefined =>
+      elements?.bounds ? elements.bounds(id) : shapeBox(registry.get(id));
+    const boxesOf = (id: string): Box[] => {
+      const byId = boxOf(id);
       if (byId || !elements) return byId ? [byId] : [];
       names ??= idsByName(elements.list());
-      return (names.get(id) ?? []).flatMap((namedId) => registry.get(namedId) ?? []);
+      return (names.get(id) ?? []).flatMap((namedId) => boxOf(namedId) ?? []);
     };
 
     for (const peer of peers) {
@@ -242,16 +262,14 @@ export function attachPresenceCanvas(
       let anchor: { x: number; y: number } | undefined; // the first outlined box
       const boxes = selection
         .slice(0, MAX_OUTLINES)
-        .flatMap((id) => (typeof id === "string" ? elementsOf(id) : []))
+        .flatMap((id) => (typeof id === "string" ? boxesOf(id) : []))
         .slice(0, MAX_OUTLINES);
-      for (const el of boxes) {
-        // shapes only — connections carry waypoints, not a box
-        if (typeof el.x !== "number" || typeof el.width !== "number") continue;
+      for (const box of boxes) {
         const outline = svg("rect");
-        outline.setAttribute("x", String(el.x - 3));
-        outline.setAttribute("y", String((el.y ?? 0) - 3));
-        outline.setAttribute("width", String(el.width + 6));
-        outline.setAttribute("height", String((el.height ?? 0) + 6));
+        outline.setAttribute("x", String(box.x - 3));
+        outline.setAttribute("y", String(box.y - 3));
+        outline.setAttribute("width", String(box.width + 6));
+        outline.setAttribute("height", String(box.height + 6));
         outline.setAttribute("rx", "3");
         outline.setAttribute("fill", "none");
         outline.setAttribute("stroke", color);
@@ -260,7 +278,7 @@ export function attachPresenceCanvas(
         outline.setAttribute("vector-effect", "non-scaling-stroke");
         if (agent) outline.setAttribute("stroke-dasharray", "5 3");
         layer.appendChild(outline);
-        anchor ??= { x: el.x - 3, y: (el.y ?? 0) - 3 };
+        anchor ??= { x: box.x - 3, y: box.y - 3 };
       }
 
       const cursor = peer.canvas.cursor;
