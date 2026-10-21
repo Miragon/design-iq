@@ -21,6 +21,7 @@ import type * as Y from "yjs";
 
 import type { TodoElementWire } from "@/lib/api";
 import type { PresenceSurface } from "@/lib/presence-canvas";
+import type { SidePanelRoom } from "@/lib/side-panel-room";
 import type { TodoCanvas } from "@/lib/todo-canvas";
 import type { ModelerMenu } from "@/mcp-app/core/menu-model";
 
@@ -70,6 +71,9 @@ export interface EditorContext {
   menuTrigger?(): HTMLElement | null;
   /** an action of the engine's menu failed (an export): surface it */
   onActionFailed?(message: string): void;
+  /** what an open side panel covers of the canvas, which a fit keeps clear
+   *  of. Optional: absent = no panel ever covers it */
+  sidePanels?: SidePanelRoom;
 }
 
 /** the model list as the shell has it: it may arrive after the editor

@@ -30,16 +30,17 @@
 .cm-canvas {
   isolation: isolate;
 }
-/* a renderer's popover (Wardley: Map size…, X-axis labels…) opens where the
-   shell's menu would drop down; here the menu is the toolbar's ⋯ at the
-   right, so the popover stands under it, over the renderer's own palette
-   (110) as a popover stands over the shell's palette (the id outranks the
-   vendor rule) */
+/* a renderer's popover (Wardley: Map size…, X-axis labels…) opens at the
+   canvas's top left, as the guide places it (§5.4: left 12px), there with no
+   menu row above it: an open side panel docks over the right edge and paints
+   over the isolated canvas, so a popover at the right would hide its focused
+   field. It stands over the renderer's own palette (110) as a popover stands
+   over the shell's palette (the id outranks the vendor rule) */
 #root .wardley-canvas .wardley-popover {
   top: 12px;
-  right: 12px;
-  left: auto;
+  left: 12px;
   z-index: 150;
+  max-height: calc(100cqh - 24px);
 }
 /* Team Topologies drops its palette to 64px at viewports up to 760px wide,
    a row kept free for a host's top chrome; the SPA has none over its canvas,

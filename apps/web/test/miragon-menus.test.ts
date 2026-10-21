@@ -103,8 +103,28 @@ async function widgetOf(id: string, readonly = false) {
   return { engine, container, ...around };
 }
 
+/** a side panel over the SPA's canvas, opened and closed by the test */
+function sidePanels() {
+  let covered = 0;
+  const listeners = new Set<() => void>();
+  return {
+    room: {
+      covered: () => covered,
+      onChange(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+    set(next: number) {
+      covered = next;
+      for (const listener of listeners) listener();
+    },
+    listening: () => listeners.size,
+  };
+}
+
 /** the SPA's editor of a notation on a shared Y.Text, its ⋯ trigger in the page */
-async function editorOf(id: string) {
+async function editorOf(id: string, panels = sidePanels()) {
   const [spec, renderer] = await load(id);
   const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
   const container = host(spec.canvasClassName);
@@ -126,11 +146,12 @@ async function editorOf(id: string) {
       onImportFailed: assert.fail,
       menuTrigger: () => trigger,
       onActionFailed: (message: string) => void failed.push(message),
+      sidePanels: panels.room,
     } as unknown as EditorContext,
   );
   await wait(50);
   assert.ok(modeler);
-  return { editor, container, trigger, failed, modeler, renderer };
+  return { editor, container, trigger, failed, modeler, renderer, panels };
 }
 
 const EXPECTED = {
@@ -355,12 +376,71 @@ test("the SPA's Miragon editors: the zoom keys and ⇧1 drive the canvas, a text
   assert.equal(scale(), 1, "a text field keeps the key: the browser zooms the page");
   field.remove();
   // ⇧1: the plot with its axes into what the renderer's palette leaves free
+  // (jsdom lays nothing out: the palette measures 0)
   press("!", "Digit1", { shiftKey: true });
-  const fitted = fitViewbox(renderer.contentBounds!(modeler)!, { width: 1000, height: 640 }, spaFitInsets(1000, 640));
+  const fitted = fitViewbox(
+    renderer.contentBounds!(modeler)!,
+    { width: 1000, height: 640 },
+    spaFitInsets({ paletteBottom: 0, coveredRight: 0 }),
+  );
   assert.ok(fitted);
   assert.equal(scale(), Math.round(fitted.scale * 1000) / 1000);
-  assert.deepEqual(spaFitInsets(1000, 640), { top: 88, right: 24, bottom: 64, left: 24 }, "the shell's insets");
-  assert.equal(spaFitInsets(720, 640).top, 140, "the palette's second row from 760px down");
   editor.destroy();
   assert.equal(press("=", "Equal", { ctrlKey: true }).defaultPrevented, false, "gone with the editor");
+});
+
+test("the SPA's fit: 24px clear of the measured palette, the sides, the bottom and an open side panel", async () => {
+  const { spaFitInsets } = await import("../src/notations/miragon/editor.ts");
+  assert.deepEqual(spaFitInsets({ paletteBottom: 64, coveredRight: 0 }), { top: 88, right: 24, bottom: 24, left: 24 });
+  assert.deepEqual(
+    spaFitInsets({ paletteBottom: 52, coveredRight: 320 }),
+    { top: 76, right: 344, bottom: 24, left: 24 },
+    "one row of palette, no zoom row below, the panel's width kept clear",
+  );
+});
+
+test("the SPA's Miragon editors: a side panel opening re-fits a view nobody moved beside it, ⇧1 fits beside it, a moved view stays", async () => {
+  const { editor, modeler, renderer, panels } = await editorOf("wardley");
+  const { spaFitInsets } = await import("../src/notations/miragon/editor.ts");
+  const canvas = modeler.diagram.get("canvas") as { viewbox(): { x: number; scale: number } };
+  const scale = (): number => Math.round(canvas.viewbox().scale * 1000) / 1000;
+  const fitBeside = (coveredRight: number): number => {
+    const fitted = fitViewbox(
+      renderer.contentBounds!(modeler)!,
+      { width: 1000, height: 640 },
+      spaFitInsets({ paletteBottom: 0, coveredRight }),
+    );
+    assert.ok(fitted);
+    return Math.round(fitted.scale * 1000) / 1000;
+  };
+  const press = (key: string, code: string, mods: Partial<KeyboardEventInit>) =>
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods }));
+
+  press("=", "Equal", { ctrlKey: true });
+  const moved = scale();
+  panels.set(320);
+  assert.equal(scale(), moved, "a view the user moved since the import stays where it is (guide §5.9)");
+  press("!", "Digit1", { shiftKey: true });
+  assert.equal(scale(), fitBeside(320), "⇧1 fits left of the open panel");
+  panels.set(0);
+  assert.equal(scale(), fitBeside(0), "the fitted view re-fits over the whole canvas once it closes");
+  panels.set(320);
+  assert.equal(scale(), fitBeside(320), "and left of the panel as it opens again");
+  editor.destroy();
+  assert.equal(panels.listening(), 0, "the editor stops listening with its destroy");
+
+  const fresh = await editorOf("wardley");
+  const freshCanvas = fresh.modeler.diagram.get("canvas") as { viewbox(): { scale: number } };
+  fresh.panels.set(320);
+  const fittedFresh = fitViewbox(
+    fresh.renderer.contentBounds!(fresh.modeler)!,
+    { width: 1000, height: 640 },
+    spaFitInsets({ paletteBottom: 0, coveredRight: 320 }),
+  );
+  assert.equal(
+    Math.round(freshCanvas.viewbox().scale * 1000) / 1000,
+    Math.round(fittedFresh!.scale * 1000) / 1000,
+    "the view the import left, nobody moved, re-fits left of the panel",
+  );
+  fresh.editor.destroy();
 });

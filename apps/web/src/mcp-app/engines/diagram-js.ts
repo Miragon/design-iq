@@ -136,18 +136,25 @@ export function diagramView(
   const onImportStart = (): void => {
     importing = true;
   };
-  // without insets (the node suites) the engine fits by itself after its import
+  // without insets (the SPA's editors, the node suites) the renderer fits by
+  // itself on import, and the view it leaves is the first one a move is
+  // measured against: an untouched view re-fits beside a side panel
   const onImportDone = (): void => {
-    if (!opts.insets) {
-      importing = false;
-      return;
-    }
+    if (!opts.insets) importing = false;
     clearTimeout(pendingFit);
     pendingFit = setTimeout(() => {
       pendingFit = undefined;
-      importFit();
+      if (opts.insets) importFit();
+      else adoptImportView();
     }, 0);
   };
+  function adoptImportView(): void {
+    if (lastFit) return;
+    const vb = canvas().viewbox(false);
+    if (!vb.outer.width || !vb.outer.height) return;
+    lastFit = { x: vb.x, y: vb.y, scale: vb.scale };
+    touched = false;
+  }
   instance.on("canvas.viewbox.changed", onViewbox);
   instance.on("palette.changed", notify);
   instance.on("import.parse.start", onImportStart);

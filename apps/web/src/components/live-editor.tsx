@@ -64,6 +64,7 @@ import { installMonacoTheme, MONACO_OPTIONS } from "@/lib/monaco-theme";
 import type { PresenceSurface, RemotePresence } from "@/lib/presence-canvas";
 import { invalidateModelLists, useFileHistory, useModels, useTodos } from "@/lib/queries";
 import { createRemoteCaretStyles } from "@/lib/remote-carets";
+import { sidePanelRoom } from "@/lib/side-panel-room";
 import { clampRatio, DEFAULT_RATIO, ratioBounds } from "@/lib/split-ratio";
 import type { TodoCanvas } from "@/lib/todo-canvas";
 import type { ModelerMenu } from "@/mcp-app/core/menu-model";
@@ -324,6 +325,10 @@ export function LiveEditor({
             },
             presence: presenceSurface,
             menuTrigger: () => menuTriggerRef.current,
+            sidePanels: sidePanelRoom(
+              () => layersRef.current,
+              () => canvasRef.current,
+            ),
             onActionFailed: (message) => {
               if (!cancelled) toast.error(message);
             },
