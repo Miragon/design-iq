@@ -29,7 +29,7 @@ export const spec: MiragonRendererSpec = {
         svgToPng,
       },
       ,
-      { dialogChrome, imageExports, lazily },
+      { dialogChrome, imageExports, lazily, ownTitle },
     ] = await Promise.all([
       import("@miragon/wardley-renderer"),
       import("@miragon/wardley-renderer/assets/wardley.css"),
@@ -42,7 +42,8 @@ export const spec: MiragonRendererSpec = {
       create: (mount) => createCollaborativeModeler({ ...contractOptions(mount), undoRedoKeys: true }),
       createViewer: (mount) => createCollaborativeViewer(contractOptions(mount)),
       contentBounds: (modeler) => (modeler.diagram.get("panConstraint") as PanConstraint).contentBounds(),
-      title: (modeler) => mapOf(modeler).exportMap().config.title.trim() || undefined,
+      // wardley-schema-model's DEFAULT_MAP_TITLE: a map without a title line
+      title: (modeler) => ownTitle(mapOf(modeler).exportMap().config.title, "Untitled Map"),
       menu(modeler, host) {
         const map = mapOf(modeler);
         const chrome = dialogChrome(host);

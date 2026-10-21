@@ -319,6 +319,20 @@ test("displayName: every renderer's document title", async () => {
   }
 });
 
+test("displayName: a map or board without a title line has none, not the parser's placeholder", async () => {
+  const untitled: Record<string, string> = {
+    wardley: MAP.replace(/^title .*\n/, ""),
+    "event-storming": BOARD.replace(/^title .*\n/, ""),
+  };
+  for (const [id, text] of Object.entries(untitled)) {
+    const [spec, renderer] = await load(id);
+    const engine = mountMiragonEngine(spec, renderer, host(spec.canvasClassName), false);
+    await engine.importText(text);
+    assert.equal(engine.displayName?.(), undefined, id);
+    engine.destroy();
+  }
+});
+
 test("the SPA's Miragon editors: the zoom keys and ⇧1 drive the canvas, a text field keeps them", async () => {
   const { editor, container, modeler, renderer } = await editorOf("wardley");
   const { spaFitInsets } = await import("../src/notations/miragon/editor.ts");

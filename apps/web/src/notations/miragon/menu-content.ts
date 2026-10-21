@@ -31,6 +31,13 @@ export function dialogChrome(host: MiragonMenuHost) {
   };
 }
 
+/** the document's own title for the menu header; the placeholder a parser
+ *  fills in for a document without a title line ("Untitled Map") is none */
+export function ownTitle(title: string | undefined, placeholder: string): string | undefined {
+  const shown = title?.trim();
+  return shown && shown !== placeholder ? shown : undefined;
+}
+
 export interface Lazy<T> {
   get(): T;
   destroy(): void;

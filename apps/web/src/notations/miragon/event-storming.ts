@@ -20,7 +20,7 @@ export const spec: MiragonRendererSpec = {
     const [
       { boardMenu, createCollaborativeModeler, createCollaborativeViewer, createShortcutsDialog },
       ,
-      { dialogChrome, imageExports, lazily },
+      { dialogChrome, imageExports, lazily, ownTitle },
       { svgToPng },
     ] = await Promise.all([
       import("@miragon/event-storming-renderer"),
@@ -33,7 +33,8 @@ export const spec: MiragonRendererSpec = {
     return {
       create: (mount) => createCollaborativeModeler({ ...contractOptions(mount), undoRedoKeys: true }),
       createViewer: (mount) => createCollaborativeViewer(contractOptions(mount)),
-      title: (modeler) => boardOf(modeler).exportMap().config.title.trim() || undefined,
+      // the board a parser reads without a title line
+      title: (modeler) => ownTitle(boardOf(modeler).exportMap().config.title, "Untitled Board"),
       menu(modeler, host) {
         const board = boardOf(modeler);
         const viewOptions = board.get<EventStormingViewOptions>("eventStormingViewOptions");
