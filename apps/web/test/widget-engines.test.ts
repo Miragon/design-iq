@@ -558,3 +558,44 @@ test("fit and zoom read the viewbox FRESH: a frame resize leaves diagram-js' cac
   assert.deepEqual(current, { x: current.x, y: current.y, width: 1280, height: 760 }, "100 % of the new frame");
   view.destroy();
 });
+
+test("zoomBy never turns a step around: a fit below 20 % keeps its level on a step out, a step in goes to 20 %; 400 % keeps it on a step in", () => {
+  // a board of two events 12000 units apart fits at about 8 % into the 1000x640 frame
+  const inner = { x: 0, y: 0, width: 12_000, height: 400 };
+  const outer = { width: 1000, height: 640 };
+  let current: Box = { x: 0, y: 0, width: 1000, height: 640 };
+  const handlers = new Map<string, Set<() => void>>();
+  const canvas = {
+    viewbox(box?: Box | false) {
+      if (box === undefined || box === false) return { ...current, scale: outer.width / current.width, inner, outer };
+      current = { ...box };
+      handlers.get("canvas.viewbox.changed")?.forEach((cb) => cb());
+      return undefined;
+    },
+  };
+  const insets: Insets = { top: 60, right: 16, bottom: 56, left: 16 };
+  const view = diagramView(
+    {
+      get: () => canvas,
+      on: (e, cb) => void (handlers.get(e) ?? handlers.set(e, new Set()).get(e)!).add(cb),
+      off: (e, cb) => void handlers.get(e)?.delete(cb),
+    },
+    { insets: () => insets },
+  );
+  view.fit(insets, false);
+  const fittedLevel = view.level();
+  assert.ok(fittedLevel < ZOOM_MIN, `the fit sits below 20 % (${fittedLevel})`);
+  const fittedView = { ...current };
+  view.zoomBy(-0.2);
+  assert.deepEqual(current, fittedView, "a step out below 20 % leaves the view");
+  assert.equal(view.isTouched(), false);
+  view.zoomBy(0.2);
+  close(view.level(), ZOOM_MIN, 1e-9);
+  view.zoomTo(ZOOM_MAX);
+  const atMax = { ...current };
+  view.zoomBy(0.2);
+  assert.deepEqual(current, atMax, "a step in at 400 % leaves the view");
+  view.zoomBy(-0.2);
+  assert.ok(view.level() < ZOOM_MAX);
+  view.destroy();
+});

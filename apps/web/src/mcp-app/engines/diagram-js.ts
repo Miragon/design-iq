@@ -11,6 +11,8 @@
  * and clamps exactly like the Miragon modelers' own chrome.
  */
 import {
+  canZoomIn,
+  canZoomOut,
   easeStandard,
   FIT_ANIMATION_MS,
   fitViewbox,
@@ -263,7 +265,13 @@ export function diagramView(
   return {
     hasViewport: () => opts.hasViewport?.() ?? true,
     fit,
-    zoomBy: (step) => zoomTo(steppedLevel(canvas().viewbox().scale, step, ZOOM_MIN, ZOOM_MAX)),
+    zoomBy(step) {
+      const level = canvas().viewbox().scale;
+      // a fit may sit below 20 %: the clamp would turn a step out into a zoom
+      // in (guide §5.8), so the step goes only the way it points
+      if (step < 0 ? !canZoomOut(level) : !canZoomIn(level)) return;
+      zoomTo(steppedLevel(level, step, ZOOM_MIN, ZOOM_MAX));
+    },
     zoomTo,
     level: () => canvas().viewbox().scale,
     isTouched: () => touched,
