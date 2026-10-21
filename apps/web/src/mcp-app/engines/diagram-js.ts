@@ -180,9 +180,10 @@ export function diagramView(
       : undefined;
   if (container) resizes?.observe(container);
 
-  // every renderer commits an open label editor on a viewbox change, so a
+  // bpmn-js and dmn-js commit an open label editor on a viewbox change, so a
   // fit the host makes on its own (after a peer's re-import, on a frame
-  // resize) would save what the user has typed so far
+  // resize) would save what the user has typed so far; the Miragon renderers
+  // keep theirs open (contract L5), and the field stays where it is typed
   const typingOnCanvas = (): boolean => {
     const focused = container?.ownerDocument.activeElement;
     return !!focused && !!container?.contains(focused) && focused.matches(TEXT_FIELD);

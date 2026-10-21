@@ -708,6 +708,42 @@ test("every renderer, in both hosts: a typed label is no edit until it commits, 
   }
 });
 
+test("L5: a view change the host makes, setViewState or a fit, never commits an open label editor", async () => {
+  for (const [id, text] of DOCUMENTS) {
+    const [elementId] = LABEL_EDITS[id]!;
+    const container = host(specOf(id).canvasClassName);
+    const engine = await engineOf(id, container);
+    await engine.importText(text);
+    const before = await engine.exportText();
+    let dirty = 0;
+    engine.onDirty(() => dirty++);
+    const diagram = engine.modeler.diagram as unknown as EditableDiagram & {
+      get(name: "canvas"): { zoom(mode: string): void };
+    };
+    diagram.get("eventBus").fire("element.dblclick", { element: diagram.get("elementRegistry").get(elementId) });
+    typeInto(openLabelEditor(container), "Half Typ");
+
+    // the SPA's restore after a peer's re-import, then the widget's own fit
+    // (that one skips while a canvas field has the focus, so it goes to the
+    // canvas directly here)
+    const view = engine.modeler.getViewState() as { x: number; y: number; width: number; height: number };
+    engine.modeler.setViewState({ ...view, x: view.x + 80, y: view.y - 40 });
+    diagram.get("canvas").zoom("fit-viewport");
+    assert.equal(dirty, 0, `${id}: no change event`);
+    assert.equal(await engine.exportText(), before, `${id}: the export is the document before the editor opened`);
+    const field = openLabelEditor(container);
+    assert.equal(typedText(field), "Half Typ", `${id}: the editor stays open with what was typed`);
+
+    typeInto(field, "Half Typed");
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+    assert.equal(dirty, 1, `${id}: the commit is one edit`);
+    assert.match(await engine.exportText(), /Half Typed/, id);
+    engine.destroy();
+  }
+});
+
 test("Team Topologies: typing a label is no edit until it commits, and a peer's re-import keeps what was typed", async () => {
   const widget = host("tt-canvas");
   const engine = await engineOf("team-topology", widget);
