@@ -3,7 +3,7 @@
  * configuration mermaid is initialised with (safe, the CI look), the element
  * ids of concurrent renders, and how a mermaid error reads for the person
  * typing. mermaid itself needs a DOM and never runs here; the error fixtures
- * have the shapes of mermaid 12.1.0's own messages.
+ * have the shapes of mermaid 12.2.0's own messages.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
