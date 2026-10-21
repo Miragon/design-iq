@@ -261,7 +261,9 @@ sized by `miragon-styles.css`) and removes it with the engine.
    package's `createCollaborativeModeler`/`createCollaborativeViewer` with the
    contract's factory options (`contractOptions` in `spec.ts`: the free area
    and `fitOnImport`, plus `undoRedoKeys` for the editor), the names every
-   renderer on `@miragon/modeler-api` 1.2 takes. Then its line in
+   renderer on `@miragon/modeler-api` 1.2 takes, and `contentBounds` if what
+   a host fits is more than the canvas's elements (Wardley's plot and axes).
+   Then its line in
    `src/notations/miragon/index.ts` — the SPA editor plugin, the widget engine,
    the CSS scoping and the widget bundle derive from it. The scoping is
    reviewed per renderer in `test/vendor-css.test.ts`: the new spec needs its

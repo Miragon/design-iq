@@ -126,7 +126,7 @@ Not compact: the palette is always visible at its slot and is included in the fi
 
 ### 2.5 Fit and zoom
 
-**`fitInto(instance, insets)`** replaces the import-time `fit-viewport`. It is pure math in `engines/fit.ts`: content bbox → viewbox, `maxScale 1`.
+**`fitInto(instance, insets)`** replaces the import-time `fit-viewport`. It is pure math in `engines/fit.ts`: content bbox → viewbox, `maxScale 1`. The content bbox is diagram-js's box around the elements, unless a Miragon spec names its own `contentBounds`: Wardley's are the plot with its axes and everything drawn on or beyond it, the bounds its pan constraint keeps in the free area.
 
 Insets:
 
