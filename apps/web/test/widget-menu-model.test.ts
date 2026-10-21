@@ -15,6 +15,7 @@ import {
   menuHeader,
   menuKeyNav,
   type ModelerMenu,
+  panelOfItem,
   runModelerItem,
   triggerLabels,
 } from "../src/mcp-app/core/menu-model.ts";
@@ -382,6 +383,17 @@ test("the Legend panel: the Model group's last entry, a checkbox with its check 
   });
   assert.equal(item({ ...miragon, legend: { open: false } }, "legend")?.checked, false);
   assert.equal(item(miragon, "legend"), undefined, "a notation without a legend has none");
+});
+
+test("panelOfItem: the items that toggle a panel, and only those", () => {
+  assert.deepEqual((["todos", "checks", "legend", "fit", "fullscreen", "modeler:legend"] as const).map(panelOfItem), [
+    "todos",
+    "checks",
+    "legend",
+    undefined,
+    undefined,
+    undefined,
+  ]);
 });
 
 test("runModelerItem runs the entry behind an item, and nothing else", () => {

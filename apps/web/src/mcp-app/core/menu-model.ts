@@ -207,6 +207,11 @@ export function runModelerItem(menu: ModelerMenu, id: MenuItemId): boolean {
   return false;
 }
 
+/** the panel (registerPanel) an item toggles: Todos, Checks, the Legend */
+export function panelOfItem(id: MenuItemId): "todos" | "checks" | "legend" | undefined {
+  return id === "todos" || id === "checks" || id === "legend" ? id : undefined;
+}
+
 /** a dmn view as the menu lists it (engines/dmn.ts views()) */
 export type DmnView = DecisionView;
 

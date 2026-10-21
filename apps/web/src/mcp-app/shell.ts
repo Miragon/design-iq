@@ -27,7 +27,7 @@ import type {
 import { mountDecision } from "./chrome/decision.ts";
 import { focusReturn } from "./chrome/focus.ts";
 import { mountHost } from "./chrome/host.ts";
-import { mountKeys } from "./chrome/keys.ts";
+import { chromeKeysFor, mountKeys } from "./chrome/keys.ts";
 import { mountLayout } from "./chrome/layout-dom.ts";
 import { mountMenu } from "./chrome/menu.ts";
 import { mountModeChip } from "./chrome/mode-chip.ts";
@@ -42,7 +42,7 @@ import { stateActionPlan } from "./core/feedback.ts";
 import type { ChromeKey } from "./core/keymap.ts";
 import { sheetFolds, type WidgetKind } from "./core/layout.ts";
 import { type DocLabel, LoadError, type ModelInput, type SyncState, type ToastSpec } from "./core/lifecycle.ts";
-import { docName, type MenuContext, type MenuItemId, runModelerItem } from "./core/menu-model.ts";
+import { docName, type MenuContext, type MenuItemId, panelOfItem, runModelerItem } from "./core/menu-model.ts";
 import type { PopoverActionId } from "./core/sync-view.ts";
 import { ZOOM_STEP } from "./engines/fit.ts";
 import { icon, mountIcons } from "./icons.ts";
@@ -183,12 +183,17 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
     displayName: () => actions.displayName(),
     onSelect: (id) => onMenu(id),
   });
+  const chromeKeys = chromeKeysFor(kind, {
+    menuOpen: () => menu.isOpen(),
+    hasViewport: () => view?.hasViewport() ?? false,
+    stateCardShown: () => stateCards.current() !== undefined,
+    run(key: ChromeKey) {
+      if (key === "fit") layout.refit(true);
+      else if (key === "zoomToActual") view?.zoomTo(1);
+      else view?.zoomBy(key === "zoomIn" ? ZOOM_STEP : -ZOOM_STEP);
+    },
+  });
   const zoom = mountZoom({ els, fit: () => layout.refit(true) });
-  const zoomKey = (key: ChromeKey): void => {
-    if (key === "fit") layout.refit(true);
-    else if (key === "zoomToActual") view?.zoomTo(1);
-    else view?.zoomBy(key === "zoomIn" ? ZOOM_STEP : -ZOOM_STEP);
-  };
   mountKeys(document, {
     save: () => {
       const s = actions.state();
@@ -205,15 +210,7 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
       return true;
     },
     escape: [() => menu.close(true), () => sync.closePopover(), () => layout.closeTools(), () => panels.escape()],
-    ...(kind === "miragon"
-      ? {
-          chromeKeys: {
-            menuOpen: () => menu.isOpen(),
-            viewport: () => (view?.hasViewport() ?? false) && stateCards.current() === undefined,
-            run: zoomKey,
-          },
-        }
-      : {}),
+    ...(chromeKeys ? { chromeKeys } : {}),
   });
 
   // ── the panels the extras registered: their badge and availability feed
@@ -306,6 +303,11 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
     }
     const modelerMenu = actions.modelerMenu();
     if (modelerMenu && runModelerItem(modelerMenu, id)) return;
+    const panel = panelOfItem(id);
+    if (panel) {
+      registered.get(panel)?.handle.toggle();
+      return;
+    }
     switch (id) {
       case "open":
         return actions.openInDesignIQ();
@@ -315,10 +317,6 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
         return actions.reload();
       case "workshop":
         return modeChip?.toggle();
-      case "todos":
-      case "checks":
-      case "legend":
-        return registered.get(id)?.handle.toggle();
       case "fit":
         return layout.refit(true);
       case "fullscreen":

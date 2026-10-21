@@ -11,9 +11,27 @@
  * theirs. The Miragon renderers bind no zoom keys: `chromeKeys` gives their
  * widgets the modeler shell's (lib/chrome-keys.ts, as in the SPA).
  */
-import { handleChromeKey, isTextField, openDialogs } from "../../lib/chrome-keys.ts";
-import { keyCommand, type KeyTarget } from "../core/keymap.ts";
+import { type ChromeKeyDeps, handleChromeKey, isTextField, openDialogs } from "../../lib/chrome-keys.ts";
+import { type ChromeKey, keyCommand, type KeyTarget } from "../core/keymap.ts";
+import type { WidgetKind } from "../core/layout.ts";
 import type { MountKeys } from "./contracts.ts";
+
+/**
+ * The zoom keys and ⇧1 of a widget (KeyDeps.chromeKeys): only a Miragon
+ * widget binds them, since bpmn-js and dmn-js keep their own keys on the
+ * focused canvas; a state card hides the diagram, so the browser keeps them.
+ */
+export function chromeKeysFor(
+  kind: WidgetKind,
+  state: { menuOpen(): boolean; hasViewport(): boolean; stateCardShown(): boolean; run(key: ChromeKey): void },
+): ChromeKeyDeps | undefined {
+  if (kind !== "miragon") return undefined;
+  return {
+    menuOpen: () => state.menuOpen(),
+    viewport: () => state.hasViewport() && !state.stateCardShown(),
+    run: (key) => state.run(key),
+  };
+}
 
 /** a modeler's own text (a label being edited, a DMN cell, the add-on's
  *  simulation form, a renderer dialog's field) vs. a chrome field (the todo
