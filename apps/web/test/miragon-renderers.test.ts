@@ -10,10 +10,10 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { newCmJson, newOwmText, newStormText, newTtJson } from "@designiq/notations/templates";
+import { fitViewbox } from "@miragon/modeler-shell/core";
 import * as Y from "yjs";
 
 import type { PresenceSurface, RemotePresence } from "../src/lib/presence-canvas.ts";
-import { fitViewbox } from "../src/mcp-app/engines/fit.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
 import type { LoadedMiragonRenderer, MiragonModeler, MiragonRendererSpec } from "../src/notations/miragon/spec.ts";
@@ -417,10 +417,11 @@ test("Wardley in the widget: the chrome fits the plot with its axes into the fre
     const content = diagram.get("panConstraint").contentBounds();
     assert.deepEqual(content, renderer.contentBounds!(engine.modeler), "the spec's content bounds");
     const { x, y, scale } = diagram.get("canvas").viewbox();
-    const fitted = fitViewbox(content, { width: 1000, height: 640 }, insets, 1);
+    const fitted = fitViewbox(content, { width: 1000, height: 640 }, insets);
+    assert.ok(fitted);
     const mount = readonly ? "viewer" : "editor";
     // diagram-js keeps the zoom to three decimals
-    assert.ok(Math.abs(scale - 1000 / fitted.width) < 0.001, `${mount}: the widget's zoom`);
+    assert.ok(Math.abs(scale - fitted.scale) < 0.001, `${mount}: the widget's zoom`);
     assert.ok(Math.abs(x - fitted.x) < 0.5 && Math.abs(y - fitted.y) < 0.5, `${mount}: the widget's position`);
     // on screen, the plot and its axes sit in what the chrome leaves free
     const left = (content.x - x) * scale;

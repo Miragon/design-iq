@@ -8,14 +8,16 @@
  * The diagram-js keyboard (undo/redo, zoom, select all, delete) binds itself
  * while the canvas has the focus — nothing here competes with it.
  */
-import { keyCommand, type KeyTarget, TEXT_FIELD } from "../core/keymap.ts";
+import { TEXT_FIELD_SELECTOR } from "@miragon/modeler-shell/core";
+
+import { keyCommand, type KeyTarget } from "../core/keymap.ts";
 import type { MountKeys } from "./contracts.ts";
 
 /** a modeler's own text (a label being edited, a DMN cell, the add-on's
  *  simulation form) vs. a chrome field (the todo form) vs. no text at all */
 function targetOf(doc: Document, target: EventTarget | null): KeyTarget {
   const el = target instanceof Element ? target : null;
-  if (!el?.closest(TEXT_FIELD)) return "plain";
+  if (!el?.closest(TEXT_FIELD_SELECTOR)) return "plain";
   return doc.getElementById("canvas")?.contains(el) ? "canvas-text" : "chrome-text";
 }
 

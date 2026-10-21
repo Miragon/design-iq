@@ -5,12 +5,25 @@
  * diagram-js module: only `get(service)` and the documented service APIs.
  *
  * diagramView() is the engines' ViewControls (core/engine.ts): fit into the
- * frame minus the chrome's insets (engines/fit.ts), zoom around the centre,
- * auto-fit until touched, the palette for Tools and the layout.
+ * frame minus the chrome's insets, zoom around the centre, auto-fit until
+ * touched, the palette for Tools and the layout. The view math is the
+ * modeler shell's (@miragon/modeler-shell/core), so the widget fits, eases
+ * and clamps exactly like the Miragon modelers' own chrome.
  */
+import {
+  easeStandard,
+  FIT_ANIMATION_MS,
+  fitViewbox,
+  interpolateViewbox,
+  sameView,
+  type ScaledViewbox,
+  TEXT_FIELD_SELECTOR,
+  ZOOM_MAX,
+  ZOOM_MIN,
+} from "@miragon/modeler-shell/core";
+
 import type { Insets, PaletteControls, ViewControls } from "../core/engine.ts";
-import { TEXT_FIELD } from "../core/keymap.ts";
-import { type Box, fitViewbox, isUntouched, lerpBox, parseCubicBezier, steppedLevel, zoomAround } from "./fit.ts";
+import { type Box, steppedLevel, zoomAround } from "./fit.ts";
 export interface DiagramLike {
   /** didi's strict lookup — the Miragon viewers forward only the name, so a
    *  missing service THROWS (never pass a strict flag; guard by mount instead) */
@@ -65,11 +78,6 @@ interface PaletteLike {
   _container?: HTMLElement;
 }
 
-export const MIN_ZOOM = 0.2;
-export const MAX_ZOOM = 4;
-/** the animated re-fit (spec §9: 250 ms, --cd-ease) */
-export const REFIT_MS = 250;
-
 export interface DiagramView extends ViewControls {
   /** after an import: fit (instantly) unless the user moved the view — or
    *  plain fit-viewport when the engine was mounted without insets (tests).
@@ -108,10 +116,10 @@ export function diagramView(
     for (const cb of listeners) cb();
   };
 
-  const write = (box: Box): void => {
+  const write = ({ x, y, width, height }: Box): void => {
     fitting++;
     try {
-      canvas().viewbox(box);
+      canvas().viewbox({ x, y, width, height });
     } finally {
       fitting--;
     }
@@ -120,20 +128,7 @@ export function diagramView(
     if (fitting === 0 && importing) return;
     // a move from outside (the user, mid-animation) wins over the running re-fit
     if (fitting === 0) stopAnimation();
-    if (fitting === 0 && lastFit && !touched) {
-      const vb = canvas().viewbox();
-      const outer = vb.outer;
-      const fitted = {
-        x: lastFit.x,
-        y: lastFit.y,
-        width: outer.width / lastFit.scale,
-        height: outer.height / lastFit.scale,
-      };
-      touched = !isUntouched(
-        { x: vb.x, y: vb.y, width: outer.width / vb.scale, height: outer.height / vb.scale },
-        fitted,
-      );
-    }
+    if (fitting === 0 && lastFit && !touched) touched = !sameView(canvas().viewbox(), lastFit);
     notify();
   };
   const onImportStart = (): void => {
@@ -186,7 +181,7 @@ export function diagramView(
   // keep theirs open (contract L5), and the field stays where it is typed
   const typingOnCanvas = (): boolean => {
     const focused = container?.ownerDocument.activeElement;
-    return !!focused && !!container?.contains(focused) && focused.matches(TEXT_FIELD);
+    return !!focused && !!container?.contains(focused) && focused.matches(TEXT_FIELD_SELECTOR);
   };
 
   function stopAnimation(): void {
@@ -197,25 +192,23 @@ export function diagramView(
   function fit(insets: Insets, animate: boolean): void {
     if (typingOnCanvas()) return;
     const vb = canvas().viewbox(false);
-    const content = opts.contentBounds?.() ?? vb.inner;
-    // a hidden or unlaid-out container has no size to fit into, and an
-    // empty canvas (mounted, not yet imported) nothing to fit
-    if (!vb.outer.width || !vb.outer.height || (!content.width && !content.height)) return;
-    const target = fitViewbox(content, vb.outer, insets, 1);
+    // undefined for a hidden or unlaid-out container (no size to fit into)
+    // and an empty canvas (mounted, not yet imported: nothing to fit)
+    const target = fitViewbox(opts.contentBounds?.() ?? vb.inner, vb.outer, insets);
+    if (!target) return;
     stopAnimation();
-    lastFit = { x: target.x, y: target.y, scale: vb.outer.width / target.width };
+    lastFit = { x: target.x, y: target.y, scale: target.scale };
     touched = false;
-    if (!animate || typeof requestAnimationFrame !== "function" || typeof document === "undefined") {
+    if (!animate || typeof requestAnimationFrame !== "function") {
       write(target);
       notify();
       return;
     }
-    const from: Box = { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
-    const ease = parseCubicBezier(getComputedStyle(document.documentElement).getPropertyValue("--cd-ease"));
+    const from: ScaledViewbox = { x: vb.x, y: vb.y, width: vb.width, height: vb.height, scale: vb.scale };
     const start = performance.now();
     const step = (now: number): void => {
-      const t = Math.min(1, (now - start) / REFIT_MS);
-      write(t < 1 ? lerpBox(from, target, ease(t)) : target);
+      const t = Math.min(1, (now - start) / FIT_ANIMATION_MS);
+      write(t < 1 ? interpolateViewbox(from, target, easeStandard(t)) : target);
       if (t < 1) frame = requestAnimationFrame(step);
       else {
         frame = 0;
@@ -240,7 +233,7 @@ export function diagramView(
     const vb = canvas().viewbox(false);
     if (!vb.outer.width || !vb.outer.height) return;
     stopAnimation();
-    const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, level));
+    const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, level));
     // a user zoom — the changed handler marks the view touched
     canvas().viewbox(zoomAround(vb, vb.outer, next, { x: vb.outer.width / 2, y: vb.outer.height / 2 }));
   }
@@ -268,7 +261,7 @@ export function diagramView(
   return {
     hasViewport: () => opts.hasViewport?.() ?? true,
     fit,
-    zoomBy: (step) => zoomTo(steppedLevel(canvas().viewbox().scale, step, MIN_ZOOM, MAX_ZOOM)),
+    zoomBy: (step) => zoomTo(steppedLevel(canvas().viewbox().scale, step, ZOOM_MIN, ZOOM_MAX)),
     zoomTo,
     level: () => canvas().viewbox().scale,
     isTouched: () => touched,

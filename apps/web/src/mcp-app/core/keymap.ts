@@ -6,30 +6,21 @@
  * todo form) keeps ⇧1 (it types "!") but still answers Escape, which closes
  * the inline form — the topmost layer while one is open. ⌘S is honoured
  * everywhere: it has no meaning inside text, and the browser's own "save
- * page" is never what someone in a modeler wants.
+ * page" is never what someone in a modeler wants. What counts as a text
+ * field and ⇧1 (by the key's position, every layout) are the modeler
+ * shell's (`TEXT_FIELD_SELECTOR`, `matchChromeKey`).
  * Plus the WAI-ARIA menu-button keys of the trigger (§3).
  * DOM-free (`.ts` relative imports): node --test loads it.
  */
 
-export type KeyCommand = "save" | "fit" | "escape";
+import { type KeyLike, matchChromeKey } from "@miragon/modeler-shell/core";
 
-/** what counts as text: its keys belong to the field (a selector string, so
- *  this module stays DOM-free — chrome/keys.ts and chrome/panel.ts match it) */
-export const TEXT_FIELD = "input, textarea, select, [contenteditable]:not([contenteditable='false'])";
+export type { KeyLike };
+
+export type KeyCommand = "save" | "fit" | "escape";
 
 /** where the key landed: not in text / in a chrome text field / in the canvas's own text */
 export type KeyTarget = "plain" | "chrome-text" | "canvas-text";
-
-export interface KeyLike {
-  key: string;
-  code: string;
-  metaKey: boolean;
-  ctrlKey: boolean;
-  shiftKey: boolean;
-  altKey: boolean;
-  /** an IME composition is running — every key belongs to it */
-  isComposing?: boolean;
-}
 
 export function keyCommand(e: KeyLike, target: KeyTarget): KeyCommand | undefined {
   if (e.isComposing) return undefined;
@@ -38,8 +29,7 @@ export function keyCommand(e: KeyLike, target: KeyTarget): KeyCommand | undefine
   if (mod && !e.altKey && !e.shiftKey && (e.key.toLowerCase() === "s" || e.code === "KeyS")) return "save";
   if (target === "canvas-text") return undefined;
   if (e.key === "Escape" && !mod && !e.altKey) return "escape";
-  // ⇧1 — by code: "!" on most layouts, something else on a few
-  if (target === "plain" && e.shiftKey && !mod && !e.altKey && e.code === "Digit1") return "fit";
+  if (target === "plain" && matchChromeKey(e) === "fit") return "fit";
   return undefined;
 }
 
