@@ -27,6 +27,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { SHAPE_IMAGE_FROM_ADDRESS } from "../src/lib/mermaid-render.ts";
 import { FEATURES, LABELS, SOURCES, TRACKER } from "./mermaid-hostile-sources.ts";
 
 /** the part of Playwright's API this check uses: Playwright is no dependency of the repo */
@@ -80,8 +81,6 @@ const WIDGETS = ["mcp-app.html", "mcp-app-dmn.html"];
 /** the fake MCP-Apps host and the widgets' origin: answered by this check, never on the network */
 const MCP_HOST = "http://mcp-host.test";
 const WIDGET_ORIGIN = "http://widget.test";
-/** what a shape image reads as, now that the frame loads none (lib/mermaid-render.ts) */
-const SHAPE_IMAGE_NOTICE = "A shape's image (img) is not drawn";
 
 /** the one npx puts on PATH */
 function loadPlaywright(): Playwright {
@@ -401,8 +400,8 @@ try {
     if (state.scriptLinks > 0) fail(`${doc.file}: ${state.scriptLinks} javascript: links in the page's document`);
     if (doc.file === "features.md") {
       const shapes = Object.keys(FEATURES).indexOf("flowchart shapes");
-      if (!state.notices[shapes]?.includes(SHAPE_IMAGE_NOTICE)) {
-        fail(`features.md: the shape image reads "${state.notices[shapes]}", not "${SHAPE_IMAGE_NOTICE} …"`);
+      if (!state.notices[shapes]?.endsWith(SHAPE_IMAGE_FROM_ADDRESS)) {
+        fail(`features.md: the shape image reads "${state.notices[shapes]}", not "${SHAPE_IMAGE_FROM_ADDRESS}"`);
       }
       for (const [i, notice] of state.notices.entries()) if (notice) console.log(`${doc.fences[i]!.name}: ${notice}`);
     }
