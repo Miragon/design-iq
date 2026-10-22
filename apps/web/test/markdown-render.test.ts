@@ -203,7 +203,7 @@ test("an image from another site is a placeholder naming its host, until the rea
       '<span class="md-image-external" title="https://img.example.com/ci.svg">' +
         '<span class="md-image-external-text">Image from <strong>img.example.com</strong>: CI badge</span>' +
         '<button type="button" class="md-image-load" data-image-src="https://img.example.com/ci.svg"' +
-        ' aria-label="Load the image CI badge from img.example.com"' +
+        ' aria-label="Load image CI badge from img.example.com"' +
         ' title="Loading it sends your IP address to img.example.com">Load image</button></span>',
     ),
   );

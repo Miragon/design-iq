@@ -223,7 +223,7 @@ test("an image from another site loads only once the reader asks, for as long as
   assert.equal(v.article.querySelectorAll("img").length, 0, "nothing is fetched from the other site unasked");
   const buttons = v.article.querySelectorAll<HTMLButtonElement>("button.md-image-load");
   assert.equal(buttons.length, 2);
-  assert.equal(buttons[0]!.getAttribute("aria-label"), "Load the image CI badge from img.example.com");
+  assert.equal(buttons[0]!.getAttribute("aria-label"), "Load image CI badge from img.example.com");
 
   buttons[0]!.focus();
   assert.equal(v.click(buttons[0]!), false, "the view handles the click");

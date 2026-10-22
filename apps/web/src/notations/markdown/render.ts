@@ -433,7 +433,7 @@ md.renderer.rules.image = (tokens, idx, options, env, self) => {
         `<span class="md-image-external" title="${escapeHtml(source.url)}">` +
         `<span class="md-image-external-text">Image from <strong>${escapeHtml(source.host)}</strong>: ${escapeHtml(label)}</span>` +
         `<button type="button" class="md-image-load" data-image-src="${escapeHtml(source.url)}"` +
-        ` aria-label="Load the image ${escapeHtml(label)} from ${escapeHtml(source.host)}"` +
+        ` aria-label="Load image ${escapeHtml(label)} from ${escapeHtml(source.host)}"` +
         ` title="Loading it sends your IP address to ${escapeHtml(source.host)}">Load image</button></span>`
       );
     }
