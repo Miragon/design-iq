@@ -96,27 +96,101 @@ export function createSanitizer(win: WindowLike): Sanitize {
 
 /**
  * The profile for a diagram a fence extension draws (./mermaid-fence.ts):
- * exactly the one mermaid applies to its own output under securityLevel
- * "strict" (DOMPurify's defaults plus the foreignObject its HTML labels sit
- * in), run once more on the page's side. The diagram reaches the view as a
- * DOM node, never through innerHTML: no script, no event handler, no
- * javascript: URL. It keeps its own <style>, which mermaid scopes to the
- * SVG's id. A link in a diagram opens a new tab without an opener, like
- * every other link of the view that leaves designIQ.
+ * the one mermaid applies to its own output under securityLevel "strict"
+ * (DOMPurify's defaults plus the foreignObject its HTML labels sit in), run
+ * once more on the page's side, minus forms and their controls, which act on
+ * a click. The diagram reaches the view as a DOM node, never through
+ * innerHTML: no script, no event handler, no javascript: URL. It keeps its
+ * own <style>, which mermaid scopes to the SVG's id. A link in a diagram
+ * opens a new tab without an opener, like every other link of the view that
+ * leaves designIQ.
+ *
+ * And nothing in it loads once it is on the page (#293): mermaid lays the
+ * diagram out in a frame that loads nothing (lib/mermaid-frame.ts), but the
+ * SVG it returns still names what a label, a shape or a style asked for. An
+ * element other than a link keeps an address only into the diagram (#…) or
+ * to inline image data (C4 draws its people so), and CSS keeps no url() but
+ * one into the diagram (inertCss).
  */
 const DIAGRAM: Config & { RETURN_DOM_FRAGMENT: true } = {
   ADD_TAGS: ["foreignobject"],
   ADD_ATTR: ["dominant-baseline"],
+  FORBID_TAGS: ["form", "button", "input", "select", "textarea"],
   HTML_INTEGRATION_POINTS: { foreignobject: true },
   RETURN_DOM_FRAGMENT: true,
 };
 
+/** an address that loads nothing: into the diagram itself, or inline image data */
+const INERT_ADDRESS = /^\s*(?:#|data:image\/)/i;
+/** the attributes a browser loads an address from */
+const ADDRESS_ATTRIBUTES = [
+  "src",
+  "href",
+  "xlink:href",
+  "poster",
+  "background",
+  "data",
+  "action",
+  "formaction",
+  "ping",
+];
+/** the attributes a browser reads as CSS, where a url() loads */
+const CSS_ATTRIBUTES = [
+  "style",
+  "fill",
+  "stroke",
+  "filter",
+  "clip-path",
+  "mask",
+  "marker",
+  "marker-start",
+  "marker-mid",
+  "marker-end",
+  "cursor",
+];
+/** CSS that can name a resource without url(): an escape (it can spell
+ *  url( itself), @import and the image functions that take a plain string */
+const CSS_HIDES_RESOURCE = /\\|@import|image-set|image\(|cross-fade|element\(|src\(/i;
+/** a url() to anything but the diagram itself; an unclosed one still loads */
+const CSS_URL = /url\((?!\s*["']?\s*#)\s*(?:"[^"]*"?|'[^']*'?|[^)]*)\)?/gi;
+
+/**
+ * CSS that loads nothing: every url() that leaves the diagram becomes
+ * `none`, so the rest of the rule still applies. CSS that could hide a
+ * resource from that (CSS_HIDES_RESOURCE) is dropped whole: mermaid's own
+ * CSS has none of it, so only a diagram's hostile styles lose their look.
+ */
+export function inertCss(css: string): string | undefined {
+  return CSS_HIDES_RESOURCE.test(css) ? undefined : css.replace(CSS_URL, "none");
+}
+
 export function createDiagramSanitizer(win: WindowLike): Sanitize {
   const purify = DOMPurify(win);
+  purify.addHook("afterSanitizeElements", (node) => {
+    if (node.nodeName.toLowerCase() !== "style") return;
+    const css = inertCss(node.textContent ?? "");
+    if (css === undefined) node.parentNode?.removeChild(node);
+    else if (css !== node.textContent) node.textContent = css;
+  });
   purify.addHook("afterSanitizeAttributes", (node) => {
-    if (node.nodeName.toLowerCase() !== "a") return;
-    node.setAttribute("target", "_blank");
-    node.setAttribute("rel", "noopener noreferrer");
+    const link = node.nodeName.toLowerCase() === "a";
+    if (link) {
+      node.setAttribute("target", "_blank");
+      node.setAttribute("rel", "noopener noreferrer");
+    }
+    node.removeAttribute("srcset");
+    for (const name of ADDRESS_ATTRIBUTES) {
+      if (link && (name === "href" || name === "xlink:href")) continue;
+      const value = node.getAttribute(name);
+      if (value !== null && !INERT_ADDRESS.test(value)) node.removeAttribute(name);
+    }
+    for (const name of CSS_ATTRIBUTES) {
+      const value = node.getAttribute(name);
+      if (value === null) continue;
+      const css = inertCss(value);
+      if (css === undefined) node.removeAttribute(name);
+      else if (css !== value) node.setAttribute(name, css);
+    }
   });
   return (svg) => purify.sanitize(svg, DIAGRAM);
 }

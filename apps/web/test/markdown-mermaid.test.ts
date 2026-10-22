@@ -16,7 +16,7 @@ import type { MermaidRenderResult } from "../src/lib/mermaid-render.ts";
 import { FENCE_EXTENSIONS } from "../src/notations/markdown/fences.ts";
 import { createMermaidFence, type RenderMermaid } from "../src/notations/markdown/mermaid-fence.ts";
 import { renderMarkdown } from "../src/notations/markdown/render.ts";
-import { createSanitizer } from "../src/notations/markdown/sanitize.ts";
+import { createSanitizer, inertCss } from "../src/notations/markdown/sanitize.ts";
 import { mountMarkdownView, RENDER_DEBOUNCE_MS } from "../src/notations/markdown/view.ts";
 import type { EditorContext } from "../src/notations/registry.ts";
 
@@ -326,4 +326,74 @@ test("the drawn SVG is sanitized again: no script, no handler, links leave in a 
   assert.equal(web?.getAttribute("target"), "_blank");
   assert.equal(web?.getAttribute("rel"), "noopener noreferrer");
   v.view.destroy();
+});
+
+test("a drawn diagram loads nothing on the page: only links, its own references and inline images keep an address", async () => {
+  const EVIL = "https://tracker.example";
+  const PNG = "data:image/png;base64,iVBORw0KGgo=";
+  const hostile = (_source: string, id: string) =>
+    `<svg id="${id}" xmlns:xlink="http://www.w3.org/1999/xlink">` +
+    `<style>#${id} .node rect{fill:#fff;stroke:url(#${id}-gradient)}#${id} .evil>*{fill:url("${EVIL}/class.svg#p")!important;background:url(${EVIL}/bg.png)}</style>` +
+    `<defs><linearGradient id="${id}-gradient"></linearGradient><marker id="${id}-arrow"></marker></defs>` +
+    `<g class="node"><rect style="fill:url(${EVIL}/style.svg#p);stroke:#333" marker-end="url(#${id}-arrow)"></rect></g>` +
+    `<rect fill="url(${EVIL}/fill.svg#p)" filter="url(${EVIL}/filter.svg#f)"></rect>` +
+    `<image href="${EVIL}/image.png"></image><image xlink:href="${PNG}"></image>` +
+    `<feImage href="${EVIL}/fe.png"></feImage>` +
+    `<a href="${EVIL}/docs"><text>docs</text></a>` +
+    `<foreignObject><div xmlns="http://www.w3.org/1999/xhtml">` +
+    `<img src="${EVIL}/img.png" srcset="${EVIL}/2x.png 2x"><img src="${PNG}">` +
+    `<video src="${EVIL}/v.mp4" poster="${EVIL}/poster.png"><source src="${EVIL}/s.mp4"></video>` +
+    `<div style="background-image:url(${EVIL}/inline.png)">bg</div>` +
+    `<span style="background:u\\72 l(${EVIL}/escaped.png)">escaped</span>` +
+    `<span style="color:red">kept</span>` +
+    `<form action="${EVIL}/post"><input type="image" src="${EVIL}/input.png"><button>go</button></form>` +
+    `</div></foreignObject><text>flowchart</text></svg>`;
+  const fake = fakeRenderer(hostile);
+  const v = mount(fence("flowchart LR"), fake);
+  await settle();
+  const svg = v.article.querySelector(".md-mermaid-diagram svg")!;
+  const markup = svg.outerHTML;
+  assert.doesNotMatch(markup, /tracker\.example(?!\/docs)/, "no address but the link's");
+  const css = svg.querySelector("style")?.textContent ?? "";
+  assert.match(css, /stroke:url\(#md-Mermaid-1-gradient\)/, "the diagram's own references stay");
+  assert.match(css, /\.evil>\*\{fill:none!important;background:none\}/, "a style's other url()s load nothing");
+  assert.equal(svg.querySelector("rect[style]")?.getAttribute("style"), "fill:none;stroke:#333");
+  assert.equal(svg.querySelector("rect[marker-end]")?.getAttribute("marker-end"), "url(#md-Mermaid-1-arrow)");
+  assert.equal(svg.querySelector("rect:not([style])")?.getAttribute("fill"), "none");
+  assert.equal(
+    svg.querySelectorAll('img[src^="data:image/"], image[*|href^="data:image/"]').length,
+    2,
+    "inline images stay",
+  );
+  assert.equal(svg.querySelector("span[style]:not([style*=color])"), null, "a style that hides an address is gone");
+  assert.equal(svg.querySelector('span[style="color:red"]')?.textContent, "kept");
+  assert.equal(svg.querySelector("form, input, button"), null, "no form acts on a click");
+  const link = svg.querySelector("a")!;
+  assert.equal(link.getAttribute("href"), `${EVIL}/docs`, "a link stays: it loads nothing until it is clicked");
+  assert.equal(link.getAttribute("rel"), "noopener noreferrer");
+  v.view.destroy();
+});
+
+test("inertCss: every url() that leaves the diagram becomes none, CSS that could hide one goes", () => {
+  assert.equal(inertCss("fill:url(#g);stroke:red"), "fill:url(#g);stroke:red");
+  assert.equal(inertCss('fill:url( "#g" )'), 'fill:url( "#g" )');
+  assert.equal(inertCss("fill:url(https://x.example/a.svg#p);stroke:red"), "fill:none;stroke:red");
+  assert.equal(inertCss('background:URL("/a.png") no-repeat'), "background:none no-repeat");
+  assert.equal(inertCss("background:url('a.png'),url(b.png)"), "background:none,none");
+  assert.equal(inertCss('background:url("a)b.png")'), "background:none");
+  assert.equal(inertCss("background:url(https://x.example/unclosed"), "background:none");
+  assert.equal(
+    inertCss("background:url(data:image/png;base64,AAAA)"),
+    "background:none",
+    "inline data too: CSS needs none",
+  );
+  for (const hiding of [
+    "background:u\\72 l(https://x.example/a.png)",
+    '@import "https://x.example/a.css";',
+    'background:image-set("https://x.example/a.png" 1x)',
+    'background:-webkit-image-set("a.png" 1x)',
+    'background:cross-fade(url(#a), "b.png")',
+  ]) {
+    assert.equal(inertCss(hiding), undefined, hiding);
+  }
 });

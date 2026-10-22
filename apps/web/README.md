@@ -106,11 +106,14 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   same origin): mermaid puts a diagram's labels, links and styles into that document as it
   measures them, before its own sanitizer runs, and the frame's policy lets nothing there load
   or run but designIQ's own scripts, styles and fonts (no image, media, frame or form; no inline
-  script, handler or `javascript:` link). The page only gets the SVG as a string, sanitized once
-  more (`createDiagramSanitizer` in `sanitize.ts`, the profile mermaid applies itself).
-  `pnpm arch` keeps it so: only the frame's script imports the renderer
-  (`mermaid-renders-in-its-frame`), and the MCP-App widgets draw no Mermaid
-  (`widgets-draw-no-mermaid`). `test/mermaid-frame.test.ts` pins the frame's policy.
+  script, handler or `javascript:` link). The page only gets the SVG as a string. That SVG is
+  sanitized once more (`createDiagramSanitizer` in `sanitize.ts`: the profile mermaid applies
+  itself, no forms, and nothing that loads: an element other than a link keeps an address only
+  into the diagram or to inline image data, and CSS keeps no `url()` but one into the diagram),
+  so a diagram on the page loads nothing until a reader clicks one of its links. `pnpm arch`
+  keeps it so: only the frame's script imports the renderer (`mermaid-renders-in-its-frame`),
+  and the MCP-App widgets draw no Mermaid (`widgets-draw-no-mermaid`).
+  `test/mermaid-frame.test.ts` pins the frame's policy.
 - The drawn SVG is cached by source: a re-render for an
   edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram
   keeps its drawing until the new one is drawn. A diagram mermaid cannot read shows a notice
