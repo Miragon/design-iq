@@ -2,7 +2,9 @@
  * ```mermaid fences in the Markdown view, drawn as diagrams: the first entry
  * of the fence extension point (./fences.ts), on the app's one Mermaid
  * renderer (lib/mermaid-render.ts: strict security level, the CI theme,
- * Geist).
+ * Geist), which lays every diagram out in a frame of its own
+ * (lib/mermaid-frame.ts); the page only gets the SVG, sanitized here once
+ * more (createDiagramSanitizer).
  *
  * - `render` (the HTML pass) keeps the fence a code block, marked
  *   `md-mermaid`, with its source as text: what a reader sees until the
@@ -25,13 +27,14 @@
  * runs it under jsdom with a fake renderer): relative `.ts` imports, every
  * DOM access through the root's own document.
  */
-import type { MermaidRenderError, MermaidRenderResult } from "../../lib/mermaid-render.ts";
+import type { RenderMermaid } from "../../lib/mermaid-frame.ts";
+import type { MermaidRenderError } from "../../lib/mermaid-render.ts";
 import { icon } from "../../mcp-app/icons.ts";
 import { escapeText, type FenceRenderer } from "./render.ts";
 import { createDiagramSanitizer, type Sanitize } from "./sanitize.ts";
 
-/** lib/mermaid-render.ts' renderMermaid: source in, an SVG string or an error out */
-export type RenderMermaid = (source: string, idPrefix: string) => Promise<MermaidRenderResult>;
+/** lib/mermaid-render.ts' renderMermaid, through the frame: source in, an SVG string or an error out */
+export type { RenderMermaid };
 
 /** the class of a mermaid fence's code block, the placeholder hydrate draws */
 export const MERMAID_BLOCK_CLASS = "md-mermaid";
@@ -72,7 +75,8 @@ export interface MermaidFence {
   hydrate(root: HTMLElement, signal: AbortSignal): Promise<void>;
 }
 
-const loadRenderer = async (): Promise<RenderMermaid> => (await import("../../lib/mermaid-render.ts")).renderMermaid;
+const loadRenderer = async (): Promise<RenderMermaid> =>
+  (await import("../../lib/mermaid-frame.ts")).renderMermaidInFrame;
 
 /** `load` resolves the renderer; tests hand in a fake, the view the lazy chunk */
 export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRenderer): MermaidFence {

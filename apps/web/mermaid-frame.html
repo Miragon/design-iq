@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      Before anything else on purpose: mermaid lays out whatever a diagram's
+      author wrote in this document, so it may run designIQ's own scripts and
+      load its own styles and fonts, and nothing else. No inline script, no
+      javascript: link, no image, media, frame or form from a diagram.
+      connect-src 'self' is the dev server's live reload; nothing of a
+      diagram can open a connection without a script of its own.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="designiq-frame" content="mermaid" />
+    <title>designIQ Mermaid layout</title>
+  </head>
+  <body>
+    <script type="module" src="/src/lib/mermaid-frame-entry.ts"></script>
+  </body>
+</html>

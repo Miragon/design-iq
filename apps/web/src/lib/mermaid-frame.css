@@ -1,0 +1,11 @@
+/* The page's global rules for the document mermaid lays diagrams out in
+   (mermaid-frame.html): mermaid measures every label there, and the page
+   draws the labels under exactly these, so they keep the size they were
+   measured at. The same head as index.css in a sheet of its own: were the
+   frame to import index.css, the build would move it into a chunk both
+   entries share, which the page then loads before the vendor styles that
+   index.css overrides. */
+@import "tailwindcss";
+@import "@designiq/ui-kit/theme.css";
+
+@source "../../node_modules/@designiq/ui-kit/src";

@@ -1,14 +1,11 @@
 /**
  * The real mermaid engine (apps/web's pin) behind lib/mermaid-render.ts, under
- * jsdom: what the app's configuration means once mermaid applies it, and
- * whether @designiq/notations/mermaid (the validator's reading of a diagram)
- * still mirrors the mermaid the app draws with.
- * mermaid parses and configures without a layout engine; drawing needs one,
- * so the drawn output is covered with a fake renderer elsewhere
- * (markdown-mermaid.test.ts). Here every label measures one fixed box, enough
- * to compare two drawings of the same diagram (drawing()). Its own process
- * (node --test runs one per file) keeps the DOM globals mermaid expects away
- * from the other suites.
+ * jsdom (./mermaid-dom.ts): what the app's configuration means once mermaid
+ * applies it, and whether @designiq/notations/mermaid (the validator's
+ * reading of a diagram) still mirrors the mermaid the app draws with. Every
+ * label measures one fixed box, enough to compare two drawings of the same
+ * diagram (drawing()). What hostile sources do to it:
+ * mermaid-engine-hostile.test.ts, next to this.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -16,45 +13,15 @@ import { before, test } from "node:test";
 
 import { MERMAID_DIAGRAM_TYPES, MERMAID_VERSION, mermaidHeader } from "@designiq/notations/mermaid";
 import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
-import { JSDOM } from "jsdom";
 import type { Mermaid } from "mermaid";
 
 import { describeMermaidError } from "../src/lib/mermaid-render.ts";
+import { loadMermaidUnderJsdom } from "./mermaid-dom.ts";
 
 let mermaid: Mermaid;
 
-/** jsdom has no CSSStyleSheet; mermaid builds a diagram's classDef rules in one */
-class StyleSheetStub {
-  cssRules: { cssText: string }[] = [];
-  insertRule(rule: string, index: number): number {
-    this.cssRules.splice(index, 0, { cssText: rule });
-    return index;
-  }
-  replaceSync(text: string): void {
-    this.cssRules = [{ cssText: text }];
-  }
-}
-
 before(async () => {
-  const { window } = new JSDOM("<!doctype html><html><body></body></html>", { pretendToBeVisual: true });
-  for (const key of ["window", "document", "navigator", "Element", "HTMLElement", "SVGElement", "DOMParser"]) {
-    if (!(key in globalThis)) {
-      Object.defineProperty(globalThis, key, {
-        value: (window as unknown as Record<string, unknown>)[key],
-        configurable: true,
-        writable: true,
-      });
-    }
-  }
-  if (!("CSSStyleSheet" in globalThis)) Object.assign(globalThis, { CSSStyleSheet: StyleSheetStub });
-  Object.assign(window.SVGElement.prototype, {
-    getBBox: () => ({ x: 0, y: 0, width: 40, height: 16 }),
-    getComputedTextLength: () => 40,
-  });
-  const { loadMermaid } = await import("../src/lib/mermaid-render.ts");
-  mermaid = await loadMermaid();
-  // the first parse registers mermaid's diagram detectors (detectType needs them)
-  await mermaid.parse("flowchart LR\n  A --> B\n");
+  ({ mermaid } = await loadMermaidUnderJsdom());
 });
 
 /** the configuration mermaid draws a source with: parse applies its front
@@ -143,6 +110,24 @@ test("a diagram cannot leave the CI look: no other theme, palette, CSS or font",
   assert.equal(
     (await drawing(`---\nconfig:\n  flowchart:\n    theme: dark\n---\n${flow}`)).style,
     (await drawing(flow)).style,
+  );
+});
+
+// mermaid 12.2 drops a diagram's own dompurifyConfig itself; a release that
+// took it would let a diagram hand its labels <style> back
+test("a diagram cannot configure mermaid's label sanitizer, nor point its arrowheads at an address", async () => {
+  const flow = "flowchart LR\n  A --> B\n";
+  for (const source of [
+    `---\nconfig:\n  dompurifyConfig:\n    ADD_TAGS: [style]\n  arrowMarkerAbsolute: true\n---\n${flow}`,
+    `%%{init: {"dompurifyConfig": {"ADD_TAGS": ["style"]}, "arrowMarkerAbsolute": true}}%%\n${flow}`,
+  ]) {
+    const config = await configFor(source);
+    assert.equal(config.dompurifyConfig, undefined, source);
+    assert.equal(config.arrowMarkerAbsolute, false, source);
+  }
+  assert.doesNotMatch(
+    (await mermaid.render("arrows", `%%{init: {"arrowMarkerAbsolute": true}}%%\n${flow}`)).svg,
+    /url\(\w+:/,
   );
 });
 

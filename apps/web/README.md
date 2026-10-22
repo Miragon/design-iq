@@ -99,8 +99,19 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   gets at least 120 px (`minNodeWidth`; a circle, since 12.2, only the room its label needs)
   and wraps at 120 px (`wrappingWidth`, 200 before), so their nodes come out wider and long
   labels wrap sooner. The renderer and
-  mermaid load on the first document that has such a fence, never for any other. The drawn SVG is sanitized once more (`createDiagramSanitizer` in
-  `sanitize.ts`, the profile mermaid applies itself) and cached by source: a re-render for an
+  mermaid load on the first document that has such a fence, never for any other.
+- Hostile diagrams: anyone who may write to a content repo writes the fences every reader's
+  browser draws, so mermaid never runs in the page. It lays a diagram out in a document of its
+  own, the hidden Mermaid frame (`src/lib/mermaid-frame.ts`, its document `mermaid-frame.html`,
+  same origin): mermaid puts a diagram's labels, links and styles into that document as it
+  measures them, before its own sanitizer runs, and the frame's policy lets nothing there load
+  or run but designIQ's own scripts, styles and fonts (no image, media, frame or form; no inline
+  script, handler or `javascript:` link). The page only gets the SVG as a string, sanitized once
+  more (`createDiagramSanitizer` in `sanitize.ts`, the profile mermaid applies itself).
+  `pnpm arch` keeps it so: only the frame's script imports the renderer
+  (`mermaid-renders-in-its-frame`), and the MCP-App widgets draw no Mermaid
+  (`widgets-draw-no-mermaid`). `test/mermaid-frame.test.ts` pins the frame's policy.
+- The drawn SVG is cached by source: a re-render for an
   edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram
   keeps its drawing until the new one is drawn. A diagram mermaid cannot read shows a notice
   with the error and its line (counted within the diagram) under its code, or under its last

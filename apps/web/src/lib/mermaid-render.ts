@@ -1,14 +1,15 @@
 /**
  * The ONE Mermaid renderer of the web app: Mermaid source in, an SVG string
- * or a readable error out. A mermaid fence in the Markdown view draws through
- * it (notations/markdown/mermaid-fence.ts), and so can any other surface that
- * shows a diagram.
+ * or a readable error out. It runs in the Mermaid frame, never in the page
+ * (./mermaid-frame.ts says why; `pnpm arch`, rule
+ * mermaid-renders-in-its-frame): a mermaid fence in the Markdown view
+ * (notations/markdown/mermaid-fence.ts), and any other surface that shows a
+ * diagram, draws through the frame.
  *
  * ADR 0006: mermaid is large, so it loads behind the dynamic import in
  * loadMermaid() and nowhere else (`pnpm arch`, rule mermaid-loads-lazily).
- * Importing this file costs a few kB, not the engine; even so the fence
- * reaches it through import() too, so the eager bundle, the repo overview
- * and every document without a diagram never carry it.
+ * The page reaches the frame through import() too, so the eager bundle, the
+ * repo overview and every document without a diagram never carry it.
  *
  * The rest is pure (config, ids, error wording) and runs under node --test:
  * mermaid itself needs a DOM to measure text.
@@ -63,7 +64,9 @@ export const MERMAID_THEME_VARIABLES = {
  * browser). mermaid checks the list at every level of a config, so a theme
  * scoped to one diagram type (`flowchart: { theme: dark }`, new in mermaid 12)
  * is refused too. Layout options (direction, curve, wrap, look, layout) stay
- * the author's.
+ * the author's; `arrowMarkerAbsolute` does not (#293): it points every
+ * arrowhead at the address of the document mermaid draws in, which is the
+ * frame's (./mermaid-frame.ts), an address the page drops.
  */
 export const MERMAID_SECURE_KEYS = [
   "secure",
@@ -78,6 +81,7 @@ export const MERMAID_SECURE_KEYS = [
   "darkMode",
   "fontFamily",
   "altFontFamily",
+  "arrowMarkerAbsolute",
 ];
 
 /**
