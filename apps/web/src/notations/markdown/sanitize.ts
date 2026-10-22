@@ -6,6 +6,11 @@
  * Node-loadable on purpose (test/markdown-view.test.ts runs it under jsdom):
  * relative `.ts` imports, no "@/" alias, the window passed in.
  *
+ * It also holds the view to its image rule (./render.ts): an image loads
+ * from the page's own origin or inline data, or from another site the reader
+ * chose to load. A slip that names any other address loses it here, so no
+ * reader's browser calls a third party unasked.
+ *
  * Widening it is a security decision: a fence extension that inserts richer
  * markup (a Mermaid SVG) sanitizes that output in its own `hydrate`, with its
  * own profile (createDiagramSanitizer below), instead of loosening this list
@@ -13,6 +18,7 @@
  */
 import DOMPurify, { type Config, type WindowLike } from "dompurify";
 
+import { CSS_RESOURCE } from "../../lib/css-resource.ts";
 import { ANCHOR_PREFIX } from "./render.ts";
 
 const SANITIZE: Config & { RETURN_DOM_FRAGMENT: true } = {
@@ -20,6 +26,7 @@ const SANITIZE: Config & { RETURN_DOM_FRAGMENT: true } = {
     "a",
     "blockquote",
     "br",
+    "button",
     "code",
     "del",
     "div",
@@ -52,6 +59,7 @@ const SANITIZE: Config & { RETURN_DOM_FRAGMENT: true } = {
     "alt",
     "checked",
     "class",
+    "data-image-src",
     "data-model-path",
     "disabled",
     "href",
@@ -65,7 +73,7 @@ const SANITIZE: Config & { RETURN_DOM_FRAGMENT: true } = {
     "title",
     "type",
   ],
-  // the one data attribute is listed above: no other data-* gets through
+  // the two data attributes are listed above: no other data-* gets through
   ALLOW_DATA_ATTR: false,
   RETURN_DOM_FRAGMENT: true,
 };
@@ -73,9 +81,34 @@ const SANITIZE: Config & { RETURN_DOM_FRAGMENT: true } = {
 /** HTML in, a sanitized fragment of the window's document out */
 export type Sanitize = (html: string) => DocumentFragment;
 
-export function createSanitizer(win: WindowLike): Sanitize {
+/** the window the view renders in: DOMPurify's, and the page's address */
+export type SanitizeWindow = WindowLike & { location: { href: string; origin: string } };
+
+export interface SanitizeOptions {
+  /** the addresses of the images from other sites the reader chose to load */
+  externalImages?: ReadonlySet<string>;
+}
+
+export function createSanitizer(win: SanitizeWindow, options: SanitizeOptions = {}): Sanitize {
   const purify = DOMPurify(win);
+  const loadsUnasked = (src: string): boolean => {
+    if (/^data:image\//i.test(src)) return true;
+    try {
+      return new URL(src, win.location.href).origin === win.location.origin;
+    } catch {
+      return false;
+    }
+  };
   purify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.tagName === "IMG") {
+      const src = node.getAttribute("src");
+      if (src !== null && !loadsUnasked(src)) {
+        if (options.externalImages?.has(src)) node.setAttribute("referrerpolicy", "no-referrer");
+        else node.removeAttribute("src");
+      }
+    }
+    // a button of the view acts through its click handler, never submits
+    if (node.tagName === "BUTTON") node.setAttribute("type", "button");
     if (node.tagName === "A" && node.hasAttribute("target")) {
       // a new tab is opened only without an opener and a referrer
       if (node.getAttribute("target") === "_blank") node.setAttribute("rel", "noopener noreferrer");
@@ -105,12 +138,15 @@ export function createSanitizer(win: WindowLike): Sanitize {
  * opens a new tab without an opener, like every other link of the view that
  * leaves designIQ.
  *
- * And nothing in it loads once it is on the page (#293): mermaid lays the
- * diagram out in a frame that loads nothing (lib/mermaid-frame.ts), but the
- * SVG it returns still names what a label, a shape or a style asked for. An
- * element other than a link keeps an address only into the diagram (#…) or
- * to inline image data (C4 draws its people so), and CSS keeps no url() but
- * one into the diagram (inertCss).
+ * And nothing in it loads once it is on the page (#290, #293): mermaid lays
+ * the diagram out in a frame that loads nothing (lib/mermaid-frame.ts), but
+ * the SVG it returns still names what a label, a shape or a style asked for.
+ * An element other than a link keeps an address only to this diagram (#…)
+ * or to inline image data (C4 draws its people so), and an attribute or a
+ * style sheet whose CSS could name any other resource is dropped. Parsed, the
+ * SVG decodes entities a style sheet kept as text while mermaid drew it, so
+ * what the page would apply is checked here, not only the source
+ * (lib/mermaid-render.ts).
  */
 const DIAGRAM: Config & { RETURN_DOM_FRAGMENT: true } = {
   ADD_TAGS: ["foreignobject"],
@@ -120,8 +156,8 @@ const DIAGRAM: Config & { RETURN_DOM_FRAGMENT: true } = {
   RETURN_DOM_FRAGMENT: true,
 };
 
-/** an address that loads nothing: into the diagram itself, or inline image data */
-const INERT_ADDRESS = /^\s*(?:#|data:image\/)/i;
+/** an address inside the diagram or inline data: nothing to fetch */
+const LOCAL_REFERENCE = /^\s*(?:#|data:image\/)/i;
 /** the attributes a browser loads an address from */
 const ADDRESS_ATTRIBUTES = [
   "src",
@@ -134,44 +170,9 @@ const ADDRESS_ATTRIBUTES = [
   "formaction",
   "ping",
 ];
-/** the attributes a browser reads as CSS, where a url() loads */
-const CSS_ATTRIBUTES = [
-  "style",
-  "fill",
-  "stroke",
-  "filter",
-  "clip-path",
-  "mask",
-  "marker",
-  "marker-start",
-  "marker-mid",
-  "marker-end",
-  "cursor",
-];
-/** CSS that can name a resource without url(): an escape (it can spell
- *  url( itself), @import and the image functions that take a plain string */
-const CSS_HIDES_RESOURCE = /\\|@import|image-set|image\(|cross-fade|element\(|src\(/i;
-/** a url() to anything but the diagram itself; an unclosed one still loads */
-const CSS_URL = /url\((?!\s*["']?\s*#)\s*(?:"[^"]*"?|'[^']*'?|[^)]*)\)?/gi;
-
-/**
- * CSS that loads nothing: every url() that leaves the diagram becomes
- * `none`, so the rest of the rule still applies. CSS that could hide a
- * resource from that (CSS_HIDES_RESOURCE) is dropped whole: mermaid's own
- * CSS has none of it, so only a diagram's hostile styles lose their look.
- */
-export function inertCss(css: string): string | undefined {
-  return CSS_HIDES_RESOURCE.test(css) ? undefined : css.replace(CSS_URL, "none");
-}
 
 export function createDiagramSanitizer(win: WindowLike): Sanitize {
   const purify = DOMPurify(win);
-  purify.addHook("afterSanitizeElements", (node) => {
-    if (node.nodeName.toLowerCase() !== "style") return;
-    const css = inertCss(node.textContent ?? "");
-    if (css === undefined) node.parentNode?.removeChild(node);
-    else if (css !== node.textContent) node.textContent = css;
-  });
   purify.addHook("afterSanitizeAttributes", (node) => {
     const link = node.nodeName.toLowerCase() === "a";
     if (link) {
@@ -182,15 +183,14 @@ export function createDiagramSanitizer(win: WindowLike): Sanitize {
     for (const name of ADDRESS_ATTRIBUTES) {
       if (link && (name === "href" || name === "xlink:href")) continue;
       const value = node.getAttribute(name);
-      if (value !== null && !INERT_ADDRESS.test(value)) node.removeAttribute(name);
+      if (value !== null && !LOCAL_REFERENCE.test(value)) node.removeAttribute(name);
     }
-    for (const name of CSS_ATTRIBUTES) {
-      const value = node.getAttribute(name);
-      if (value === null) continue;
-      const css = inertCss(value);
-      if (css === undefined) node.removeAttribute(name);
-      else if (css !== value) node.setAttribute(name, css);
+    // a presentation attribute (stroke, fill, mask, filter …) is CSS as much as a style is
+    for (const { name, value } of [...node.attributes]) {
+      if (link && (name === "href" || name === "xlink:href")) continue;
+      if (CSS_RESOURCE.test(value)) node.removeAttribute(name);
     }
+    if (node.nodeName.toLowerCase() === "style" && CSS_RESOURCE.test(node.textContent ?? "")) node.remove();
   });
   return (svg) => purify.sanitize(svg, DIAGRAM);
 }

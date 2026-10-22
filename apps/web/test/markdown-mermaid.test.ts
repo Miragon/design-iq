@@ -12,11 +12,11 @@ import { test } from "node:test";
 import { JSDOM, VirtualConsole } from "jsdom";
 import * as Y from "yjs";
 
-import type { MermaidRenderResult } from "../src/lib/mermaid-render.ts";
+import { diagramImageRefusal, type MermaidRenderResult } from "../src/lib/mermaid-render.ts";
 import { FENCE_EXTENSIONS } from "../src/notations/markdown/fences.ts";
 import { createMermaidFence, type RenderMermaid } from "../src/notations/markdown/mermaid-fence.ts";
 import { renderMarkdown } from "../src/notations/markdown/render.ts";
-import { createSanitizer, inertCss } from "../src/notations/markdown/sanitize.ts";
+import { createSanitizer } from "../src/notations/markdown/sanitize.ts";
 import { mountMarkdownView, RENDER_DEBOUNCE_MS } from "../src/notations/markdown/view.ts";
 import type { EditorContext } from "../src/notations/registry.ts";
 
@@ -328,7 +328,7 @@ test("the drawn SVG is sanitized again: no script, no handler, links leave in a 
   v.view.destroy();
 });
 
-test("a drawn diagram loads nothing on the page: only links, its own references and inline images keep an address", async () => {
+test("a drawn diagram loads nothing on the page: no media, no form, only links, its own references and inline images keep an address (#293)", async () => {
   const EVIL = "https://tracker.example";
   const PNG = "data:image/png;base64,iVBORw0KGgo=";
   const hostile = (_source: string, id: string) =>
@@ -354,12 +354,13 @@ test("a drawn diagram loads nothing on the page: only links, its own references 
   const svg = v.article.querySelector(".md-mermaid-diagram svg")!;
   const markup = svg.outerHTML;
   assert.doesNotMatch(markup, /tracker\.example(?!\/docs)/, "no address but the link's");
-  const css = svg.querySelector("style")?.textContent ?? "";
-  assert.match(css, /stroke:url\(#md-Mermaid-1-gradient\)/, "the diagram's own references stay");
-  assert.match(css, /\.evil>\*\{fill:none!important;background:none\}/, "a style's other url()s load nothing");
-  assert.equal(svg.querySelector("rect[style]")?.getAttribute("style"), "fill:none;stroke:#333");
+  assert.equal(svg.querySelector("style"), null, "a style sheet that names a resource goes whole");
+  assert.equal(
+    svg.querySelector("[style*=url], [fill], [filter]"),
+    null,
+    "so does a style or a presentation attribute",
+  );
   assert.equal(svg.querySelector("rect[marker-end]")?.getAttribute("marker-end"), "url(#md-Mermaid-1-arrow)");
-  assert.equal(svg.querySelector("rect:not([style])")?.getAttribute("fill"), "none");
   assert.equal(
     svg.querySelectorAll('img[src^="data:image/"], image[*|href^="data:image/"]').length,
     2,
@@ -374,26 +375,79 @@ test("a drawn diagram loads nothing on the page: only links, its own references 
   v.view.destroy();
 });
 
-test("inertCss: every url() that leaves the diagram becomes none, CSS that could hide one goes", () => {
-  assert.equal(inertCss("fill:url(#g);stroke:red"), "fill:url(#g);stroke:red");
-  assert.equal(inertCss('fill:url( "#g" )'), 'fill:url( "#g" )');
-  assert.equal(inertCss("fill:url(https://x.example/a.svg#p);stroke:red"), "fill:none;stroke:red");
-  assert.equal(inertCss('background:URL("/a.png") no-repeat'), "background:none no-repeat");
-  assert.equal(inertCss("background:url('a.png'),url(b.png)"), "background:none,none");
-  assert.equal(inertCss('background:url("a)b.png")'), "background:none");
-  assert.equal(inertCss("background:url(https://x.example/unclosed"), "background:none");
-  assert.equal(
-    inertCss("background:url(data:image/png;base64,AAAA)"),
-    "background:none",
-    "inline data too: CSS needs none",
+test("a drawn diagram loads nothing from another site on the page (#290)", async () => {
+  const tracking = (_source: string, id: string) =>
+    `<svg id="${id}" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient id="g"/></defs>` +
+    `<image href="https://tracker.example/a.png"/><image xlink:href="//tracker.example/b.png"/>` +
+    `<image href="data:image/png;base64,AAAA"/><image href="#g"/><use href="https://tracker.example/s.svg#x"/>` +
+    `<rect style="fill:url(#g)"/><rect style="fill:url(https://tracker.example/c.svg#p)"/>` +
+    `<rect style="background-image:image-set('https://tracker.example/d.png' 1x)"/><rect style="background:\\75rl(x)"/>` +
+    `<foreignObject><div xmlns="http://www.w3.org/1999/xhtml"><img src="https://tracker.example/e.png"/>` +
+    `<span style="background-image:url('https://tracker.example/f.png')">label</span></div></foreignObject>` +
+    `<a href="https://example.com"><text>web</text></a><text>flowchart</text></svg>`;
+  const v = mount(fence("flowchart LR"), fakeRenderer(tracking));
+  await settle();
+  const markup = v.article.querySelector(".md-mermaid-diagram svg")!.outerHTML;
+  assert.doesNotMatch(markup, /tracker\.example|image-set|\\75rl/);
+  assert.match(markup, /<image href="data:image\/png;base64,AAAA"/, "inline data stays");
+  assert.match(markup, /<image href="#g"/, "a reference within the diagram stays");
+  assert.match(markup, /<rect style="fill:url\(#g\)"/);
+  assert.match(markup, /<a href="https:\/\/example.com" target="_blank" rel="noopener noreferrer">/, "links stay");
+  v.view.destroy();
+});
+
+test("a drawn diagram's style sheets and presentation attributes fetch nothing either (#290)", async () => {
+  const tracking = (_source: string, id: string) =>
+    `<svg id="${id}"><style>#${id} .node{fill:red}</style>` +
+    `<g><style>#${id} .bad span{background-image:url("https://tracker.example/state.png")!important;}</style></g>` +
+    `<g><style>#${id} .x{background:&#117;rl(https://tracker.example/entity.png)}</style></g>` +
+    `<g><style>#${id} .y{background:u\\72l(https://tracker.example/escape.png)}</style></g>` +
+    `<defs><marker id="arrow"/><linearGradient id="g"/></defs>` +
+    `<line stroke="url(https://tracker.example/rel.png)" marker-end="url(#arrow)"/>` +
+    `<rect fill="url(#g)" mask="url(https://tracker.example/m.svg#m)" filter="u\\72l(https://tracker.example/f.svg#f)"/>` +
+    `<text>flowchart</text></svg>`;
+  const v = mount(fence("flowchart LR"), fakeRenderer(tracking));
+  await settle();
+  const svg = v.article.querySelector(".md-mermaid-diagram svg")!;
+  assert.doesNotMatch(svg.outerHTML, /tracker\.example/);
+  // the entity only turns into url( once the SVG is parsed: the page checks what it would apply
+  assert.deepEqual(
+    [...svg.querySelectorAll("style")].map((style) => style.textContent),
+    ["#md-Mermaid-1 .node{fill:red}"],
+    "the diagram's own style sheet stays",
   );
-  for (const hiding of [
-    "background:u\\72 l(https://x.example/a.png)",
-    '@import "https://x.example/a.css";',
-    'background:image-set("https://x.example/a.png" 1x)',
-    'background:-webkit-image-set("a.png" 1x)',
-    'background:cross-fade(url(#a), "b.png")',
-  ]) {
-    assert.equal(inertCss(hiding), undefined, hiding);
-  }
+  assert.equal(svg.querySelector("line")?.getAttribute("marker-end"), "url(#arrow)");
+  assert.equal(svg.querySelector("rect")?.getAttribute("fill"), "url(#g)");
+  v.view.destroy();
+});
+
+test("an actor's details that read a heading of the document are refused before mermaid sees them (#290)", async () => {
+  const fake = fakeRenderer();
+  const drawn: string[] = [];
+  const render: RenderMermaid = (source, idPrefix) => {
+    const refused = diagramImageRefusal(source);
+    if (refused) return Promise.resolve({ error: refused });
+    drawn.push(source);
+    return Promise.resolve({ svg: `<svg id="${idPrefix}-1"><text>drawn</text></svg>` });
+  };
+  const v = mount(
+    '## {"properties":{"icon":"//tracker.example/details-icon.png"}}\n\n' +
+      fence(
+        "sequenceDiagram\n  participant A\n  details A: md-propertiesicontrackerexampledetails-iconpng\n  A->>A: hi",
+      ),
+    { ...fake, load: () => Promise.resolve(render) },
+  );
+  await settle();
+  // the heading is the element mermaid would read the actor's properties from
+  assert.equal(
+    v.article.querySelector("#md-propertiesicontrackerexampledetails-iconpng")?.innerHTML,
+    '{"properties":{"icon":"//tracker.example/details-icon.png"}}',
+  );
+  assert.deepEqual(drawn, []);
+  assert.equal(v.article.querySelector(".md-mermaid-notice-title")?.textContent, "Error on line 3 of the diagram");
+  assert.match(
+    v.article.querySelector(".md-mermaid-notice-message")?.textContent ?? "",
+    /^An actor's details are not drawn/,
+  );
+  v.view.destroy();
 });

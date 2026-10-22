@@ -12,7 +12,9 @@ import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
 
 import {
   describeMermaidError,
+  diagramImageRefusal,
   MERMAID_CONFIG,
+  MERMAID_LABEL_SANITIZER,
   MERMAID_THEME_VARIABLES,
   mermaidRenderId,
   SHAPE_IMAGE_FROM_ADDRESS,
@@ -156,4 +158,164 @@ test("describeMermaidError: a shape image the frame refused names the shape and 
   assert.deepEqual(describeMermaidError(refused, 'flowchart LR\n  A@{ img: "data:image/png;base64,AAAA" }'), {
     message: "A shape's image (img) cannot be decoded. Check its data:image/ URL or remove it.",
   });
+});
+
+test("the mermaid config: a label's HTML loads nothing, and no diagram may hand that back (#290)", () => {
+  assert.equal(MERMAID_CONFIG.dompurifyConfig, MERMAID_LABEL_SANITIZER);
+  // mermaid's own default stays in
+  assert.ok(MERMAID_LABEL_SANITIZER.FORBID_TAGS.includes("style"));
+  for (const tag of ["img", "picture", "source", "video", "image", "feimage", "input", "iframe", "object", "embed"]) {
+    assert.ok(MERMAID_LABEL_SANITIZER.FORBID_TAGS.includes(tag), tag);
+  }
+  for (const attribute of ["style", "src", "srcset", "poster", "background"]) {
+    assert.ok(MERMAID_LABEL_SANITIZER.FORBID_ATTR.includes(attribute), attribute);
+  }
+  assert.ok(MERMAID_CONFIG.secure.includes("dompurifyConfig"));
+});
+
+/** the kind of refusal a source gets: the first words of its message, undefined when it draws */
+const refusal = (source: string): string | undefined =>
+  /^(A shape's image|An actor's icon|An actor's details|CSS that loads)/.exec(
+    diagramImageRefusal(source)?.message ?? "",
+  )?.[1];
+
+test("diagramImageRefusal: a shape's img or an actor's icon draws only from inline data (#290)", () => {
+  const shape = diagramImageRefusal(
+    'flowchart LR\n  A --> B\n  B@{ img: "https://tracker.example/a.png", label: "x" }',
+  );
+  assert.equal(shape?.line, 3);
+  assert.match(shape?.message ?? "", /^A shape's image \(img\) is not drawn/);
+  for (const source of [
+    "flowchart LR\n  A@{ shape: image, img: //tracker.example/a.png }",
+    'flowchart LR\n  A@{ "img": "https://tracker.example/a.png" }',
+    'flowchart LR\n  A@{"img":"https://tracker.example/a.png"}',
+    "flowchart LR\n  A@{\n    label: x\n    IMG: https://tracker.example/a.png\n  }",
+    'flowchart LR\n  A@{ label: "}", img: "https://tracker.example/a.png" }',
+    'flowchart LR\n  A@{ "\\x69mg": "https://tracker.example/a.png" }',
+    "flowchart LR\n  A@{ label: &k img, *k : https://tracker.example/a.png }",
+    "flowchart LR\n  A@{\n    ? img\n    : https://tracker.example/a.png\n  }",
+    'flowchart LR\n  A@{ label: "a\\" , img: \\"x", img: "https://tracker.example/a.png" }',
+    'flowchart LR\n  A@{ img: "data:image/png;base64,AAAA", img: "https://tracker.example/a.png" }',
+  ]) {
+    assert.equal(refusal(source), "A shape's image", source);
+  }
+  const icon = diagramImageRefusal(
+    'sequenceDiagram\n  participant A\n  properties A: {"class": "x", "icon": "https://tracker.example/i.png"}',
+  );
+  assert.equal(icon?.line, 3);
+  assert.match(icon?.message ?? "", /^An actor's icon is not drawn/);
+  for (const source of [
+    'sequenceDiagram\n  participant A; properties A: {"icon": "//tracker.example/i.png"}',
+    'sequenceDiagram\n  properties A: {"\\u0069con": "https://tracker.example/i.png"}',
+    'sequenceDiagram\n  properties A: {"icon": "@clock", "icon": "https://tracker.example/i.png"}',
+  ]) {
+    assert.equal(refusal(source), "An actor's icon", source);
+  }
+  // inline data and the diagram's own symbols load nothing: they draw
+  for (const source of [
+    "flowchart LR\n  A --> B",
+    'flowchart LR\n  A@{ shape: rounded, label: "Order" }\n  e1@{ animate: true }',
+    'flowchart LR\n  A@{ img: "data:image/png;base64,AAAA", label: "x" }',
+    'sequenceDiagram\n  participant A\n  properties A: {"class": "internal-service-actor", "icon": "@clock"}',
+    'sequenceDiagram\n  properties A: {"icon": "data:image/png;base64,AAAA"}',
+  ]) {
+    assert.equal(diagramImageRefusal(source), undefined, source);
+  }
+});
+
+test("diagramImageRefusal: an actor's details, and an icon that markup, an entity or a prototype spells (#290)", () => {
+  // details reads the actor's properties as JSON from an element of the page:
+  // a heading of the document is one (its id md-<slug>, its HTML the text)
+  const details = diagramImageRefusal(
+    "sequenceDiagram\n  participant A\n  details A: md-propertiesicontrackerexampledetails-iconpng\n  A->>A: hi",
+  );
+  assert.equal(details?.line, 3);
+  assert.match(details?.message ?? "", /^An actor's details are not drawn/);
+  for (const source of [
+    "sequenceDiagram\n  participant A; details A: md-x",
+    "sequenceDiagram\n  DETAILS A: md-x",
+    "sequenceDiagram\n  loop x\n    A->>A: hi\n  end details A: md-x",
+    '---\ntitle: T\n---\n%%{init: {"wrap": true}}%%\nsequenceDiagram\n  A->>A: hi;%%{init: {}}%%details A: md-x',
+  ]) {
+    assert.equal(refusal(source), "An actor's details", source);
+  }
+  // mermaid hands the JSON to DOMPurify first: a comment, a dropped tag or an
+  // entity in a key ends up as "icon"; a second statement copies __proto__
+  for (const source of [
+    'sequenceDiagram\n  properties A: {"ic<!---->on": "https://tracker.example/i.png"}',
+    'sequenceDiagram\n  properties A: {"ic<style></style>on": "https://tracker.example/i.png"}',
+    'sequenceDiagram\n  properties A: {"&#105;con": "https://tracker.example/i.png"}',
+    'sequenceDiagram\n  properties A: {"class": "x"}\n  properties A: {"__proto__": {"icon": "https://tracker.example/i.png"}}',
+    'sequenceDiagram\n  loop x\n    A->>A: hi\n  end properties A: {"icon": "https://tracker.example/i.png"}',
+  ]) {
+    assert.equal(refusal(source), "An actor's icon", source);
+  }
+});
+
+test("diagramImageRefusal: CSS that fetches, in any diagram type, escaped or not (#290)", () => {
+  const state =
+    "stateDiagram-v2\n  classDef bad background-image:url(https://tracker.example/state.png)\n  [*] --> S1\n  class S1 bad";
+  const css = diagramImageRefusal(state);
+  assert.equal(css?.line, 2);
+  assert.match(
+    css?.message ?? "",
+    /^CSS that loads from an address \(url\(\), image-set\(\) or @import\) is not drawn/,
+  );
+  for (const source of [
+    "block-beta\n  a b\n  classDef blue background-image:url(https://tracker.example/block.png)\n  class a blue",
+    state.replace("url(", "u\\72l("),
+    state.replace("url(", "\\75 rl("),
+    state.replace("url(", "U\\RL("),
+    state.replace("url(https://tracker.example/state.png)", 'image-set("https://tracker.example/state.png" 1x)'),
+    state.replace("url(https://tracker.example/state.png)", '-webkit-image-set("https://tracker.example/s.png" 1x)'),
+    state.replace("url(", "src("),
+    state.replace("background-image:url", "border-image:url"),
+    state.replace("background-image:url", "mask-image:url"),
+    state.replace("background-image:url", "list-style-image:url"),
+    state.replace("background-image:url(https://tracker.example/state.png)", '@import "https://tracker.example/s.css"'),
+    state.replace(
+      "background-image:url(https://tracker.example/state.png)",
+      '@\\69mport "https://tracker.example/s.css"',
+    ),
+    'C4Context\n  Person(a, "A")\n  Person(b, "B")\n  Rel(a, b, "uses")\n  UpdateRelStyle(a, b, $lineColor="url(https://tracker.example/c4.png)")',
+    // a label's HTML is decoded while mermaid lays it out; the drawn SVG decodes the rest
+    "flowchart LR\n  A[\"<svg><rect mask='url&lpar;https://tracker.example/m.svg#m)'/></svg> x\"] --> B",
+    state.replace("url(", "u&bsol;72l("),
+    state.replace("url(", "url&#40;"),
+    state.replace("url(", "url#40;"),
+    '---\nconfig:\n  sankey:\n    linkColor: "url(https://tracker.example/s.png)"\n---\nsankey-beta\na,b,1',
+  ]) {
+    assert.equal(refusal(source), "CSS that loads", source);
+  }
+  // a reference within the diagram, a TeX parenthesis or a path is no fetch
+  for (const source of [
+    "stateDiagram-v2\n  classDef g fill:url(#grad)\n  [*] --> S1\n  class S1 g",
+    "flowchart LR\n  A --> B\n  classDef hot fill:#f96,stroke:#333\n  class A hot",
+    'flowchart LR\n  A["$$\\left( \\frac{a}{b} \\right)$$"] --> B',
+    'flowchart LR\n  A["C:\\Program Files (x86)\\app"] --> B',
+    "flowchart LR\n  A[Pick a curl(1) flag] --> B",
+  ]) {
+    assert.equal(diagramImageRefusal(source), undefined, source);
+  }
+});
+
+test("diagramImageRefusal: a word in a label or a message is no statement (#290)", () => {
+  for (const source of [
+    "flowchart LR\n  A[Edit the properties of an icon] --> B[Save]",
+    "sequenceDiagram\n  A->>B: load properties from Silicon Valley office\n  B-->>A: ok",
+    'flowchart LR\n  A@{ shape: rect, label: "Resize img" } --> B',
+    "flowchart LR\n  A@{ shape: rect, label: 'Crop img' } --> B",
+    "flowchart LR\n  A@{ shape: rect, label: Resize img } --> B",
+    'flowchart LR\n  A@{\n    shape: rect\n    label: "Resize img"\n  }',
+    'flowchart LR\n  A@{ label: "C:\\\\temp\\\\file", shape: rect }',
+    "classDiagram\n  class Icon {\n    +properties Map\n    +lexicon String\n  }",
+    "sequenceDiagram\n  A->>B: Fetch details for customer: 42",
+    'sequenceDiagram\n  A->>B: hi\n  Note over A: properties A: {"icon": "x"}',
+    "sequenceDiagram\n  loop details for each item: x\n    A->>B: hi\n  end",
+    "sequenceDiagram\n  participant A as Order details: x\n  A->>A: hi",
+    'sequenceDiagram\n  participant A\n  properties A: {"class": "icon"}\n  A->>A: hi',
+    "flowchart LR\n  A[Show details X: y] --> B",
+  ]) {
+    assert.equal(diagramImageRefusal(source), undefined, source);
+  }
 });

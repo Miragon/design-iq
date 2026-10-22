@@ -29,9 +29,10 @@ import { after, before, test } from "node:test";
 
 import { MERMAID_DIAGRAM_TYPES } from "@designiq/notations/mermaid";
 import { JSDOM, VirtualConsole } from "jsdom";
+import type { Mermaid } from "mermaid";
 
 import { createMermaidFrameRenderer } from "../src/lib/mermaid-frame.ts";
-import { renderMermaid } from "../src/lib/mermaid-render.ts";
+import { describeMermaidError, mermaidRenderId, type MermaidRenderResult } from "../src/lib/mermaid-render.ts";
 import { loadMermaidUnderJsdom } from "./mermaid-dom.ts";
 import { FEATURES, LABELS, SOURCES } from "./mermaid-hostile-sources.ts";
 
@@ -113,6 +114,20 @@ function loads(root: Element): string[] {
 }
 
 let window: JSDOM["window"];
+let mermaid: Mermaid;
+
+/**
+ * mermaid itself, as the frame runs it, past the source checks renderMermaid
+ * refuses a diagram with first (#290): the frame and the page's sanitizer are
+ * what hold a way to load those checks miss, so they are tested without them.
+ */
+async function drawnByMermaid(source: string, idPrefix: string): Promise<MermaidRenderResult> {
+  try {
+    return { svg: (await mermaid.render(mermaidRenderId(idPrefix), source)).svg };
+  } catch (error) {
+    return { error: describeMermaidError(error, source) };
+  }
+}
 const pwned: unknown[] = [];
 
 interface Render {
@@ -140,7 +155,7 @@ async function render(name: string, source: string): Promise<Render> {
     }
   });
   observer.observe(window.document, { childList: true, subtree: true, attributes: true });
-  const result = await renderMermaid(source, "md-Mermaid");
+  const result = await drawnByMermaid(source, "md-Mermaid");
   await new Promise((resolve) => setImmediate(resolve));
   observer.takeRecords();
   observer.disconnect();
@@ -153,7 +168,7 @@ const labelRenders = new Map<string, Render[]>();
 const featureRenders: Render[] = [];
 
 before(async () => {
-  ({ window } = await loadMermaidUnderJsdom({
+  ({ window, mermaid } = await loadMermaidUnderJsdom({
     url: "https://designiq.test/mermaid-frame.html",
     runScripts: "dangerously",
     virtualConsole: new VirtualConsole(),
@@ -222,11 +237,11 @@ test("the SVG mermaid returns, sanitized for the page, holds nothing that runs o
   const { createDiagramSanitizer } = await view();
   const sanitize = createDiagramSanitizer(page);
   const renders = [...[...labelRenders.values()].flat(), ...featureRenders].filter((r) => r.svg);
-  let unsanitized = 0;
+  const unsanitized = new Set<string>();
   for (const r of renders) {
     const raw = page.document.createElement("div");
     raw.innerHTML = r.svg!;
-    if (loads(raw).length > 0) unsanitized++;
+    if (loads(raw).length > 0) unsanitized.add(r.name);
     const svg = sanitize(r.svg!).firstElementChild!;
     assert.deepEqual([...scripts(svg), ...loads(svg)], [], r.name);
     for (const a of svg.querySelectorAll("a")) {
@@ -234,8 +249,11 @@ test("the SVG mermaid returns, sanitized for the page, holds nothing that runs o
       assert.equal(a.getAttribute("rel"), "noopener noreferrer", r.name);
     }
   }
-  // without the page's sanitizer, those SVGs would load what they name
-  assert.ok(unsanitized >= 20, `only ${unsanitized} SVGs name a resource before the page's sanitizer`);
+  // mermaid's label sanitizer (MERMAID_LABEL_SANITIZER) drops what a label
+  // names. A diagram's styles reach the SVG as written: renderMermaid refuses
+  // them in the source, and should that miss one, the page's sanitizer is
+  // what keeps it from loading
+  assert.deepEqual([...unsanitized].sort(), ["class click", "state styles"]);
 });
 
 test("drawn through the frame, the page's own document holds nothing of a diagram but its sanitized SVG", async () => {
@@ -253,7 +271,7 @@ test("drawn through the frame, the page's own document holds nothing of a diagra
       // the frame: this suite's own window, where the renderer lays diagrams out
       open: async (doc) => {
         frame = doc.body.appendChild(doc.createElement("iframe"));
-        return { element: frame, api: { render: renderMermaid } };
+        return { element: frame, api: { render: drawnByMermaid } };
       },
     }),
   );

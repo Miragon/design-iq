@@ -15,7 +15,7 @@ import { MERMAID_DIAGRAM_TYPES, MERMAID_VERSION, mermaidHeader } from "@designiq
 import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
 import type { Mermaid } from "mermaid";
 
-import { describeMermaidError } from "../src/lib/mermaid-render.ts";
+import { describeMermaidError, MERMAID_LABEL_SANITIZER, renderMermaid } from "../src/lib/mermaid-render.ts";
 import { loadMermaidUnderJsdom } from "./mermaid-dom.ts";
 
 let mermaid: Mermaid;
@@ -113,22 +113,106 @@ test("a diagram cannot leave the CI look: no other theme, palette, CSS or font",
   );
 });
 
-// mermaid 12.2 drops a diagram's own dompurifyConfig itself; a release that
-// took it would let a diagram hand its labels <style> back
-test("a diagram cannot configure mermaid's label sanitizer, nor point its arrowheads at an address", async () => {
+// in the frame, an absolute arrowhead would point at its about:srcdoc address
+test("a diagram cannot point its arrowheads at an address (#293)", async () => {
   const flow = "flowchart LR\n  A --> B\n";
   for (const source of [
-    `---\nconfig:\n  dompurifyConfig:\n    ADD_TAGS: [style]\n  arrowMarkerAbsolute: true\n---\n${flow}`,
-    `%%{init: {"dompurifyConfig": {"ADD_TAGS": ["style"]}, "arrowMarkerAbsolute": true}}%%\n${flow}`,
+    `---\nconfig:\n  arrowMarkerAbsolute: true\n---\n${flow}`,
+    `%%{init: {"arrowMarkerAbsolute": true}}%%\n${flow}`,
   ]) {
-    const config = await configFor(source);
-    assert.equal(config.dompurifyConfig, undefined, source);
-    assert.equal(config.arrowMarkerAbsolute, false, source);
+    assert.equal((await configFor(source)).arrowMarkerAbsolute, false, source);
   }
   assert.doesNotMatch(
     (await mermaid.render("arrows", `%%{init: {"arrowMarkerAbsolute": true}}%%\n${flow}`)).svg,
     /url\(\w+:/,
   );
+});
+
+test("a label's HTML loads nothing from another site, whatever the diagram's own config says (#290)", async () => {
+  const labels =
+    "flowchart LR\n  A[\"<img src='https://tracker.example/a.png'/> logo\"] --> B[\"<span style='background-image:url(https://tracker.example/b.png)'>b</span>\"]\n" +
+    "  B --> C[\"<picture><source srcset='https://tracker.example/c.png'></picture><video poster='https://tracker.example/d.png'></video>c\"]\n";
+  const unlock =
+    "---\nconfig:\n  dompurifyConfig:\n    ADD_TAGS: [img]\n    FORBID_TAGS: []\n    FORBID_ATTR: []\n---\n";
+  for (const source of [labels, unlock + labels, `%%{init: {"dompurifyConfig": {"FORBID_TAGS": []}}}%%\n${labels}`]) {
+    assert.deepEqual((await configFor(source)).dompurifyConfig, MERMAID_LABEL_SANITIZER, source);
+    const { svg } = await mermaid.render(`labels-${++drawings}`, source);
+    assert.doesNotMatch(svg, /tracker\.example|<img|<picture|<video/, source);
+    assert.match(svg, /logo/, "the label's text stays");
+  }
+});
+
+test("a shape's image or an actor's icon from an address is refused before mermaid loads it (#290)", async () => {
+  const shape = await renderMermaid('flowchart LR\n  A@{ img: "https://tracker.example/a.png", label: "x" }', "test");
+  assert.ok("error" in shape);
+  assert.equal(shape.error.line, 2);
+  assert.match(shape.error.message, /^A shape's image \(img\) is not drawn/);
+  const icon = await renderMermaid(
+    'sequenceDiagram\n  participant A\n  properties A: {"icon": "https://tracker.example/i.png"}\n  A->>A: hi',
+    "test",
+  );
+  assert.ok("error" in icon);
+  assert.match(icon.error.message, /^An actor's icon is not drawn/);
+});
+
+test("a classDef with url() would load as the diagram is laid out: it is refused before mermaid applies it (#290)", async () => {
+  const state =
+    "stateDiagram-v2\n  classDef bad background-image:url(https://tracker.example/state.png)\n  [*] --> S1\n  class S1 bad\n";
+  const block =
+    "block-beta\n  a b\n  classDef blue background-image:url(https://tracker.example/block.png)\n  class a blue\n";
+  // the vector is real: mermaid writes it into the style sheet it lays the diagram out with
+  for (const source of [state, block]) assert.match((await drawing(source)).style, /tracker\.example/, source);
+  for (const [source, line] of [
+    [state, 2],
+    [block, 3],
+    [state.replace("url(", "u\\72l("), 2],
+    [state.replace("url(https://tracker.example/state.png)", 'image-set("https://tracker.example/state.png" 1x)'), 2],
+    [state.replace("background-image:url", "mask-image:url"), 2],
+  ] as const) {
+    const refused = await renderMermaid(source, "test");
+    assert.ok("error" in refused, source);
+    assert.equal(refused.error.line, line, source);
+    assert.match(refused.error.message, /^CSS that loads from an address/, source);
+  }
+});
+
+test("an actor's details read its icon from an element of the page: the statement is refused (#290)", async () => {
+  const heading = document.createElement("h2");
+  heading.id = "md-propertiesicontrackerexampledetails-iconpng";
+  heading.textContent = '{"properties":{"icon":"//tracker.example/details-icon.png"}}';
+  document.body.append(heading);
+  try {
+    const source = `sequenceDiagram\n  participant A\n  details A: ${heading.id}\n  A->>A: hi\n`;
+    const { svg } = await mermaid.render(`details-${++drawings}`, source);
+    assert.match(svg, /<image[^>]*tracker\.example\/details-icon\.png/, "mermaid draws the icon the heading names");
+    const refused = await renderMermaid(source, "test");
+    assert.ok("error" in refused);
+    assert.equal(refused.error.line, 3);
+    assert.match(refused.error.message, /^An actor's details are not drawn/);
+  } finally {
+    heading.remove();
+  }
+});
+
+test("a diagram's configuration that names CSS to fetch is refused, its YAML and JSON escapes read (#290)", async () => {
+  const sankey = "sankey-beta\na,b,1\nb,c,1\n";
+  const escaped = `---\nconfig:\n  sankey:\n    linkColor: "u\\x72l(https://tracker.example/s.png)"\n---\n${sankey}`;
+  // the vector is real: YAML turns the escape into a url() that mermaid draws every link with
+  const { svg } = await mermaid.render(`config-${++drawings}`, escaped);
+  assert.match(svg, /url\(https:\/\/tracker\.example\/s\.png\)/);
+  for (const source of [
+    escaped,
+    `%%{init: {"sankey": {"linkColor": "u\\u0072l(https://tracker.example/s.png)"}}}%%\n${sankey}`,
+    `%%{init: {"sankey": {"linkColor": "\\\\75rl(https://tracker.example/s.png)"}}}%%\n${sankey}`,
+  ]) {
+    const refused = await renderMermaid(source, "test");
+    assert.ok("error" in refused, source);
+    assert.equal(refused.error.line, 1, source);
+    assert.match(refused.error.message, /^The diagram's configuration loads from an address/, source);
+  }
+  for (const source of [`---\nconfig:\n  sankey:\n    linkColor: gradient\n---\n${sankey}`, sankey]) {
+    assert.ok("svg" in (await renderMermaid(source, "test")), source);
+  }
 });
 
 test("layout stays the author's: a directive may still set the look and the wrapping", async () => {

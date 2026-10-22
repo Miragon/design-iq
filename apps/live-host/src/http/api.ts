@@ -42,6 +42,7 @@
  *   POST /api/repos/:owner/:repo/release/:id     → release AS THE USER (repo write required)
  *   GET  /api/repos/:owner/:repo/content?path=   → current LIVE model content + baseVersion (repo write required)
  *   PUT  /api/repos/:owner/:repo/content?path=   → validate + CAS-save into the live doc (repo write required)
+ *   GET  /api/repos/:owner/:repo/image?path=     → a repository image for the Markdown view (repo write required)
  *   POST /mcp                                    → MCP endpoint (stateless Streamable HTTP; session id / OIDC JWT / none-mode principal)
  *   GET  /.well-known/oauth-protected-resource(/mcp) → RFC-9728 PRM, per resource (only when OIDC is configured)
  *   POST /webhook/github                         → installation lifecycle (HMAC-verified)
@@ -127,6 +128,7 @@ import type { LoginCodeStore } from "../application/login-codes.ts";
 import { listAllModels, listChanges, listDecisions, listProcesses, listRepos } from "../application/overview.ts";
 import { referencesTo } from "../application/reference-impact.ts";
 import type { RepoActivity } from "../application/repo-activity.ts";
+import { locateRepoImage, type RepoImage } from "../application/repo-image.ts";
 import type { RoomPresenceDeps } from "../application/room-presence.ts";
 import {
   createDecision,
@@ -715,8 +717,11 @@ export function startApi(port: number, opts: ApiOptions): Server {
       // "content". A repo literally NAMED "<owner>/history" therefore cannot
       // address /content over REST (the URL is claimed by history/content) —
       // accepted keyword-collision edge; MCP tools and ws rooms are unaffected.
+      // `image` is guarded the same way against "release/<id>": a process
+      // named "image" keeps its release route, so a repo literally named
+      // "<owner>/release" cannot address /image over REST.
       const repoRoute = url.pathname.match(
-        /^\/api\/repos\/(.+)\/(processes|decisions|models|folders|move|rename|duplicate|delete|references|changes|conflicts|sync|history(?:\/content)?|todos(?:\/([0-9A-Za-z-]+)\/close)?|todo-jobs(?:\/retry)?|release(?:\/([^/]+))?|(?<!\/history\/)content)$/,
+        /^\/api\/repos\/(.+)\/(processes|decisions|models|folders|move|rename|duplicate|delete|references|changes|conflicts|sync|history(?:\/content)?|todos(?:\/([0-9A-Za-z-]+)\/close)?|todo-jobs(?:\/retry)?|release(?:\/([^/]+))?|(?<!\/release\/)image|(?<!\/history\/)content)$/,
       );
       if (repoRoute) {
         const session = await sessionOf(req);
@@ -916,6 +921,40 @@ export function startApi(port: number, opts: ApiOptions): Server {
             return send(res, 200, out.result satisfies PutContentResultWire);
           }
           return send(res, 405, { error: "method not allowed" });
+        }
+        // a repository image of a Markdown document (application/repo-image.ts);
+        // ?path is repo-relative. A missing image is an ordinary answer for a
+        // document, so the typed errors are sent here, not logged as a 500
+        if (repoRoute[2] === "image") {
+          if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, { error: "method not allowed" });
+          const path = url.searchParams.get("path") ?? "";
+          if (!path) return send(res, 400, { error: "missing ?path=<repo-relative image path>" });
+          let image: RepoImage;
+          try {
+            image = await locateRepoImage(opts, repo, path);
+          } catch (e) {
+            if (!(e instanceof AppError)) throw e;
+            return send(res, e.status, { error: e.message, code: e.code });
+          }
+          const headers = {
+            "content-type": image.type,
+            "cache-control": "private, no-cache",
+            etag: image.etag,
+            // an SVG opened on its own is a document of this origin: it runs
+            // no script, loads nothing and cannot be framed
+            "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'none'",
+            "cross-origin-resource-policy": "same-origin",
+          };
+          if (req.headers["if-none-match"]?.split(/\s*,\s*/).includes(image.etag)) {
+            res.writeHead(304, headers);
+            return res.end();
+          }
+          res.writeHead(200, { ...headers, "content-length": String(image.size) });
+          if (req.method === "HEAD") return res.end();
+          createReadStream(image.diskPath)
+            .on("error", () => res.destroy())
+            .pipe(res);
+          return;
         }
         // file history (read-models in application/history.ts) — ?path is the
         // content-relative model path, the same identifier the live rooms use

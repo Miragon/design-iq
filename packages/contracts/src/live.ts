@@ -64,6 +64,37 @@ export const EDITOR_LOGIN_PATH = "/auth";
  *  "acme/models-2" from ever matching "acme/models" */
 export const roomPrefix = (repoFullName: string): string => `${repoFullName}/`;
 
+// ── repository images (#290) ─────────────────────────────────────────────────
+// A Markdown document's relative images are files of its repository. The Live
+// Host serves them on one route, under the content API's authorization; the
+// web client's Markdown view points the document's images there. Only these
+// types are served: a document that names another file shows a placeholder.
+
+/** the image types the Live Host serves from a repository, by lower-case extension */
+export const REPO_IMAGE_TYPES: Readonly<Record<string, string>> = {
+  ".avif": "image/avif",
+  ".gif": "image/gif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+};
+
+/** the largest repository image the Live Host serves (10 MiB) */
+export const REPO_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+/** the MIME type of a repository image path, undefined for any other file */
+export const repoImageType = (path: string): string | undefined => {
+  const dot = path.lastIndexOf(".");
+  const extension = dot < 0 ? "" : path.slice(dot).toLowerCase();
+  return Object.hasOwn(REPO_IMAGE_TYPES, extension) ? REPO_IMAGE_TYPES[extension] : undefined;
+};
+
+/** the Live Host route of a repository image (`path` repo-relative) */
+export const repoImageRoute = (repoFullName: string, path: string): string =>
+  `/api/repos/${repoFullName}/image?path=${encodeURIComponent(path)}`;
+
 // ── presence (awareness) — ephemeral, NEVER in the Y.Doc ─────────────────────
 // Awareness is scoped per room (a room IS one file), so no docPath rides in
 // the payload. y-monaco owns the awareness field "selection" — the canvas
