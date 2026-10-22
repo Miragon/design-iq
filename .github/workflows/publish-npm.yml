@@ -48,12 +48,13 @@ jobs:
         if: inputs.package == 'validator'
         run: |
           fail() { echo "::error::$*"; exit 1; }
-          tarball="$(mktemp -d)"
-          pnpm --filter ./packages/validator pack --pack-destination "$tarball" > /dev/null
-          modules="$(mktemp -d)/node_modules"
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          pnpm --filter ./packages/validator pack --pack-destination "$work" > /dev/null
+          modules="$work/node_modules"
           package="$modules/@miragon/design-iq-validator"
           mkdir -p "$package" "$modules/.bin"
-          tar -xzf "$tarball"/* -C "$package" --strip-components=1
+          tar -xzf "$work"/*.tgz -C "$package" --strip-components=1
           for dependency in $(node -p 'Object.keys(require(process.argv[1]).dependencies ?? {}).join(" ")' "$package/package.json"); do
             mkdir -p "$(dirname "$modules/$dependency")"
             ln -s "$PWD/packages/validator/node_modules/$dependency" "$modules/$dependency"
