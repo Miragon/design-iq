@@ -1,0 +1,3 @@
+# exactly one invalid model (Task_ship has no BPMNDI shape): publish-npm.yml requires the built
+# CLI to fail on it, so a CLI that can no longer fail is never published
+models: processes

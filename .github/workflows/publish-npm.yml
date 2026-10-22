@@ -39,9 +39,27 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build (tsdown → dist/)
         run: pnpm --filter ./packages/${{ inputs.package }} build
-      - name: Sanity-run the built validator against the example content repo
+      # The bin npm installs, not the library entry: dist/validate.js never calls runCli(), so the
+      # step printed nothing and passed whatever the build held (#282). The invalid model proves the
+      # CLI can still fail. packages/validator/test/publish-sanity.test.ts runs this step.
+      - name: Sanity-run the built validator CLI (the example content repo passes, an invalid model fails)
         if: inputs.package == 'validator'
-        run: node packages/validator/dist/validate.js --root process-documentation
+        run: |
+          bin="packages/validator/$(node -p "require('./packages/validator/package.json').publishConfig.bin['designiq-validate']")"
+          invalid=packages/validator/test/fixtures/invalid-content-repo
+          fail() { echo "::error::$*"; exit 1; }
+
+          status=0
+          out="$(node "$bin" --root process-documentation)" || status=$?
+          printf '%s\n' "$out"
+          [ "$status" -eq 0 ] || fail "$bin exited $status on the example content repo, expected 0"
+          grep -qE '^0 error\(s\), [0-9]+ warning\(s\) .+ OK \(' <<<"$out" || fail "$bin printed no OK summary for the example content repo"
+
+          status=0
+          out="$(node "$bin" --root "$invalid")" || status=$?
+          printf '%s\n' "$out"
+          [ "$status" -eq 1 ] || fail "$bin exited $status on $invalid, expected 1"
+          grep -q '^\[ERROR\] processes/ship-order\.bpmn: ' <<<"$out" || fail "$bin did not report the invalid model of $invalid"
       - name: Sanity-run the built MCP server (must boot, then exit 0 on stdin EOF)
         if: inputs.package == 'mcp'
         run: timeout 30 node packages/mcp/dist/server.js --root process-documentation < /dev/null
