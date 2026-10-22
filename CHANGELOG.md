@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.8.0](https://github.com/Miragon/design-iq/compare/v5.7.0...v5.8.0) (2026-10-22)
+
+
+### Features
+
+* **web:** show a Markdown document's repository images, and images from other sites only on the reader's click ([#304](https://github.com/Miragon/design-iq/issues/304)) ([945cbe7](https://github.com/Miragon/design-iq/commit/945cbe78fb5c7f9b2e8827b065a7aebccf75ce0a))
+
+
+### Bug Fixes
+
+* **web:** draw Mermaid diagrams in a frame that runs and loads nothing ([#306](https://github.com/Miragon/design-iq/issues/306)) ([98004a6](https://github.com/Miragon/design-iq/commit/98004a63ae0ac26805d8d46fa289e7ce1384f942))
+
 ## [5.7.0](https://github.com/Miragon/design-iq/compare/v5.6.0...v5.7.0) (2026-10-21)
 
 
