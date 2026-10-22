@@ -25,8 +25,8 @@ import type { WorkspaceEnsure } from "../domain/rooms.ts";
 import type { ConnectedRepo } from "../repos/registry.ts";
 
 export interface RepoImage {
-  /** the file on disk, symlinks resolved */
-  file: string;
+  /** where it is on disk, symlinks resolved */
+  diskPath: string;
   /** its MIME type */
   type: string;
   size: number;
@@ -59,14 +59,14 @@ export async function locateRepoImage(
     status: 404,
     expose: true,
   });
-  let file: string;
+  let diskPath: string;
   try {
-    file = realpathSync(resolve(workspace, path));
+    diskPath = realpathSync(resolve(workspace, path));
   } catch {
     throw notFound;
   }
-  if (!file.startsWith(realpathSync(workspace) + sep)) throw invalid(`${path} leaves the repository (symlink)`);
-  const stats = statSync(file);
+  if (!diskPath.startsWith(realpathSync(workspace) + sep)) throw invalid(`${path} leaves the repository (symlink)`);
+  const stats = statSync(diskPath);
   if (!stats.isFile()) throw notFound;
   if (stats.size > REPO_IMAGE_MAX_BYTES) {
     throw new AppError(
@@ -76,7 +76,7 @@ export async function locateRepoImage(
     );
   }
   return {
-    file,
+    diskPath,
     type,
     size: stats.size,
     etag: `W/"${stats.size.toString(36)}-${Math.trunc(stats.mtimeMs).toString(36)}"`,

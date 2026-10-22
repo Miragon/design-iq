@@ -948,7 +948,7 @@ export function startApi(port: number, opts: ApiOptions): Server {
           }
           res.writeHead(200, { ...headers, "content-length": String(image.size) });
           if (req.method === "HEAD") return res.end();
-          createReadStream(image.file)
+          createReadStream(image.diskPath)
             .on("error", () => res.destroy())
             .pipe(res);
           return;
