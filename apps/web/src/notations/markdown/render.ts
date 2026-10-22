@@ -22,7 +22,14 @@
  * repository file (a folder, an image, source code, a document outside the
  * models folder) is not something designIQ opens, so it renders as plain,
  * marked text instead of a link that would lead nowhere.
+ *
+ * Images: an image of the repository (a relative path) loads from the Live
+ * Host, like the document itself. An image from another site loads only once
+ * the reader asks for it (RenderOptions.externalImages): its host would see
+ * every reader's address, time and browser, so until then a placeholder names
+ * the host. Inline data images need no request and show at once.
  */
+import { repoImageRoute, repoImageType } from "@designiq/contracts/live";
 import { byExtension } from "@designiq/notations";
 import MarkdownIt, { type Env, type StateCore, type Token } from "markdown-it";
 
@@ -51,6 +58,11 @@ export interface RenderOptions {
   /** the repo-relative paths of the repository's models; absent (the list
    *  is still loading) = every path with a notation extension counts as one */
   models?: ReadonlySet<string>;
+  /** the addresses of the images from other sites the reader chose to load;
+   *  every other one renders as a placeholder that offers to load it */
+  externalImages?: ReadonlySet<string>;
+  /** the routes of the repository images that did not load: placeholders */
+  brokenImages?: ReadonlySet<string>;
 }
 
 /** what a link in the document points at */
@@ -67,6 +79,18 @@ export type LinkTarget =
   | { kind: "contact" }
   /** any other scheme markdown-it lets through (vscode:, ms-word:, data:image/): not followed */
   | { kind: "scheme"; scheme: string };
+
+/** where an image of the document comes from */
+export type ImageSource =
+  /** a data:image/ URL: nothing to fetch */
+  | { kind: "inline" }
+  /** a file of the repository, served by the Live Host */
+  | { kind: "repository"; path: string }
+  /** another site: loads only once the reader asks for it */
+  | { kind: "external"; url: string; host: string }
+  /** nothing designIQ loads (an http: address, another scheme, a path
+   *  outside the repository, a file that is no image), named by `where` */
+  | { kind: "unavailable"; where: string };
 
 /** heading ids carry a prefix, so document content can never clobber a
  *  global (window.<id>) or another id of the app; URL fragments stay bare
@@ -145,12 +169,37 @@ export function classifyHref(href: string, docPath: string, models?: ReadonlySet
   return isModel ? { kind: "model", path, fragment } : { kind: "file", path };
 }
 
+/**
+ * Where an image `src` of the document at `docPath` comes from (`src` as
+ * markdown-it normalized it, so percent-encoded). A protocol-relative address
+ * is an https one, as on the https page designIQ serves.
+ */
+export function classifyImage(src: string, docPath: string): ImageSource {
+  if (/^data:image\//i.test(src)) return { kind: "inline" };
+  const url = src.startsWith("//") ? `https:${src}` : src;
+  if (/^https:\/\//i.test(url)) {
+    try {
+      return { kind: "external", url, host: new URL(url).host };
+    } catch {
+      return { kind: "unavailable", where: safeDecode(src) };
+    }
+  }
+  if (SCHEME.test(src)) return { kind: "unavailable", where: safeDecode(src) };
+  const pathPart = src.replace(/[?#].*$/, "");
+  const path = pathPart === "" ? undefined : resolveRepoPath(pathPart, docPath);
+  if (path === undefined || repoImageType(path) === undefined)
+    return { kind: "unavailable", where: path ?? safeDecode(src) };
+  return { kind: "repository", path };
+}
+
 /** what the core rules read from markdown-it's env */
 interface RenderEnv extends Env {
   repo: string;
   docPath: string;
   fences: Readonly<Record<string, FenceRenderer>>;
   models: ReadonlySet<string> | undefined;
+  externalImages: ReadonlySet<string> | undefined;
+  brokenImages: ReadonlySet<string> | undefined;
 }
 
 const TASK_MARKER = /^\[([ xX])\](?:[ \t]+|$)/;
@@ -344,27 +393,53 @@ md.renderer.rules.fence = (tokens, idx, _options, env) => {
 md.renderer.rules.code_block = (tokens, idx) =>
   `<pre class="md-code"><code>${escapeHtml(tokens[idx]!.content)}</code></pre>\n`;
 
-// images: https and inline data images load (lazily, without a referrer).
-// An https image loads straight from its host, which sees the reader's
-// address, as it would outside GitHub's image proxy: a deliberate default
-// for now. Anything else, the repository's own relative images included, has
-// no route to load from yet and shows as a placeholder naming the image
+/** the last segment of a path or address, "image" for none */
+const fileName = (where: string): string => where.split("/").filter(Boolean).pop() ?? "image";
+
+/** an image in place of the picture: its name, and the place it would come from */
+const imagePlaceholder = (where: string, label: string): string =>
+  `<span class="md-image-placeholder" title="${escapeHtml(where)}">Image not shown: ${escapeHtml(label)}</span>`;
+
+// images: inline data images show, a repository image loads from the Live
+// Host, an image from another site only once the reader asked for it (the
+// reader's address is what that site would learn). Every other image, and a
+// repository image that did not load, is a placeholder naming it
 md.renderer.rules.image = (tokens, idx, options, env, self) => {
   const token = tokens[idx]!;
   const src = String(token.attrGet("src") ?? "");
   const alt = self.renderInlineAsText(token.children ?? [], options, env);
-  if (/^https:\/\//i.test(src) || /^data:image\//i.test(src)) {
-    token.attrSet("alt", alt);
-    token.attrSet("loading", "lazy");
-    token.attrSet("referrerpolicy", "no-referrer");
-    return self.renderToken(tokens, idx, options);
+  const { repo, docPath, externalImages, brokenImages } = env as RenderEnv;
+  const source = classifyImage(src, docPath);
+  token.attrSet("alt", alt);
+  token.attrSet("loading", "lazy");
+  switch (source.kind) {
+    case "inline":
+      return self.renderToken(tokens, idx, options);
+    case "repository": {
+      const route = repoImageRoute(repo, source.path);
+      if (brokenImages?.has(route)) return imagePlaceholder(source.path, alt || fileName(source.path));
+      token.attrSet("src", route);
+      token.attrSet("class", "md-repo-image");
+      return self.renderToken(tokens, idx, options);
+    }
+    case "external": {
+      if (externalImages?.has(source.url)) {
+        token.attrSet("src", source.url);
+        token.attrSet("referrerpolicy", "no-referrer");
+        return self.renderToken(tokens, idx, options);
+      }
+      const label = alt || fileName(safeDecode(new URL(source.url).pathname));
+      return (
+        `<span class="md-image-external" title="${escapeHtml(source.url)}">` +
+        `<span class="md-image-external-text">Image from <strong>${escapeHtml(source.host)}</strong>: ${escapeHtml(label)}</span>` +
+        `<button type="button" class="md-image-load" data-image-src="${escapeHtml(source.url)}"` +
+        ` aria-label="Load the image ${escapeHtml(label)} from ${escapeHtml(source.host)}"` +
+        ` title="Loading it sends your IP address to ${escapeHtml(source.host)}">Load image</button></span>`
+      );
+    }
+    case "unavailable":
+      return imagePlaceholder(source.where, alt || fileName(source.where));
   }
-  // name a repository image by its repo-relative path, anything else by its URL
-  const docPath = (env as RenderEnv).docPath;
-  const where =
-    (SCHEME.test(src) || src.startsWith("//") ? undefined : resolveRepoPath(src, docPath)) ?? safeDecode(src);
-  const label = alt || where.split("/").pop() || "image";
-  return `<span class="md-image-placeholder" title="${escapeHtml(where)}">Image not shown: ${escapeHtml(label)}</span>`;
 };
 
 /** render a Markdown document to (unsanitized, but escaped) HTML */
@@ -374,6 +449,8 @@ export function renderMarkdown(source: string, options: RenderOptions): string {
     docPath: options.docPath,
     fences: options.fences ?? {},
     models: options.models,
+    externalImages: options.externalImages,
+    brokenImages: options.brokenImages,
   };
   return md.render(source, env);
 }
@@ -383,6 +460,13 @@ export function renderMarkdown(source: string, options: RenderOptions): string {
  *  the validator's fence scanner against their fences, and ./insert-diagram.ts
  *  reads from them the blocks a diagram must not be inserted into */
 export function parseMarkdown(source: string): Token[] {
-  const env: RenderEnv = { repo: "", docPath: "", fences: {}, models: undefined };
+  const env: RenderEnv = {
+    repo: "",
+    docPath: "",
+    fences: {},
+    models: undefined,
+    externalImages: undefined,
+    brokenImages: undefined,
+  };
   return md.parse(source, env);
 }

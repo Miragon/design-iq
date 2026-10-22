@@ -6,6 +6,11 @@
  * Node-loadable on purpose (test/markdown-view.test.ts runs it under jsdom):
  * relative `.ts` imports, no "@/" alias, the window passed in.
  *
+ * It also holds the view to its image rule (./render.ts): an image loads
+ * from the page's own origin or inline data, or from another site the reader
+ * chose to load. A slip that names any other address loses it here, so no
+ * reader's browser calls a third party unasked.
+ *
  * Widening it is a security decision: a fence extension that inserts richer
  * markup (a Mermaid SVG) sanitizes that output in its own `hydrate`, with its
  * own profile (createDiagramSanitizer below), instead of loosening this list
@@ -20,6 +25,7 @@ const SANITIZE: Config & { RETURN_DOM_FRAGMENT: true } = {
     "a",
     "blockquote",
     "br",
+    "button",
     "code",
     "del",
     "div",
@@ -52,6 +58,7 @@ const SANITIZE: Config & { RETURN_DOM_FRAGMENT: true } = {
     "alt",
     "checked",
     "class",
+    "data-image-src",
     "data-model-path",
     "disabled",
     "href",
@@ -65,7 +72,7 @@ const SANITIZE: Config & { RETURN_DOM_FRAGMENT: true } = {
     "title",
     "type",
   ],
-  // the one data attribute is listed above: no other data-* gets through
+  // the two data attributes are listed above: no other data-* gets through
   ALLOW_DATA_ATTR: false,
   RETURN_DOM_FRAGMENT: true,
 };
@@ -73,9 +80,34 @@ const SANITIZE: Config & { RETURN_DOM_FRAGMENT: true } = {
 /** HTML in, a sanitized fragment of the window's document out */
 export type Sanitize = (html: string) => DocumentFragment;
 
-export function createSanitizer(win: WindowLike): Sanitize {
+/** the window the view renders in: DOMPurify's, and the page's address */
+export type SanitizeWindow = WindowLike & { location: { href: string; origin: string } };
+
+export interface SanitizeOptions {
+  /** the addresses of the images from other sites the reader chose to load */
+  externalImages?: ReadonlySet<string>;
+}
+
+export function createSanitizer(win: SanitizeWindow, options: SanitizeOptions = {}): Sanitize {
   const purify = DOMPurify(win);
+  const loadsUnasked = (src: string): boolean => {
+    if (/^data:image\//i.test(src)) return true;
+    try {
+      return new URL(src, win.location.href).origin === win.location.origin;
+    } catch {
+      return false;
+    }
+  };
   purify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.tagName === "IMG") {
+      const src = node.getAttribute("src");
+      if (src !== null && !loadsUnasked(src)) {
+        if (options.externalImages?.has(src)) node.setAttribute("referrerpolicy", "no-referrer");
+        else node.removeAttribute("src");
+      }
+    }
+    // a button of the view acts through its click handler, never submits
+    if (node.tagName === "BUTTON") node.setAttribute("type", "button");
     if (node.tagName === "A" && node.hasAttribute("target")) {
       // a new tab is opened only without an opener and a referrer
       if (node.getAttribute("target") === "_blank") node.setAttribute("rel", "noopener noreferrer");

@@ -10,6 +10,11 @@
  * models of the repository navigate inside designIQ through the shell;
  * #anchors scroll this view.
  *
+ * An image from another site shows as a placeholder until the reader loads
+ * it: that choice holds for this view of the document, through every
+ * re-render, and is never stored. A repository image that does not load (a
+ * missing file, one too large) turns into a placeholder and stays one.
+ *
  * Node-loadable on purpose (test/markdown-view.test.ts runs it under jsdom):
  * relative `.ts` imports, and every DOM access goes through the container's
  * own document and window. The stylesheet comes with the lazy entry,
@@ -44,7 +49,11 @@ export function mountMarkdownView(
   const doc = container.ownerDocument;
   const win = doc.defaultView;
   if (!win) throw new Error("The Markdown view needs a document with a window");
-  const sanitize = createSanitizer(win);
+  /** the addresses of the images from other sites the reader loaded */
+  const externalImages = new Set<string>();
+  /** the routes of the repository images that did not load */
+  const brokenImages = new Set<string>();
+  const sanitize = createSanitizer(win, { externalImages });
 
   const scroller = doc.createElement("div");
   scroller.className = "markdown-view";
@@ -59,6 +68,9 @@ export function mountMarkdownView(
 
   let lastSource: string | undefined;
   let lastModels: ReadonlySet<string> | undefined;
+  /** counts the images the reader loaded: a render with a new one is not a repeat */
+  let imagesLoaded = 0;
+  let lastImagesLoaded = 0;
   let rendered = false;
   let hydration: AbortController | undefined;
   /** the fence languages the last render hydrated */
@@ -67,7 +79,7 @@ export function mountMarkdownView(
   const render = (): void => {
     const source = ctx.ytext.toString();
     const models = ctx.models?.paths();
-    if (source === lastSource && models === lastModels) return;
+    if (source === lastSource && models === lastModels && imagesLoaded === lastImagesLoaded) return;
     // the fence languages this document has: only their extensions hydrate,
     // so a diagram engine loads only for a document that contains a diagram
     const seen = new Set<string>();
@@ -80,7 +92,14 @@ export function mountMarkdownView(
     }
     let html: string;
     try {
-      html = renderMarkdown(source, { repo: ctx.repo, docPath: ctx.docPath, fences: renderers, models });
+      html = renderMarkdown(source, {
+        repo: ctx.repo,
+        docPath: ctx.docPath,
+        fences: renderers,
+        models,
+        externalImages,
+        brokenImages,
+      });
     } catch (e) {
       // the first render failing sends the shell to the source view; a later
       // one keeps the last good rendering on screen
@@ -90,6 +109,7 @@ export function mountMarkdownView(
     }
     lastSource = source;
     lastModels = models;
+    lastImagesLoaded = imagesLoaded;
     rendered = true;
     hydration?.abort();
     hydration = undefined;
@@ -128,10 +148,28 @@ export function mountMarkdownView(
     }
   };
 
+  /** the reader asked for an image from another site */
+  const loadImage = (button: HTMLButtonElement): void => {
+    const url = button.dataset.imageSrc ?? "";
+    if (!/^https:\/\//i.test(url)) return;
+    // the button goes with the re-render: keep the keyboard in the view
+    const hadFocus = doc.activeElement === button;
+    externalImages.add(url);
+    imagesLoaded++;
+    update();
+    if (hadFocus) scroller.focus({ preventScroll: true });
+  };
+
   // plain left clicks only: a modified or middle click opens the link's real
   // href in a new tab, which is the same route on a full page load
   const onClick = (e: MouseEvent): void => {
-    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (e.defaultPrevented) return;
+    const button = e.target instanceof win.Element ? e.target.closest("button.md-image-load") : null;
+    if (button instanceof win.HTMLButtonElement && article.contains(button)) {
+      e.preventDefault();
+      return loadImage(button);
+    }
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const link = e.target instanceof win.Element ? e.target.closest("a[href]") : null;
     if (!(link instanceof win.HTMLAnchorElement) || !article.contains(link)) return;
     const href = link.getAttribute("href") ?? "";
@@ -147,6 +185,23 @@ export function mountMarkdownView(
     }
   };
   article.addEventListener("click", onClick);
+
+  // a repository image that does not load becomes the placeholder it would
+  // have rendered as, now and in every later render; error does not bubble
+  const onImageError = (e: Event): void => {
+    const image = e.target;
+    if (!(image instanceof win.HTMLImageElement) || !image.classList.contains("md-repo-image")) return;
+    const route = image.getAttribute("src");
+    if (!route || !article.contains(image)) return;
+    brokenImages.add(route);
+    const path = new URL(route, win.location.href).searchParams.get("path") ?? route;
+    const placeholder = doc.createElement("span");
+    placeholder.className = "md-image-placeholder";
+    placeholder.title = path;
+    placeholder.textContent = `Image not shown: ${image.alt || path.split("/").pop() || "image"}`;
+    image.replaceWith(placeholder);
+  };
+  article.addEventListener("error", onImageError, true);
 
   // opened through a link with a #section: land on it once the document is
   // on screen
@@ -203,6 +258,7 @@ export function mountMarkdownView(
       offVisibility?.();
       hydration?.abort();
       article.removeEventListener("click", onClick);
+      article.removeEventListener("error", onImageError, true);
       scroller.remove();
     },
   };
