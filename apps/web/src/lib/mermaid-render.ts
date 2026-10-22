@@ -7,7 +7,8 @@
  * diagram, draws through the frame.
  *
  * ADR 0006: mermaid is large, so it loads behind the dynamic import in
- * loadMermaid() and nowhere else (`pnpm arch`, rule mermaid-loads-lazily).
+ * loadMermaid() and nowhere else (`pnpm arch`, rules mermaid-loads-lazily
+ * and mermaid-loads-in-the-renderer-only).
  * The page reaches the frame through import() too, so the eager bundle, the
  * repo overview and every document without a diagram never carry it.
  *

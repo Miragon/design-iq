@@ -112,6 +112,7 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   into the diagram or to inline image data, and CSS keeps no `url()` but one into the diagram),
   so a diagram on the page loads nothing until a reader clicks one of its links. `pnpm arch`
   keeps it so: only the frame's script imports the renderer (`mermaid-renders-in-its-frame`),
+  only the renderer imports mermaid, `import()` included (`mermaid-loads-in-the-renderer-only`),
   and the MCP-App widgets draw no Mermaid (`widgets-draw-no-mermaid`).
   `test/mermaid-engine-hostile.test.ts`, next to the version mirror, runs hostile labels in every
   diagram type, links, click callbacks, front matter, `%%{init}%%` directives and foreignObject

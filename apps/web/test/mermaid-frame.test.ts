@@ -20,8 +20,10 @@ import {
   MERMAID_FRAME_MARKER,
   MERMAID_FRAME_URL,
   type MermaidFrame,
+  type MermaidFrameApi,
   openMermaidFrame,
 } from "../src/lib/mermaid-frame.ts";
+import { createMermaidFence } from "../src/notations/markdown/mermaid-fence.ts";
 
 const FRAME_HTML = readFileSync(new URL("../mermaid-frame.html", import.meta.url), "utf8");
 const APP_HTML = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -104,6 +106,22 @@ test("fetchFrameHtml: the frame's document, never the app's index.html the Live 
   await assert.rejects(fetchFrameHtml(), /answered 404/);
 });
 
+/** jsdom runs no srcdoc: every frame `win` starts carries `render` as if its script had run */
+function startFramesWith(win: ReturnType<typeof newWindow>, render: MermaidFrameApi["render"]): HTMLIFrameElement[] {
+  const appended: HTMLIFrameElement[] = [];
+  const append = win.document.body.append.bind(win.document.body);
+  win.document.body.append = (...nodes: (Node | string)[]) => {
+    for (const node of nodes) {
+      if (node instanceof win.HTMLIFrameElement) {
+        appended.push(node);
+        Object.defineProperty(node, "contentWindow", { get: () => ({ [MERMAID_FRAME_API]: { render } }) });
+      }
+    }
+    append(...nodes);
+  };
+  return appended;
+}
+
 test("openMermaidFrame: a hidden srcdoc frame, out of the tab order; one that does not start leaves nothing", async () => {
   const win = newWindow();
   const doc = win.document;
@@ -111,19 +129,7 @@ test("openMermaidFrame: a hidden srcdoc frame, out of the tab order; one that do
   await assert.rejects(openMermaidFrame(doc, FRAME_HTML), /did not start/);
   assert.equal(doc.querySelector("iframe"), null, "the failed frame is gone");
 
-  const appended: HTMLIFrameElement[] = [];
-  const append = doc.body.append.bind(doc.body);
-  doc.body.append = (...nodes: (Node | string)[]) => {
-    for (const node of nodes) {
-      if (node instanceof win.HTMLIFrameElement) {
-        appended.push(node);
-        Object.defineProperty(node, "contentWindow", {
-          get: () => ({ [MERMAID_FRAME_API]: { render: async () => ({ svg: "<svg></svg>" }) } }),
-        });
-      }
-    }
-    append(...nodes);
-  };
+  const appended = startFramesWith(win, async () => ({ svg: "<svg></svg>" }));
   const frame = await openMermaidFrame(doc, FRAME_HTML);
   const element = appended[0]!;
   assert.equal(frame.element, element);
@@ -202,4 +208,29 @@ test("createMermaidFrameRenderer: a frame taken off the page is started anew", a
   await render("B", "md");
   assert.equal(opened, 2);
   assert.equal(doc.querySelectorAll("iframe").length, 1);
+});
+
+test("the Markdown view's fence draws through the page's one Mermaid frame unless it is handed a renderer", async () => {
+  const win = newWindow();
+  const asked = serve(FRAME_HTML);
+  const sources: string[] = [];
+  const frames = startFramesWith(win, async (source) => {
+    sources.push(source);
+    return { svg: `<svg><text>drawn in the frame</text></svg>` };
+  });
+  // the app's renderer (renderMermaidInFrame) starts its frame in the page's global document
+  const global = globalThis as { document?: Document };
+  global.document = win.document;
+  try {
+    const article = win.document.body.appendChild(win.document.createElement("article"));
+    const fence = createMermaidFence();
+    article.innerHTML = fence.render("flowchart LR\n  A --> B", { lang: "mermaid", info: "mermaid" }) ?? "";
+    await fence.hydrate(article, new win.AbortController().signal);
+    assert.deepEqual(asked, [MERMAID_FRAME_URL], "the page fetched the frame's document");
+    assert.equal(frames.length, 1, "and started its frame");
+    assert.deepEqual(sources, ["flowchart LR\n  A --> B"]);
+    assert.equal(article.querySelector(".md-mermaid-diagram svg")?.textContent, "drawn in the frame");
+  } finally {
+    delete global.document;
+  }
 });

@@ -244,6 +244,17 @@ export default {
       },
     },
     {
+      name: "mermaid-loads-in-the-renderer-only",
+      severity: "error",
+      comment:
+        "Issue 293, the other half of mermaid-renders-in-its-frame: that rule guards the renderer, " +
+        'mermaid-loads-lazily only static imports. An import("mermaid") anywhere else in the app ' +
+        "would run mermaid in the page's own document with a green build, so lib/mermaid-render.ts " +
+        "is the one module that loads it, dynamic imports included.",
+      from: { path: "^apps/web/src/", pathNot: "^apps/web/src/lib/mermaid-render\\.ts$" },
+      to: { path: "(^|/)node_modules/mermaid/", dependencyTypesNot: ["type-only"] },
+    },
+    {
       name: "widgets-draw-no-mermaid",
       severity: "error",
       comment:
