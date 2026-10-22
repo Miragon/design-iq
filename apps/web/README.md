@@ -110,10 +110,12 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   sanitized once more (`createDiagramSanitizer` in `sanitize.ts`: the profile mermaid applies
   itself, no forms, and nothing that loads: an element other than a link keeps an address only
   into the diagram or to inline image data, and CSS keeps no `url()` but one into the diagram),
-  so a diagram on the page loads nothing until a reader clicks one of its links. `pnpm arch`
-  keeps it so: only the frame's script imports the renderer (`mermaid-renders-in-its-frame`),
-  only the renderer imports mermaid, `import()` included (`mermaid-loads-in-the-renderer-only`),
-  and the MCP-App widgets draw no Mermaid (`widgets-draw-no-mermaid`).
+  so a diagram on the page loads nothing until a reader clicks one of its links. Images from an
+  address are not drawn: one in a label is dropped, and a shape's image (`img:`) fails its
+  diagram with a notice that says so; inline `data:image/` images draw. `pnpm arch` keeps it so:
+  only the frame's script imports the renderer (`mermaid-renders-in-its-frame`), only the
+  renderer imports mermaid, `import()` included (`mermaid-loads-in-the-renderer-only`), and the
+  MCP-App widgets draw no Mermaid (`widgets-draw-no-mermaid`).
   `test/mermaid-engine-hostile.test.ts`, next to the version mirror, runs hostile labels in every
   diagram type, links, click callbacks, front matter, `%%{init}%%` directives and foreignObject
   HTML through the pinned mermaid; `test/mermaid-frame.test.ts` pins the frame's policy.

@@ -15,6 +15,7 @@ import {
   MERMAID_CONFIG,
   MERMAID_THEME_VARIABLES,
   mermaidRenderId,
+  SHAPE_IMAGE_FROM_ADDRESS,
 } from "../src/lib/mermaid-render.ts";
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -129,4 +130,30 @@ test("describeMermaidError: anything else keeps its message, without a line", ()
   });
   assert.deepEqual(describeMermaidError("boom", "graph TD"), { message: "boom" });
   assert.deepEqual(describeMermaidError(new Error(""), "graph TD"), { message: "The diagram could not be drawn." });
+});
+
+test("describeMermaidError: a shape image the frame refused names the shape and the reason, not a broken image", () => {
+  // what Chromium's img.decode() rejects with when the frame's policy blocks the image
+  const refused = new DOMException("The source image cannot be decoded.", "EncodingError");
+  const source = [
+    "flowchart LR",
+    '  A@{ img: "data:image/png;base64,iVBORw0KGgo=", label: "Inline" }',
+    '  B@{ label: "Own icon", img: "/favicon.svg", pos: "t", w: 60, h: 60 }',
+    "  A --> B",
+  ].join("\n");
+  assert.deepEqual(describeMermaidError(refused, source), { line: 3, message: SHAPE_IMAGE_FROM_ADDRESS });
+  assert.deepEqual(describeMermaidError(refused, 'flowchart LR\n  A@{ "img": https://example.com/logo.png }'), {
+    line: 2,
+    message: SHAPE_IMAGE_FROM_ADDRESS,
+  });
+  // the message alone, should a browser's decode error lose its name on the way
+  assert.equal(
+    describeMermaidError(new Error("The source image cannot be decoded."), "flowchart LR\n  A@{ img: 'x.png' }")
+      .message,
+    SHAPE_IMAGE_FROM_ADDRESS,
+  );
+  // only inline images: one of them is broken
+  assert.deepEqual(describeMermaidError(refused, 'flowchart LR\n  A@{ img: "data:image/png;base64,AAAA" }'), {
+    message: "A shape's image (img) cannot be decoded. Check its data:image/ URL or remove it.",
+  });
 });

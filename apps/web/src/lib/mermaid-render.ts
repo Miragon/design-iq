@@ -160,14 +160,48 @@ function sourceLineOf(error: unknown, message: string, source: string): number |
   return named ? mermaidSourceLine(source, Number(named)) : undefined;
 }
 
+/** what a shape's image refused by the frame reads as; the words #290 refuses one with */
+export const SHAPE_IMAGE_FROM_ADDRESS =
+  "A shape's image (img) is not drawn: it would load from its address for every reader. Use a data:image/ URL or remove it.";
+
+/** a shape's `img` key (quoted or not) and its value, up to where the value ends */
+const SHAPE_IMAGE = /@\{[^}]*?\bimg["']?\s*:\s*["']?\s*([^"'\s,}]*)/gi;
+
+/** the 1-based line of the first shape image that is not inline image data */
+function shapeImageFromAddressLine(source: string): number | undefined {
+  for (const m of source.matchAll(SHAPE_IMAGE)) {
+    if (!/^data:image\//i.test(m[1]!)) return source.slice(0, m.index + m[0].length).split("\n").length;
+  }
+  return undefined;
+}
+
+/**
+ * mermaid's image shape decodes its `img` before it lays the shape out, and
+ * the frame's policy (#293) loads no image from an address, the app's own
+ * included: the decode fails with a DOMException (Chromium's message "The
+ * source image cannot be decoded" blames the image, not the policy), and with
+ * it the whole diagram.
+ */
+function imageDecodeFailed(error: unknown): boolean {
+  const { name, message } = (error ?? {}) as { name?: unknown; message?: unknown };
+  return name === "EncodingError" || (typeof message === "string" && /source image cannot be decoded/i.test(message));
+}
+
 /**
  * What a failed mermaid parse or render means for the person typing: the
  * source line (mermaid counts lines AFTER dropping the front matter and, for
  * most diagram types, the comments; @designiq/notations/mermaid maps them
  * back) and the message. A missing or unknown diagram type reads like the
- * validator's header check.
+ * validator's header check, a shape image the frame refused like #290's
+ * refusal of it.
  */
 export function describeMermaidError(error: unknown, source: string): MermaidRenderError {
+  if (imageDecodeFailed(error)) {
+    const line = shapeImageFromAddressLine(source);
+    return line === undefined
+      ? { message: "A shape's image (img) cannot be decoded. Check its data:image/ URL or remove it." }
+      : { line, message: SHAPE_IMAGE_FROM_ADDRESS };
+  }
   const raw = (error instanceof Error ? error.message : String(error)).trim();
   if (raw.startsWith("No diagram type detected")) {
     const header = mermaidHeader(source);
