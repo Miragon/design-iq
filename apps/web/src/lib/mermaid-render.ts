@@ -54,9 +54,39 @@ export const MERMAID_THEME_VARIABLES = {
 } as const;
 
 /**
+ * What mermaid's sanitizer keeps out of a label's HTML (`dompurifyConfig`):
+ * its own default (no `style` element), and everything that loads a
+ * resource. Under `strict` an <img>, a picture or video, an SVG image or a
+ * style attribute's url() in a label would otherwise load from its host,
+ * with every reader's IP address, as mermaid lays the diagram out (#290).
+ * Links stay: they load nothing until clicked.
+ */
+export const MERMAID_LABEL_SANITIZER = {
+  FORBID_TAGS: [
+    "style",
+    "img",
+    "picture",
+    "source",
+    "video",
+    "audio",
+    "track",
+    "input",
+    "object",
+    "embed",
+    "iframe",
+    "link",
+    "image",
+    "feimage",
+    "use",
+  ],
+  FORBID_ATTR: ["style", "src", "srcset", "poster", "background"],
+};
+
+/**
  * The keys a diagram's own front matter (`config:`) or %%{init}%% directive
  * may NOT set: mermaid's own secure list, plus everything that makes up the
- * look. A diagram copied from a repo that draws it dark would otherwise get
+ * look, and the label sanitizer: a diagram could hand mermaid's default back
+ * and with it the images in labels. A diagram copied from a repo that draws it dark would otherwise get
  * a hybrid (mermaid merges the CI variables into the other theme's palette:
  * near-black boxes with near-black labels), and `themeCSS` would let any
  * collaborator inject CSS (a `url()` in it is a request from every reader's
@@ -78,6 +108,7 @@ export const MERMAID_SECURE_KEYS = [
   "darkMode",
   "fontFamily",
   "altFontFamily",
+  "dompurifyConfig",
 ];
 
 /**
@@ -112,6 +143,7 @@ export const MERMAID_CONFIG = {
   er: { layout: "dagre" },
   requirement: { layout: "dagre" },
   suppressErrorRendering: true,
+  dompurifyConfig: MERMAID_LABEL_SANITIZER,
   secure: MERMAID_SECURE_KEYS,
 } as const satisfies MermaidConfig;
 
@@ -184,6 +216,59 @@ export function describeMermaidError(error: unknown, source: string): MermaidRen
   };
 }
 
+/** the 1-based line of a character of the source */
+const lineAt = (source: string, index: number): number => source.slice(0, index).split("\n").length;
+
+/** a shape's img that names inline data (quoted key or not) */
+const INLINE_IMG = /^img["']?\s*:\s*["']?data:image\//i;
+/** an actor's icon that names inline data or a symbol of the diagram (`@clock`) */
+const INLINE_ICON = /^icon"\s*:\s*"(?:@|data:image\/)/;
+
+/** every mention of `word` in `text` is one `inline` accepts, and no escape could hide another */
+const onlyInline = (text: string, word: RegExp, inline: RegExp, opening = ""): boolean =>
+  !text.includes("\\") &&
+  [...text.matchAll(word)].every(
+    (m) => text.slice(m.index - opening.length, m.index) === opening && inline.test(text.slice(m.index)),
+  );
+
+/**
+ * Where a diagram would draw an image from an address it names: a shape's
+ * `img` (`A@{ img: … }`) or a sequence actor's `icon` (`properties A:
+ * {"icon": …}`). mermaid loads both itself while it lays the diagram out,
+ * past every sanitizer, so the source is checked before mermaid sees it, and
+ * strictly: within a shape's data or a properties line, every `img` or
+ * `icon` must name inline data (an icon may also name a symbol); any other
+ * mention of one, and any escape, refuses the diagram (#290).
+ */
+export function diagramImageRefusal(source: string): MermaidRenderError | undefined {
+  // a shape's data runs from `@{` to the first `}` outside double quotes, as
+  // in mermaid's lexer
+  for (let at = source.indexOf("@{"); at >= 0; at = source.indexOf("@{", at + 2)) {
+    let end = at + 2;
+    for (let quoted = false; end < source.length; end++) {
+      if (source[end] === '"') quoted = !quoted;
+      else if (source[end] === "}" && !quoted) break;
+    }
+    if (!onlyInline(source.slice(at, end), /\bimg\b/gi, INLINE_IMG)) {
+      return {
+        line: lineAt(source, at),
+        message:
+          "A shape's image (img) is not drawn: it would load from its address for every reader. Use a data:image/ URL or remove it.",
+      };
+    }
+  }
+  for (const m of source.matchAll(/\bproperties\b[^\n]*/gi)) {
+    if (!onlyInline(m[0], /icon/gi, INLINE_ICON, '"')) {
+      return {
+        line: lineAt(source, m.index),
+        message:
+          "An actor's icon is not drawn: it would load from its address for every reader. Use a symbol (@name), a data:image/ URL, or remove it.",
+      };
+    }
+  }
+  return undefined;
+}
+
 let engine: Promise<Mermaid> | undefined;
 
 /**
@@ -213,6 +298,8 @@ export function loadMermaid(): Promise<Mermaid> {
  * concurrent calls neither interleave nor collide.
  */
 export async function renderMermaid(source: string, idPrefix: string): Promise<MermaidRenderResult> {
+  const refused = diagramImageRefusal(source);
+  if (refused) return { error: refused };
   const mermaid = await loadMermaid();
   try {
     const { svg } = await mermaid.render(mermaidRenderId(idPrefix), source);

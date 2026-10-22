@@ -100,8 +100,13 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   Mermaid renderer, `src/lib/mermaid-render.ts` (strict security level, the CI theme,
   Geist). The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
   theme, palette, CSS or font (`MERMAID_SECURE_KEYS`, checked against mermaid itself in
-  `test/mermaid-engine.test.ts`); layout options stay the author's. A diagram keeps the look
-  and the layout it had before mermaid 12 unless its front matter picks otherwise (`look: neo`,
+  `test/mermaid-engine.test.ts`); layout options stay the author's. A diagram draws no image
+  from another site either (#290): mermaid's label sanitizer (`MERMAID_LABEL_SANITIZER`, a
+  diagram cannot change it) drops images, media and styles from a label's HTML, a shape's
+  `img` or a sequence actor's `icon` that names an address refuses the diagram with a notice
+  (mermaid would load it itself; inline `data:image/` and `@symbol` icons still draw), and the
+  page-side sanitizer drops every address but the diagram's own `#…` references and inline
+  data. A diagram keeps the look and the layout it had before mermaid 12 unless its front matter picks otherwise (`look: neo`,
   `layout: elk`): the classic look, and dagre for flowchart, class, state, ER and requirement
   diagrams. mermaid 12's own sizing still applies: in flowchart and state diagrams a label
   gets at least 120 px (`minNodeWidth`; a circle, since 12.2, only the room its label needs)

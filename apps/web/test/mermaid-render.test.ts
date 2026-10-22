@@ -12,7 +12,9 @@ import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
 
 import {
   describeMermaidError,
+  diagramImageRefusal,
   MERMAID_CONFIG,
+  MERMAID_LABEL_SANITIZER,
   MERMAID_THEME_VARIABLES,
   mermaidRenderId,
 } from "../src/lib/mermaid-render.ts";
@@ -129,4 +131,57 @@ test("describeMermaidError: anything else keeps its message, without a line", ()
   });
   assert.deepEqual(describeMermaidError("boom", "graph TD"), { message: "boom" });
   assert.deepEqual(describeMermaidError(new Error(""), "graph TD"), { message: "The diagram could not be drawn." });
+});
+
+test("the mermaid config: a label's HTML loads nothing, and no diagram may hand that back (#290)", () => {
+  assert.equal(MERMAID_CONFIG.dompurifyConfig, MERMAID_LABEL_SANITIZER);
+  // mermaid's own default stays in
+  assert.ok(MERMAID_LABEL_SANITIZER.FORBID_TAGS.includes("style"));
+  for (const tag of ["img", "picture", "source", "video", "image", "feimage", "input", "iframe", "object", "embed"]) {
+    assert.ok(MERMAID_LABEL_SANITIZER.FORBID_TAGS.includes(tag), tag);
+  }
+  for (const attribute of ["style", "src", "srcset", "poster", "background"]) {
+    assert.ok(MERMAID_LABEL_SANITIZER.FORBID_ATTR.includes(attribute), attribute);
+  }
+  assert.ok(MERMAID_CONFIG.secure.includes("dompurifyConfig"));
+});
+
+test("diagramImageRefusal: a shape's img or an actor's icon draws only from inline data (#290)", () => {
+  const shape = diagramImageRefusal(
+    'flowchart LR\n  A --> B\n  B@{ img: "https://tracker.example/a.png", label: "x" }',
+  );
+  assert.equal(shape?.line, 3);
+  assert.match(shape?.message ?? "", /^A shape's image \(img\) is not drawn/);
+  for (const source of [
+    "flowchart LR\n  A@{ shape: image, img: //tracker.example/a.png }",
+    'flowchart LR\n  A@{ "img": "https://tracker.example/a.png" }',
+    "flowchart LR\n  A@{\n    label: x\n    IMG: https://tracker.example/a.png\n  }",
+    'flowchart LR\n  A@{ label: "}", img: "https://tracker.example/a.png" }',
+    'flowchart LR\n  A@{ "\\x69mg": "https://tracker.example/a.png" }',
+    "flowchart LR\n  A@{ label: &k img, *k : https://tracker.example/a.png }",
+  ]) {
+    assert.ok(diagramImageRefusal(source), source);
+  }
+  const icon = diagramImageRefusal(
+    'sequenceDiagram\n  participant A\n  properties A: {"class": "x", "icon": "https://tracker.example/i.png"}',
+  );
+  assert.equal(icon?.line, 3);
+  assert.match(icon?.message ?? "", /^An actor's icon is not drawn/);
+  for (const source of [
+    'sequenceDiagram\n  participant A; properties A: {"icon": "//tracker.example/i.png"}',
+    'sequenceDiagram\n  properties A: {"\\u0069con": "https://tracker.example/i.png"}',
+    'sequenceDiagram\n  properties A: {"icon": "@clock", "icon": "https://tracker.example/i.png"}',
+  ]) {
+    assert.ok(diagramImageRefusal(source), source);
+  }
+  // inline data and the diagram's own symbols load nothing: they draw
+  for (const source of [
+    "flowchart LR\n  A --> B",
+    'flowchart LR\n  A@{ shape: rounded, label: "Order" }\n  e1@{ animate: true }',
+    'flowchart LR\n  A@{ img: "data:image/png;base64,AAAA", label: "x" }',
+    'sequenceDiagram\n  participant A\n  properties A: {"class": "internal-service-actor", "icon": "@clock"}',
+    'sequenceDiagram\n  properties A: {"icon": "data:image/png;base64,AAAA"}',
+  ]) {
+    assert.equal(diagramImageRefusal(source), undefined, source);
+  }
 });

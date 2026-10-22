@@ -134,7 +134,10 @@ export function createSanitizer(win: SanitizeWindow, options: SanitizeOptions = 
  * DOM node, never through innerHTML: no script, no event handler, no
  * javascript: URL. It keeps its own <style>, which mermaid scopes to the
  * SVG's id. A link in a diagram opens a new tab without an opener, like
- * every other link of the view that leaves designIQ.
+ * every other link of the view that leaves designIQ. And nothing in it loads
+ * from another site once it is on the page (#290): an element other than a
+ * link keeps an address only to this diagram (#…) or to inline data, and a
+ * style attribute that names any other resource is dropped.
  */
 const DIAGRAM: Config & { RETURN_DOM_FRAGMENT: true } = {
   ADD_TAGS: ["foreignobject"],
@@ -143,12 +146,24 @@ const DIAGRAM: Config & { RETURN_DOM_FRAGMENT: true } = {
   RETURN_DOM_FRAGMENT: true,
 };
 
+/** an address inside the diagram or inline data: nothing to fetch */
+const LOCAL_REFERENCE = /^\s*(?:#|data:image\/)/i;
+/** CSS that could name a resource: a url() not to this diagram, image-set(), @import, or an escape hiding one */
+const CSS_RESOURCE = /url\(\s*(?!["']?\s*#)|image-set|@import|\\/i;
+
 export function createDiagramSanitizer(win: WindowLike): Sanitize {
   const purify = DOMPurify(win);
   purify.addHook("afterSanitizeAttributes", (node) => {
-    if (node.nodeName.toLowerCase() !== "a") return;
-    node.setAttribute("target", "_blank");
-    node.setAttribute("rel", "noopener noreferrer");
+    if (node.nodeName.toLowerCase() === "a") {
+      node.setAttribute("target", "_blank");
+      node.setAttribute("rel", "noopener noreferrer");
+    } else {
+      for (const name of ["src", "srcset", "href", "xlink:href"]) {
+        const value = node.getAttribute(name);
+        if (value !== null && (name === "srcset" || !LOCAL_REFERENCE.test(value))) node.removeAttribute(name);
+      }
+    }
+    if (CSS_RESOURCE.test(node.getAttribute("style") ?? "")) node.removeAttribute("style");
   });
   return (svg) => purify.sanitize(svg, DIAGRAM);
 }

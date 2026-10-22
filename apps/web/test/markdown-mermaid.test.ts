@@ -327,3 +327,24 @@ test("the drawn SVG is sanitized again: no script, no handler, links leave in a 
   assert.equal(web?.getAttribute("rel"), "noopener noreferrer");
   v.view.destroy();
 });
+
+test("a drawn diagram loads nothing from another site on the page (#290)", async () => {
+  const tracking = (_source: string, id: string) =>
+    `<svg id="${id}" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><linearGradient id="g"/></defs>` +
+    `<image href="https://tracker.example/a.png"/><image xlink:href="//tracker.example/b.png"/>` +
+    `<image href="data:image/png;base64,AAAA"/><image href="#g"/><use href="https://tracker.example/s.svg#x"/>` +
+    `<rect style="fill:url(#g)"/><rect style="fill:url(https://tracker.example/c.svg#p)"/>` +
+    `<rect style="background-image:image-set('https://tracker.example/d.png' 1x)"/><rect style="background:\\75rl(x)"/>` +
+    `<foreignObject><div xmlns="http://www.w3.org/1999/xhtml"><img src="https://tracker.example/e.png"/>` +
+    `<span style="background-image:url('https://tracker.example/f.png')">label</span></div></foreignObject>` +
+    `<a href="https://example.com"><text>web</text></a><text>flowchart</text></svg>`;
+  const v = mount(fence("flowchart LR"), fakeRenderer(tracking));
+  await settle();
+  const markup = v.article.querySelector(".md-mermaid-diagram svg")!.outerHTML;
+  assert.doesNotMatch(markup, /tracker\.example|image-set|\\75rl/);
+  assert.match(markup, /<image href="data:image\/png;base64,AAAA"/, "inline data stays");
+  assert.match(markup, /<image href="#g"/, "a reference within the diagram stays");
+  assert.match(markup, /<rect style="fill:url\(#g\)"/);
+  assert.match(markup, /<a href="https:\/\/example.com" target="_blank" rel="noopener noreferrer">/, "links stay");
+  v.view.destroy();
+});

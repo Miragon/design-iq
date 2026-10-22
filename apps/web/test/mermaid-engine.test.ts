@@ -19,7 +19,7 @@ import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
 import { JSDOM } from "jsdom";
 import type { Mermaid } from "mermaid";
 
-import { describeMermaidError } from "../src/lib/mermaid-render.ts";
+import { describeMermaidError, MERMAID_LABEL_SANITIZER, renderMermaid } from "../src/lib/mermaid-render.ts";
 
 let mermaid: Mermaid;
 
@@ -144,6 +144,33 @@ test("a diagram cannot leave the CI look: no other theme, palette, CSS or font",
     (await drawing(`---\nconfig:\n  flowchart:\n    theme: dark\n---\n${flow}`)).style,
     (await drawing(flow)).style,
   );
+});
+
+test("a label's HTML loads nothing from another site, whatever the diagram's own config says (#290)", async () => {
+  const labels =
+    "flowchart LR\n  A[\"<img src='https://tracker.example/a.png'/> logo\"] --> B[\"<span style='background-image:url(https://tracker.example/b.png)'>b</span>\"]\n" +
+    "  B --> C[\"<picture><source srcset='https://tracker.example/c.png'></picture><video poster='https://tracker.example/d.png'></video>c\"]\n";
+  const unlock =
+    "---\nconfig:\n  dompurifyConfig:\n    ADD_TAGS: [img]\n    FORBID_TAGS: []\n    FORBID_ATTR: []\n---\n";
+  for (const source of [labels, unlock + labels, `%%{init: {"dompurifyConfig": {"FORBID_TAGS": []}}}%%\n${labels}`]) {
+    assert.deepEqual((await configFor(source)).dompurifyConfig, MERMAID_LABEL_SANITIZER, source);
+    const { svg } = await mermaid.render(`labels-${++drawings}`, source);
+    assert.doesNotMatch(svg, /tracker\.example|<img|<picture|<video/, source);
+    assert.match(svg, /logo/, "the label's text stays");
+  }
+});
+
+test("a shape's image or an actor's icon from an address is refused before mermaid loads it (#290)", async () => {
+  const shape = await renderMermaid('flowchart LR\n  A@{ img: "https://tracker.example/a.png", label: "x" }', "test");
+  assert.ok("error" in shape);
+  assert.equal(shape.error.line, 2);
+  assert.match(shape.error.message, /^A shape's image \(img\) is not drawn/);
+  const icon = await renderMermaid(
+    'sequenceDiagram\n  participant A\n  properties A: {"icon": "https://tracker.example/i.png"}\n  A->>A: hi',
+    "test",
+  );
+  assert.ok("error" in icon);
+  assert.match(icon.error.message, /^An actor's icon is not drawn/);
 });
 
 test("layout stays the author's: a directive may still set the look and the wrapping", async () => {
