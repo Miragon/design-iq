@@ -39,9 +39,43 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build (tsdown → dist/)
         run: pnpm --filter ./packages/${{ inputs.package }} build
-      - name: Sanity-run the built validator against the example content repo
+      # designiq-validate as npm installs it (#282): unpacked from the tarball beside only its
+      # declared dependencies, started through its shebang. Run with `node` in the workspace, a bin
+      # without a shebang or one importing an undeclared or workspace-only package still works, yet
+      # breaks once npm installs it. The invalid model proves the CLI can still fail.
+      # packages/validator/test/publish-sanity.test.ts runs this step.
+      - name: Sanity-run the packed validator bin (the example content repo passes, an invalid model fails)
         if: inputs.package == 'validator'
-        run: node packages/validator/dist/validate.js --root process-documentation
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          modules="$work/node_modules"
+          package="$modules/@miragon/design-iq-validator"
+          mkdir -p "$work/tarball" "$package" "$modules/.bin"
+          pnpm --filter ./packages/validator pack --pack-destination "$work/tarball" > /dev/null
+          tar -xzf "$work"/tarball/* -C "$package" --strip-components=1
+          for dependency in $(node -p 'Object.keys(require(process.argv[1]).dependencies ?? {}).join(" ")' "$package/package.json"); do
+            mkdir -p "$(dirname "$modules/$dependency")"
+            ln -s "$PWD/packages/validator/node_modules/$dependency" "$modules/$dependency"
+          done
+          target="$package/$(node -p 'require(process.argv[1]).bin["designiq-validate"]' "$package/package.json")"
+          chmod +x "$target"
+          bin="$modules/.bin/designiq-validate"
+          ln -s "$target" "$bin"
+          invalid=packages/validator/test/fixtures/invalid-content-repo
+
+          status=0
+          out="$("$bin" --root process-documentation)" || status=$?
+          printf '%s\n' "$out"
+          [ "$status" -eq 0 ] || fail "designiq-validate exited $status on the example content repo, expected 0"
+          grep -qE '^0 error\(s\), [0-9]+ warning\(s\) .+ OK \(' <<<"$out" || fail "designiq-validate printed no OK summary for the example content repo"
+
+          status=0
+          out="$("$bin" --root "$invalid")" || status=$?
+          printf '%s\n' "$out"
+          [ "$status" -eq 1 ] || fail "designiq-validate exited $status on $invalid, expected 1"
+          grep -q '^\[ERROR\] processes/ship-order\.bpmn: ' <<<"$out" || fail "designiq-validate did not report the invalid model of $invalid"
       - name: Sanity-run the built MCP server (must boot, then exit 0 on stdin EOF)
         if: inputs.package == 'mcp'
         run: timeout 30 node packages/mcp/dist/server.js --root process-documentation < /dev/null
