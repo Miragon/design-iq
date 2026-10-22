@@ -18,6 +18,7 @@
  */
 import DOMPurify, { type Config, type WindowLike } from "dompurify";
 
+import { CSS_RESOURCE } from "../../lib/css-resource.ts";
 import { ANCHOR_PREFIX } from "./render.ts";
 
 const SANITIZE: Config & { RETURN_DOM_FRAGMENT: true } = {
@@ -136,8 +137,11 @@ export function createSanitizer(win: SanitizeWindow, options: SanitizeOptions = 
  * SVG's id. A link in a diagram opens a new tab without an opener, like
  * every other link of the view that leaves designIQ. And nothing in it loads
  * from another site once it is on the page (#290): an element other than a
- * link keeps an address only to this diagram (#…) or to inline data, and a
- * style attribute that names any other resource is dropped.
+ * link keeps an address only to this diagram (#…) or to inline data, and an
+ * attribute or a style sheet whose CSS could name any other resource is
+ * dropped. Parsed, the SVG decodes entities a style sheet kept as text while
+ * mermaid drew it, so what the page would apply is checked here, not only
+ * the source (lib/mermaid-render.ts).
  */
 const DIAGRAM: Config & { RETURN_DOM_FRAGMENT: true } = {
   ADD_TAGS: ["foreignobject"],
@@ -148,13 +152,12 @@ const DIAGRAM: Config & { RETURN_DOM_FRAGMENT: true } = {
 
 /** an address inside the diagram or inline data: nothing to fetch */
 const LOCAL_REFERENCE = /^\s*(?:#|data:image\/)/i;
-/** CSS that could name a resource: a url() not to this diagram, image-set(), @import, or an escape hiding one */
-const CSS_RESOURCE = /url\(\s*(?!["']?\s*#)|image-set|@import|\\/i;
 
 export function createDiagramSanitizer(win: WindowLike): Sanitize {
   const purify = DOMPurify(win);
   purify.addHook("afterSanitizeAttributes", (node) => {
-    if (node.nodeName.toLowerCase() === "a") {
+    const link = node.nodeName.toLowerCase() === "a";
+    if (link) {
       node.setAttribute("target", "_blank");
       node.setAttribute("rel", "noopener noreferrer");
     } else {
@@ -163,7 +166,12 @@ export function createDiagramSanitizer(win: WindowLike): Sanitize {
         if (value !== null && (name === "srcset" || !LOCAL_REFERENCE.test(value))) node.removeAttribute(name);
       }
     }
-    if (CSS_RESOURCE.test(node.getAttribute("style") ?? "")) node.removeAttribute("style");
+    // a presentation attribute (stroke, fill, mask, filter …) is CSS as much as a style is
+    for (const { name, value } of [...node.attributes]) {
+      if (link && (name === "href" || name === "xlink:href")) continue;
+      if (CSS_RESOURCE.test(value)) node.removeAttribute(name);
+    }
+    if (node.nodeName.toLowerCase() === "style" && CSS_RESOURCE.test(node.textContent ?? "")) node.remove();
   });
   return (svg) => purify.sanitize(svg, DIAGRAM);
 }

@@ -13,11 +13,12 @@
  * The rest is pure (config, ids, error wording) and runs under node --test:
  * mermaid itself needs a DOM to measure text.
  */
-import { mermaidFrontMatterLines, mermaidHeader, mermaidSourceLine } from "@designiq/notations/mermaid";
+import { mermaidCode, mermaidFrontMatterLines, mermaidHeader, mermaidSourceLine } from "@designiq/notations/mermaid";
 import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
 import type { Mermaid, MermaidConfig } from "mermaid";
 
 import { canvasFontReady } from "./canvas-theme.ts";
+import { CSS_RESOURCE } from "./css-resource.ts";
 
 /**
  * The Miragon CI as Mermaid's "base" theme. Literal colours from the tokens
@@ -219,26 +220,171 @@ export function describeMermaidError(error: unknown, source: string): MermaidRen
 /** the 1-based line of a character of the source */
 const lineAt = (source: string, index: number): number => source.slice(0, index).split("\n").length;
 
-/** a shape's img that names inline data (quoted key or not) */
-const INLINE_IMG = /^img["']?\s*:\s*["']?data:image\//i;
-/** an actor's icon that names inline data or a symbol of the diagram (`@clock`) */
-const INLINE_ICON = /^icon"\s*:\s*"(?:@|data:image\/)/;
+/** a CSS escape: up to six hex digits (and the one whitespace that ends them), or any other character */
+const CSS_ESCAPE = String.raw`\\(?:[0-9A-Fa-f]{1,6}[ \t\n\r\f]?|[^\n\r\f0-9A-Fa-f])`;
+/** a name as CSS reads it, escapes included: an at-rule's after "@", a function's before "(" */
+const CSS_NAME = new RegExp(String.raw`(@?)((?:[\w\u0080-\uffff-]|${CSS_ESCAPE})+)(\(\s*["']?\s*#?)?`, "g");
+/** the CSS functions that fetch what they name */
+const CSS_FETCHES = /^(?:url|src|(?:-[a-z]+-)?image-set)$/;
 
-/** every mention of `word` in `text` is one `inline` accepts, and no escape could hide another */
-const onlyInline = (text: string, word: RegExp, inline: RegExp, opening = ""): boolean =>
-  !text.includes("\\") &&
-  [...text.matchAll(word)].every(
-    (m) => text.slice(m.index - opening.length, m.index) === opening && inline.test(text.slice(m.index)),
-  );
+const cssUnescape = (name: string): string =>
+  name.replace(new RegExp(CSS_ESCAPE, "g"), (escape) => {
+    const hex = /^\\([0-9A-Fa-f]+)/.exec(escape)?.[1];
+    if (!hex) return escape.slice(1);
+    const code = parseInt(hex, 16);
+    return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? "\ufffd" : String.fromCodePoint(code);
+  });
+
+/** where `text` names something CSS would fetch: a url() or src() not to the diagram itself, an image-set() or an @import */
+function cssFetchAt(text: string): number | undefined {
+  for (const m of text.matchAll(CSS_NAME)) {
+    const name = cssUnescape(m[2]!).replace(/[A-Z]/g, (c) => c.toLowerCase());
+    if (m[1] ? name === "import" : m[3] !== undefined && CSS_FETCHES.test(name) && !m[3].endsWith("#")) {
+      return m.index;
+    }
+  }
+  return undefined;
+}
 
 /**
- * Where a diagram would draw an image from an address it names: a shape's
- * `img` (`A@{ img: … }`) or a sequence actor's `icon` (`properties A:
- * {"icon": …}`). mermaid loads both itself while it lays the diagram out,
- * past every sanitizer, so the source is checked before mermaid sees it, and
- * strictly: within a shape's data or a properties line, every `img` or
- * `icon` must name inline data (an icon may also name a symbol); any other
- * mention of one, and any escape, refuses the diagram (#290).
+ * The entities that spell what CSS needs to fetch: a label's HTML passes
+ * through DOMPurify while mermaid lays the diagram out (`&lpar;` is a "("
+ * by then), and the drawn SVG turns numeric ones and mermaid's own `#…;`
+ * into characters once it is parsed.
+ */
+const SPELLED = /&?#(\d+);|&#x([0-9a-f]+);|[&#](lpar|bsol|commat);/gi;
+const NAMED: Record<string, string> = { lpar: "(", bsol: "\\", commat: "@" };
+const unspell = (text: string): string =>
+  text.replace(SPELLED, (entity, decimal?: string, hex?: string, name?: string) => {
+    if (name) return NAMED[name.toLowerCase()]!;
+    const code = decimal ? Number(decimal) : parseInt(hex!, 16);
+    return code > 0x10ffff ? entity : String.fromCodePoint(code);
+  });
+
+/**
+ * The 1-based line where the source names something CSS would fetch,
+ * escaped, spelled with entities or not. Statements of many diagram types
+ * hand their text to the diagram's style sheet or to a style (a classDef of
+ * a state or block diagram, a C4 relation's colour, an attribute in a
+ * label's SVG), and mermaid applies it while it lays the diagram out in the
+ * page, before any sanitizer sees the result. So the whole source is read
+ * the way CSS reads it, whichever diagram type it is: a label that merely
+ * mentions url( is refused too, which costs less than a type that slips
+ * through.
+ */
+function cssResourceLine(source: string): number | undefined {
+  const at = cssFetchAt(source);
+  if (at !== undefined) return lineAt(source, at);
+  const spelled = source.split("\n").findIndex((line) => cssFetchAt(unspell(line)) !== undefined);
+  return spelled < 0 ? undefined : spelled + 1;
+}
+
+/** a shape's img that names inline data (quoted key or not) */
+const INLINE_IMG = /^img["']?\s*:\s*["']?data:image\//i;
+const INLINE_DATA = /^["']?data:image\//i;
+
+/** every mention of `word` in `text` is one `inline` accepts, and no escape could hide another */
+const onlyInline = (text: string, word: RegExp, inline: RegExp): boolean =>
+  !text.includes("\\") && [...text.matchAll(word)].every((m) => inline.test(text.slice(m.index)));
+
+/**
+ * One `key: value` pair of a shape's data in its plain form, where mermaid's
+ * lexer and YAML agree on every key: the key a word or quoted without an
+ * escape; the value quoted without a line break or an escaped quote, or plain
+ * without anything YAML could read as an anchor, alias, tag, comment,
+ * collection or another key. An img in such a value, or an escape, can never
+ * become a key, so a label may name one.
+ */
+const SHAPE_KEY = String.raw`([A-Za-z_][\w-]*)[ \t]*:[ \t]+|("[^"\\\n]*"|'[^'"\n]*')[ \t]*:[ \t]*`;
+const SHAPE_VALUE = [
+  String.raw`"(?:[^"\\\n]|\\[^"\n])*"`,
+  String.raw`'(?:[^'"\n]|'')*'`,
+  "(?![&*!|>%@`#,\\[\\]{}\"']|[-?:]\\s)(?:[^\"'\\n,{}\\[\\]#:]|:(?![\\s,{}\\[\\]]|$))*?",
+].join("|");
+const SHAPE_PAIR = new RegExp(`(?:${SHAPE_KEY})(${SHAPE_VALUE})[ \\t]*(?:,|(?=\\n)|$)`, "y");
+
+/** the pairs of a shape's data, undefined unless all of it is in the plain form */
+function plainShapePairs(data: string): [key: string, value: string][] | undefined {
+  const pairs: [string, string][] = [];
+  const blank = /\s*/y;
+  for (let at = 0; ;) {
+    blank.lastIndex = at;
+    blank.exec(data);
+    at = blank.lastIndex;
+    if (at >= data.length) return pairs;
+    SHAPE_PAIR.lastIndex = at;
+    const pair = SHAPE_PAIR.exec(data);
+    if (!pair || SHAPE_PAIR.lastIndex === at) return undefined;
+    pairs.push([(pair[1] ?? pair[2]!.slice(1, -1)).toLowerCase(), pair[3]!]);
+    at = SHAPE_PAIR.lastIndex;
+  }
+}
+
+/**
+ * A shape's data names an image that is not inline data. In the plain form
+ * only an `img` key counts; in any other (anchors, nested collections,
+ * escaped keys), every mention of img must be an inline-data key.
+ */
+function shapeImageFromAddress(data: string): boolean {
+  const pairs = plainShapePairs(data);
+  if (!pairs) return !onlyInline(data, /\bimg\b/gi, INLINE_IMG);
+  return pairs.some(([key, value]) => key === "img" && !INLINE_DATA.test(value));
+}
+
+/** the sequence statements that set an actor's properties, its icon among them */
+const ACTOR_METADATA = /\b(properties|details)(?=[ \t]+[^/\\+()<>:\n,;\s-])/gi;
+/** statements whose rest of the line is a name or text, never another statement */
+const TEXT_STATEMENT =
+  /^(?:participant|actor|create|destroy|loop|alt|opt|par|par_over|and|else|critical|option|break|rect|box|title|note|links?|properties|details|activate|deactivate|autonumber)\b/i;
+
+/**
+ * A properties statement's JSON gives its actor an icon that is not a symbol
+ * of the diagram (`@clock`) or inline data. mermaid runs the text through
+ * DOMPurify before it parses it, so markup or an entity could still spell a
+ * key, and a JSON escape could too: such a text is refused. `__proto__` would
+ * hand the actor an icon through its prototype.
+ */
+function iconFromAddress(json: string): boolean {
+  if (/[\\<&]/.test(json)) return true;
+  for (const key of json.matchAll(/"([^"]*)"\s*:/g)) {
+    const name = key[1]!.toLowerCase();
+    if (name === "__proto__") return true;
+    const value = json.slice(key.index + key[0].length);
+    if (name === "icon" && !/^\s*"(?:@|data:image\/)/i.test(value)) return true;
+  }
+  return false;
+}
+
+/**
+ * Where a sequence diagram gives an actor an icon from an address: a
+ * `properties` statement, or any `details` statement, which reads the
+ * properties as JSON from an element of the page (a heading of the
+ * document, say) that the source cannot show. Read on the code mermaid
+ * parses, statement by statement: a keyword after a message's colon or in a
+ * text statement is text.
+ */
+function actorIconAt(source: string): { line: number; details: boolean } | undefined {
+  if (!/^sequencediagram/i.test(mermaidHeader(source)?.text ?? "")) return undefined;
+  const code = mermaidCode(source);
+  for (const m of code.matchAll(ACTOR_METADATA)) {
+    const start = Math.max(code.lastIndexOf("\n", m.index - 1), code.lastIndexOf(";", m.index - 1)) + 1;
+    const prefix = code.slice(start, m.index);
+    if (prefix.includes(":") || TEXT_STATEMENT.test(prefix.trim())) continue;
+    const line = mermaidSourceLine(source, lineAt(code, m.index));
+    if (m[1]!.toLowerCase() === "details") return { line, details: true };
+    const text = /^[^:\n;]*:([^#\n;]*)/.exec(code.slice(m.index))?.[1];
+    if (text !== undefined && iconFromAddress(text)) return { line, details: false };
+  }
+  return undefined;
+}
+
+/**
+ * Where a diagram would load from an address it names: a shape's `img`
+ * (`A@{ img: … }`), a sequence actor's `icon` (`properties A: {"icon": …}`
+ * or `details A: <element id>`), or CSS that fetches (cssResourceLine).
+ * mermaid loads all of them itself while it lays the diagram out, past every
+ * sanitizer, so the source is checked before mermaid sees it. Inline
+ * `data:image/` images and `@symbol` icons still draw (#290).
  */
 export function diagramImageRefusal(source: string): MermaidRenderError | undefined {
   // a shape's data runs from `@{` to the first `}` outside double quotes, as
@@ -249,7 +395,7 @@ export function diagramImageRefusal(source: string): MermaidRenderError | undefi
       if (source[end] === '"') quoted = !quoted;
       else if (source[end] === "}" && !quoted) break;
     }
-    if (!onlyInline(source.slice(at, end), /\bimg\b/gi, INLINE_IMG)) {
+    if (shapeImageFromAddress(source.slice(at + 2, end))) {
       return {
         line: lineAt(source, at),
         message:
@@ -257,16 +403,60 @@ export function diagramImageRefusal(source: string): MermaidRenderError | undefi
       };
     }
   }
-  for (const m of source.matchAll(/\bproperties\b[^\n]*/gi)) {
-    if (!onlyInline(m[0], /icon/gi, INLINE_ICON, '"')) {
-      return {
-        line: lineAt(source, m.index),
-        message:
-          "An actor's icon is not drawn: it would load from its address for every reader. Use a symbol (@name), a data:image/ URL, or remove it.",
-      };
-    }
+  const icon = actorIconAt(source);
+  if (icon?.details) {
+    return {
+      line: icon.line,
+      message:
+        "An actor's details are not drawn: they read the actor's properties from the page, and an icon among them would load from its address for every reader. Set them with properties instead.",
+    };
+  }
+  if (icon) {
+    return {
+      line: icon.line,
+      message:
+        "An actor's icon is not drawn: it would load from its address for every reader. Use a symbol (@name), a data:image/ URL, or remove it.",
+    };
+  }
+  const css = cssResourceLine(source);
+  if (css !== undefined) {
+    return {
+      line: css,
+      message:
+        "CSS that loads from an address (url(), image-set() or @import) is not drawn: it would load for every reader. Remove it.",
+    };
   }
   return undefined;
+}
+
+const namesResource = (value: unknown): boolean =>
+  typeof value === "string"
+    ? CSS_RESOURCE.test(value)
+    : typeof value === "object" && value !== null && Object.values(value).some(namesResource);
+
+/**
+ * Where a diagram's own configuration (its front matter's `config:` or a
+ * %%{init}%% directive) names CSS that fetches. Some of it reaches a style
+ * as it is (a sankey's linkColor, a C4 element's colours), and YAML and JSON
+ * have escapes of their own that cssResourceLine does not read, so the
+ * configuration is read as mermaid parsed it.
+ */
+export async function diagramConfigRefusal(mermaid: Mermaid, source: string): Promise<MermaidRenderError | undefined> {
+  let config: unknown;
+  try {
+    const parsed = await mermaid.parse(source);
+    config = parsed ? parsed.config : undefined;
+  } catch {
+    // the render reports what mermaid cannot read
+    return undefined;
+  }
+  if (!namesResource(config)) return undefined;
+  const at = source.search(/^[^\S\n\r]*---|%%\{/m);
+  return {
+    ...(at >= 0 ? { line: lineAt(source, at) } : {}),
+    message:
+      "The diagram's configuration loads from an address (url(), image-set(), @import or an escape): it would load for every reader. Remove it.",
+  };
 }
 
 let engine: Promise<Mermaid> | undefined;
@@ -301,6 +491,8 @@ export async function renderMermaid(source: string, idPrefix: string): Promise<M
   const refused = diagramImageRefusal(source);
   if (refused) return { error: refused };
   const mermaid = await loadMermaid();
+  const configured = await diagramConfigRefusal(mermaid, source);
+  if (configured) return { error: configured };
   try {
     const { svg } = await mermaid.render(mermaidRenderId(idPrefix), source);
     return { svg };

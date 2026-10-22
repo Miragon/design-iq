@@ -173,6 +173,66 @@ test("a shape's image or an actor's icon from an address is refused before merma
   assert.match(icon.error.message, /^An actor's icon is not drawn/);
 });
 
+test("a classDef with url() would load as the diagram is laid out: it is refused before mermaid applies it (#290)", async () => {
+  const state =
+    "stateDiagram-v2\n  classDef bad background-image:url(https://tracker.example/state.png)\n  [*] --> S1\n  class S1 bad\n";
+  const block =
+    "block-beta\n  a b\n  classDef blue background-image:url(https://tracker.example/block.png)\n  class a blue\n";
+  // the vector is real: mermaid writes it into the style sheet it lays the diagram out with
+  for (const source of [state, block]) assert.match((await drawing(source)).style, /tracker\.example/, source);
+  for (const [source, line] of [
+    [state, 2],
+    [block, 3],
+    [state.replace("url(", "u\\72l("), 2],
+    [state.replace("url(https://tracker.example/state.png)", 'image-set("https://tracker.example/state.png" 1x)'), 2],
+    [state.replace("background-image:url", "mask-image:url"), 2],
+  ] as const) {
+    const refused = await renderMermaid(source, "test");
+    assert.ok("error" in refused, source);
+    assert.equal(refused.error.line, line, source);
+    assert.match(refused.error.message, /^CSS that loads from an address/, source);
+  }
+});
+
+test("an actor's details read its icon from an element of the page: the statement is refused (#290)", async () => {
+  const heading = document.createElement("h2");
+  heading.id = "md-propertiesicontrackerexampledetails-iconpng";
+  heading.textContent = '{"properties":{"icon":"//tracker.example/details-icon.png"}}';
+  document.body.append(heading);
+  try {
+    const source = `sequenceDiagram\n  participant A\n  details A: ${heading.id}\n  A->>A: hi\n`;
+    const { svg } = await mermaid.render(`details-${++drawings}`, source);
+    assert.match(svg, /<image[^>]*tracker\.example\/details-icon\.png/, "mermaid draws the icon the heading names");
+    const refused = await renderMermaid(source, "test");
+    assert.ok("error" in refused);
+    assert.equal(refused.error.line, 3);
+    assert.match(refused.error.message, /^An actor's details are not drawn/);
+  } finally {
+    heading.remove();
+  }
+});
+
+test("a diagram's configuration that names CSS to fetch is refused, its YAML and JSON escapes read (#290)", async () => {
+  const sankey = "sankey-beta\na,b,1\nb,c,1\n";
+  const escaped = `---\nconfig:\n  sankey:\n    linkColor: "u\\x72l(https://tracker.example/s.png)"\n---\n${sankey}`;
+  // the vector is real: YAML turns the escape into a url() that mermaid draws every link with
+  const { svg } = await mermaid.render(`config-${++drawings}`, escaped);
+  assert.match(svg, /url\(https:\/\/tracker\.example\/s\.png\)/);
+  for (const source of [
+    escaped,
+    `%%{init: {"sankey": {"linkColor": "u\\u0072l(https://tracker.example/s.png)"}}}%%\n${sankey}`,
+    `%%{init: {"sankey": {"linkColor": "\\\\75rl(https://tracker.example/s.png)"}}}%%\n${sankey}`,
+  ]) {
+    const refused = await renderMermaid(source, "test");
+    assert.ok("error" in refused, source);
+    assert.equal(refused.error.line, 1, source);
+    assert.match(refused.error.message, /^The diagram's configuration loads from an address/, source);
+  }
+  for (const source of [`---\nconfig:\n  sankey:\n    linkColor: gradient\n---\n${sankey}`, sankey]) {
+    assert.ok("svg" in (await renderMermaid(source, "test")), source);
+  }
+});
+
 test("layout stays the author's: a directive may still set the look and the wrapping", async () => {
   const config = await configFor(
     '---\nconfig:\n  look: handDrawn\n---\n%%{init: {"wrap": true}}%%\nflowchart LR\n A --> B\n',
