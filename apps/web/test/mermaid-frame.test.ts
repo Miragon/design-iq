@@ -4,8 +4,8 @@
  * frame's document and starts the frame, and the one frame a page shares.
  * jsdom runs no srcdoc and enforces no policy, so a fake frame stands in for
  * a started one; what a browser makes of the policy is checked in headless
- * Chromium (the issue's evidence), what mermaid writes into the frame in
- * mermaid-engine-hostile.test.ts.
+ * Chromium (hostile-mermaid-chromium.ts, by hand), what mermaid writes into
+ * the frame in mermaid-engine-hostile.test.ts.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

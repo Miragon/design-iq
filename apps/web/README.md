@@ -118,7 +118,15 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   MCP-App widgets draw no Mermaid (`widgets-draw-no-mermaid`).
   `test/mermaid-engine-hostile.test.ts`, next to the version mirror, runs hostile labels in every
   diagram type, links, click callbacks, front matter, `%%{init}%%` directives and foreignObject
-  HTML through the pinned mermaid; `test/mermaid-frame.test.ts` pins the frame's policy.
+  HTML through the pinned mermaid (the sources: `test/mermaid-hostile-sources.ts`);
+  `test/mermaid-frame.test.ts` pins the frame's policy. What a browser makes of that policy is
+  checked by hand, as CI has no browser: `test/hostile-mermaid-chromium.ts` starts a Live Host
+  of its own on the same sources, opens them in the built SPA and in the BPMN and DMN widgets in
+  headless Chromium, and fails on anything that ran or loaded. Run it after a mermaid or a
+  browser update, from the repository root: `pnpm build`, once
+  `npx -y playwright@1.56.1 install --only-shell chromium`, then
+  `npx -y -p playwright@1.56.1 -c "node apps/web/test/hostile-mermaid-chromium.ts"` (`PORT`
+  sets the Live Host's port, 8391 unless set).
 - The drawn SVG is cached by source: a re-render for an
   edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram
   keeps its drawing until the new one is drawn. A diagram mermaid cannot read shows a notice
