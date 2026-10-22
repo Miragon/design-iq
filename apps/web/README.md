@@ -7,12 +7,12 @@ Desktop, ChatGPT).
 
 ## Scripts
 
-| Script                                  | What it does                                                                                                                                                                                                                                                                                                                                   |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                                                                                                                                                |
-| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                                                                                                                                                    |
-| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and the Miragon renderers themselves (`test/renderer-dom.ts`). |
-| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                        |
+| Script                                  | What it does                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                                                                                                                                                                                                        |
+| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                                                                                                                                                                                                            |
+| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and what it makes of hostile sources, the Mermaid frame and the Miragon renderers themselves (`test/renderer-dom.ts`). |
+| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                                                                                |
 
 ## Theming
 
@@ -113,7 +113,9 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   so a diagram on the page loads nothing until a reader clicks one of its links. `pnpm arch`
   keeps it so: only the frame's script imports the renderer (`mermaid-renders-in-its-frame`),
   and the MCP-App widgets draw no Mermaid (`widgets-draw-no-mermaid`).
-  `test/mermaid-frame.test.ts` pins the frame's policy.
+  `test/mermaid-engine-hostile.test.ts`, next to the version mirror, runs hostile labels in every
+  diagram type, links, click callbacks, front matter, `%%{init}%%` directives and foreignObject
+  HTML through the pinned mermaid; `test/mermaid-frame.test.ts` pins the frame's policy.
 - The drawn SVG is cached by source: a re-render for an
   edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram
   keeps its drawing until the new one is drawn. A diagram mermaid cannot read shows a notice
