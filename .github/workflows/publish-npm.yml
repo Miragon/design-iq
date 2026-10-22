@@ -50,11 +50,11 @@ jobs:
           fail() { echo "::error::$*"; exit 1; }
           work="$(mktemp -d)"
           trap 'rm -rf "$work"' EXIT
-          pnpm --filter ./packages/validator pack --pack-destination "$work" > /dev/null
           modules="$work/node_modules"
           package="$modules/@miragon/design-iq-validator"
-          mkdir -p "$package" "$modules/.bin"
-          tar -xzf "$work"/*.tgz -C "$package" --strip-components=1
+          mkdir -p "$work/tarball" "$package" "$modules/.bin"
+          pnpm --filter ./packages/validator pack --pack-destination "$work/tarball" > /dev/null
+          tar -xzf "$work"/tarball/* -C "$package" --strip-components=1
           for dependency in $(node -p 'Object.keys(require(process.argv[1]).dependencies ?? {}).join(" ")' "$package/package.json"); do
             mkdir -p "$(dirname "$modules/$dependency")"
             ln -s "$PWD/packages/validator/node_modules/$dependency" "$modules/$dependency"
