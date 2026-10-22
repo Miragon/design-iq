@@ -6,7 +6,8 @@
  *  2. minimal diffs into Y.Text, never replace-all (common prefix/suffix trim,
  *     the line breaks that close the text apart)
  *  3. debounced re-import of remote changes with view-state restore and echo
- *     suppression (Yjs transaction origin + last-export equality)
+ *     suppression (Yjs transaction origin + last-export equality), held back
+ *     while a local gesture runs on the canvas, for 10 s at most (#295)
  *  4. gate the merged text before import; keep rendering the last good state on
  *     rare invalid interleavings — the next update usually heals the document.
  *     Canvas exports that cross on the wire and replace the same text never
@@ -46,6 +47,13 @@ const OVERLAP_GRACE_MS = 3000;
 const HELD_WRITERS = 64;
 /** longer than a repair takes (about 2 s from the break): a text on its way to a repair shows no notice */
 const UNRENDERABLE_NOTICE_MS = 5000;
+
+/** how long a remote re-import waits for a gesture on the canvas to end: a stuck gesture must not hide peers' edits for good */
+const GESTURE_HOLD_MS = 10_000;
+/** how often a re-import held back for a gesture looks again */
+const GESTURE_RECHECK_MS = 100;
+/** diagram-js puts it on the root element while a drag runs, also a palette create that follows the pointer with no button held */
+const DRAG_ACTIVE_MARKER = "djs-drag-active";
 
 /** a canvas write as a log entry names it: its writer's count and its Lamport time */
 type Mark = [n: number, time: number];
@@ -117,6 +125,47 @@ export interface SyncAdapter {
   observeModel(onChanged: () => void): () => void;
 }
 
+interface CanvasGesture {
+  active(): boolean;
+  /** ends the gesture the way the user's Escape does */
+  cancel(): void;
+  dispose(): void;
+}
+
+/**
+ * A gesture on the canvas, read from the DOM alone, so it holds for every
+ * diagram-js editor, whatever services it registers: a pointer held on the
+ * canvas host, or diagram-js's drag marker inside it.
+ */
+function watchCanvasGesture(host: Element): CanvasGesture {
+  const page = host.ownerDocument;
+  const view = page.defaultView;
+  const pressed = new Set<number>();
+  const press = (event: Event): void => void pressed.add((event as PointerEvent).pointerId);
+  const release = (event: Event): void => void pressed.delete((event as PointerEvent).pointerId);
+  // a button released while another window has the focus never reports here
+  const releaseAll = (): void => pressed.clear();
+  const releases = ["pointerup", "pointercancel", "lostpointercapture"] as const;
+  const drags = host.getElementsByClassName(DRAG_ACTIVE_MARKER);
+  // capture: a renderer that stops a pointer event on its way must not hide it
+  host.addEventListener("pointerdown", press, true);
+  for (const type of releases) view?.addEventListener(type, release, true);
+  view?.addEventListener("blur", releaseAll);
+  return {
+    active: () => pressed.size > 0 || drags.length > 0,
+    cancel() {
+      if (!view) return;
+      // diagram-js's dragging cancels on an Escape keyup at the document
+      page.dispatchEvent(new view.KeyboardEvent("keyup", { key: "Escape", code: "Escape", bubbles: true }));
+    },
+    dispose() {
+      host.removeEventListener("pointerdown", press, true);
+      for (const type of releases) view?.removeEventListener(type, release, true);
+      view?.removeEventListener("blur", releaseAll);
+    },
+  };
+}
+
 interface AwarenessChange {
   added: number[];
   updated: number[];
@@ -134,7 +183,7 @@ export interface PeerAwareness {
   off(event: "change", listener: (change: AwarenessChange) => void): void;
 }
 
-/** what a live session adds to the binding; without it the binding syncs as before */
+/** what a live session and the editor around the canvas add to the binding; without it the binding syncs as before */
 export interface SyncOptions {
   /** a writer that left cannot repair a broken merge: with the room's
    *  presence, the next-ranked writer repairs in its place */
@@ -145,6 +194,13 @@ export interface SyncOptions {
    * to show until the callback fires again with null, once a text renders
    */
   onUnrenderable?: (message: string | null) => void;
+  /**
+   * the element the canvas is mounted in. While a gesture runs on it (a
+   * drag, a resize, a connection, a lasso, a palette create), remote
+   * re-imports wait: an import replaces the shapes the gesture works on, and
+   * its drop would throw on them and lose the edit. Absent = never held back.
+   */
+  canvasHost?: Element;
 }
 
 /** XML well-formedness — the looksRenderable gate of the XML notations (bpmn, dmn) */
@@ -199,6 +255,9 @@ export function bindModelSync(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let repairTimer: ReturnType<typeof setTimeout> | undefined;
   let unbound = false;
+  const gesture = sync.canvasHost ? watchCanvasGesture(sync.canvasHost) : undefined;
+  /** when the remote state now held back for a gesture began to wait */
+  let heldForGestureSince: number | undefined;
 
   const writes = doc.getMap<unknown>(CANVAS_WRITES_KEY);
   const entry = (key: string): CanvasWrite | undefined => {
@@ -276,6 +335,10 @@ export function bindModelSync(
   }
 
   async function importFromY(): Promise<void> {
+    // a wait for a gesture spans only the rechecks that follow each other: any
+    // other outcome starts the next wait afresh
+    const waitingSince = heldForGestureSince;
+    heldForGestureSince = undefined;
     // Local edits win: importText replaces the whole canvas, so an in-flight user
     // edit would be lost. Wait for a short quiet period — the local edit exports
     // into ytext first, and the next observer round imports the merged state.
@@ -306,6 +369,19 @@ export function bindModelSync(
       planRepair(text);
       scheduleImport(OVERLAP_GRACE_MS - sinceOverlap);
       return;
+    }
+    if (gesture?.active()) {
+      // a gesture has committed nothing yet, so no quiet period covers it; its
+      // drop exports into ytext, and the import after it takes in both edits
+      const since = waitingSince ?? Date.now();
+      if (Date.now() - since < GESTURE_HOLD_MS) {
+        heldForGestureSince = since;
+        scheduleImport(GESTURE_RECHECK_MS);
+        return;
+      }
+      // past the hold the peers' edits win: the gesture ends before the import,
+      // so it never drops onto shapes the import replaced
+      gesture.cancel();
     }
     // what this text holds, read with it: more may arrive while it imports
     const closure = logClosure();
@@ -643,6 +719,7 @@ export function bindModelSync(
     sync.awareness?.off("change", onPresence);
     losses.unobserve(onLosses);
     unobserveModel();
+    gesture?.dispose();
     clearTimeout(timer);
     clearTimeout(repairTimer);
     clearTimeout(unrenderableTimer);

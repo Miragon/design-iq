@@ -201,7 +201,16 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
 2. **Minimal diffs into Y.Text, never replace-all** (diff-match-patch in one transaction) —
    replace-all destroys merge granularity and clobbers concurrent edits.
 3. **Debounce remote re-imports** (~300–500 ms) with an import-suppression flag and
-   string-equality guard (echo prevention via Yjs transaction origins).
+   string-equality guard (echo prevention via Yjs transaction origins). **Hold them back
+   while a local gesture runs** (#295). A drag, resize, connection, lasso or palette create
+   has committed nothing yet, so the quiet period after a local edit does not cover it, and
+   an import replaces the shapes it works on: its drop would throw and lose the move. The
+   binding reads the gesture from the DOM of the element the canvas is mounted in, the same
+   way for every diagram-js editor: a pointer held on it, or diagram-js's `djs-drag-active`
+   marker inside it (a palette create follows the pointer with no button held). The import
+   runs once the gesture ends, after the drop's own edit, so the canvas takes in both edits.
+   A gesture that outlasts 10 s gives way: it is cancelled the way Escape cancels it, then
+   the import runs. Gates and repairs (rule 4) do not wait for a gesture.
 4. **Validate merged XML before import** (cheap parse); on the rare interleaved-merge
    corruption, fall back to the last-good snapshot the Live Host keeps anyway.
    **Repair a merge that canvas writes alone broke** (#274). Two canvas exports that cross
