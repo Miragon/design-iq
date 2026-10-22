@@ -8,11 +8,11 @@
  * connection lost) before its settle delay ends, the next-ranked writer
  * repairs in its place; when the text stays unrenderable for longer than a
  * repair takes (typing that a repair never writes over), every canvas peer
- * is told once and told again when a text renders; a merge a repair heals
- * tells nobody.
+ * is told once, and the notice is withdrawn when a text renders; a merge a
+ * repair heals tells nobody.
  */
 import assert from "node:assert/strict";
-import { mock, test } from "node:test";
+import { afterEach, mock, test } from "node:test";
 
 import { CANVAS_LOSSES_KEY } from "@designiq/contracts/live";
 
@@ -50,7 +50,7 @@ async function advance(ms: number): Promise<void> {
   }
 }
 
-test.afterEach(() => mock.timers.reset());
+afterEach(() => mock.timers.reset());
 
 test("the first-ranked writer closes its tab before its settle delay ends: the next-ranked writer repairs", async () => {
   // past the drop, before the leaver has decided; then inside its settle delay
@@ -87,7 +87,7 @@ test("the first-ranked writer closes its tab before its settle delay ends: the n
     assert.equal(
       host.doc.getMap(CANVAS_LOSSES_KEY).get("100"),
       1,
-      `${where}: the writer who left is told on its return`,
+      `${where}: the loss notice waits for the writer who left`,
     );
     a.unbind();
     mock.timers.reset();
