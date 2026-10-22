@@ -38,7 +38,7 @@
     "diagram-js": "15.28.1",
     "dmn-js": "17.12.3",
     "dompurify": "3.4.17",
-    "lucide-react": "1.58.0",
+    "lucide-react": "1.59.0",
     "markdown-it": "15.0.3",
     "mermaid": "12.2.0",
     "monaco-editor": "0.55.1",
@@ -57,7 +57,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "jsdom": "30.1.3",
-    "postcss": "8.5.30",
+    "postcss": "8.5.31",
     "postcss-prefix-selector": "2.2.1",
     "vite": "8.3.4",
     "vite-plugin-singlefile": "2.3.4"
