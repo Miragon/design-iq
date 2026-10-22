@@ -43,6 +43,7 @@ export type LiveSessionLike = Pick<
   ReturnType<typeof openLiveSession>,
   | "doc"
   | "content"
+  | "awareness"
   | "onSynced"
   | "onDisconnect"
   | "onDocClose"
@@ -169,6 +170,7 @@ export async function tryLive(
           onConflict: hooks.onConflict,
           onImportError: hooks.onImportError,
           presence,
+          awareness: session.awareness,
         });
         established = true;
         // the roster rides the same awareness — from establish on, so a failed

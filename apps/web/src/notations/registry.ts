@@ -15,6 +15,7 @@
  * hand-written manifests: ./miragon holds ONE spec per renderer, and
  * miragonPlugin derives the manifest from it.
  */
+import type { SyncOptions } from "@designiq/live-client";
 import type * as Monaco from "monaco-editor";
 import type { ComponentType, LazyExoticComponent } from "react";
 import type * as Y from "yjs";
@@ -44,6 +45,11 @@ export interface EditorContext {
   onSyncError(message: string): void;
   /** the FIRST import failed — the shell falls back to the text view */
   onImportFailed(message: string): void;
+  /** the live session's part of the canvas sync: the room's awareness, so a
+   *  repair passes to the next writer when the first one leaves, and the
+   *  notice that the shared text stays unrenderable. Optional: an engine
+   *  mounted without a session syncs without them */
+  sync?: SyncOptions;
   /** element badge clicked (todo anchors) */
   onBadgeClick(elementId: string): void;
   /** canvas selection changed — feeds todo creation and the assist handoff */

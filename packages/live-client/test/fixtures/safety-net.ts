@@ -7,6 +7,7 @@
  * update until flushed, so peers write before either receives; hub() is the
  * Live Host as a server with one link per peer, each of which can lag, drop
  * offline and re-sync the way y-protocols does (one update each way).
+ * presence() is the room's awareness as each peer sees it.
  */
 import assert from "node:assert/strict";
 
@@ -14,8 +15,9 @@ import { CANVAS_LOSSES_KEY } from "@designiq/contracts/live";
 import { type CollaborativeModeler, MODELER_API_VERSION } from "@miragon/modeler-api";
 import * as Y from "yjs";
 
-import { bindBpmn } from "../../src/bpmn-sync.ts";
+import { bindBpmn, type SyncOptions } from "../../src/bpmn-sync.ts";
 import { bindMiragon } from "../../src/miragon-sync.ts";
+import type { PeerAwareness } from "../../src/model-sync.ts";
 
 export const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** the local edit's quiet period, the import's debounce, the repair's settle delay and the peers' re-import */
@@ -212,6 +214,38 @@ export function hub(room: Uint8Array) {
 
 export type Hub = ReturnType<typeof hub>;
 
+type PresenceListener = Parameters<PeerAwareness["on"]>[1];
+
+/**
+ * The room's awareness as each peer's y-protocols Awareness reports it: a
+ * peer that leaves (its tab closed, its connection lost) is removed from
+ * every other peer's view, and added again when it comes back.
+ */
+export function presence() {
+  const listeners = new Map<number, Set<PresenceListener>>();
+  const emit = (clientId: number, change: "added" | "removed"): void => {
+    for (const [viewer, own] of listeners) {
+      if (viewer === clientId) continue;
+      for (const listener of [...own]) {
+        listener({
+          added: change === "added" ? [clientId] : [],
+          updated: [],
+          removed: change === "removed" ? [clientId] : [],
+        });
+      }
+    }
+  };
+  return {
+    of(clientId: number): PeerAwareness {
+      const own = listeners.get(clientId) ?? new Set<PresenceListener>();
+      listeners.set(clientId, own);
+      return { on: (_event, listener) => void own.add(listener), off: (_event, listener) => void own.delete(listener) };
+    },
+    leave: (clientId: number): void => emit(clientId, "removed"),
+    rejoin: (clientId: number): void => emit(clientId, "added"),
+  };
+}
+
 /* ── a BPMN-like XML notation ─────────────────────────────────────────────── */
 
 interface Bounds {
@@ -294,16 +328,25 @@ export function bpmnLikeModeler() {
   };
 }
 
-/** a canvas of the BPMN-like notation bound to `doc`; `own` is for the test to keep its export */
-export function bpmnPeerOn(doc: Y.Doc) {
+/**
+ * A canvas of the BPMN-like notation bound to `doc`; `own` is for the test to
+ * keep its export. `notices` are what the binding said about a text that
+ * stays unrenderable (null: it renders again).
+ */
+export function bpmnPeerOn(doc: Y.Doc, awareness?: SyncOptions["awareness"]) {
   const ytext = doc.getText("content");
   const modeler = bpmnLikeModeler();
   const conflicts: string[] = [];
-  const unbind = bindBpmn(modeler as never, ytext, doc, (message) => conflicts.push(message));
-  return { doc, ytext, modeler, conflicts, unbind, own: "" };
+  const notices: Array<string | null> = [];
+  const unbind = bindBpmn(modeler as never, ytext, doc, (message) => conflicts.push(message), {
+    awareness,
+    onUnrenderable: (message) => notices.push(message),
+  });
+  return { doc, ytext, modeler, conflicts, notices, unbind, own: "" };
 }
 
-export const bpmnPeer = (net: Relay, room: Uint8Array, clientId?: number) => bpmnPeerOn(joinRoom(net, room, clientId));
+export const bpmnPeer = (net: Relay, room: Uint8Array, clientId?: number, awareness?: SyncOptions["awareness"]) =>
+  bpmnPeerOn(joinRoom(net, room, clientId), awareness);
 
 export type Peer = { ytext: Y.Text; conflicts: string[]; own: string; unbind(): void };
 

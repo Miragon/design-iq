@@ -30,7 +30,7 @@ export async function mountBpmnEditor(container: HTMLElement, ctx: EditorContext
     additionalModules: [bpmnStickyModule, bpmnColorModule],
     moddleExtensions: { sticky: stickyModdle },
   });
-  const unbind = bindBpmn(modeler as never, ctx.ytext, ctx.doc, ctx.onSyncError);
+  const unbind = bindBpmn(modeler as never, ctx.ytext, ctx.doc, ctx.onSyncError, ctx.sync);
   const todoCanvas = attachTodoCanvas(modeler as never, {
     onBadgeClick: ctx.onBadgeClick,
     onSelectionChanged: ctx.onSelectionChanged,

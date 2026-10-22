@@ -24,6 +24,9 @@ import type * as Y from "yjs";
 
 import { sanitizeCanvas, sanitizeUser } from "./presence.ts";
 
+// what a consumer hands the canvas sync bridges from this session (its awareness)
+export type { PeerAwareness, SyncOptions } from "./model-sync.ts";
+
 // re-exported so session consumers don't need a second import for the contract
 export { type CanvasPresence, CONTENT_KEY, type MovedNotice, type PresenceUser, roomName };
 

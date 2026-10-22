@@ -27,7 +27,9 @@
 import { apiVersionsCompatible, type CollaborativeModeler, MODELER_API_VERSION } from "@miragon/modeler-api";
 import type * as Y from "yjs";
 
-import { bindModelSync } from "./model-sync.ts";
+import { bindModelSync, type SyncOptions } from "./model-sync.ts";
+
+export type { SyncOptions } from "./model-sync.ts";
 
 /** the one pre-gate (L7 above), which the widget's own import applies too */
 export const isBlank = (text: string): boolean => text.trim() === "";
@@ -54,6 +56,7 @@ export function bindMiragon(
   doc: Y.Doc,
   onConflict?: (message: string) => void,
   onImportError?: (message: string) => void,
+  sync?: SyncOptions,
 ): () => void {
   assertContract(modeler, notation);
   return bindModelSync(
@@ -75,5 +78,6 @@ export function bindMiragon(
     doc,
     onConflict,
     onImportError,
+    sync,
   );
 }

@@ -6,7 +6,15 @@
  */
 import type * as Y from "yjs";
 
-import { bindModelSync, keepDiagramViewbox, looksWellFormedXml, NOT_WELL_FORMED_XML } from "./model-sync.ts";
+import {
+  bindModelSync,
+  keepDiagramViewbox,
+  looksWellFormedXml,
+  NOT_WELL_FORMED_XML,
+  type SyncOptions,
+} from "./model-sync.ts";
+
+export type { SyncOptions } from "./model-sync.ts";
 
 interface ModelerLike {
   get(service: string): any;
@@ -21,6 +29,7 @@ export function bindBpmn(
   ytext: Y.Text,
   doc: Y.Doc,
   onConflict?: (message: string) => void,
+  sync?: SyncOptions,
 ): () => void {
   return bindModelSync(
     {
@@ -39,5 +48,7 @@ export function bindBpmn(
     ytext,
     doc,
     onConflict,
+    undefined,
+    sync,
   );
 }

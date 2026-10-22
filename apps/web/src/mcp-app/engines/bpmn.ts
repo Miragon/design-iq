@@ -93,7 +93,7 @@ export const mountBpmnEngine: EngineFactory<BpmnEngine> = (container, readonly, 
     // bindBpmn reports no import errors (bpmn-js keeps its old canvas on a
     // failed re-import) — the hook stays unused here by design
     bindLive(ytext: Y.Text, doc: Y.Doc, hooks: LiveBindHooks): () => void {
-      const unbind = bindBpmn(instance as never, ytext, doc, hooks.onConflict);
+      const unbind = bindBpmn(instance as never, ytext, doc, hooks.onConflict, { awareness: hooks.awareness });
       // live cursors + selection outlines, the SPA's controller unchanged
       const presence = hooks.presence ? attachPresenceCanvas(instance as never, hooks.presence) : undefined;
       return () => {

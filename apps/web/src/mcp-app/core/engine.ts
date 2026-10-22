@@ -23,6 +23,7 @@
  * Pure types: this module is imported by the node --test suites, so it must
  * never pull DOM-bound code.
  */
+import type { PeerAwareness } from "@designiq/live-client";
 import type * as Y from "yjs";
 
 import type { PresenceSurface } from "../../lib/presence-canvas.ts";
@@ -49,6 +50,10 @@ export interface LiveBindHooks {
    *  the peers' — the diagram-js engines attach lib/presence-canvas to it.
    *  Absent = the session has no awareness (tests, older cores). */
   presence?: PresenceSurface;
+  /** the room's awareness, for the binding itself: a writer that left
+   *  cannot repair a merge broken by crossing canvas writes, so the next one
+   *  does (model-sync rule 4). Absent = the binding ranks every writer */
+  awareness?: PeerAwareness | null;
 }
 
 /** the renderer palette as the chrome moves it (bpmn/DRD: the left column;

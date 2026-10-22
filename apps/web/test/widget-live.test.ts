@@ -30,6 +30,7 @@ function fakeSession() {
     session: {
       doc,
       content,
+      awareness: { on: () => {}, off: () => {} } as unknown as LiveSessionLike["awareness"],
       setUser: (user: { name: string; color: string }) => void s.users.push(user),
       setCanvasPresence: (p: unknown) => void s.published.push(p),
       onAwarenessStates: (cb: (peers: AwarenessPeer[]) => void) => {
@@ -135,6 +136,7 @@ test("the engine is bound WITH a presence surface riding the session's awareness
   await tick(1);
   s.sync();
   assert.ok(await p);
+  assert.equal(engine.bound?.awareness, s.session.awareness, "the binding sees who leaves the room (#296)");
   const presence = engine.bound?.presence;
   assert.ok(presence, "bindLive received the presence surface");
   presence.setLocal({ cursor: { x: 1, y: 2 }, selection: ["Task_1"] });

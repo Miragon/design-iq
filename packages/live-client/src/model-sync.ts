@@ -13,7 +13,9 @@
  *     heal: each canvas keeps its own state. The writer every peer ranks first
  *     writes its canvas over the merge (repairs below, #274); a writer whose
  *     updates lag behind the settle delay can repair the same merge too, and
- *     the next round settles the two repairs
+ *     the next round settles the two repairs. A writer whose presence is
+ *     gone is passed over, and a canvas whose text stays unrenderable says
+ *     so (#296): nothing else heals such a text
  *
  * What differs per notation (how change events are observed, how the view
  * state survives a re-import, what "renderable" means pre-import) lives in a
@@ -34,6 +36,7 @@ const CONFLICT_MESSAGE =
 /** a repair can undo more than the last action: every canvas edit the repairer's canvas had not taken in */
 const REPAIRED_MESSAGE =
   "Your recent canvas edits crossed a colleague's at the same moment and could not be merged. The model now shows their version.";
+const UNRENDERABLE_MESSAGE = "The shared text cannot be rendered. Your canvas shows the last good state.";
 
 /** how long the repairing writer waits for further crossing writes before it writes */
 const REPAIR_SETTLE_MS = 500;
@@ -41,6 +44,8 @@ const REPAIR_SETTLE_MS = 500;
 const OVERLAP_GRACE_MS = 3000;
 /** the most other writers a log entry names, the latest ones: it keeps the entry small */
 const HELD_WRITERS = 64;
+/** longer than a repair takes (about 2 s from the break): a text on its way to a repair shows no notice */
+const UNRENDERABLE_NOTICE_MS = 5000;
 
 /** a canvas write as a log entry names it: its writer's count and its Lamport time */
 type Mark = [n: number, time: number];
@@ -112,6 +117,35 @@ export interface SyncAdapter {
   observeModel(onChanged: () => void): () => void;
 }
 
+interface AwarenessChange {
+  added: number[];
+  updated: number[];
+  removed: number[];
+}
+
+/**
+ * The room's presence, as y-protocols' Awareness reports it (a session's
+ * `awareness`): a client id leaves in `removed` when its tab closes or its
+ * connection is lost, and comes back in `added` when it reconnects.
+ */
+export interface PeerAwareness {
+  on(event: "change", listener: (change: AwarenessChange) => void): void;
+  off(event: "change", listener: (change: AwarenessChange) => void): void;
+}
+
+/** what a live session adds to the binding; without it the binding syncs as before */
+export interface SyncOptions {
+  /** a writer that left cannot repair a broken merge: with the room's
+   *  presence, the next-ranked writer repairs in its place */
+  awareness?: PeerAwareness | null;
+  /**
+   * the shared text failed the gate or the import for longer than a repair
+   * takes, while this canvas keeps showing its last good state: the message
+   * to show until the callback fires again with null, once a text renders
+   */
+  onUnrenderable?: (message: string | null) => void;
+}
+
 /** XML well-formedness — the looksRenderable gate of the XML notations (bpmn, dmn) */
 export const looksWellFormedXml = (s: string): boolean =>
   s.trim().length > 0 &&
@@ -154,6 +188,7 @@ export function bindModelSync(
    * on the console
    */
   onImportError?: (message: string) => void,
+  sync: SyncOptions = {},
 ): () => void {
   let importing = false;
   let lastExport = "";
@@ -192,6 +227,12 @@ export function bindModelSync(
   /** received writes that deleted text a concurrent canvas write had deleted: the merge keeps both replacements */
   const overlapping = new Map<string, number>();
   let overlapSeenAt = 0;
+  /** writers whose presence left the room: their repair timer went with them */
+  const departed = new Set<string>();
+  /** when the text first failed the gate or the import since a text last rendered */
+  let unrenderableSince: number | undefined;
+  let unrenderableTimer: ReturnType<typeof setTimeout> | undefined;
+  let unrenderableTold = false;
 
   // a document that never rendered has no fallback view — surface that once
   const reportFirstImportFailure = (message: string): void => {
@@ -199,6 +240,39 @@ export function bindModelSync(
     importErrorReported = true;
     onImportError?.(message);
   };
+
+  /**
+   * The text failed the gate or the import while the canvas shows a good
+   * state. A repair heals that within the notice delay; a break the repair
+   * must not write over (typing, a save, a restore) or a repairer that never
+   * comes does not, and the canvas would drift from the file unnoticed.
+   */
+  function notRendered(text: string): void {
+    if (lastExport === "" || unrenderableTold) return;
+    const now = Date.now();
+    unrenderableSince ??= now;
+    const remaining = unrenderableSince + UNRENDERABLE_NOTICE_MS - now;
+    if (remaining <= 0) return tellUnrenderable();
+    clearTimeout(unrenderableTimer);
+    // a text that changed meanwhile has an import on its way, which decides
+    unrenderableTimer = setTimeout(() => {
+      if (!unbound && ytext.toString() === text) tellUnrenderable();
+    }, remaining);
+  }
+
+  function tellUnrenderable(): void {
+    unrenderableTold = true;
+    sync.onUnrenderable?.(UNRENDERABLE_MESSAGE);
+  }
+
+  /** the text rendered, or is this canvas's own export */
+  function rendered(): void {
+    clearTimeout(unrenderableTimer);
+    unrenderableSince = undefined;
+    if (!unrenderableTold) return;
+    unrenderableTold = false;
+    sync.onUnrenderable?.(null);
+  }
 
   async function importFromY(): Promise<void> {
     // Local edits win: importText replaces the whole canvas, so an in-flight user
@@ -210,6 +284,7 @@ export function bindModelSync(
     }
     const text = ytext.toString();
     if (text === lastExport) {
+      rendered();
       // both empty = a 0-byte document, not an echo — there is nothing to render
       if (text === "") reportFirstImportFailure("the document is empty");
       return;
@@ -218,6 +293,7 @@ export function bindModelSync(
       // rule 4: keep last good canvas, wait for next update — but a document
       // that is broken from the START has no last good canvas to keep
       reportFirstImportFailure(adapter.unrenderableReason ?? "the document is not renderable in its current state");
+      notRendered(text);
       planRepair(text);
       return;
     }
@@ -242,9 +318,11 @@ export function bindModelSync(
       lastExport = text;
       matched(closure, foreign);
       importErrorReported = false;
+      rendered();
     } catch (err) {
       console.warn("[designiq] remote document not importable, keeping last good state", err);
       reportFirstImportFailure(err instanceof Error ? err.message : String(err));
+      notRendered(text);
       planRepair(text);
     } finally {
       importing = false;
@@ -327,6 +405,15 @@ export function bindModelSync(
   };
   writes.observe(onWrites);
 
+  // a writer that left changes who repairs, as one standing down does
+  const onPresence = ({ added, updated, removed }: AwarenessChange): void => {
+    for (const id of [...added, ...updated]) departed.delete(String(id));
+    const left = removed.filter((id) => id !== doc.clientID).map(String);
+    for (const key of left) departed.add(key);
+    if (left.some((key) => entry(key))) scheduleImport();
+  };
+  sync.awareness?.on("change", onPresence);
+
   /** a repair wrote over this canvas's writes: say so once per lost write, then clear the notice */
   const onLosses = (): void => {
     const lost = losses.get(writer());
@@ -380,16 +467,17 @@ export function bindModelSync(
   const holds = (write: CanvasWrite): number => Object.values(write.held).reduce((sum, [n]) => sum + n, write.n);
 
   /**
-   * The repairing writer: of the open writes not standing down, the latest
-   * (Lamport time: the canvas that took in the longest chain of writes, its
-   * own included), then the one whose canvas holds the most writes, then the
-   * lowest client id. Every peer ranks the same log, so every peer names the
-   * same writer. None unless writes crossed.
+   * The repairing writer: of the open writes not standing down and whose
+   * writer is still in the room, the latest (Lamport time: the canvas that
+   * took in the longest chain of writes, its own included), then the one
+   * whose canvas holds the most writes, then the lowest client id. Every peer
+   * ranks the same log and sees the same writers leave, so every peer names
+   * the same writer. None unless writes crossed.
    */
   function repairingWriter(): string | undefined {
     const open = openWrites();
     if (open.length < 2) return undefined;
-    const ready = open.filter(([, write]) => !write.standsDown);
+    const ready = open.filter(([key, write]) => !write.standsDown && !departed.has(key));
     ready.sort(([a, x], [b, y]) => y.time - x.time || holds(y) - holds(x) || Number(a) - Number(b));
     return ready[0]?.[0];
   }
@@ -451,6 +539,7 @@ export function bindModelSync(
     }
     lastExport = text;
     matched(logClosure(), foreignChanges);
+    rendered();
   }
 
   const onModelChanged = async (): Promise<void> => {
@@ -543,9 +632,11 @@ export function bindModelSync(
     unbound = true;
     ytext.unobserve(observer);
     writes.unobserve(onWrites);
+    sync.awareness?.off("change", onPresence);
     losses.unobserve(onLosses);
     unobserveModel();
     clearTimeout(timer);
     clearTimeout(repairTimer);
+    clearTimeout(unrenderableTimer);
   };
 }

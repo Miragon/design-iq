@@ -93,7 +93,15 @@ export function mountMiragonEditor(
   );
   let unbind: () => void;
   try {
-    unbind = bindMiragon(modeler, spec.contractNotation, ctx.ytext, ctx.doc, ctx.onSyncError, ctx.onImportFailed);
+    unbind = bindMiragon(
+      modeler,
+      spec.contractNotation,
+      ctx.ytext,
+      ctx.doc,
+      ctx.onSyncError,
+      ctx.onImportFailed,
+      ctx.sync,
+    );
   } catch (error) {
     view.destroy();
     modeler.destroy();
