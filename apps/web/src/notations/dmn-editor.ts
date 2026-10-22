@@ -27,7 +27,7 @@ export async function mountDmnEditor(container: HTMLElement, ctx: EditorContext)
     // malformed from the start: nothing to render — surface the error and
     // fall back to the text view, where the document stays editable
     ctx.onImportFailed,
-    ctx.sync,
+    { ...ctx.sync, canvasHost: container },
   );
   return {
     destroy: () => {

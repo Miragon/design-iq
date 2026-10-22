@@ -14,8 +14,9 @@ Desktop, ChatGPT).
 | `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and what it makes of hostile sources, the Mermaid frame and the Miragon renderers themselves (`test/renderer-dom.ts`). |
 | `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                                                                                |
 
-Two checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`
-(under the Markdown view below) and `test/live-repair-chromium.ts`, the live merge repair and its
+Three checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`
+(under the Markdown view below), `test/live-gesture-chromium.ts` (under the MCP-App widgets below)
+and `test/live-repair-chromium.ts`, the live merge repair and its
 notice with real peers (issue 296): two tabs dropping moves at once, the first-ranked writer
 closing its tab, a link that drops and comes back, a half-typed tag seen from the canvas tabs, a
 reload during it, and the BPMN widget live in a minimal MCP-Apps host. From the repository root:
@@ -305,6 +306,18 @@ are the ONE template + entry, built once per spec with the spec aliased in
 through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
 `mcp-app-<id>.html`. The dev server resolves that alias to
 `widget-spec.dev.ts`: `/mcp-app-miragon.html?notation=<id>` previews any of them.
+
+**A gesture holds the live re-imports back.** Every live binding, the SPA's editors and
+the widget engines alike, passes live-client the element it mounts the canvas in: while a
+pointer is held on it or a diagram-js drag runs in it, a peer's change waits, for 10 s at
+most (sync rule 3 in `docs/platform-concept.md`, #295). `test/live-gesture.test.ts` covers
+every mount under jsdom, with diagram-js's dragging run without a pointer. Pointer drags in
+a browser are checked by hand, as CI has no browser: `test/live-gesture-chromium.ts` starts a
+Live Host of its own and drags in two SPA pages per notation (bpmn-js and every Miragon
+renderer) while the other page drops a move. After a renderer, diagram-js or live-client
+change, from the repository root: `pnpm build`, then
+`npx -y -p playwright@1.56.1 -c "node apps/web/test/live-gesture-chromium.ts"` (`PORT` sets
+the Live Host's port, 8392 unless set).
 
 **One engine per bundle.** The iframe sandbox allows no external requests, so
 nothing is shared between the emitted files — and exactly one engine per file is
