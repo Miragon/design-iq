@@ -153,3 +153,13 @@ test("locateRepoImage: a folder named like an image is no image", async () => {
     code: "image/not-found",
   });
 });
+
+test("a process named image keeps its release route: the image keyword does not claim release/<id>", async () => {
+  const release = async (id: string) => {
+    const res = await fetch(`${base}/api/repos/${MODELS.fullName}/release/${id}`, { method: "POST", headers: AUTH });
+    return { status: res.status, error: ((await res.json()) as { error?: string }).error };
+  };
+  const image = await release("image");
+  assert.doesNotMatch(image.error ?? "", /not a connected repository/);
+  assert.deepEqual(image, await release("order"), "it reaches the release of acme/models like any other id");
+});

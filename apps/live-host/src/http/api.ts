@@ -717,8 +717,11 @@ export function startApi(port: number, opts: ApiOptions): Server {
       // "content". A repo literally NAMED "<owner>/history" therefore cannot
       // address /content over REST (the URL is claimed by history/content) —
       // accepted keyword-collision edge; MCP tools and ws rooms are unaffected.
+      // `image` is guarded the same way against "release/<id>": a process
+      // named "image" keeps its release route, so a repo literally named
+      // "<owner>/release" cannot address /image over REST.
       const repoRoute = url.pathname.match(
-        /^\/api\/repos\/(.+)\/(processes|decisions|models|folders|move|rename|duplicate|delete|references|changes|conflicts|sync|history(?:\/content)?|todos(?:\/([0-9A-Za-z-]+)\/close)?|todo-jobs(?:\/retry)?|release(?:\/([^/]+))?|image|(?<!\/history\/)content)$/,
+        /^\/api\/repos\/(.+)\/(processes|decisions|models|folders|move|rename|duplicate|delete|references|changes|conflicts|sync|history(?:\/content)?|todos(?:\/([0-9A-Za-z-]+)\/close)?|todo-jobs(?:\/retry)?|release(?:\/([^/]+))?|(?<!\/release\/)image|(?<!\/history\/)content)$/,
       );
       if (repoRoute) {
         const session = await sessionOf(req);
