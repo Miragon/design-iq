@@ -6,7 +6,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { MOVED_NOTICE, movedNotice, parseMovedNotice, PRESENCE_COLORS, presenceColor } from "../src/live.ts";
+import {
+  MOVED_NOTICE,
+  movedNotice,
+  parseMovedNotice,
+  PRESENCE_COLORS,
+  presenceColor,
+  REPO_IMAGE_TYPES,
+  repoImageRoute,
+  repoImageType,
+} from "../src/live.ts";
 
 test("presenceColor: deterministic per principal, always a hex color", () => {
   assert.equal(presenceColor("petra"), presenceColor("petra"));
@@ -108,4 +117,19 @@ test("MOVED_NOTICE is frozen: a client built before any product rename still fol
   // … and a notice in the old spelling is still a notice
   const legacy = JSON.stringify({ type: frozen, to: "p/x.bpmn", room: "acme/models/p/x.bpmn", by: "Petra" });
   assert.equal(parseMovedNotice(legacy)?.to, "p/x.bpmn");
+});
+
+test("repository images (#290): image types only, by extension, on the one route the Live Host serves", () => {
+  assert.equal(repoImageType("docs/assets/map.png"), "image/png");
+  assert.equal(repoImageType("Logo.SVG"), "image/svg+xml");
+  assert.equal(repoImageType("photo.jpeg"), repoImageType("photo.jpg"));
+  for (const path of ["notes.md", "page.html", "image", "docs.png/readme", ".png.exe", "x.constructor"]) {
+    assert.equal(repoImageType(path), undefined, path);
+  }
+  // nothing a browser would run or render as a page
+  for (const type of Object.values(REPO_IMAGE_TYPES)) assert.match(type, /^image\//);
+  assert.equal(
+    repoImageRoute("acme/models", "docs/a b/map.png"),
+    "/api/repos/acme/models/image?path=docs%2Fa%20b%2Fmap.png",
+  );
 });

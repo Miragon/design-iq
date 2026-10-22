@@ -298,7 +298,8 @@
   height: auto;
   vertical-align: middle;
 }
-/* an image with no route to load from: its name in place of the picture */
+/* an image the view does not show (another scheme, outside the repository,
+   not found): its name in place of the picture */
 .markdown-body .md-image-placeholder {
   display: inline-block;
   padding: var(--cd-space-1) var(--cd-space-2);
@@ -307,6 +308,53 @@
   background: var(--secondary);
   color: var(--muted-foreground);
   font-size: 0.8125rem;
+}
+
+/* an image from another site, not loaded yet: the host it would come from,
+   named in the placeholder, and the reader's choice to load it. A secondary
+   button (CI §8): md, 600, blue on hover */
+.markdown-body .md-image-external {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cd-space-2);
+  max-width: 100%;
+  padding: var(--cd-space-1) var(--cd-space-1) var(--cd-space-1) var(--cd-space-2);
+  border: 1px dashed var(--input);
+  border-radius: var(--cd-radius-md);
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+.markdown-body .md-image-external strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.markdown-body .md-image-load {
+  padding: var(--cd-space-1) var(--cd-space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--cd-radius-md);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--cd-shadow-1);
+  transition:
+    color var(--cd-motion-fast) var(--cd-ease),
+    border-color var(--cd-motion-fast) var(--cd-ease),
+    background-color var(--cd-motion-fast) var(--cd-ease);
+}
+.markdown-body .md-image-load:hover {
+  border-color: var(--primary);
+  color: var(--link);
+  background: var(--accent);
+}
+.markdown-body .md-image-load:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .markdown-body .md-empty {

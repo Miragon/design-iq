@@ -121,7 +121,8 @@ test("the sanitizer keeps the renderer's markup and strips everything else", () 
   );
   assert.doesNotMatch(hostile, /<script|<style|<svg|<math|<iframe|<form|onclick|onerror|onload|style=|data-track/);
   assert.match(hostile, /<p>text<\/p>/);
-  assert.match(hostile, /<img src="https:\/\/img.example\/a.png">/);
+  // an image from another site the reader did not load keeps no address (#290)
+  assert.match(hostile, /<img>/);
   // the only input there is: a disabled checkbox, whatever the markup asked for
   assert.match(hostile, /<input type="checkbox" disabled="">/);
 
@@ -137,6 +138,40 @@ test("the sanitizer keeps the renderer's markup and strips everything else", () 
   const ids = clean('<h2 id="md-intro">a</h2><h2 id="location">b</h2><input type="checkbox" checked>');
   assert.match(ids, /<h2 id="md-intro">a<\/h2><h2>b<\/h2>/);
   assert.match(ids, /<input type="checkbox" checked="" disabled="">/);
+
+  const button = clean(
+    '<button type="submit" formaction="https://evil.example" onclick="x()" data-image-src="https://a.example/x.png">Load image</button>',
+  );
+  assert.equal(button, '<button type="button" data-image-src="https://a.example/x.png">Load image</button>');
+});
+
+test("the sanitizer lets an image load from this origin or inline data, from another site only once the reader chose it", () => {
+  const win = newWindow();
+  const chosen = new Set<string>();
+  const sanitize = createSanitizer(win, { externalImages: chosen });
+  const sources = (html: string): Array<string | null> => {
+    const box = win.document.createElement("div");
+    box.append(sanitize(html));
+    return [...box.querySelectorAll("img")].map((img) => img.getAttribute("src"));
+  };
+  const html =
+    '<img src="/api/repos/acme/models/image?path=docs%2Fa.png"><img src="data:image/png;base64,AAAA">' +
+    '<img src="https://designiq.test/api/repos/acme/models/image?path=b.png"><img src="https://img.example/a.png">' +
+    '<img src="//img.example/b.png"><img src="/\\img.example/c.png"><img src="http://designiq.test/x.png">';
+  assert.deepEqual(sources(html), [
+    "/api/repos/acme/models/image?path=docs%2Fa.png",
+    "data:image/png;base64,AAAA",
+    "https://designiq.test/api/repos/acme/models/image?path=b.png",
+    null,
+    null,
+    null,
+    null,
+  ]);
+
+  chosen.add("https://img.example/a.png");
+  const box = win.document.createElement("div");
+  box.append(sanitize('<img src="https://img.example/a.png" referrerpolicy="unsafe-url">'));
+  assert.equal(box.innerHTML, '<img src="https://img.example/a.png" referrerpolicy="no-referrer">');
 });
 
 test("the view renders the live text, after a pause and at least once a second", (t) => {
@@ -178,6 +213,60 @@ test("a model link opens through the shell, an anchor scrolls, any other click i
   assert.equal(v.click(v.article.querySelector('a[href="#intro"]')), false);
   assert.deepEqual(v.scrolled, ["md-intro"]);
   assert.equal(v.click(v.article.querySelector('a[target="_blank"]')), true);
+  v.view.destroy();
+});
+
+test("an image from another site loads only once the reader asks, for as long as the view lives (#290)", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const source = "# Status\n\n![CI badge](https://img.example.com/ci.svg) ![Coverage](https://img.example.com/cov.svg)";
+  const v = mount(source);
+  assert.equal(v.article.querySelectorAll("img").length, 0, "nothing is fetched from the other site unasked");
+  const buttons = v.article.querySelectorAll<HTMLButtonElement>("button.md-image-load");
+  assert.equal(buttons.length, 2);
+  assert.equal(buttons[0]!.getAttribute("aria-label"), "Load image CI badge from img.example.com");
+
+  buttons[0]!.focus();
+  assert.equal(v.click(buttons[0]!), false, "the view handles the click");
+  const loaded = v.article.querySelector("img");
+  assert.equal(loaded?.getAttribute("src"), "https://img.example.com/ci.svg");
+  assert.equal(loaded?.getAttribute("referrerpolicy"), "no-referrer");
+  assert.equal(v.article.querySelectorAll("button.md-image-load").length, 1, "the other image is still only offered");
+  assert.equal(v.win.document.activeElement, v.container.querySelector(".markdown-view"), "focus stays in the view");
+
+  // a co-editor's change re-renders: the choice holds
+  v.append("\n\nmore");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  assert.match(v.article.textContent, /more/);
+  assert.equal(v.article.querySelector("img")?.getAttribute("src"), "https://img.example.com/ci.svg");
+  v.view.destroy();
+
+  // and is never stored: the next view of the document asks again
+  const again = mount(source);
+  assert.equal(again.article.querySelectorAll("img").length, 0);
+  again.view.destroy();
+});
+
+test("a repository image loads from the Live Host; one that does not load becomes a placeholder and stays one", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const v = mount("![Process map](./assets/map.png) ![](../logo.svg)");
+  const [map, logo] = [...v.article.querySelectorAll("img")];
+  assert.equal(map?.getAttribute("src"), "/api/repos/acme/models/image?path=docs%2Fassets%2Fmap.png");
+  assert.equal(logo?.getAttribute("src"), "/api/repos/acme/models/image?path=logo.svg");
+
+  map!.dispatchEvent(new v.win.Event("error"));
+  const placeholder = v.article.querySelector(".md-image-placeholder");
+  assert.equal(placeholder?.textContent, "Image not shown: Process map");
+  assert.equal(placeholder?.getAttribute("title"), "docs/assets/map.png");
+  assert.equal(v.article.querySelectorAll("img").length, 1);
+
+  v.append(" ![](../logo.svg)");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  assert.equal(v.article.querySelector(".md-image-placeholder")?.textContent, "Image not shown: Process map");
+  assert.deepEqual(
+    [...v.article.querySelectorAll("img")].map((img) => img.getAttribute("src")),
+    ["/api/repos/acme/models/image?path=logo.svg", "/api/repos/acme/models/image?path=logo.svg"],
+  );
+  assert.deepEqual(v.errors, []);
   v.view.destroy();
 });
 

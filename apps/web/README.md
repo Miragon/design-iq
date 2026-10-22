@@ -59,8 +59,10 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   `javascript:`, `vbscript:`, `file:` and non-image `data:` URLs never become a link or an
   image. GFM footnotes do not render yet; their text stays in the document.
 - `sanitize.ts` sanitizes that HTML once more with DOMPurify, against an allowlist of exactly
-  the markup the renderer emits (no style, no SVG, no data-\* but `data-model-path`, ids only
-  with the `md-` prefix).
+  the markup the renderer emits (no style, no SVG, no data-\* but `data-model-path` and
+  `data-image-src`, ids only with the `md-` prefix). It holds the images to the rule below as
+  well: an image keeps its address only on the page's own origin, as inline data, or when the
+  reader chose to load it.
 - `view.ts` mounts the document in the canvas layer. It re-renders 200 ms after the last
   change of the shared Y.Text (a collaborator's included), at least once a second while the
   changes keep coming, scrolls in-page `#anchors` and hands a link to another model to the
@@ -81,9 +83,15 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
 - A relative link to a model of the repository (the shell's model list) is that model's
   in-app route (`/r/<owner>/<repo>/f/<path>#<section>`); a link to any other repository file,
   a document outside the models folder included, is marked, inert text. So is a link with a
-  scheme other than `http(s):`, `mailto:` and `tel:`. Images load from `https:` and inline
-  `data:image/` URLs, directly from their host; an image of the repository shows a
-  placeholder with its alt text, because the Live Host serves no raw files.
+  scheme other than `http(s):`, `mailto:` and `tel:`.
+- Images (#290): a relative image is a file of the repository and loads from the Live Host
+  (`GET /api/repos/<owner>/<repo>/image?path=`, the content API's authorization, image types
+  only, 10 MiB at most); one that does not load turns into a placeholder with its alt text. An
+  image from another site (`https:`) never loads on its own: its host would learn every
+  reader's IP address, time and browser. It shows as a placeholder that names the host, and
+  **Load image** loads that one image, without a referrer, for as long as the view of the
+  document is open (never stored). Inline `data:image/` images show at once; `http:` and other
+  schemes stay placeholders.
 - A fenced code block renders as code, unless `fences.ts` registers its language: `render`
   returns its HTML inside the render pass, `hydrate` upgrades it in the DOM afterwards, only
   for a document that has such a fence. `fences.ts` states the contract an extension builds
@@ -92,8 +100,20 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   Mermaid renderer, `src/lib/mermaid-render.ts` (strict security level, the CI theme,
   Geist). The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
   theme, palette, CSS or font (`MERMAID_SECURE_KEYS`, checked against mermaid itself in
-  `test/mermaid-engine.test.ts`); layout options stay the author's. A diagram keeps the look
-  and the layout it had before mermaid 12 unless its front matter picks otherwise (`look: neo`,
+  `test/mermaid-engine.test.ts`); layout options stay the author's. What mermaid is known to
+  load from an address a diagram names is kept from another site (#290). mermaid's label
+  sanitizer (`MERMAID_LABEL_SANITIZER`, a diagram cannot change it) drops images, media and
+  styles from a label's HTML. mermaid loads the rest itself while it lays the diagram out, so
+  the source is checked before mermaid sees it (`diagramImageRefusal`,
+  `diagramConfigRefusal`), and the diagram is refused with a notice for a shape's `img` or a
+  sequence actor's `icon` that names an address (inline `data:image/` and `@symbol` icons
+  still draw), for any `details` statement (it reads an actor's properties from an element of
+  the page), and for CSS that fetches (`url()`, `src()`, `image-set()`, `@import`, escaped or
+  not) anywhere in the source or in the diagram's own configuration. The page-side sanitizer
+  then drops every address but the diagram's own `#…` references and inline data, and every
+  style sheet or attribute whose CSS could name one. These checks follow mermaid's syntax, not
+  a browser policy: a way to load that a later mermaid adds is not covered until it is added
+  here. A diagram keeps the look and the layout it had before mermaid 12 unless its front matter picks otherwise (`look: neo`,
   `layout: elk`): the classic look, and dagre for flowchart, class, state, ER and requirement
   diagrams. mermaid 12's own sizing still applies: in flowchart and state diagrams a label
   gets at least 120 px (`minNodeWidth`; a circle, since 12.2, only the room its label needs)

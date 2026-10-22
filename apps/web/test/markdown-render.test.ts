@@ -11,6 +11,7 @@ import { test } from "node:test";
 import {
   anchorId,
   classifyHref,
+  classifyImage,
   type FenceInfo,
   modelRoute,
   renderMarkdown,
@@ -192,22 +193,96 @@ test("link targets classify and resolve against the document's folder", () => {
   assert.equal(modelRoute("acme/models", "a b/c.md", "Sec 1"), "/r/acme/models/f/a%20b/c.md#Sec%201");
 });
 
-test("https and inline images load without a referrer; repository images show a placeholder", () => {
-  const html = render("![CI badge](https://img.example.com/ci.svg) ![Process map](../assets/map.png) ![](./plain.png)");
+test("an image from another site is a placeholder naming its host, until the reader loads it (#290)", () => {
+  const html = render("![CI badge](https://img.example.com/ci.svg) ![](//cdn.example.org/a/logo.png)");
+  // nothing a browser would fetch from the other site
+  assert.doesNotMatch(html, /<img/);
   assert.match(
     html,
+    new RegExp(
+      '<span class="md-image-external" title="https://img.example.com/ci.svg">' +
+        '<span class="md-image-external-text">Image from <strong>img.example.com</strong>: CI badge</span>' +
+        '<button type="button" class="md-image-load" data-image-src="https://img.example.com/ci.svg"' +
+        ' aria-label="Load image CI badge from img.example.com"' +
+        ' title="Loading it sends your IP address to img.example.com">Load image</button></span>',
+    ),
+  );
+  // protocol-relative is https, as on the page; without alt text the file names it
+  assert.match(html, /data-image-src="https:\/\/cdn.example.org\/a\/logo.png"/);
+  assert.match(html, /Image from <strong>cdn.example.org<\/strong>: logo.png/);
+
+  // the one the reader loaded is an image, without a referrer; the others stay offered
+  const loaded = renderMarkdown("![CI badge](https://img.example.com/ci.svg) ![x](https://other.example/x.png)", {
+    repo: REPO,
+    docPath: DOC,
+    externalImages: new Set(["https://img.example.com/ci.svg"]),
+  });
+  assert.match(
+    loaded,
     /<img src="https:\/\/img.example.com\/ci.svg" alt="CI badge" loading="lazy" referrerpolicy="no-referrer">/,
   );
+  assert.match(loaded, /data-image-src="https:\/\/other.example\/x.png"/);
+  assert.equal(loaded.match(/<img /g)?.length, 1);
+
+  // the alt text and the address stay text and attribute values
+  const hostile = render('![<b onclick="x">](https://img.example.com/a.png?q="><script>)');
+  assert.doesNotMatch(hostile, /<b |<script|<img/);
+});
+
+test("a repository image loads from the Live Host; the rest shows as a placeholder naming it", () => {
+  const html = render("![Process map](../assets/map.png) ![](./plain.PNG) ![Logo](/brand/logo.svg?raw=true#top)");
   assert.match(
     html,
+    /<img src="\/api\/repos\/acme\/models\/image\?path=docs%2Fuse-cases%2Fbike-leasing%2Fassets%2Fmap.png" alt="Process map" loading="lazy" class="md-repo-image">/,
+  );
+  assert.match(html, /image\?path=docs%2Fuse-cases%2Fbike-leasing%2Ffeature-map%2Fplain.PNG" alt=""/);
+  assert.match(html, /image\?path=brand%2Flogo.svg" alt="Logo"/);
+
+  // not shown: an http: address, another scheme, a path above the repository, a file that is no image
+  assert.match(render("![x](http://example.com/a.png)"), /title="http:\/\/example.com\/a.png">Image not shown: x</);
+  assert.match(render("![v](vscode://file/a.png)"), /title="vscode:\/\/file\/a.png">Image not shown: v</);
+  assert.match(render("![up](../../../../../x.png)"), />Image not shown: up</);
+  assert.match(
+    render("![](./spec.pdf)"),
+    /title="docs\/use-cases\/bike-leasing\/feature-map\/spec.pdf">Image not shown: spec.pdf</,
+  );
+  // a repository image that did not load stays a placeholder
+  assert.match(
+    renderMarkdown("![Process map](../assets/map.png)", {
+      repo: REPO,
+      docPath: DOC,
+      brokenImages: new Set(["/api/repos/acme/models/image?path=docs%2Fuse-cases%2Fbike-leasing%2Fassets%2Fmap.png"]),
+    }),
     /<span class="md-image-placeholder" title="docs\/use-cases\/bike-leasing\/assets\/map.png">Image not shown: Process map<\/span>/,
   );
-  assert.match(html, />Image not shown: plain.png<\/span>/);
-  assert.match(render("![x](http://example.com/a.png)"), /title="http:\/\/example.com\/a.png">Image not shown: x</);
+  // inline data needs no request
   assert.match(
     render("![dot](data:image/png;base64,iVBORw0KGgo=)"),
-    /<img src="data:image\/png;base64,iVBORw0KGgo=" alt="dot"/,
+    /<img src="data:image\/png;base64,iVBORw0KGgo=" alt="dot" loading="lazy">/,
   );
+});
+
+test("classifyImage: where an image comes from", () => {
+  assert.deepEqual(classifyImage("data:image/png;base64,AAAA", DOC), { kind: "inline" });
+  assert.deepEqual(classifyImage("https://img.example.com:8443/a.png", DOC), {
+    kind: "external",
+    url: "https://img.example.com:8443/a.png",
+    host: "img.example.com:8443",
+  });
+  assert.deepEqual(classifyImage("//cdn.example.org/a.png", DOC), {
+    kind: "external",
+    url: "https://cdn.example.org/a.png",
+    host: "cdn.example.org",
+  });
+  assert.deepEqual(classifyImage("./a%20b.png", "docs/x.md"), { kind: "repository", path: "docs/a b.png" });
+  assert.deepEqual(classifyImage("/img/a.webp", "docs/x.md"), { kind: "repository", path: "img/a.webp" });
+  assert.deepEqual(classifyImage("../../a.png", "docs/x.md"), { kind: "unavailable", where: "../../a.png" });
+  assert.deepEqual(classifyImage("./notes.txt", "docs/x.md"), { kind: "unavailable", where: "docs/notes.txt" });
+  assert.deepEqual(classifyImage("http://example.com/a.png", DOC), {
+    kind: "unavailable",
+    where: "http://example.com/a.png",
+  });
+  assert.deepEqual(classifyImage("#top", DOC), { kind: "unavailable", where: "#top" });
 });
 
 test("fences render through the hook keyed by language, every other fence as code", () => {
