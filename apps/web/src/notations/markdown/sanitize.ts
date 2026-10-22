@@ -129,29 +129,47 @@ export function createSanitizer(win: SanitizeWindow, options: SanitizeOptions = 
 
 /**
  * The profile for a diagram a fence extension draws (./mermaid-fence.ts):
- * exactly the one mermaid applies to its own output under securityLevel
- * "strict" (DOMPurify's defaults plus the foreignObject its HTML labels sit
- * in), run once more on the page's side. The diagram reaches the view as a
- * DOM node, never through innerHTML: no script, no event handler, no
- * javascript: URL. It keeps its own <style>, which mermaid scopes to the
- * SVG's id. A link in a diagram opens a new tab without an opener, like
- * every other link of the view that leaves designIQ. And nothing in it loads
- * from another site once it is on the page (#290): an element other than a
- * link keeps an address only to this diagram (#…) or to inline data, and an
- * attribute or a style sheet whose CSS could name any other resource is
- * dropped. Parsed, the SVG decodes entities a style sheet kept as text while
- * mermaid drew it, so what the page would apply is checked here, not only
- * the source (lib/mermaid-render.ts).
+ * the one mermaid applies to its own output under securityLevel "strict"
+ * (DOMPurify's defaults plus the foreignObject its HTML labels sit in), run
+ * once more on the page's side, minus forms and their controls, which act on
+ * a click. The diagram reaches the view as a DOM node, never through
+ * innerHTML: no script, no event handler, no javascript: URL. It keeps its
+ * own <style>, which mermaid scopes to the SVG's id. A link in a diagram
+ * opens a new tab without an opener, like every other link of the view that
+ * leaves designIQ.
+ *
+ * And nothing in it loads once it is on the page (#290, #293): mermaid lays
+ * the diagram out in a frame that loads nothing (lib/mermaid-frame.ts), but
+ * the SVG it returns still names what a label, a shape or a style asked for.
+ * An element other than a link keeps an address only to this diagram (#…)
+ * or to inline image data (C4 draws its people so), and an attribute or a
+ * style sheet whose CSS could name any other resource is dropped. Parsed, the
+ * SVG decodes entities a style sheet kept as text while mermaid drew it, so
+ * what the page would apply is checked here, not only the source
+ * (lib/mermaid-render.ts).
  */
 const DIAGRAM: Config & { RETURN_DOM_FRAGMENT: true } = {
   ADD_TAGS: ["foreignobject"],
   ADD_ATTR: ["dominant-baseline"],
+  FORBID_TAGS: ["form", "button", "input", "select", "textarea"],
   HTML_INTEGRATION_POINTS: { foreignobject: true },
   RETURN_DOM_FRAGMENT: true,
 };
 
 /** an address inside the diagram or inline data: nothing to fetch */
 const LOCAL_REFERENCE = /^\s*(?:#|data:image\/)/i;
+/** the attributes a browser loads an address from */
+const ADDRESS_ATTRIBUTES = [
+  "src",
+  "href",
+  "xlink:href",
+  "poster",
+  "background",
+  "data",
+  "action",
+  "formaction",
+  "ping",
+];
 
 export function createDiagramSanitizer(win: WindowLike): Sanitize {
   const purify = DOMPurify(win);
@@ -160,11 +178,12 @@ export function createDiagramSanitizer(win: WindowLike): Sanitize {
     if (link) {
       node.setAttribute("target", "_blank");
       node.setAttribute("rel", "noopener noreferrer");
-    } else {
-      for (const name of ["src", "srcset", "href", "xlink:href"]) {
-        const value = node.getAttribute(name);
-        if (value !== null && (name === "srcset" || !LOCAL_REFERENCE.test(value))) node.removeAttribute(name);
-      }
+    }
+    node.removeAttribute("srcset");
+    for (const name of ADDRESS_ATTRIBUTES) {
+      if (link && (name === "href" || name === "xlink:href")) continue;
+      const value = node.getAttribute(name);
+      if (value !== null && !LOCAL_REFERENCE.test(value)) node.removeAttribute(name);
     }
     // a presentation attribute (stroke, fill, mask, filter …) is CSS as much as a style is
     for (const { name, value } of [...node.attributes]) {

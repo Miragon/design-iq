@@ -229,6 +229,51 @@ export default {
       to: { path: "(^|/)node_modules/mermaid/", dependencyTypesNot: ["type-only"], dynamic: false },
     },
     {
+      name: "mermaid-renders-in-its-frame",
+      severity: "error",
+      comment:
+        "Issue 293: mermaid lays a diagram out in the document it runs in, the diagram's images, styles " +
+        "and links as written, and sanitizes the SVG only after. So lib/mermaid-render.ts runs in " +
+        "the Mermaid frame alone (lib/mermaid-frame-entry.ts, under mermaid-frame.html's policy), " +
+        "and the page draws through lib/mermaid-frame.ts. Any other runtime import would draw in " +
+        "the page's own document with a green build; an `import type` is erased and free.",
+      from: { path: "^apps/web/src/", pathNot: "^apps/web/src/lib/mermaid-frame-entry\\.ts$" },
+      to: {
+        dependencyTypesNot: ["type-only"],
+        path: ["^apps/web/src/lib/mermaid-render\\.ts$", "^@/lib/mermaid-render(\\.ts)?$"],
+      },
+    },
+    {
+      name: "mermaid-loads-in-the-renderer-only",
+      severity: "error",
+      comment:
+        "Issue 293, the other half of mermaid-renders-in-its-frame: that rule guards the renderer, " +
+        'mermaid-loads-lazily only static imports. An import("mermaid") anywhere else in the app ' +
+        "would run mermaid in the page's own document with a green build, so lib/mermaid-render.ts " +
+        "is the one module that loads it, dynamic imports included.",
+      from: { path: "^apps/web/src/", pathNot: "^apps/web/src/lib/mermaid-render\\.ts$" },
+      to: { path: "(^|/)node_modules/mermaid/", dependencyTypesNot: ["type-only"] },
+    },
+    {
+      name: "widgets-draw-no-mermaid",
+      severity: "error",
+      comment:
+        "Issue 293: the MCP-App widgets draw no Mermaid. A single-file widget has no frame document to " +
+        "lay a diagram out in (lib/mermaid-frame.ts), and mermaid in the widget's own document would " +
+        "hold a hostile diagram's markup there. A widget that shows Mermaid is a decision of its " +
+        "own, not an import.",
+      from: { path: "^apps/web/src/mcp-app/" },
+      to: {
+        path: [
+          "(^|/)node_modules/mermaid/",
+          "^apps/web/src/lib/mermaid-",
+          "^apps/web/src/notations/markdown/",
+          "^@/lib/mermaid-",
+          "^@/notations/markdown/",
+        ],
+      },
+    },
+    {
       name: "mermaid-grammar-loads-lazily",
       severity: "error",
       comment:

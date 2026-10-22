@@ -1,14 +1,16 @@
 /**
  * The ONE Mermaid renderer of the web app: Mermaid source in, an SVG string
- * or a readable error out. A mermaid fence in the Markdown view draws through
- * it (notations/markdown/mermaid-fence.ts), and so can any other surface that
- * shows a diagram.
+ * or a readable error out. It runs in the Mermaid frame, never in the page
+ * (./mermaid-frame.ts says why; `pnpm arch`, rule
+ * mermaid-renders-in-its-frame): a mermaid fence in the Markdown view
+ * (notations/markdown/mermaid-fence.ts), and any other surface that shows a
+ * diagram, draws through the frame.
  *
  * ADR 0006: mermaid is large, so it loads behind the dynamic import in
- * loadMermaid() and nowhere else (`pnpm arch`, rule mermaid-loads-lazily).
- * Importing this file costs a few kB, not the engine; even so the fence
- * reaches it through import() too, so the eager bundle, the repo overview
- * and every document without a diagram never carry it.
+ * loadMermaid() and nowhere else (`pnpm arch`, rules mermaid-loads-lazily
+ * and mermaid-loads-in-the-renderer-only).
+ * The page reaches the frame through import() too, so the eager bundle, the
+ * repo overview and every document without a diagram never carry it.
  *
  * The rest is pure (config, ids, error wording) and runs under node --test:
  * mermaid itself needs a DOM to measure text.
@@ -94,7 +96,9 @@ export const MERMAID_LABEL_SANITIZER = {
  * browser). mermaid checks the list at every level of a config, so a theme
  * scoped to one diagram type (`flowchart: { theme: dark }`, new in mermaid 12)
  * is refused too. Layout options (direction, curve, wrap, look, layout) stay
- * the author's.
+ * the author's; `arrowMarkerAbsolute` does not (#293): it points every
+ * arrowhead at the address of the document mermaid draws in, which is the
+ * frame's (./mermaid-frame.ts), an address the page drops.
  */
 export const MERMAID_SECURE_KEYS = [
   "secure",
@@ -110,6 +114,7 @@ export const MERMAID_SECURE_KEYS = [
   "fontFamily",
   "altFontFamily",
   "dompurifyConfig",
+  "arrowMarkerAbsolute",
 ];
 
 /**
@@ -188,14 +193,49 @@ function sourceLineOf(error: unknown, message: string, source: string): number |
   return named ? mermaidSourceLine(source, Number(named)) : undefined;
 }
 
+/** what a shape's image from an address reads as, refused in the source
+ *  (diagramImageRefusal) or, where that check misses it, by the frame's policy */
+export const SHAPE_IMAGE_FROM_ADDRESS =
+  "A shape's image (img) is not drawn: it would load from its address for every reader. Use a data:image/ URL or remove it.";
+
+/** a shape's `img` key (quoted or not) and its value, up to where the value ends */
+const SHAPE_IMAGE = /@\{[^}]*?\bimg["']?\s*:\s*["']?\s*([^"'\s,}]*)/gi;
+
+/** the 1-based line of the first shape image that is not inline image data */
+function shapeImageFromAddressLine(source: string): number | undefined {
+  for (const m of source.matchAll(SHAPE_IMAGE)) {
+    if (!/^data:image\//i.test(m[1]!)) return source.slice(0, m.index + m[0].length).split("\n").length;
+  }
+  return undefined;
+}
+
+/**
+ * mermaid's image shape decodes its `img` before it lays the shape out, and
+ * the frame's policy (#293) loads no image from an address, the app's own
+ * included: an img diagramImageRefusal did not read as one fails to decode
+ * with a DOMException (Chromium's message "The source image cannot be
+ * decoded" blames the image, not the policy), and with it the whole diagram.
+ */
+function imageDecodeFailed(error: unknown): boolean {
+  const { name, message } = (error ?? {}) as { name?: unknown; message?: unknown };
+  return name === "EncodingError" || (typeof message === "string" && /source image cannot be decoded/i.test(message));
+}
+
 /**
  * What a failed mermaid parse or render means for the person typing: the
  * source line (mermaid counts lines AFTER dropping the front matter and, for
  * most diagram types, the comments; @designiq/notations/mermaid maps them
  * back) and the message. A missing or unknown diagram type reads like the
- * validator's header check.
+ * validator's header check, a shape image the frame refused like
+ * diagramImageRefusal's refusal of it.
  */
 export function describeMermaidError(error: unknown, source: string): MermaidRenderError {
+  if (imageDecodeFailed(error)) {
+    const line = shapeImageFromAddressLine(source);
+    return line === undefined
+      ? { message: "A shape's image (img) cannot be decoded. Check its data:image/ URL or remove it." }
+      : { line, message: SHAPE_IMAGE_FROM_ADDRESS };
+  }
   const raw = (error instanceof Error ? error.message : String(error)).trim();
   if (raw.startsWith("No diagram type detected")) {
     const header = mermaidHeader(source);
@@ -396,11 +436,7 @@ export function diagramImageRefusal(source: string): MermaidRenderError | undefi
       else if (source[end] === "}" && !quoted) break;
     }
     if (shapeImageFromAddress(source.slice(at + 2, end))) {
-      return {
-        line: lineAt(source, at),
-        message:
-          "A shape's image (img) is not drawn: it would load from its address for every reader. Use a data:image/ URL or remove it.",
-      };
+      return { line: lineAt(source, at), message: SHAPE_IMAGE_FROM_ADDRESS };
     }
   }
   const icon = actorIconAt(source);

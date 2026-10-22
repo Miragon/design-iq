@@ -7,12 +7,12 @@ Desktop, ChatGPT).
 
 ## Scripts
 
-| Script                                  | What it does                                                                                                                                                                                                                                                                                                                                   |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                                                                                                                                                |
-| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                                                                                                                                                    |
-| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and the Miragon renderers themselves (`test/renderer-dom.ts`). |
-| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                        |
+| Script                                  | What it does                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                                                                                                                                                                                                        |
+| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                                                                                                                                                                                                            |
+| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and what it makes of hostile sources, the Mermaid frame and the Miragon renderers themselves (`test/renderer-dom.ts`). |
+| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                                                                                |
 
 ## Theming
 
@@ -111,16 +111,42 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   the page), and for CSS that fetches (`url()`, `src()`, `image-set()`, `@import`, escaped or
   not) anywhere in the source or in the diagram's own configuration. The page-side sanitizer
   then drops every address but the diagram's own `#…` references and inline data, and every
-  style sheet or attribute whose CSS could name one. These checks follow mermaid's syntax, not
-  a browser policy: a way to load that a later mermaid adds is not covered until it is added
-  here. A diagram keeps the look and the layout it had before mermaid 12 unless its front matter picks otherwise (`look: neo`,
+  style sheet or attribute whose CSS could name one. These checks follow mermaid's syntax; a way
+  to load that a later mermaid adds is held by the Mermaid frame's policy instead (below) until
+  it is added here. A diagram keeps the look and the layout it had before mermaid 12 unless its front matter picks otherwise (`look: neo`,
   `layout: elk`): the classic look, and dagre for flowchart, class, state, ER and requirement
   diagrams. mermaid 12's own sizing still applies: in flowchart and state diagrams a label
   gets at least 120 px (`minNodeWidth`; a circle, since 12.2, only the room its label needs)
   and wraps at 120 px (`wrappingWidth`, 200 before), so their nodes come out wider and long
   labels wrap sooner. The renderer and
-  mermaid load on the first document that has such a fence, never for any other. The drawn SVG is sanitized once more (`createDiagramSanitizer` in
-  `sanitize.ts`, the profile mermaid applies itself) and cached by source: a re-render for an
+  mermaid load on the first document that has such a fence, never for any other.
+- Hostile diagrams: anyone who may write to a content repo writes the fences every reader's
+  browser draws, so mermaid never runs in the page. It lays a diagram out in a document of its
+  own, the hidden Mermaid frame (`src/lib/mermaid-frame.ts`, its document `mermaid-frame.html`,
+  same origin): mermaid puts a diagram's labels, links and styles into that document as it
+  measures them, before its own sanitizer runs, and the frame's policy lets nothing there load
+  or run but designIQ's own scripts, styles and fonts (no image, media, frame or form; no inline
+  script, handler or `javascript:` link). The page only gets the SVG as a string. That SVG is
+  sanitized once more (`createDiagramSanitizer` in `sanitize.ts`: the profile mermaid applies
+  itself, no forms, and nothing that loads, as above), so a diagram on the page loads nothing
+  until a reader clicks one of its links. Images from an address are not drawn: one in a label
+  is dropped, and a shape's image (`img:`) fails its diagram with a notice that says so, from
+  the source check or, should that miss one, from the frame; inline `data:image/` images draw. `pnpm arch` keeps it so:
+  only the frame's script imports the renderer (`mermaid-renders-in-its-frame`), only the
+  renderer imports mermaid, `import()` included (`mermaid-loads-in-the-renderer-only`), and the
+  MCP-App widgets draw no Mermaid (`widgets-draw-no-mermaid`).
+  `test/mermaid-engine-hostile.test.ts`, next to the version mirror, runs hostile labels in every
+  diagram type, links, click callbacks, front matter, `%%{init}%%` directives and foreignObject
+  HTML through the pinned mermaid (the sources: `test/mermaid-hostile-sources.ts`);
+  `test/mermaid-frame.test.ts` pins the frame's policy. What a browser makes of that policy is
+  checked by hand, as CI has no browser: `test/hostile-mermaid-chromium.ts` starts a Live Host
+  of its own on the same sources, opens them in the built SPA and in the BPMN and DMN widgets in
+  headless Chromium, and fails on anything that ran or loaded. Run it after a mermaid or a
+  browser update, from the repository root: `pnpm build`, once
+  `npx -y playwright@1.56.1 install --only-shell chromium`, then
+  `npx -y -p playwright@1.56.1 -c "node apps/web/test/hostile-mermaid-chromium.ts"` (`PORT`
+  sets the Live Host's port, 8391 unless set).
+- The drawn SVG is cached by source: a re-render for an
   edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram
   keeps its drawing until the new one is drawn. A diagram mermaid cannot read shows a notice
   with the error and its line (counted within the diagram) under its code, or under its last

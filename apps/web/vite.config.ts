@@ -29,6 +29,12 @@ export default defineConfig({
       { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
     ],
   },
+  build: {
+    rollupOptions: {
+      // the frame mermaid lays diagrams out in (src/lib/mermaid-frame.ts)
+      input: [here("./index.html"), here("./mermaid-frame.html")],
+    },
+  },
   server: {
     proxy: {
       "/api": "http://localhost:8301",
@@ -39,3 +45,7 @@ export default defineConfig({
     },
   },
 });
+
+function here(rel: string): string {
+  return fileURLToPath(new URL(rel, import.meta.url));
+}
