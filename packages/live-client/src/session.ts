@@ -93,6 +93,33 @@ export interface LiveSession {
   destroy(): void;
 }
 
+/**
+ * y-protocols takes a client in only on a newer awareness clock. When a link
+ * drops, the provider removes every peer and the server removes this client,
+ * and both keep the clocks; on reconnect each side repeats the same clocks
+ * and is ignored, so the two count each other as gone until each renews its
+ * state (every 15 s). A writer counted as gone does not repair a broken merge
+ * (model-sync rule 4, #296), and the roster shows the peers gone meanwhile.
+ * Forgetting the dropped peers' clocks takes in the room's snapshot on
+ * reconnect; a newer own clock on every (re)sync makes the room take this
+ * client in again. A peer that left meanwhile is not in the snapshot and
+ * stays gone.
+ */
+function keepPresenceAcrossReconnects(provider: HocuspocusProvider): void {
+  provider.on("close", () => {
+    const awareness = provider.awareness;
+    if (!awareness) return;
+    for (const clientId of [...awareness.meta.keys()]) {
+      if (clientId !== awareness.clientID && !awareness.getStates().has(clientId)) awareness.meta.delete(clientId);
+    }
+  });
+  provider.on("synced", () => {
+    const awareness = provider.awareness;
+    const own = awareness?.getLocalState();
+    if (awareness && own) awareness.setLocalState(own);
+  });
+}
+
 export function openLiveSession(opts: LiveSessionOptions): LiveSession {
   const socket = new HocuspocusProviderWebsocket({
     url: opts.url,
@@ -111,6 +138,7 @@ export function openLiveSession(opts: LiveSessionOptions): LiveSession {
     },
   });
   provider.attach();
+  keepPresenceAcrossReconnects(provider);
 
   return {
     doc: provider.document,

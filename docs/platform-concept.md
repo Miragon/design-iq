@@ -233,7 +233,10 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
      first-ranked writer that cannot (its canvas has not taken in someone's typing or save)
      marks its entry as standing down, and the next one acts. So does the next one when the
      first-ranked writer's awareness disappears (its tab closed, its connection lost, #296):
-     every peer passes over a writer that left, as if it had stood down.
+     every peer passes over a writer that left, as if it had stood down. A writer counts as
+     back once its link re-syncs (the session takes in the room's presence and renews its
+     own, so both sides see each other again at once, not at the next 15 s renewal) or once
+     a canvas write of it arrives.
    - The repair names every writer whose write the text holds and its canvas does not, in
      a second map (`CANVAS_LOSSES_KEY`). Each of them shows the conflict toast once per lost
      write, also when the notice reaches it only on reconnect, and clears the notice; the
@@ -263,7 +266,13 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
      and its repair reaches the room on reconnect, where it settles with the one the
      others made like a lagging writer's: both writers can be told.
    - A connection lost without a close reaches the others only when the Live Host or the
-     awareness timeout (about 30 s) removes the writer; until then the notice shows.
+     awareness timeout (about 30 s) removes the writer; until then the notice shows. After a
+     writer's link has dropped and come back once, the Live Host no longer removes it when
+     that connection closes (it ties a client's presence to the connection it first came
+     on), so a later drop of it takes the timeout.
+   - A peer whose own link dropped takes a writer who left meanwhile as present again when
+     that writer's last canvas write reaches it only on its own reconnect; for that break
+     it waits for the writer that left, as before this rule, and shows the notice.
    - The MCP-App widget passes over writers that left, but shows no notice yet: it has no
      source view to offer.
    - A re-sync that bundles canvas writes with a deletion typed in the source view counts

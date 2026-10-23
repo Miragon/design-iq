@@ -6,15 +6,18 @@
  *
  * Pinned: when the first-ranked writer leaves (its tab closed, its
  * connection lost) before its settle delay ends, the next-ranked writer
- * repairs in its place; when the text stays unrenderable for longer than a
- * repair takes (typing that a repair never writes over), every canvas peer
- * is told once, and the notice is withdrawn when a text renders; a merge a
- * repair heals tells nobody.
+ * repairs in its place; a writer whose link came back counts as present
+ * again, by its re-sync or by its next write, so crossing drops then get
+ * one repair; when the text stays unrenderable for longer than a repair
+ * takes (typing that a repair never writes over), every canvas peer is told
+ * once, and the notice is withdrawn when a text renders; a merge a repair
+ * heals tells nobody.
  */
 import assert from "node:assert/strict";
 import { afterEach, mock, test } from "node:test";
 
 import { CANVAS_LOSSES_KEY } from "@designiq/contracts/live";
+import type * as Y from "yjs";
 
 import { bindMiragon } from "../src/miragon-sync.ts";
 import { updateText } from "../src/text-diff.ts";
@@ -24,6 +27,7 @@ import {
   bpmnPeer,
   bpmnPeerOn,
   hostCopy,
+  type Hub,
   hub,
   joinRoom,
   linesModeler,
@@ -43,11 +47,28 @@ function mockClock(): void {
 }
 
 /** move the mocked clock on, letting each import's promises settle between steps */
-async function advance(ms: number): Promise<void> {
-  for (let elapsed = 0; elapsed < ms; elapsed += 10) {
+async function advance(ms: number, every60ms?: () => void): Promise<void> {
+  for (let elapsed = 10; elapsed <= ms; elapsed += 10) {
     mock.timers.tick(10);
+    if (elapsed % 60 === 0) every60ms?.();
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
+}
+
+/** links that lag: what the hub holds goes out every 60 ms, so writes made within that time cross */
+function lagging(net: Hub, docs: readonly Y.Doc[]): { tick(): void; end(): void } {
+  for (const doc of docs) net.hold(doc);
+  return {
+    tick() {
+      for (const doc of docs) {
+        net.release(doc);
+        net.hold(doc);
+      }
+    },
+    end() {
+      for (const doc of docs) net.release(doc);
+    },
+  };
 }
 
 afterEach(() => mock.timers.reset());
@@ -75,7 +96,7 @@ test("the first-ranked writer closes its tab before its settle delay ends: the n
     await advance(leavesAfter);
     // b ranks first (equal footing, the lower client id) and is gone
     b.unbind();
-    people.leave(100);
+    people.close(100);
     await advance(3000);
 
     const where = `left after ${leavesAfter} ms`;
@@ -117,7 +138,7 @@ test("the first-ranked writer loses its connection before its settle delay ends:
   await advance(1100);
   // b's link drops inside its settle delay: its repair stays on its side
   net.offline(b.doc);
-  people.leave(100);
+  people.drop(100);
   await advance(3000);
 
   assert.equal(net.host.ytext.toString(), a.own, "the room holds the next-ranked writer's repair");
@@ -125,7 +146,7 @@ test("the first-ranked writer loses its connection before its settle delay ends:
   assert.equal(watcher.modeler.canvas(), a.own, "the watcher shows it");
 
   net.reconnect(b.doc);
-  people.rejoin(100);
+  people.resync(100);
   await advance(6000);
   // its own repair, made offline, reaches the room only now: the two settle like a lagging writer's
   repairedBy([a, b, watcher], (peer) => peer.modeler.canvas());
@@ -133,6 +154,50 @@ test("the first-ranked writer loses its connection before its settle delay ends:
   assert.deepEqual(watcher.conflicts, [], "nothing of the watcher's was lost");
   for (const peer of [a, b, watcher]) peer.unbind();
 });
+
+// the session renews its presence on every re-sync; an older client's comes
+// back only with its next renewal, 15 s on, but its write shows it is back
+for (const renewsOnResync of [true, false]) {
+  const how = renewsOnResync ? "the session's re-sync" : "its write alone (an older client)";
+  test(`crossing drops right after a writer's link came back, its presence back by ${how}: one repair, one toast`, async () => {
+    mockClock();
+    const room = roomOf(XML);
+    const net = hub(room);
+    const people = presence();
+    const a = bpmnPeerOn(net.join(200), people.of(200));
+    const b = bpmnPeerOn(net.join(100), people.of(100));
+    await advance(50);
+    net.offline(b.doc);
+    people.drop(100);
+    await advance(1000);
+    net.reconnect(b.doc);
+    if (renewsOnResync) people.resync(100);
+    else people.reconnectSilently(100);
+    await advance(100);
+
+    // within the 15 s before an awareness renewal would bring them back
+    const links = lagging(net, [a.doc, b.doc]);
+    a.modeler.move("Task_b", 40, 30);
+    b.modeler.move("Task_d", 35, -20);
+    await advance(20);
+    a.own = a.ytext.toString();
+    b.own = b.ytext.toString();
+    await advance(8000, links.tick);
+    links.end();
+    await advance(3000);
+
+    repairedBy([a, b], (peer) => peer.modeler.canvas());
+    assert.ok(wellFormed(net.host.ytext.toString()), how);
+    assert.deepEqual(net.host.log.repairs, [100], `${how}: every peer names the same repairer`);
+    assert.deepEqual(
+      [a.conflicts.length, b.conflicts.length],
+      [1, 0],
+      `${how}: the writer whose edit was lost is told, once`,
+    );
+    a.unbind();
+    b.unbind();
+  });
+}
 
 test("a writer that leaves without ranking first changes nothing: the first-ranked one repairs", async () => {
   mockClock();
@@ -152,7 +217,7 @@ test("a writer that leaves without ranking first changes nothing: the first-rank
   net.release();
   await advance(1100);
   a.unbind();
-  people.leave(200);
+  people.close(200);
   await advance(3000);
 
   assert.equal(host.ytext.toString(), b.own);

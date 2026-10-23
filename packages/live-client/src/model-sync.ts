@@ -126,7 +126,8 @@ interface AwarenessChange {
 /**
  * The room's presence, as y-protocols' Awareness reports it (a session's
  * `awareness`): a client id leaves in `removed` when its tab closes or its
- * connection is lost, and comes back in `added` when it reconnects.
+ * connection is lost, and comes back in `added` or `updated` once its link
+ * re-syncs (openLiveSession renews the presence on both sides then).
  */
 export interface PeerAwareness {
   on(event: "change", listener: (change: AwarenessChange) => void): void;
@@ -399,9 +400,15 @@ export function bindModelSync(
   };
   ytext.observe(observer);
 
-  // a peer standing down changes who repairs, without touching the text
+  // a peer standing down changes who repairs, without touching the text. A
+  // write shows its writer is in the room, whatever the presence last said:
+  // a client whose re-sync does not renew its presence (an older one) would
+  // otherwise stay passed over here while it ranks itself, and the two
+  // repairs would cross again and again
   const onWrites = (event: Y.YMapEvent<unknown>): void => {
-    if (!event.transaction.local) scheduleImport();
+    if (event.transaction.local) return;
+    for (const key of event.keysChanged) if (entry(key)) departed.delete(key);
+    scheduleImport();
   };
   writes.observe(onWrites);
 
@@ -471,8 +478,9 @@ export function bindModelSync(
    * writer is still in the room, the latest (Lamport time: the canvas that
    * took in the longest chain of writes, its own included), then the one
    * whose canvas holds the most writes, then the lowest client id. Every peer
-   * ranks the same log and sees the same writers leave, so every peer names
-   * the same writer. None unless writes crossed.
+   * ranks the same log and sees the same writers leave (a re-sync or a write
+   * brings one back), so every peer names the same writer. None unless
+   * writes crossed.
    */
   function repairingWriter(): string | undefined {
     const open = openWrites();

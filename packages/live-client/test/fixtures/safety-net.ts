@@ -215,34 +215,55 @@ export function hub(room: Uint8Array) {
 export type Hub = ReturnType<typeof hub>;
 
 type PresenceListener = Parameters<PeerAwareness["on"]>[1];
+type PresenceChange = Parameters<PresenceListener>[0];
 
 /**
- * The room's awareness as each peer's y-protocols Awareness reports it: a
- * peer that leaves (its tab closed, its connection lost) is removed from
- * every other peer's view, and added again when it comes back.
+ * The room's awareness as each peer's y-protocols Awareness reports it
+ * behind openLiveSession. A tab that closes leaves every other view. A link
+ * that drops leaves every other view too, and the dropped peer's provider
+ * clears every other peer from its own. The session's re-sync brings both
+ * sides back: it takes in the room's snapshot and renews its own clock.
+ * Without that (an older client), y-protocols takes a peer in again only on
+ * its next renewal, every 15 s.
  */
 export function presence() {
   const listeners = new Map<number, Set<PresenceListener>>();
-  const emit = (clientId: number, change: "added" | "removed"): void => {
-    for (const [viewer, own] of listeners) {
-      if (viewer === clientId) continue;
-      for (const listener of [...own]) {
-        listener({
-          added: change === "added" ? [clientId] : [],
-          updated: [],
-          removed: change === "removed" ? [clientId] : [],
-        });
-      }
+  const inRoom = new Set<number>();
+  const tell = (viewer: number, change: Partial<PresenceChange>): void => {
+    for (const listener of [...(listeners.get(viewer) ?? [])]) {
+      listener({ added: [], updated: [], removed: [], ...change });
     }
   };
+  const others = (clientId: number): number[] => [...inRoom].filter((other) => other !== clientId);
   return {
     of(clientId: number): PeerAwareness {
       const own = listeners.get(clientId) ?? new Set<PresenceListener>();
       listeners.set(clientId, own);
+      inRoom.add(clientId);
       return { on: (_event, listener) => void own.add(listener), off: (_event, listener) => void own.delete(listener) };
     },
-    leave: (clientId: number): void => emit(clientId, "removed"),
-    rejoin: (clientId: number): void => emit(clientId, "added"),
+    close(clientId: number): void {
+      inRoom.delete(clientId);
+      for (const other of others(clientId)) tell(other, { removed: [clientId] });
+    },
+    drop(clientId: number): void {
+      inRoom.delete(clientId);
+      const left = others(clientId);
+      for (const other of left) tell(other, { removed: [clientId] });
+      tell(clientId, { removed: left });
+    },
+    resync(clientId: number): void {
+      inRoom.add(clientId);
+      tell(clientId, { added: others(clientId) });
+      for (const other of others(clientId)) tell(other, { updated: [clientId] });
+    },
+    /** a dropped client back in the room without a re-sync of its presence */
+    reconnectSilently(clientId: number): void {
+      inRoom.add(clientId);
+    },
+    renew(clientId: number): void {
+      for (const other of others(clientId)) tell(other, { updated: [clientId] });
+    },
   };
 }
 
