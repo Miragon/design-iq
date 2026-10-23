@@ -359,7 +359,7 @@ export function bpmnPeerOn(doc: Y.Doc, awareness?: SyncOptions["awareness"]) {
   const modeler = bpmnLikeModeler();
   const conflicts: string[] = [];
   const notices: Array<string | null> = [];
-  const unbind = bindBpmn(modeler as never, ytext, doc, (message) => conflicts.push(message), {
+  const unbind = bindBpmn(modeler as never, ytext, doc, (message) => conflicts.push(message), undefined, {
     awareness,
     onUnrenderable: (message) => notices.push(message),
   });

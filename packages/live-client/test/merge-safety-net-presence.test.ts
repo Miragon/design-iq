@@ -11,7 +11,8 @@
  * one repair; when the text stays unrenderable for longer than a repair
  * takes (typing that a repair never writes over), every canvas peer is told
  * once, and the notice is withdrawn when a text renders; a merge a repair
- * heals tells nobody.
+ * heals tells nobody; a document that never rendered, BPMN included, gets
+ * the first import's report instead.
  */
 import assert from "node:assert/strict";
 import { afterEach, mock, test } from "node:test";
@@ -19,6 +20,7 @@ import { afterEach, mock, test } from "node:test";
 import { CANVAS_LOSSES_KEY } from "@designiq/contracts/live";
 import type * as Y from "yjs";
 
+import { bindBpmn } from "../src/bpmn-sync.ts";
 import { bindMiragon } from "../src/miragon-sync.ts";
 import { updateText } from "../src/text-diff.ts";
 import {
@@ -348,5 +350,25 @@ test("a document that never rendered gets the first import's report, not this no
   await advance(10_000);
   assert.equal(imports.length, 1, "the shell falls back to the source on this report");
   assert.deepEqual(notices, [], "there is no last good state the canvas could be showing");
+  unbind();
+});
+
+test("a BPMN document that never rendered reports its first import too: a peer that opens it during a lasting break gets the XML view", async () => {
+  mockClock();
+  const net = relay();
+  const doc = joinRoom(net, roomOf(XML.replace("<definitions", "<definitions <")), 100);
+  const imports: string[] = [];
+  const notices: Array<string | null> = [];
+  const unbind = bindBpmn(
+    bpmnLikeModeler() as never,
+    doc.getText("content"),
+    doc,
+    undefined,
+    (message) => imports.push(message),
+    { awareness: presence().of(100), onUnrenderable: (message) => notices.push(message) },
+  );
+  await advance(10_000);
+  assert.deepEqual(imports, ["the document is not well-formed XML"], "the shell falls back to the XML view on it");
+  assert.deepEqual(notices, []);
   unbind();
 });

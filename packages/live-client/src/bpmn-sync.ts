@@ -29,6 +29,8 @@ export function bindBpmn(
   ytext: Y.Text,
   doc: Y.Doc,
   onConflict?: (message: string) => void,
+  /** first import failed: the document is malformed, offer the XML view */
+  onImportError?: (message: string) => void,
   sync?: SyncOptions,
 ): () => void {
   return bindModelSync(
@@ -48,7 +50,7 @@ export function bindBpmn(
     ytext,
     doc,
     onConflict,
-    undefined,
+    onImportError,
     sync,
   );
 }

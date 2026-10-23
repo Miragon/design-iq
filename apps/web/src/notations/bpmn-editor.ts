@@ -30,7 +30,16 @@ export async function mountBpmnEditor(container: HTMLElement, ctx: EditorContext
     additionalModules: [bpmnStickyModule, bpmnColorModule],
     moddleExtensions: { sticky: stickyModdle },
   });
-  const unbind = bindBpmn(modeler as never, ctx.ytext, ctx.doc, ctx.onSyncError, ctx.sync);
+  const unbind = bindBpmn(
+    modeler as never,
+    ctx.ytext,
+    ctx.doc,
+    ctx.onSyncError,
+    // malformed from the start: nothing to render, so surface the error and
+    // fall back to the XML view, where the document stays editable
+    ctx.onImportFailed,
+    ctx.sync,
+  );
   const todoCanvas = attachTodoCanvas(modeler as never, {
     onBadgeClick: ctx.onBadgeClick,
     onSelectionChanged: ctx.onSelectionChanged,

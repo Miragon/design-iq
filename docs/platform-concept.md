@@ -248,8 +248,10 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
      state (a repair lands about 2 s after the break) is reported to that canvas. The SPA
      shows a persistent warning, "The shared text cannot be rendered. Your canvas shows the
      last good state.", with a Show source action, while the canvas is on screen without
-     the source; it goes once a text renders. A document that never rendered keeps its
-     first-import report and the fall-back to the source.
+     the source; it goes once a text renders. A document that never rendered (a newcomer,
+     a reload during the break) gets the first import's report instead, BPMN included: the
+     SPA's import-failed toast and the switch to the source, the widget's "Live import
+     failed".
 
    What it does not guarantee:
    - One repair per state of the map, not per broken text: a writer whose updates reach the

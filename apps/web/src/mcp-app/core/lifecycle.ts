@@ -21,7 +21,7 @@
  *  - tryLive(app, ref, modeler, hooks) → deps.live(ref, engine, hooks), guarded
  *    by `engine.bindLive` (a capability) and the presence of a live port
  *  - claimDocument → deps.claim; AUTOSAVE_MS / 10_000 / 100 → deps.timing
- *  - liveHooks gains onImportError (the DSL/JSON binds report it; bpmn never)
+ *  - liveHooks gains onImportError (a binding whose first import fails reports it)
  *  - `cfg.readonly`, the deep link, the icon font and the button handlers
  *    live in widget.ts (the DOM composition)
  * Four re-delivery hazards the old code carried are closed here (each pinned
@@ -117,8 +117,8 @@ export interface LiveHooks {
    *  peer's repair of a merge broken by crossing canvas writes replaced it
    *  (model-sync rule 4) */
   onConflict(message: string): void;
-  /** a remote snapshot did not import — the binds that take the parameter
-   *  report it; bpmn's never does */
+  /** the binding's first import failed: the room's text is malformed or
+   *  empty, and the canvas keeps what the widget loaded */
   onImportError(message: string): void;
   /** runs after sync, before the first Yjs import replaces the canvas — flush
    *  unsaved state through the bridge here; false aborts the upgrade */

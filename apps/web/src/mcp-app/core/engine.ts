@@ -43,8 +43,7 @@ export interface LiveBindHooks {
    *  peer's repair of a merge broken by crossing canvas writes replaced it
    *  (model-sync rule 4) */
   onConflict(message: string): void;
-  /** a remote snapshot did not import — reported by the binds that support it
-   *  (bindBpmn reports nothing; the core tolerates silence) */
+  /** the binding's first import failed: the room's text is malformed or empty */
   onImportError(message: string): void;
   /** live presence (#115): publish this canvas's pointer/selection, render
    *  the peers' — the diagram-js engines attach lib/presence-canvas to it.
