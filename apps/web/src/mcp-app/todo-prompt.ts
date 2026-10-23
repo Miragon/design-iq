@@ -44,6 +44,9 @@ export function implementPrompt(todo: TodoWire, target: PromptTarget): string {
     "Please implement this designIQ todo end to end, using the tools on this connector.",
     "",
     `Todo #${todo.id} — ${todo.title}`,
+    ...(todo.anchor?.type
+      ? [`Type: ${todo.anchor.type.name} (filed with the "${todo.anchor.type.id}" issue template)`]
+      : []),
     `Repository: ${target.repo}`,
     `Model: ${target.path}${process ? ` (process "${process}")` : ""}`,
     elements ? `Anchored elements: ${elements}` : "Anchored elements: none — the todo is about the process as a whole.",

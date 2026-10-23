@@ -30,7 +30,13 @@ import { join } from "node:path";
 
 import { fileDeepLink, processDeepLink } from "@designiq/contracts/deep-link";
 import { type CanvasPresence, presenceColor, roomName } from "@designiq/contracts/live";
-import type { ContentConflictWire, RoomPresenceWire, TodoWire, WidgetBootWire } from "@designiq/contracts/live-host";
+import type {
+  ContentConflictWire,
+  RoomPresenceWire,
+  TodoTypeWire,
+  TodoWire,
+  WidgetBootWire,
+} from "@designiq/contracts/live-host";
 import { mcpAppToolName } from "@designiq/contracts/mcp-app";
 import { analyzeDecision, simulateDecision } from "@designiq/decisions";
 import { parseTestSuite, type TestCase, testsPathFor } from "@designiq/decisions/tests";
@@ -75,7 +81,7 @@ import {
 } from "../application/overview.ts";
 import { roomPresence, type RoomPresenceDeps } from "../application/room-presence.ts";
 import { createDecision, createNotationModel, createProcess } from "../application/scaffold.ts";
-import { closeTodoFor, fileTodo, listOpenTodos } from "../application/todos.ts";
+import { closeTodoFor, fileTodo, listOpenTodos, listTodoTypesFor } from "../application/todos.ts";
 import type { WsTicketStore } from "../application/ws-tickets.ts";
 import { changedElementIds } from "../domain/model-diff.ts";
 import type { GitProvider } from "../ports/git-provider.ts";
@@ -373,7 +379,7 @@ function liveInstructions(on: {
     `BPMN and DMN have deeper tooling: for processes ${named(["get_process", ...(on.bpmnEdit ? ["get_process_outline"] : []), "get_bpmn_xml", "validate_bpmn"])}; ` +
       `for decisions ${named(["get_decision", "simulate_decision", "analyze_decision", "run_decision_tests", ...(write ? ["save_decision_tests"] : [])])}` +
       (on.todos
-        ? `; and todos anchored to process elements in the repository's issue tracker (${named(write ? ["list_todos", "create_todo", "close_todo"] : ["list_todos"])})`
+        ? `; and todos anchored to process elements in the repository's issue tracker (${named(write ? ["list_todos", "list_todo_types", "create_todo", "close_todo"] : ["list_todos"])})`
         : "") +
       ".",
     on.bpmnEdit && write
@@ -1508,7 +1514,8 @@ export function createLiveMcpServer(
         description:
           "OPEN todos anchored to BPMN processes — work items filed from the live model into the " +
           "repo's issue tracker. Pass `id`/`path` to narrow to ONE process, omit both for the whole repo. " +
-          "Each row carries its tracker url, the anchored BPMN elements and the author.",
+          "Each row carries its tracker url, the anchored BPMN elements, the author and, in `anchor.type`, the " +
+          "issue template it was filed with (absent: a plain todo).",
         inputSchema: z.object(processRef),
         annotations: READ,
       },
@@ -1525,17 +1532,43 @@ export function createLiveMcpServer(
 
     if (!opts.mcpReadOnly) {
       server.registerTool(
+        "list_todo_types",
+        {
+          title: "List todo types",
+          description:
+            "The forms a todo can be filed with in this repository: its issue templates (bug, feature, …) " +
+            "and/or the built-in `todo` (a title and a free-text description). Each type lists its fields " +
+            "with kind, label, options and whether they are required; `markdown` fields are the form's hints " +
+            "to read, never to fill. Call it before create_todo and fill every required field.",
+          inputSchema: z.object({ repo: repoArg }),
+          annotations: READ,
+        },
+        safe(async ({ repo }: { repo: string }) => {
+          const r = await requireRepo(repo);
+          return ok({ repo: r.fullName, types: (await listTodoTypesFor(issues, r)) satisfies TodoTypeWire[] });
+        }),
+      );
+
+      server.registerTool(
         "create_todo",
         {
           title: "Create a todo on a BPMN process",
           description:
             "File a todo on a BPMN process into the repository's issue tracker. Anchor it to concrete BPMN " +
             "elements via `elements` (ids from get_bpmn_xml/get_process) — the modeler then shows a badge " +
-            "on each one; omit them for a process-level todo. The item is bot-authored, you stay attributed.",
+            "on each one; omit them for a process-level todo. The item is bot-authored, you stay attributed. " +
+            "Pick a `type` from list_todo_types and pass its `fields` by id: input and textarea take a string, " +
+            "dropdown an option label (a list when it allows several), checkboxes the list of checked labels. " +
+            "A missing required field fails with the list of what is missing.",
           inputSchema: z.object({
             ...processRef,
             title: z.string().describe("what needs to be done — the tracker item's title"),
-            body: z.string().optional().describe("free-text description (markdown)"),
+            type: z.string().optional().describe("a type id from list_todo_types; omit for the built-in `todo`"),
+            fields: z
+              .record(z.string(), z.union([z.string(), z.array(z.string())]))
+              .optional()
+              .describe("the type's field values by field id"),
+            body: z.string().optional().describe("free-text description (markdown) of the built-in `todo`"),
             elements: z
               .array(
                 z.object({
@@ -1554,6 +1587,8 @@ export function createLiveMcpServer(
             id,
             path,
             title,
+            type,
+            fields,
             body,
             elements,
           }: {
@@ -1561,6 +1596,8 @@ export function createLiveMcpServer(
             id?: string;
             path?: string;
             title: string;
+            type?: string;
+            fields?: Record<string, string | string[]>;
             body?: string;
             elements?: Array<{ id: string; name?: string | null }>;
           }) => {
@@ -1572,7 +1609,7 @@ export function createLiveMcpServer(
               issues,
               session,
               r,
-              { title, body, process: id, file: path, elements },
+              { title, body, type, fields, process: id, file: path, elements },
               "mcp",
             );
             return ok({ todo: todo satisfies TodoWire });

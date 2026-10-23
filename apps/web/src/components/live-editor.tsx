@@ -62,7 +62,7 @@ import { modelTarget, useOpenModel, wasExpected } from "@/lib/model-target";
 import { installMonacoLanguages } from "@/lib/monaco-languages";
 import { installMonacoTheme, MONACO_OPTIONS } from "@/lib/monaco-theme";
 import type { PresenceSurface, RemotePresence } from "@/lib/presence-canvas";
-import { invalidateModelLists, useFileHistory, useModels, useTodos } from "@/lib/queries";
+import { invalidateModelLists, useFileHistory, useModels, useTodos, useTodoTypes } from "@/lib/queries";
 import { createRemoteCaretStyles } from "@/lib/remote-carets";
 import { sidePanelRoom } from "@/lib/side-panel-room";
 import { clampRatio, DEFAULT_RATIO, ratioBounds } from "@/lib/split-ratio";
@@ -151,6 +151,8 @@ export function LiveEditor({
   // model-anchored todos — only for documents that belong to a process
   const hasTodos = processId.length > 0;
   const todosQuery = useTodos(repo, processId, hasTodos);
+  // the Add todo dialog opens with the repo's todo types already there
+  useTodoTypes(repo, hasTodos);
   const [selectedElements, setSelectedElements] = useState<TodoElementWire[]>([]);
   const [todoFilter, setTodoFilter] = useState<string | null>(null);
   const [todoCreateOpen, setTodoCreateOpen] = useState(false);

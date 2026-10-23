@@ -10,7 +10,8 @@
  * simulates a user with/without repo access; {"addIssue":…} seeds tracker rows
  * (incl. PR-shaped ones) and {"issuesForbidden":true} simulates an app missing
  * the Issues permission, {"rateLimitWrites":N} makes the next N issue PATCHes
- * a secondary rate limit. GET /_control returns recorded pull-request
+ * a secondary rate limit, {"addFile":…} seeds a file on the default branch
+ * (the contents API, e.g. issue templates) and {"addLabel":…} a repo label. GET /_control returns recorded pull-request
  * payloads, GET /_control/writes every issue PATCH in order.
  */
 import { createServer, type ServerResponse } from "node:http";
@@ -36,6 +37,8 @@ interface StubIssue {
   pull_request?: { url: string };
 }
 const repoLabels = new Map<string, Set<string>>();
+// default-branch files per repo (contents API: issue templates)
+const repoFiles = new Map<string, Map<string, string>>();
 const repoIssues = new Map<string, StubIssue[]>();
 // comments per issue, keyed "<repo>#<number>" (GitHub keeps them off the issue row)
 const issueComments = new Map<string, Array<{ body: string }>>();
@@ -175,6 +178,30 @@ createServer(async (req, res) => {
   // issues list filters by labels (ALL must match) + state and includes PR rows.
   // One issue (PATCH: state transitions) + its comments (POST/GET) round out the
   // close flow; issuesForbidden simulates the missing-permission 403 on all of it.
+  // the contents API: a file (raw when asked for it, base64 JSON otherwise), a
+  // directory listing of the files right below a path, 404 for anything else
+  const contentsRoute = url.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/contents\/(.+)$/);
+  if (contentsRoute && req.method === "GET") {
+    const files = repoFiles.get(contentsRoute[1]!) ?? new Map<string, string>();
+    const path = decodeURIComponent(contentsRoute[2]!);
+    const file = files.get(path);
+    if (file !== undefined) {
+      if ((req.headers.accept ?? "").includes("raw")) {
+        res.writeHead(200, { "content-type": "text/plain" });
+        return res.end(file);
+      }
+      return json(res, 200, { type: "file", path, content: Buffer.from(file).toString("base64"), encoding: "base64" });
+    }
+    const children = [...files.keys()].filter(
+      (p) => p.startsWith(`${path}/`) && !p.slice(path.length + 1).includes("/"),
+    );
+    if (children.length === 0) return json(res, 404, { message: "Not Found" });
+    return json(
+      res,
+      200,
+      children.map((p) => ({ type: "file", name: p.slice(path.length + 1), path: p })),
+    );
+  }
   const labelsRoute = url.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/labels$/);
   const issuesRoute = url.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/issues$/);
   const issueRoute = url.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
@@ -260,7 +287,19 @@ createServer(async (req, res) => {
       issuesForbidden?: boolean;
       /** the next N issue PATCHes are rate limited (403 + retry-after: 1) */
       rateLimitWrites?: number;
+      addFile?: { repo: string; path: string; text: string };
+      addLabel?: { repo: string; name: string };
     };
+    if (ctl.addFile) {
+      const files = repoFiles.get(ctl.addFile.repo) ?? new Map<string, string>();
+      repoFiles.set(ctl.addFile.repo, files);
+      files.set(ctl.addFile.path, ctl.addFile.text);
+    }
+    if (ctl.addLabel) {
+      const set = repoLabels.get(ctl.addLabel.repo) ?? new Set<string>();
+      repoLabels.set(ctl.addLabel.repo, set);
+      set.add(ctl.addLabel.name);
+    }
     if (ctl.permission) permission = ctl.permission;
     if (typeof ctl.rateLimitWrites === "number") rateLimitedWrites = ctl.rateLimitWrites;
     if (ctl.addIssue) addIssue(ctl.addIssue.repo, ctl.addIssue);

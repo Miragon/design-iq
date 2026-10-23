@@ -441,3 +441,128 @@ test("rateLimitWait: retry-after, an exhausted quota and the secondary message a
   assert.equal(rateLimitWait(res(403, {}), "Resource not accessible by integration"), undefined);
   assert.equal(rateLimitWait(res(500, { "retry-after": "5" }), ""), undefined);
 });
+
+// ── todo types: the repo's issue templates (#313) ─────────────────────────────
+
+const TEMPLATED_REPO = "acme/templated";
+const BUG_FORM = [
+  "name: Bug report",
+  "description: Something is broken",
+  'title: "[Bug]: "',
+  "labels: [bug, needs-triage]",
+  "body:",
+  "  - type: textarea",
+  "    id: repro",
+  "    attributes:",
+  "      label: Steps to reproduce",
+  "    validations:",
+  "      required: true",
+].join("\n");
+const templated = createGitHubIssueTracker({ apiUrl: STUB_URL, tokenFor: async () => "stub-installation-token-1" });
+
+test("listTodoTypes: a repo without templates has none, and blank todos are allowed", async () => {
+  assert.deepEqual(await tracker.listTodoTypes(REPO), { types: [], blankAllowed: true });
+});
+
+test("listTodoTypes: the forms on the default branch, the config honoured — read once per TTL", async () => {
+  await control({ addFile: { repo: TEMPLATED_REPO, path: ".github/ISSUE_TEMPLATE/bug.yml", text: BUG_FORM } });
+  await control({
+    addFile: { repo: TEMPLATED_REPO, path: ".github/ISSUE_TEMPLATE/config.yml", text: "blank_issues_enabled: false" },
+  });
+  const first = await templated.listTodoTypes(TEMPLATED_REPO);
+  assert.deepEqual(
+    first.types.map((t) => t.id),
+    ["bug.yml"],
+  );
+  assert.equal(first.blankAllowed, false);
+
+  await control({
+    addFile: { repo: TEMPLATED_REPO, path: ".github/ISSUE_TEMPLATE/idea.md", text: "---\nname: Idea\n---\nWhy?" },
+  });
+  assert.deepEqual(
+    (await templated.listTodoTypes(TEMPLATED_REPO)).types.map((t) => t.id),
+    ["bug.yml"],
+    "cached within the TTL",
+  );
+  const fresh = createGitHubIssueTracker({ apiUrl: STUB_URL, tokenFor: async () => "t", templateTtlMs: 0 });
+  assert.deepEqual(
+    (await fresh.listTodoTypes(TEMPLATED_REPO)).types.map((t) => t.id),
+    ["bug.yml", "idea.md"],
+  );
+});
+
+test("createTodo with a type: the form's body, todo + process + the template labels the repo has", async () => {
+  await control({ addLabel: { repo: TEMPLATED_REPO, name: "Bug" } });
+  const anchor: TodoAnchor = { ...anchorOf("order-to-cash"), type: { id: "bug.yml", name: "Bug report" } };
+  const todo = await templated.createTodo(TEMPLATED_REPO, {
+    title: "[Bug]: Saving fails",
+    body: "",
+    anchor,
+    author: "petra",
+    fields: { repro: "Click save" },
+  });
+  assert.deepEqual(todo.anchor, anchor);
+  assert.equal(todo.body, "### Steps to reproduce\n\nClick save");
+  const raw = (await (await fetch(`${STUB_URL}/repos/${TEMPLATED_REPO}/issues/${todo.id}`)).json()) as {
+    body: string;
+    labels: Array<{ name: string }>;
+  };
+  assert.deepEqual(
+    raw.labels.map((l) => l.name),
+    ["todo", "process:order-to-cash", "Bug"],
+    "the repo's spelling of `bug`; `needs-triage` does not exist there and is not invented",
+  );
+  assert.equal(
+    raw.body,
+    todoBody({ title: "", body: "### Steps to reproduce\n\nClick save", anchor, author: "petra" }),
+  );
+});
+
+test("the type survives hand-edited labels and a rename: it lives in the anchor block", async () => {
+  const [item] = await templated.listTodos(TEMPLATED_REPO, "order-to-cash");
+  assert.ok(item);
+  await fetch(`${STUB_URL}/repos/${TEMPLATED_REPO}/issues/${item.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ labels: ["todo", "process:order-to-cash"] }),
+  });
+  await templated.retargetTodo(TEMPLATED_REPO, item.id, "order-to-cash", {
+    process: "o2c",
+    file: "processes/o2c.bpmn",
+  });
+  const [moved] = await templated.listTodos(TEMPLATED_REPO, "o2c");
+  assert.deepEqual(moved?.anchor?.type, { id: "bug.yml", name: "Bug report" });
+});
+
+test("createTodo with a type the repo no longer has is a typed 400", async () => {
+  await assert.rejects(
+    () =>
+      templated.createTodo(TEMPLATED_REPO, {
+        title: "x",
+        body: "",
+        anchor: { ...anchorOf("order-to-cash"), type: { id: "gone.yml", name: "Gone" } },
+        author: "petra",
+        fields: {},
+      }),
+    (e: unknown) => e instanceof AppError && e.code === "todos/unknown-type" && e.status === 400,
+  );
+});
+
+test("listTodoTypes: concurrent callers share one read, and a failed read is not remembered", async () => {
+  let reads = 0;
+  let failNext = true;
+  const counted = createGitHubIssueTracker({
+    apiUrl: STUB_URL,
+    tokenFor: async () => {
+      reads++;
+      if (failNext) {
+        failNext = false;
+        throw new Error("token service down");
+      }
+      return "t";
+    },
+  });
+  await assert.rejects(() => counted.listTodoTypes(TEMPLATED_REPO), /token service down/);
+  const [a, b] = await Promise.all([counted.listTodoTypes(TEMPLATED_REPO), counted.listTodoTypes(TEMPLATED_REPO)]);
+  assert.deepEqual(a, b);
+  assert.equal(reads, 2, "one failed read, then ONE read for both callers");
+});

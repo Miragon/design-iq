@@ -39,6 +39,9 @@ function tracker(todos: Record<string, number>) {
   });
   const issues: IssueTracker = {
     id: "fake",
+    async listTodoTypes() {
+      return { types: [], blankAllowed: true };
+    },
     async createTodo() {
       throw new Error("unused");
     },

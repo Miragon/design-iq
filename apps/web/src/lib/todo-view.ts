@@ -21,3 +21,6 @@ export const emptyTodoMessage = (filtered: boolean): string =>
 
 export const openInTrackerTitle = (id: string): string => `Open #${id} in the tracker`;
 export const closeInTrackerTitle = (id: string): string => `Close #${id} in the tracker`;
+
+/** the issue template a todo was filed with; null for a plain todo */
+export const todoTypeLabel = (todo: TodoWire): string | null => todo.anchor?.type?.name ?? null;

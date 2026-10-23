@@ -39,6 +39,15 @@ import {
   TrackerRateLimited,
 } from "../../ports/issue-tracker.ts";
 import { githubApi } from "./app-auth.ts";
+import {
+  type IssueTemplateSet,
+  issueTemplateSet,
+  renderTemplateBody,
+  TEMPLATE_FILE,
+  type TemplateFile,
+} from "./issue-templates.ts";
+
+const TEMPLATE_DIR = ".github/ISSUE_TEMPLATE";
 
 /** attribution line appended to every created issue (items are bot-authored) */
 export const attributionLine = (author: string): string => `_Created from the designIQ live model by @${author}_`;
@@ -157,6 +166,9 @@ export interface GitHubIssueRowsDeps {
   /** the live host's public URL — when set, issue bodies carry 📍 deep links
    * into the web app's process editor for every anchored element */
   publicUrl?: string;
+  /** how long a repo's issue templates are reused before they are read again */
+  templateTtlMs?: number;
+  now?: () => number;
 }
 
 /** the slice of GitHub's issue wire shape this adapter maps */
@@ -207,6 +219,62 @@ export function createGitHubIssueTracker(deps: GitHubIssueRowsDeps): IssueTracke
     await raise(res, repoFullName, `label '${label.name}' creation in ${repoFullName}`);
   }
 
+  const templateTtlMs = deps.templateTtlMs ?? 5 * 60_000;
+  const now = deps.now ?? Date.now;
+  /** per repo: the templates read last (or being read), shared by concurrent callers */
+  const templateCache = new Map<string, { at: number; set: Promise<IssueTemplateSet> }>();
+
+  /** a refused template read — in its own words: it is no missing Issues permission */
+  async function unreadable(res: Response, repoFullName: string, path: string): Promise<never> {
+    throw new Error(`reading ${path} of ${repoFullName} → ${res.status} ${await res.text()}`);
+  }
+
+  async function readTemplateFiles(token: string, repoFullName: string): Promise<TemplateFile[]> {
+    const listing = await rest(token, `/repos/${repoFullName}/contents/${TEMPLATE_DIR}`);
+    if (listing.status === 404) {
+      await listing.text();
+      return [];
+    }
+    if (!listing.ok) await unreadable(listing, repoFullName, TEMPLATE_DIR);
+    const entries = (await listing.json()) as Array<{ type: string; name: string; path: string }>;
+    const files = Array.isArray(entries) ? entries.filter((e) => e.type === "file" && TEMPLATE_FILE.test(e.name)) : [];
+    return Promise.all(
+      files.map(async (file) => {
+        const res = await rest(token, `/repos/${repoFullName}/contents/${file.path}`, {
+          headers: { accept: "application/vnd.github.raw+json" },
+        });
+        if (!res.ok) await unreadable(res, repoFullName, file.path);
+        return { name: file.name, text: await res.text() };
+      }),
+    );
+  }
+
+  function templatesOf(repoFullName: string): Promise<IssueTemplateSet> {
+    const cached = templateCache.get(repoFullName);
+    if (cached && now() - cached.at < templateTtlMs) return cached.set;
+    const set = deps
+      .tokenFor(repoFullName)
+      .then((token) => readTemplateFiles(token, repoFullName))
+      .then(issueTemplateSet);
+    templateCache.set(repoFullName, { at: now(), set });
+    // a failed read is not remembered — the next caller tries again
+    set.catch(() => {
+      if (templateCache.get(repoFullName)?.set === set) templateCache.delete(repoFullName);
+    });
+    return set;
+  }
+
+  /** the template's labels the repo HAS, in the repo's spelling — GitHub
+   *  would create the others, and a todo must not invent a repo's labels */
+  async function existingLabels(token: string, repoFullName: string, wanted: string[]): Promise<string[]> {
+    if (wanted.length === 0) return [];
+    const rows = (await paginate(ghApi, `/repos/${repoFullName}/labels?per_page=100`, { token })) as Array<{
+      name: string;
+    }>;
+    const byLowerName = new Map(rows.map((row) => [row.name.toLowerCase(), row.name]));
+    return wanted.map((l) => byLowerName.get(l.toLowerCase())).filter((l): l is string => l !== undefined);
+  }
+
   function toTodo(issue: GitHubIssueRow): Todo {
     const body = issue.body ?? "";
     return {
@@ -225,8 +293,23 @@ export function createGitHubIssueTracker(deps: GitHubIssueRowsDeps): IssueTracke
   return {
     id: "github-issues",
 
+    async listTodoTypes(repoFullName) {
+      const set = await templatesOf(repoFullName);
+      return { types: set.templates.map((t) => t.type), blankAllowed: set.blankAllowed };
+    },
+
     async createTodo(repoFullName, input) {
       const token = await deps.tokenFor(repoFullName);
+      const typeId = input.anchor.type?.id;
+      const template = typeId
+        ? (await templatesOf(repoFullName)).templates.find((t) => t.type.id === typeId)
+        : undefined;
+      if (typeId && !template) {
+        throw new AppError("todos/unknown-type", `${repoFullName} has no issue template '${typeId}' (any more)`, {
+          status: 400,
+          expose: true,
+        });
+      }
       await ensureLabel(token, repoFullName, {
         name: TODO_LABEL,
         color: "fa8100",
@@ -237,12 +320,17 @@ export function createGitHubIssueTracker(deps: GitHubIssueRowsDeps): IssueTracke
         color: "ededed",
         description: `designIQ process ${input.anchor.process}`,
       });
+      const text = template ? renderTemplateBody(template, input.fields ?? {}) : input.body;
+      const templateLabels = template ? await existingLabels(token, repoFullName, template.labels) : [];
       const res = await rest(token, `/repos/${repoFullName}/issues`, {
         method: "POST",
         body: JSON.stringify({
           title: input.title,
-          body: todoBody(input, deps.publicUrl ? { publicUrl: deps.publicUrl, repoFullName } : undefined),
-          labels: [TODO_LABEL, processLabel(input.anchor.process)],
+          body: todoBody(
+            { ...input, body: text },
+            deps.publicUrl ? { publicUrl: deps.publicUrl, repoFullName } : undefined,
+          ),
+          labels: [...new Set([TODO_LABEL, processLabel(input.anchor.process), ...templateLabels])],
         }),
       });
       if (!res.ok) await raise(res, repoFullName, `issue creation in ${repoFullName}`);

@@ -54,8 +54,12 @@ cross-repo bleed) and per-(user,repo) authorization.
 `GET/POST /api/repos/:fullName/todos` (+ `POST …/todos/:id/close`) stores todos as **GitHub
 Issues in the content repo** (label `todo` + `process:<id>`, the anchor block from
 `@designiq/contracts/todo-anchor` embedded in the issue body) — never in a platform database.
-The MCP twins are `list_todos` / `create_todo` / `close_todo` (below), so agents and the
-embedded modeler widget file and complete the same items humans see in the web app. Reads
+The MCP twins are `list_todos` / `list_todo_types` / `create_todo` / `close_todo` (below), so agents and the
+embedded modeler widget file and complete the same items humans see in the web app.
+`GET /api/repos/:fullName/todo-types` lists the types a todo is filed with: the repo's issue
+templates (`.github/ISSUE_TEMPLATE/`, read through the contents API, cached five minutes) and/or
+the built-in `Todo`. `POST …/todos` takes `type` + `fields`; a missing required field is a 400
+`todos/fields-required` naming every field. Reads
 return the author's own text (`body`) with that platform markup stripped again — it is what
 the modeler widget's "Implement" prompt hands to the assistant.
 Issue bodies deep-link every anchored element straight into the web app's process editor
@@ -78,7 +82,7 @@ tools over the **live** models: `list_repos`, `list_models`, `get_view`, `list_p
 `mint_ws_ticket` — see [apps/web/README.md](../web/README.md)), `create_process`,
 `save_bpmn_xml`, `release_process`, the
 notation-generic `get_model_content` / `validate_model` / `create_model` / `save_model_content` — plus
-`list_todos` / `create_todo` / `close_todo` **when a tracker is configured** (no
+`list_todos` / `list_todo_types` / `create_todo` / `close_todo` **when a tracker is configured** (no
 credentials → absent from `tools/list`, never a call that fails), and the semantic BPMN tools
 `get_process_outline` / `edit_process` / `layout_process` **with `LIVE_MCP_BPMN_EDIT=1`** (engine
 `@miragon/bpmn-cli`, `src/application/bpmn-edit.ts`, ADR 0009). The repo is a **tool

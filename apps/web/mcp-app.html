@@ -141,8 +141,11 @@
             <span id="todo-error-text"></span>
             <button id="todo-retry" class="pb" type="button" hidden>Try again</button>
           </div>
-          <form id="todo-form" class="panel-form" hidden aria-label="Add todo">
+          <form id="todo-form" class="panel-form" hidden aria-label="Add todo" novalidate>
             <div id="todo-anchor" class="todo-anchor"></div>
+            <!-- the repo's todo types (#313): a picker only when there is a choice -->
+            <select id="todo-type" class="input" aria-label="Todo type" hidden></select>
+            <p id="todo-type-name" class="muted" hidden></p>
             <input
               id="todo-title"
               class="input"
@@ -158,6 +161,8 @@
               aria-label="Description"
               placeholder="Description (optional)"
             ></textarea>
+            <!-- a template's fields, built from its type (mcp-app/todos.ts) -->
+            <div id="todo-fields" class="todo-fields" hidden></div>
             <p id="todo-form-error" class="form-error" role="alert" hidden></p>
             <div class="form-actions">
               <button type="button" id="todo-cancel" class="pb">Cancel</button>

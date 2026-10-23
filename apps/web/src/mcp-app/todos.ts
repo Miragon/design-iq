@@ -19,18 +19,38 @@
  * the feature away for good (isMissingTool), any other failure is a real
  * tracker error, shown verbatim (permission messages are actionable).
  *
+ * The form files a todo with one of the repo's types (#313, list_todo_types,
+ * read after the first list): a picker when there is a choice, the built-in
+ * `Todo` as the title + description it always was, a template as its fields,
+ * flagged inline by the check the server runs too (lib/todo-form.ts).
+ *
  * Where each outcome lands: a load or close failure → ONE callout (load: with
  * Try again); a create failure → under the form; Implement and a blocked
  * tracker link → toasts; a write tool turning out absent → the read-only foot
  * line, write actions removed. The modeler itself is never blocked by any of it.
  */
 import type { TodoElementWire, TodoWire } from "@designiq/contracts/live-host";
+import {
+  BUILT_IN_TODO_TYPE,
+  isBuiltInTodoType,
+  type TodoField,
+  type TodoFieldValues,
+  type TodoType,
+} from "@designiq/contracts/todo-types";
 import type { App } from "@modelcontextprotocol/ext-apps";
 
 import { attachTodoCanvas, type TodoCanvas } from "@/lib/todo-canvas";
-import { closeInTrackerTitle, elementLabel, openInTrackerTitle } from "@/lib/todo-view";
+import {
+  defaultTodoType,
+  fieldFlags,
+  formFields,
+  initialFieldValues,
+  todoTypeRequest,
+  toggleOption,
+} from "@/lib/todo-form";
+import { closeInTrackerTitle, elementLabel, openInTrackerTitle, todoTypeLabel } from "@/lib/todo-view";
 
-import { closeTodo, createTodo, isMissingTool, listTodos } from "./bridge";
+import { closeTodo, createTodo, isMissingTool, listTodos, listTodoTypes } from "./bridge";
 import type { PanelHandle, WidgetChrome } from "./chrome/contracts";
 import { h } from "./chrome/dom";
 import {
@@ -46,10 +66,13 @@ import {
   implementSent,
   linkBlocked,
   loadError,
+  LOADING_TYPES,
   READONLY_FOOT,
+  TITLE_REQUIRED,
   todoListView,
   todoMeta,
   todosBadge,
+  typesNotLoaded,
   WHOLE_PROCESS,
   WHOLE_PROCESS_TITLE,
 } from "./core/todos-view";
@@ -87,6 +110,9 @@ export function mountTodos(
   const anchorEl = el<HTMLDivElement>("todo-anchor");
   const titleInput = el<HTMLInputElement>("todo-title");
   const bodyInput = el<HTMLTextAreaElement>("todo-body");
+  const typeSelect = el<HTMLSelectElement>("todo-type");
+  const typeName = el<HTMLParagraphElement>("todo-type-name");
+  const fieldsEl = el<HTMLDivElement>("todo-fields");
   const formError = el<HTMLParagraphElement>("todo-form-error");
   const submitBtn = el<HTMLButtonElement>("todo-submit");
   const listEl = el<HTMLDivElement>("todo-list");
@@ -112,6 +138,14 @@ export function mountTodos(
   let canWrite = !opts.readonly; // flipped off if create/close turn out absent
   let keepOnOpen = false; // a badge or a collapsed sheet reopens as it was
   let epoch = 0; // bumps on load() — stale async results bail out
+  let types: TodoType[] = []; // the repo's todo types; none yet → the built-in
+  let typesRequested = false;
+  let typesError: string | undefined; // the last list_todo_types failure
+  let formType: TodoType = BUILT_IN_TODO_TYPE;
+  let values: TodoFieldValues = {};
+  let submitted = false; // flags show once a submit was tried
+  /** a template field's control and the flag line under it */
+  const fieldControls = new Map<string, { control: HTMLElement; flag: HTMLElement }>();
 
   const panel: PanelHandle = chrome.registerPanel({
     id: "todos",
@@ -179,10 +213,12 @@ export function mountTodos(
     link.onclick = () => void openTracker(todo.url);
     row.append(h("div", { class: "todo-head" }, h("span", { class: "todo-title" }, todo.title), link));
     // the description in two lines — it rides along in full when the todo is
-    // handed to the assistant
-    if (todo.body.trim()) row.append(h("p", { class: "todo-body" }, todo.body.trim()));
+    // handed to the assistant; a filed form's body is its sections, the type says more
+    const typeLabel = todoTypeLabel(todo);
+    if (todo.body.trim() && !typeLabel) row.append(h("p", { class: "todo-body" }, todo.body.trim()));
 
     const chips = h("div", { class: "todo-chips" });
+    if (typeLabel) chips.append(chip(typeLabel, `Filed as ${typeLabel}`));
     const elements = todo.anchor?.elements ?? [];
     if (elements.length === 0) chips.append(whole());
     for (const element of elements) {
@@ -330,6 +366,116 @@ export function mountTodos(
 
   // ── the inline form ───────────────────────────────────────────────────────
 
+  function fieldNode(field: TodoField, index: number): HTMLElement {
+    const id = `todo-field-${index}`;
+    const flag = h("p", { class: "form-error", id: `${id}-flag` });
+    flag.hidden = true;
+    const isList = field.kind === "checkboxes" || (field.kind === "dropdown" && field.multiple);
+    const label = h(
+      isList ? "span" : "label",
+      { class: "field-label", id: `${id}-label`, ...(isList ? {} : { for: id }) },
+      field.label,
+      field.required || field.kind === "checkboxes" ? undefined : h("span", { class: "muted" }, " (optional)"),
+    );
+    let control: HTMLElement;
+    if (isList) {
+      control = h("div", { class: "field-options", role: "group", id, "aria-labelledby": `${id}-label` });
+      for (const option of field.options) {
+        const box = h("input", { type: "checkbox" });
+        const current = values[field.id];
+        box.checked = Array.isArray(current) && current.includes(option.label);
+        box.onchange = () => setValue(field.id, toggleOption(values[field.id], option.label, box.checked));
+        control.append(
+          h("label", { class: "field-option" }, box, option.required ? `${option.label} (required)` : option.label),
+        );
+      }
+    } else if (field.kind === "dropdown") {
+      const select = h(
+        "select",
+        { class: "input", id },
+        h("option", { value: "" }, "Choose…"),
+        ...field.options.map((o) => h("option", { value: o.label }, o.label)),
+      );
+      select.value = typeof values[field.id] === "string" ? (values[field.id] as string) : "";
+      select.onchange = () => setValue(field.id, select.value);
+      control = select;
+    } else {
+      const input = h(field.kind === "textarea" ? "textarea" : "input", { class: "input", id });
+      if (input instanceof HTMLTextAreaElement) input.rows = 3;
+      if (field.placeholder) input.placeholder = field.placeholder;
+      input.value = typeof values[field.id] === "string" ? (values[field.id] as string) : "";
+      input.oninput = () => setValue(field.id, input.value);
+      control = input;
+    }
+    fieldControls.set(field.id, { control, flag });
+    const hint = field.description ? h("p", { class: "muted" }, field.description) : undefined;
+    return h("div", { class: "todo-field" }, label, hint, control, flag);
+  }
+
+  function setValue(id: string, value: string | string[]): void {
+    values = { ...values, [id]: value };
+    renderFlags();
+  }
+
+  /** a field's flag tracks its value once a submit was tried */
+  function renderFlags(): void {
+    const flags = submitted ? fieldFlags(formType, values) : {};
+    for (const [id, { control, flag }] of fieldControls) {
+      const text = flags[id];
+      flag.hidden = !text;
+      flag.textContent = text ?? "";
+      if (text) {
+        control.setAttribute("aria-invalid", "true");
+        control.setAttribute("aria-describedby", flag.id);
+      } else {
+        control.removeAttribute("aria-invalid");
+        control.removeAttribute("aria-describedby");
+      }
+    }
+  }
+
+  /** the form shows `type`: the built-in as title + description, a template as its fields */
+  function chooseType(type: TodoType): void {
+    formType = type;
+    values = initialFieldValues(type);
+    submitted = false;
+    const builtIn = isBuiltInTodoType(type);
+    bodyInput.hidden = !builtIn;
+    fieldsEl.hidden = builtIn;
+    fieldControls.clear();
+    fieldsEl.replaceChildren(...(builtIn ? [] : formFields(type).map(fieldNode)));
+    typeSelect.hidden = types.length < 2;
+    typeSelect.value = type.id;
+    const onlyTemplate = types.length === 1 && !builtIn;
+    typeName.hidden = !onlyTemplate;
+    typeName.textContent = onlyTemplate ? `Filed as ${type.name}` : "";
+  }
+
+  /** the repo's todo types, once per document — until they are there, the built-in */
+  async function loadTypes(): Promise<void> {
+    if (!ref || typesRequested || !canWrite) return;
+    typesRequested = true;
+    const mine = epoch;
+    try {
+      const result = await listTodoTypes(app, ref.repo);
+      if (mine !== epoch) return;
+      showTypes(result.types);
+    } catch (err) {
+      if (mine !== epoch) return;
+      // a host without the tool files plain todos only
+      if (isMissingTool(err, "list_todo_types")) return showTypes([BUILT_IN_TODO_TYPE]);
+      typesRequested = false; // the next refresh asks again
+      typesError = (err as Error).message;
+    }
+  }
+
+  function showTypes(next: TodoType[]): void {
+    types = next;
+    typesError = undefined;
+    typeSelect.replaceChildren(...types.map((t) => h("option", { value: t.id }, t.name)));
+    chooseType(defaultTodoType(types) ?? BUILT_IN_TODO_TYPE);
+  }
+
   function openForm(): void {
     if (!canWrite) return;
     form.hidden = false;
@@ -423,6 +569,7 @@ export function mountTodos(
       discovered = true;
       failed = false;
       error = undefined;
+      void loadTypes();
     } catch (err) {
       if (mine !== epoch) return;
       if (isMissingTool(err, "list_todos")) {
@@ -470,18 +617,47 @@ export function mountTodos(
 
   async function submit(): Promise<void> {
     const title = titleInput.value.trim();
-    if (!ref || creating || title.length === 0) return;
+    if (!ref || creating) return;
+    formError.hidden = true;
+    titleInput.removeAttribute("aria-invalid");
+    if (types.length === 0) {
+      formError.textContent = typesError ? typesNotLoaded(typesError) : LOADING_TYPES;
+      formError.hidden = false;
+      void loadTypes();
+      return;
+    }
+    if (title.length === 0) {
+      formError.textContent = TITLE_REQUIRED;
+      formError.hidden = false;
+      titleInput.setAttribute("aria-invalid", "true");
+      titleInput.focus();
+      return;
+    }
+    const builtIn = isBuiltInTodoType(formType);
+    if (!builtIn) {
+      submitted = true;
+      renderFlags();
+      const flags = fieldFlags(formType, values);
+      const first = formFields(formType).find((f) => flags[f.id]);
+      if (first) {
+        const control = fieldControls.get(first.id)?.control;
+        (control?.querySelector("input") ?? control)?.focus();
+        return;
+      }
+    }
     const mine = epoch;
     setCreating(true);
     formError.hidden = true;
     try {
       // the anchor is the selection at SUBMIT time — the preview above the
       // form tracks it live, so what the user last saw is what gets anchored
-      const { todo } = await createTodo(app, ref, { title, body: bodyInput.value.trim(), elements: selection });
+      const request = todoTypeRequest(formType, builtIn ? { description: bodyInput.value } : values);
+      const { todo } = await createTodo(app, ref, { title, ...request, elements: selection });
       if (mine !== epoch) return;
       todos = [todo, ...todos];
       titleInput.value = "";
       bodyInput.value = "";
+      chooseType(formType);
       closeForm(true);
       void app.updateModelContext({
         content: [{ type: "text", text: `User filed todo #${todo.id} "${todo.title}" from the modeler widget.` }],
@@ -510,6 +686,7 @@ export function mountTodos(
   filterChip.onclick = () => clearFilter();
   el<HTMLButtonElement>("todo-filter-clear").onclick = () => clearFilter();
   newBtn.onclick = () => (form.hidden ? openForm() : void closeForm(true));
+  typeSelect.onchange = () => chooseType(types.find((t) => t.id === typeSelect.value) ?? formType);
   el<HTMLButtonElement>("todo-cancel").onclick = () => void closeForm(true);
   form.onsubmit = (e) => {
     e.preventDefault();
@@ -529,6 +706,9 @@ export function mountTodos(
     closing.clear();
     sending.clear();
     formError.hidden = true;
+    types = [];
+    typesRequested = false;
+    chooseType(BUILT_IN_TODO_TYPE);
     closeForm(false);
     renderAnchor();
     render();

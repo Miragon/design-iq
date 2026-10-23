@@ -8,7 +8,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { encodeAnchor, parseAnchor, stripAnchor, type TodoAnchor } from "@designiq/contracts/todo-anchor";
+import {
+  encodeAnchor,
+  parseAnchor,
+  replaceAnchor,
+  stripAnchor,
+  type TodoAnchor,
+} from "@designiq/contracts/todo-anchor";
 
 test("roundtrip: encode → parse yields the same anchor", () => {
   const anchor: TodoAnchor = {
@@ -49,6 +55,35 @@ test("element without a name round-trips as name null", () => {
     processVersion: null,
   };
   assert.deepEqual(parseAnchor(encodeAnchor(anchor))?.elements, [{ id: "Task_X", name: null }]);
+});
+
+test("the type round-trips, survives a re-anchoring and an anchor without it has no type key", () => {
+  const typed: TodoAnchor = {
+    process: "order-to-cash",
+    file: null,
+    elements: [],
+    processVersion: null,
+    type: { id: "bug_report", name: "Bug report" },
+  };
+  const body = `${encodeAnchor(typed)}\n\n### Steps\n\nClick`;
+  assert.deepEqual(parseAnchor(body), typed);
+  const moved = replaceAnchor(body, { ...parseAnchor(body)!, process: "order-intake" });
+  assert.deepEqual(parseAnchor(moved)?.type, typed.type);
+  const plain = parseAnchor(encodeAnchor({ ...typed, type: undefined }))!;
+  assert.ok(!("type" in plain), "a built-in todo parses exactly as before");
+});
+
+test("a type id or name with pipes/newlines is flattened at encode time", () => {
+  const anchor: TodoAnchor = {
+    process: "p",
+    file: null,
+    elements: [],
+    processVersion: null,
+    type: { id: "odd|id", name: "Bug\nreport" },
+  };
+  assert.deepEqual(parseAnchor(encodeAnchor(anchor))?.type, { id: "odd id", name: "Bug report" });
+  const closing = parseAnchor(`${encodeAnchor({ ...anchor, type: { id: "x", name: "Bug --> triage" } })}\n\ntext`);
+  assert.deepEqual(closing?.type, { id: "x", name: "Bug -> triage" }, "a name cannot close the comment early");
 });
 
 test("missing/unclosed block yields null", () => {

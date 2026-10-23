@@ -28,6 +28,7 @@ import {
   emptyTodoMessage,
   openInTrackerTitle,
   todosForElement,
+  todoTypeLabel,
 } from "@/lib/todo-view";
 
 function TodoItem({
@@ -42,6 +43,7 @@ function TodoItem({
   onRevealElement: (elementId: string) => void;
   onCloseTodo: () => void;
 }) {
+  const typeLabel = todoTypeLabel(todo);
   return (
     <div className={cn("rounded-md border p-2.5", closing && "pointer-events-none opacity-50")}>
       <div className="flex items-start gap-2">
@@ -68,6 +70,11 @@ function TodoItem({
         </div>
       )}
       <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 text-xs">
+        {typeLabel && (
+          <Badge variant="secondary" className="max-w-32" title={`Filed as ${typeLabel}`}>
+            <span className="truncate">{typeLabel}</span>
+          </Badge>
+        )}
         <span>#{todo.id}</span>
         {todo.assignees.length > 0 && <span>{todo.assignees.map((a) => `@${a}`).join(", ")}</span>}
         <Button

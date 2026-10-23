@@ -7,6 +7,7 @@
  */
 import type { GitUserWire } from "./common.ts";
 import type { TodoAnchor, TodoElement } from "./todo-anchor.ts";
+import type { TodoFieldValues, TodoType } from "./todo-types.ts";
 
 /** one model file of a process — each opens as its own live document */
 export interface ModelRef {
@@ -570,10 +571,18 @@ export interface TodoWire {
   createdAt: string;
 }
 
+/** GET /api/repos/:fullName/todo-types — the forms a todo can be filed with:
+ *  the repo's issue templates and/or the built-in `Todo` (./todo-types.ts) */
+export type TodoTypeWire = TodoType;
+
 /** POST /api/repos/:fullName/todos — response is the created TodoWire */
 export interface CreateTodoBody {
   title: string;
   body?: string;
+  /** a TodoTypeWire id — omitted: the built-in `Todo` */
+  type?: string;
+  /** the type's field values, by field id (validateTodoFields) */
+  fields?: TodoFieldValues;
   anchor: {
     process: string;
     file?: string;

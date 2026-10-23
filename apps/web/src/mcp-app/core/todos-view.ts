@@ -107,6 +107,9 @@ export const anchorTitle = (el: { id: string; name?: string | null }, gone = fal
 export const loadError = (message: string): string => `Could not load todos: ${message}`;
 export const closeError = (id: string, message: string): string => `Could not close #${id}: ${message}`;
 export const createError = (message: string): string => `Could not create the todo: ${message}`;
+export const TITLE_REQUIRED = "A title is required.";
+export const LOADING_TYPES = "Loading the todo types, try again in a moment.";
+export const typesNotLoaded = (message: string): string => `Could not load the todo types: ${message}`;
 
 /** Implement went through — the answer lands in the chat (the widget steps back inline) */
 export const implementSent = (id: string): ToastSpec => ({

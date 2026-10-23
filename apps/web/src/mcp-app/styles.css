@@ -231,10 +231,60 @@ button.chip:hover {
   color: var(--destructive);
   font-size: 12px;
   line-height: 1.45;
+  white-space: pre-line;
 }
 
 .form-error[hidden] {
   display: none;
+}
+
+/* a template's fields (#313): label, hint, control, flag */
+.todo-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.todo-fields[hidden] {
+  display: none;
+}
+
+.todo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.todo-field .muted,
+#todo-type-name {
+  margin: 0;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.field-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.field-option input {
+  margin: 1px 0 0;
+  accent-color: var(--primary);
+}
+
+.todo-field [aria-invalid="true"] {
+  border-color: var(--destructive);
 }
 
 /* rows are cards: title, the 2-line body, the anchor chips, the meta + actions */

@@ -13,11 +13,15 @@
  *   file: processes/order-to-cash/order-to-cash.bpmn
  *   version: 1.4.0
  *   element: Task_CheckCredit | Bonität prüfen
+ *   type: bug_report | Bug report
  *   -->
  *
  * `element:` repeats per anchored element; the part after `|` is the name
  * SNAPSHOT at creation time (elements get renamed — the id stays the anchor,
  * the name keeps the item readable when the id no longer resolves).
+ * `type:` names the issue template the todo was filed with, the same way; a
+ * todo without it is a built-in `Todo` (#313). Labels can be edited by hand,
+ * the block cannot drift with them.
  * Parsing is tolerant: unknown lines are skipped, a missing block yields null.
  */
 
@@ -35,6 +39,14 @@ export interface TodoAnchor {
   elements: TodoElement[];
   /** process version at creation time, if known (optional — no metadata on the slim contract) */
   processVersion: string | null;
+  /** the issue template it was filed with; absent = the built-in `Todo` */
+  type?: TodoTypeRef;
+}
+
+export interface TodoTypeRef {
+  id: string;
+  /** display-name snapshot at creation time */
+  name: string;
 }
 
 // FROZEN — the marker never follows a product rename. It opens the anchor
@@ -45,14 +57,20 @@ export interface TodoAnchor {
 const OPEN = "<!-- bpmiq:todo v1"; // legacy-name-ok: stored in customer issue bodies
 const CLOSE = "-->";
 
-/** newlines/pipe would break the line format — flatten them out of names */
-const cleanName = (name: string | null): string => (name ?? "").replace(/[\r\n|]+/g, " ").trim();
+/** newlines/pipe would break the line format and `--` could end the HTML
+ *  comment early — flatten them out of names */
+const cleanName = (name: string | null): string =>
+  (name ?? "")
+    .replace(/[\r\n|]+/g, " ")
+    .replace(/-{2,}/g, "-")
+    .trim();
 
 export function encodeAnchor(anchor: TodoAnchor): string {
   const lines = [OPEN, `process: ${anchor.process}`];
   if (anchor.file) lines.push(`file: ${anchor.file}`);
   if (anchor.processVersion) lines.push(`version: ${anchor.processVersion}`);
   for (const el of anchor.elements) lines.push(`element: ${el.id} | ${cleanName(el.name)}`);
+  if (anchor.type) lines.push(`type: ${cleanName(anchor.type.id)} | ${cleanName(anchor.type.name)}`);
   lines.push(CLOSE);
   return lines.join("\n");
 }
@@ -94,7 +112,12 @@ export function parseAnchor(text: string): TodoAnchor | null {
     if (key === "process") anchor.process = value;
     else if (key === "file") anchor.file = value;
     else if (key === "version") anchor.processVersion = value;
-    else if (key === "element") {
+    else if (key === "type") {
+      const pipe = value.indexOf(" |");
+      const id = (pipe === -1 ? value : value.slice(0, pipe)).trim();
+      const name = pipe === -1 ? "" : value.slice(pipe + 2).trim();
+      if (id) anchor.type = { id, name: name || id };
+    } else if (key === "element") {
       const pipe = value.indexOf(" | ");
       if (pipe === -1) anchor.elements.push({ id: value.replace(/ \|$/, "").trim(), name: null });
       else anchor.elements.push({ id: value.slice(0, pipe).trim(), name: value.slice(pipe + 3).trim() || null });
