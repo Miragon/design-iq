@@ -15,9 +15,16 @@ import { fitViewbox } from "@miragon/modeler-shell/core";
 import * as Y from "yjs";
 
 import type { PresenceSurface, RemotePresence } from "../src/lib/presence-canvas.ts";
+import type { Insets } from "../src/mcp-app/core/engine.ts";
+import type { Box } from "../src/mcp-app/engines/fit.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
-import type { LoadedMiragonRenderer, MiragonModeler, MiragonRendererSpec } from "../src/notations/miragon/spec.ts";
+import type {
+  LoadedMiragonRenderer,
+  MiragonModeler,
+  MiragonMountOptions,
+  MiragonRendererSpec,
+} from "../src/notations/miragon/spec.ts";
 import type { EditorContext } from "../src/notations/registry.ts";
 import { closeDom, host } from "./renderer-dom.ts";
 
@@ -391,12 +398,16 @@ test("each spec hands the chrome's insets to its renderer as the contract's free
   }
 });
 
-test("with the chrome's insets the view after an import is the host's to set, without them the renderer fits it", async () => {
+test("a host that fits itself (the widget's insets, the SPA's fitOnImport: false) sets the view after an import; by default the renderer fits it", async () => {
+  const mounts: Array<[where: string, mount: MiragonMountOptions, fitsItself: boolean]> = [
+    ["the widget", { insets: () => ({ top: 56, right: 0, bottom: 0, left: 300 }) }, true],
+    ["the SPA", { fitOnImport: false }, true],
+    ["no host option", {}, false],
+  ];
   for (const [id, text] of DOCUMENTS) {
     const [spec, renderer] = await load(id);
     for (const readonly of [false, true]) {
-      for (const fitsItself of [true, false]) {
-        const mount = fitsItself ? { insets: () => ({ top: 56, right: 0, bottom: 0, left: 300 }) } : {};
+      for (const [mounted, mount, fitsItself] of mounts) {
         const modeler = readonly ? renderer.createViewer(mount) : renderer.create(mount);
         modeler.attachTo(host(spec.canvasClassName));
         await modeler.importText(text);
@@ -405,7 +416,7 @@ test("with the chrome's insets the view after an import is the host's to set, wi
         const hosts = modeler.getViewState();
         assert.notDeepEqual(hosts, ownFit, `${id}: a view of the host's own`);
         await modeler.importText(text);
-        const where = `${id}${readonly ? " viewer" : ""}, ${fitsItself ? "the widget" : "the SPA"}`;
+        const where = `${id}${readonly ? " viewer" : ""}, ${mounted}`;
         assert.deepEqual(modeler.getViewState(), fitsItself ? hosts : ownFit, where);
         modeler.destroy();
       }
@@ -413,32 +424,148 @@ test("with the chrome's insets the view after an import is the host's to set, wi
   }
 });
 
-test("Wardley in the widget: the chrome fits the plot with its axes into the free area, and the pan constraint keeps that fit", async () => {
+/** the canvas's viewbox, which diagram-js keeps to three decimals of zoom */
+type Viewbox = { x: number; y: number; width: number; height: number; scale: number };
+const viewboxOf = (modeler: MiragonModeler): Viewbox =>
+  (modeler.diagram.get("canvas") as { viewbox(): Viewbox }).viewbox();
+
+/** the view `fitViewbox` gives for `content` in the 1000×640 canvas
+ *  (renderer-dom's CLIENT_SIZE), and the content's place on screen in it */
+function assertFitted(modeler: MiragonModeler, content: Box, insets: Insets, where: string): void {
+  const fitted = fitViewbox(content, { width: 1000, height: 640 }, insets);
+  assert.ok(fitted, `${where}: a box to fit`);
+  const { x, y, scale } = viewboxOf(modeler);
+  assert.ok(Math.abs(scale - fitted.scale) < 0.001, `${where}: the zoom of the fit (${scale} against ${fitted.scale})`);
+  assert.ok(Math.abs(x - fitted.x) < 0.5 && Math.abs(y - fitted.y) < 0.5, `${where}: the position of the fit`);
+  const left = (content.x - x) * scale;
+  const top = (content.y - y) * scale;
+  assert.ok(left >= insets.left - 1 && left + content.width * scale <= 1000 - insets.right + 1, `${where}: across`);
+  assert.ok(top >= insets.top - 1 && top + content.height * scale <= 640 - insets.bottom + 1, `${where}: down`);
+}
+
+test("every renderer reports its content box (contract 1.3) in the editor and the viewer; Wardley's holds its plot without a component", async () => {
+  for (const [id, text] of DOCUMENTS) {
+    const [spec, renderer] = await load(id);
+    for (const readonly of [false, true]) {
+      const where = `${id}${readonly ? " viewer" : ""}`;
+      const modeler = readonly ? renderer.createViewer() : renderer.create();
+      assert.equal(typeof modeler.contentBounds, "function", where);
+      modeler.attachTo(host(spec.canvasClassName));
+      await modeler.importText(text);
+      const box = modeler.contentBounds?.();
+      assert.ok(box && box.width > 0 && box.height > 0, `${where}: ${JSON.stringify(box)}`);
+      modeler.destroy();
+    }
+  }
+  const [, wardley] = await load("wardley");
+  const map = wardley.create();
+  map.attachTo(host());
+  await map.importText("title Empty\n");
+  const plot = map.contentBounds?.();
+  assert.ok(plot && plot.width > 0 && plot.height > 0, "a map without components still has its plot to fit");
+  map.destroy();
+});
+
+test("every renderer in the widget: the chrome fits the renderer's content box into the free area, and the view stays there", async () => {
   const insets = { top: 120, right: 16, bottom: 56, left: 16 };
-  const [spec, renderer] = await load("wardley");
-  for (const readonly of [false, true]) {
-    const engine = mountMiragonEngine(spec, renderer, host(spec.canvasClassName), readonly, { insets: () => insets });
-    await engine.importText(MAP);
+  for (const [id, text] of DOCUMENTS) {
+    const [spec, renderer] = await load(id);
+    for (const readonly of [false, true]) {
+      const where = `${id}${readonly ? " viewer" : ""}`;
+      const engine = mountMiragonEngine(spec, renderer, host(spec.canvasClassName), readonly, { insets: () => insets });
+      await engine.importText(text);
+      // the chrome's fit runs one task after the import, and Wardley's pan
+      // constraint would pull a fit to any other box back
+      await wait(20);
+      assertFitted(engine.modeler, engine.modeler.contentBounds!()!, insets, `${where}, the import`);
+      engine.view.zoomTo(2);
+      engine.view.fit(insets, false);
+      await wait(20);
+      assertFitted(engine.modeler, engine.modeler.contentBounds!()!, insets, `${where}, the Fit button`);
+      engine.destroy();
+    }
+  }
+});
+
+test("every renderer in the SPA: the first view fits the renderer's content box beside the palette, a peer's re-import keeps it", async () => {
+  const { spaFitInsets } = await import("../src/notations/miragon/editor.ts");
+  // jsdom lays nothing out: the palette measures 0
+  const insets = spaFitInsets({ paletteBottom: 0, coveredRight: 0 });
+  for (const [id, text, peer] of DOCUMENTS) {
+    const doc = new Y.Doc();
+    const ytext = doc.getText("content");
+    ytext.insert(0, text);
+    const { modeler, destroy } = await mountLive("the SPA editor", id, ytext, doc);
+    // a failed case leaves no editor behind whose keys the next case would hear
+    try {
+      await wait(50);
+      assertFitted(modeler, modeler.contentBounds!()!, insets, `${id}, the first view`);
+      const view = (): number[] => {
+        const { x, y, scale } = viewboxOf(modeler);
+        return [x, y, scale];
+      };
+      const first = view();
+      const before = modeler.exportText();
+      doc.transact(() => {
+        ytext.delete(0, ytext.length);
+        ytext.insert(0, peer);
+      });
+      await wait(450);
+      assert.notEqual(modeler.exportText(), before, `${id}: re-imported`);
+      assert.deepEqual(view(), first, `${id}: the view stays where the first fit put it`);
+    } finally {
+      destroy();
+    }
+  }
+});
+
+test("every renderer in the SPA: ⇧1 fits the renderer's content box beside the palette", async () => {
+  const { spaFitInsets } = await import("../src/notations/miragon/editor.ts");
+  // jsdom lays nothing out: the palette measures 0
+  const insets = spaFitInsets({ paletteBottom: 0, coveredRight: 0 });
+  for (const [id, text] of DOCUMENTS) {
+    const doc = new Y.Doc();
+    const ytext = doc.getText("content");
+    ytext.insert(0, text);
+    const { modeler, destroy } = await mountLive("the SPA editor", id, ytext, doc);
+    await wait(50);
+    modeler.setViewState({ x: 4000, y: 4000, width: 500, height: 320 });
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "!", code: "Digit1", shiftKey: true, bubbles: true, cancelable: true }),
+    );
     await wait(20);
-    const diagram = engine.modeler.diagram as unknown as {
-      get(name: "canvas"): { viewbox(): { x: number; y: number; width: number; height: number; scale: number } };
-      get(name: "panConstraint"): { contentBounds(): { x: number; y: number; width: number; height: number } };
-    };
-    const content = diagram.get("panConstraint").contentBounds();
-    assert.deepEqual(content, renderer.contentBounds!(engine.modeler), "the spec's content bounds");
-    const { x, y, scale } = diagram.get("canvas").viewbox();
-    const fitted = fitViewbox(content, { width: 1000, height: 640 }, insets);
-    assert.ok(fitted);
-    const mount = readonly ? "viewer" : "editor";
-    // diagram-js keeps the zoom to three decimals
-    assert.ok(Math.abs(scale - fitted.scale) < 0.001, `${mount}: the widget's zoom`);
-    assert.ok(Math.abs(x - fitted.x) < 0.5 && Math.abs(y - fitted.y) < 0.5, `${mount}: the widget's position`);
-    // on screen, the plot and its axes sit in what the chrome leaves free
-    const left = (content.x - x) * scale;
-    const top = (content.y - y) * scale;
-    assert.ok(left >= insets.left - 1 && left + content.width * scale <= 1000 - insets.right + 1, `${mount}: across`);
-    assert.ok(top >= insets.top - 1 && top + content.height * scale <= 640 - insets.bottom + 1, `${mount}: down`);
-    engine.destroy();
+    assertFitted(modeler, modeler.contentBounds!()!, insets, id);
+    destroy();
+  }
+});
+
+test("a renderer without contentBounds (contract 1.2) fits as before: diagram-js's box around the elements", async () => {
+  const svgElement = SVGElement.prototype as unknown as { getBBox(): unknown };
+  const getBBox = svgElement.getBBox;
+  const elements = { x: -200, y: -100, width: 600, height: 400 };
+  svgElement.getBBox = () => elements;
+  try {
+    const insets = { top: 120, right: 16, bottom: 56, left: 16 };
+    for (const [id, text] of DOCUMENTS.filter(([id]) => id !== "wardley")) {
+      const [spec, renderer] = await load(id);
+      const withoutBounds = (modeler: MiragonModeler): MiragonModeler => {
+        Object.defineProperty(modeler, "contentBounds", { value: undefined });
+        return modeler;
+      };
+      const engine = mountMiragonEngine(
+        spec,
+        { ...renderer, create: (options) => withoutBounds(renderer.create(options)) },
+        host(spec.canvasClassName),
+        false,
+        { insets: () => insets },
+      );
+      await engine.importText(text);
+      await wait(20);
+      assertFitted(engine.modeler, elements, insets, id);
+      engine.destroy();
+    }
+  } finally {
+    svgElement.getBBox = getBBox;
   }
 });
 

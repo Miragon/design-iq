@@ -5,7 +5,10 @@
  * Y.Text through live-client's miragon-sync, with live presence attached.
  * The SPA's chrome sits outside the canvas (only a side panel opens over
  * its edge, on demand), so the factory gets no insets: the renderer's
- * defaults apply.
+ * defaults apply. The renderer's palette floats over the canvas, though,
+ * and the renderer's own import fit does not leave it free: the editor
+ * mounts it without one and fits the first import as ⇧1 does, beside the
+ * palette; a peer's re-import keeps the view the user has.
  * The zoom keys and ⇧1 are the MCP-App widget's (lib/chrome-keys.ts): the
  * renderers bind none, and without them Cmd/Ctrl + `+` zooms the page. A
  * renderer's own menu entries reach the shell's ⋯ menu (MountedEditor.menu),
@@ -20,8 +23,8 @@ import { handleChromeKey } from "@/lib/chrome-keys";
 import { attachPresenceCanvas } from "@/lib/presence-canvas";
 import { attachSurfaceTodoCanvas } from "@/lib/todo-surface-canvas";
 import type { ExportFile, Insets } from "@/mcp-app/core/engine";
-import { diagramView } from "@/mcp-app/engines/diagram-js";
 import { ZOOM_STEP } from "@/mcp-app/engines/fit";
+import { miragonView } from "@/mcp-app/engines/miragon";
 
 import type { EditorContext, MountedEditor } from "../registry";
 import type { LoadedMiragonRenderer, MiragonRendererSpec } from "./spec";
@@ -86,14 +89,13 @@ export function mountMiragonEditor(
   container: HTMLElement,
   ctx: EditorContext,
 ): MountedEditor {
-  const modeler = renderer.create();
+  const modeler = renderer.create({ fitOnImport: false });
   modeler.attachTo(container);
-  // before the binding: its first import may finish right away, and the view
-  // that import leaves is the one a later move is measured against
-  const view = diagramView(
-    modeler.diagram,
-    renderer.contentBounds ? { contentBounds: () => renderer.contentBounds?.(modeler) } : {},
-  );
+  const fitInsets = (): Insets =>
+    spaFitInsets({ paletteBottom: paletteBottomIn(container), coveredRight: ctx.sidePanels?.covered() ?? 0 });
+  // before the binding: its first import may finish right away, and the fit
+  // of that import is the view a later move is measured against
+  const view = miragonView(modeler, { firstFit: fitInsets });
   // todo badges, selection and reveal on the document's element ids — before
   // the binding too: the one-shot deep-link reveal waits for that first import
   const todos = attachSurfaceTodoCanvas(modeler.diagram, modeler.elements, {
@@ -121,8 +123,6 @@ export function mountMiragonEditor(
   // the live editor holds every key from document listeners while the canvas
   // is behind the source or a dialog (lib/canvas-keys), so this hears only
   // the keys meant for the canvas in front
-  const fitInsets = (): Insets =>
-    spaFitInsets({ paletteBottom: paletteBottomIn(container), coveredRight: ctx.sidePanels?.covered() ?? 0 });
   const onKey = (event: KeyboardEvent): void => {
     handleChromeKey(event, doc, {
       menuOpen: () => false,

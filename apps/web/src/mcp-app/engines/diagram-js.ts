@@ -104,7 +104,15 @@ export interface DiagramView extends ViewControls {
  */
 export function diagramView(
   instance: Pick<DiagramLike, "get" | "on" | "off">,
-  opts: { insets?: () => Insets; hasViewport?: () => boolean; contentBounds?: () => Box | undefined } = {},
+  opts: {
+    insets?: () => Insets;
+    hasViewport?: () => boolean;
+    contentBounds?: () => Box | undefined;
+    /** without `insets`: the insets the FIRST import is fitted into, for a
+     *  host that mounts its renderer without an import fit of its own and
+     *  leaves every later import's view to the live binding (the SPA) */
+    firstFit?: () => Insets;
+  } = {},
 ): DiagramView {
   const canvas = (): CanvasLike => instance.get("canvas") as CanvasLike;
   let lastFit: { x: number; y: number; scale: number } | undefined;
@@ -136,9 +144,10 @@ export function diagramView(
   const onImportStart = (): void => {
     importing = true;
   };
-  // without insets (the SPA's editors, the node suites) the renderer fits by
-  // itself on import, and the view it leaves is the first one a move is
-  // measured against: an untouched view re-fits beside a side panel
+  // without insets (the SPA's editors, the node suites) the live binding
+  // keeps the view across a re-import, and the first import's view, the
+  // chrome's first fit or the renderer's own, is the one a move is measured
+  // against: an untouched view re-fits beside a side panel
   const onImportDone = (): void => {
     if (!opts.insets) importing = false;
     clearTimeout(pendingFit);
@@ -150,6 +159,7 @@ export function diagramView(
   };
   function adoptImportView(): void {
     if (lastFit) return;
+    if (opts.firstFit && fit(opts.firstFit(), false)) return;
     const vb = canvas().viewbox(false);
     if (!vb.outer.width || !vb.outer.height) return;
     lastFit = { x: vb.x, y: vb.y, scale: vb.scale };
@@ -200,20 +210,21 @@ export function diagramView(
     frame = 0;
   }
 
-  function fit(insets: Insets, animate: boolean): void {
-    if (typingOnCanvas()) return;
+  /** false when there was nothing to fit or no room to fit it into */
+  function fit(insets: Insets, animate: boolean): boolean {
+    if (typingOnCanvas()) return false;
     const vb = canvas().viewbox(false);
     // undefined for a hidden or unlaid-out container (no size to fit into)
     // and an empty canvas (mounted, not yet imported: nothing to fit)
     const target = fitViewbox(opts.contentBounds?.() ?? vb.inner, vb.outer, insets);
-    if (!target) return;
+    if (!target) return false;
     stopAnimation();
     lastFit = { x: target.x, y: target.y, scale: target.scale };
     touched = false;
     if (!animate || typeof requestAnimationFrame !== "function") {
       write(target);
       notify();
-      return;
+      return true;
     }
     const from: ScaledViewbox = { x: vb.x, y: vb.y, width: vb.width, height: vb.height, scale: vb.scale };
     const start = performance.now();
@@ -227,6 +238,7 @@ export function diagramView(
       }
     };
     frame = requestAnimationFrame(step);
+    return true;
   }
 
   function importFit(): void {

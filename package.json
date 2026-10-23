@@ -1,6 +1,6 @@
 {
   "name": "designiq",
-  "version": "5.8.1",
+  "version": "5.9.0",
   "private": true,
   "type": "module",
   "description": "Collaborative modeling and architecture with AI — live, Git-native, with every model a file in your repo.",

@@ -12,8 +12,10 @@
  *    previews such as a Wardley resize drag never), and exportText already
  *    returns the changed document inside the listener.
  *  - L5 view state: snapshot before a RE-import, restore after it. The first
- *    import keeps the renderer's own fit (at most 100 %, clear of the chrome
- *    the host told it about), which diagram-js's fit-viewport is not.
+ *    import keeps the view it leaves: the renderer's own fit (at most 100 %,
+ *    clear of the chrome the host told it about), which diagram-js's
+ *    fit-viewport is not, or none for a host that mounts the renderer with
+ *    `fitOnImport: false` and fits the view itself.
  *  - L7 a rejected import leaves the last good canvas, and its reason reaches
  *    onImportError unchanged. That canvas's export is what a repair of a
  *    broken merge writes (rule 4). So the rule-4 pre-gate is only "not empty":

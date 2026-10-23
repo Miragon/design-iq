@@ -357,7 +357,7 @@ test("displayName: a map or board without a title line has none, not the parser'
 });
 
 test("the SPA's Miragon editors: the zoom keys and ⇧1 drive the canvas, a text field keeps them", async () => {
-  const { editor, container, modeler, renderer } = await editorOf("wardley");
+  const { editor, container, modeler } = await editorOf("wardley");
   const { spaFitInsets } = await import("../src/notations/miragon/editor.ts");
   const canvas = modeler.diagram.get("canvas") as { viewbox(): { scale: number } };
   const scale = (): number => Math.round(canvas.viewbox().scale * 1000) / 1000;
@@ -381,7 +381,7 @@ test("the SPA's Miragon editors: the zoom keys and ⇧1 drive the canvas, a text
   // (jsdom lays nothing out: the palette measures 0)
   press("!", "Digit1", { shiftKey: true });
   const fitted = fitViewbox(
-    renderer.contentBounds!(modeler)!,
+    modeler.contentBounds!()!,
     { width: 1000, height: 640 },
     spaFitInsets({ paletteBottom: 0, coveredRight: 0 }),
   );
@@ -402,13 +402,13 @@ test("the SPA's fit: 24px clear of the measured palette, the sides, the bottom a
 });
 
 test("the SPA's Miragon editors: a side panel opening re-fits a view nobody moved beside it, ⇧1 fits beside it, a moved view stays", async () => {
-  const { editor, modeler, renderer, panels } = await editorOf("wardley");
+  const { editor, modeler, panels } = await editorOf("wardley");
   const { spaFitInsets } = await import("../src/notations/miragon/editor.ts");
   const canvas = modeler.diagram.get("canvas") as { viewbox(): { x: number; scale: number } };
   const scale = (): number => Math.round(canvas.viewbox().scale * 1000) / 1000;
   const fitBeside = (coveredRight: number): number => {
     const fitted = fitViewbox(
-      renderer.contentBounds!(modeler)!,
+      modeler.contentBounds!()!,
       { width: 1000, height: 640 },
       spaFitInsets({ paletteBottom: 0, coveredRight }),
     );
@@ -435,7 +435,7 @@ test("the SPA's Miragon editors: a side panel opening re-fits a view nobody move
   const freshCanvas = fresh.modeler.diagram.get("canvas") as { viewbox(): { scale: number } };
   fresh.panels.set(320);
   const fittedFresh = fitViewbox(
-    fresh.renderer.contentBounds!(fresh.modeler)!,
+    fresh.modeler.contentBounds!()!,
     { width: 1000, height: 640 },
     spaFitInsets({ paletteBottom: 0, coveredRight: 320 }),
   );
