@@ -22,7 +22,6 @@ import type { CollaborativeModeler, CollaborativeModelerOptions, ElementsSurface
 
 import type { Insets, MenuHost } from "../../mcp-app/core/engine.ts";
 import type { ModelerMenu } from "../../mcp-app/core/menu-model.ts";
-import type { Box } from "../../mcp-app/engines/fit.ts";
 
 /** the diagram-js instance a renderer's factory wraps — STRUCTURALLY: the
  *  platform wires presence outlines and the widget's view controls to it */
@@ -48,17 +47,22 @@ export interface MiragonMountOptions {
    *  then also fits the view after every import itself. Absent (the SPA,
    *  whose chrome sits outside the canvas): the renderer's defaults apply */
   insets?: () => Insets;
+  /** false: the host sets the view after an import itself, without insets
+   *  — the SPA fits the first import beside the renderer's palette, which
+   *  the renderer's own fit does not leave free. Implied by `insets` */
+  fitOnImport?: false;
 }
 
 /**
  * The contract's factory options for a mount: the chrome's insets are the
  * free area (keyboard creation lands in it, and a renderer that constrains
  * panning keeps the host's fit where the host put it), and a host that fits
- * the view itself after every import gets no fit of the renderer's own
- * before it, so the view changes once per import.
+ * the view itself gets no fit of the renderer's own before it, so the view
+ * changes once per import.
  */
-export function contractOptions({ insets }: MiragonMountOptions = {}): CollaborativeModelerOptions {
-  return insets ? { freeArea: { insets }, fitOnImport: false } : {};
+export function contractOptions({ insets, fitOnImport }: MiragonMountOptions = {}): CollaborativeModelerOptions {
+  if (insets) return { freeArea: { insets }, fitOnImport: false };
+  return fitOnImport === false ? { fitOnImport } : {};
 }
 
 /** what a mount's menu content gets from its host */
@@ -83,11 +87,6 @@ export interface LoadedMiragonRenderer {
   /** the read-only mount (`meta.editable: false`): no command stack, never
    *  a change event */
   createViewer(options?: MiragonMountOptions): MiragonModeler;
-  /** what a host fits the view to, in diagram coordinates, where that is
-   *  more than the canvas's elements (diagram-js's content box): a fit to
-   *  the elements alone would push the rest under the chrome or out of the
-   *  frame, and a renderer that keeps a host's fit in place leaves it there */
-  contentBounds?(modeler: MiragonModeler): Box | undefined;
   /** the document's own title, for the menu header; undefined = none set */
   title?(modeler: MiragonModeler): string | undefined;
   /** the renderer's own menu content (Model, Export, Help), where its

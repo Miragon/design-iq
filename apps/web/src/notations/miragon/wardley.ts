@@ -2,12 +2,13 @@
  *  changes from the command stack only, and its export is the committed
  *  document: during a plot-resize drag or a size preview it is the map as
  *  it was before, the dropped size is the edit. The plot with its axes is
- *  content too, though it is no element: a host fits the bounds the
- *  renderer's pan constraint measures, as the renderer's own web app does.
- *  Its menu content (`mapMenu`) brings Map title…, Map size… and X-axis
- *  labels… (one undoable step each), the PNG and SVG exports and the
- *  shortcuts dialog; the map file itself is no export, it is the model. */
-import type { Modeler, PanConstraint } from "@miragon/wardley-renderer";
+ *  content too, though it is no element: the box its `contentBounds()`
+ *  reports (contract 1.3) holds it, and its pan constraint keeps a host's
+ *  fit to that box in place. Its menu content (`mapMenu`) brings Map
+ *  title…, Map size… and X-axis labels… (one undoable step each), the PNG
+ *  and SVG exports and the shortcuts dialog; the map file itself is no
+ *  export, it is the model. */
+import type { Modeler } from "@miragon/wardley-renderer";
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
 
@@ -41,7 +42,6 @@ export const spec: MiragonRendererSpec = {
     return {
       create: (mount) => createCollaborativeModeler({ ...contractOptions(mount), undoRedoKeys: true }),
       createViewer: (mount) => createCollaborativeViewer(contractOptions(mount)),
-      contentBounds: (modeler) => (modeler.diagram.get("panConstraint") as PanConstraint).contentBounds(),
       // wardley-schema-model's DEFAULT_MAP_TITLE: a map without a title line
       title: (modeler) => ownTitle(mapOf(modeler).exportMap().config.title, "Untitled Map"),
       menu(modeler, host) {
