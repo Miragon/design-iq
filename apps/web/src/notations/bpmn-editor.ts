@@ -38,7 +38,7 @@ export async function mountBpmnEditor(container: HTMLElement, ctx: EditorContext
     // malformed from the start: nothing to render, so surface the error and
     // fall back to the XML view, where the document stays editable
     ctx.onImportFailed,
-    ctx.sync,
+    { ...ctx.sync, canvasHost: container },
   );
   const todoCanvas = attachTodoCanvas(modeler as never, {
     onBadgeClick: ctx.onBadgeClick,

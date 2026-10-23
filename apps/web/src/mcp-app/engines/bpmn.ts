@@ -91,7 +91,10 @@ export const mountBpmnEngine: EngineFactory<BpmnEngine> = (container, readonly, 
       return (process?.name ?? pool?.name)?.trim() || undefined;
     },
     bindLive(ytext: Y.Text, doc: Y.Doc, hooks: LiveBindHooks): () => void {
-      const unbind = bindBpmn(instance as never, ytext, doc, hooks.onConflict, hooks.onImportError, hooks.sync);
+      const unbind = bindBpmn(instance as never, ytext, doc, hooks.onConflict, hooks.onImportError, {
+        ...hooks.sync,
+        canvasHost: container,
+      });
       // live cursors + selection outlines, the SPA's controller unchanged
       const presence = hooks.presence ? attachPresenceCanvas(instance as never, hooks.presence) : undefined;
       return () => {
