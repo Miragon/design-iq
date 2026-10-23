@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.10.0](https://github.com/Miragon/design-iq/compare/v5.9.0...v5.10.0) (2026-10-23)
+
+
+### Features
+
+* **live-host,web:** todos on every notation but DMN and Value Chain ([#275](https://github.com/Miragon/design-iq/issues/275)) ([#317](https://github.com/Miragon/design-iq/issues/317)) ([c53f1a8](https://github.com/Miragon/design-iq/commit/c53f1a80975939cd02d89b873e2b7e5de0b08a3a))
+
 ## [5.9.0](https://github.com/Miragon/design-iq/compare/v5.8.1...v5.9.0) (2026-10-23)
 
 
