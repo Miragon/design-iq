@@ -67,7 +67,7 @@ definitions live in `packages/mcp/tools.ts`, shared by two entry points:
 | `who_owns(id)`               | Who does what?                      | the BPMN lanes (roles) and the steps each contains; the pools                                                                                                       |
 | `which_processes_use(query)` | Impact: what references this?       | each process's id, derived name, role names, step names, and `callActivity` `calledElement`                                                                         |
 | `which_models_use(id)`       | Impact, across EVERY notation       | the repo-wide reference index (typed cross-model refs: calls, decides, …), incl. dangling references                                                                |
-| `list_todos(id?, notation?)` | What work is open (opt-in)?         | the content repo's issue tracker (label `todo` + `process:<id>` or `<notation>:<id>`), anchors parsed from issue bodies                                             |
+| `list_todos(id?, notation?)` | What work is open (opt-in)?         | the content repo's issue tracker (label `todo` + `<notation>:<id>`), anchors parsed from issue bodies                                                               |
 
 All tools carry `readOnlyHint` annotations, so clients may auto-approve them, and a short display
 `title` ("List models", "Get BPMN process view") that clients show people instead of the tool
@@ -366,8 +366,8 @@ on exactly that shape.
 Todos are filed on processes, Wardley Maps, Event Storming boards, Context Maps, Team
 Topologies and Markdown documents (the notation descriptor's `todos` flag in
 `@designiq/notations`); a decision or a Value Chain takes none yet (a typed 400). Model ids are
-file stems, unique per notation but not across them, so the label names the notation: a
-process keeps `process:<id>`, every other model is `<notation>:<id>` (`wardley:tea-shop`).
+file stems, unique per notation but not across them, so the label names the notation:
+`<notation>:<id>` (`bpmn:order-to-cash`, `wardley:tea-shop`).
 `create_todo` and `list_todos` take a model as the generic tools do (`id` or `path`, `notation`
 for a stem shared across notations; without it a process wins). Element ids are the ones the
 canvas reports: a process's from `get_process`, a canvas model's the node ids `get_view`

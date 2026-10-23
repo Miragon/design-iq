@@ -6,26 +6,17 @@
  * needs to understand it.
  *
  * Format v1 (line-based on purpose — this module is domain code and may not
- * depend on a YAML library). A process todo, as every todo was written before
- * the other notations got todos (#275):
+ * depend on a YAML library). The block names the model's notation and id —
+ * ids are file stems, unique per notation but not across them (a process and
+ * a Wardley Map may share one):
  *
  *   <!-- bpmiq:todo v1
- *   process: order-to-cash
+ *   notation: bpmn
+ *   model: order-to-cash
  *   file: processes/order-to-cash/order-to-cash.bpmn
  *   version: 1.4.0
  *   element: Task_CheckCredit | Bonität prüfen
  *   type: bug_report | Bug report
- *   -->
- *
- * A todo on a model of any other notation names the notation and the model
- * instead of the process — ids are file stems, unique per notation but not
- * across them (a process and a Wardley Map may share one):
- *
- *   <!-- bpmiq:todo v1
- *   notation: wardley
- *   model: order-to-cash
- *   file: processes/order-to-cash.owm
- *   element: component_payment | Payment
  *   -->
  *
  * `element:` repeats per anchored element; the part after `|` is the name
@@ -34,7 +25,8 @@
  * `type:` names the issue template the todo was filed with, the same way; a
  * todo without it is a built-in `Todo` (#313). Labels can be edited by hand,
  * the block cannot drift with them.
- * Parsing is tolerant: unknown lines are skipped, a missing block yields null.
+ * Parsing is tolerant: unknown lines are skipped; a missing block, or one
+ * without its notation or model, yields null.
  */
 
 /** the model a todo belongs to — ids are file stems, unique per notation */
@@ -52,7 +44,7 @@ export interface TodoElement {
 }
 
 export interface TodoAnchor {
-  /** the model's notation (registry id) — "bpmn" for a block that names none */
+  /** the model's notation (registry id) */
   notation: string;
   /** model id (the file stem; a process's process id) */
   model: string;
@@ -71,10 +63,6 @@ export interface TodoTypeRef {
   name: string;
 }
 
-/** the notation a block without a `notation:` line belongs to: every todo
- *  filed before #275 is a process todo */
-const DEFAULT_NOTATION = "bpmn";
-
 /** the model the anchor names */
 export const anchorModel = (anchor: Pick<TodoAnchor, "notation" | "model">): TodoModelRef => ({
   notation: anchor.notation,
@@ -85,11 +73,10 @@ export const anchorModel = (anchor: Pick<TodoAnchor, "notation" | "model">): Tod
 export const anchorsModel = (anchor: Pick<TodoAnchor, "notation" | "model">, model: TodoModelRef): boolean =>
   anchor.notation === model.notation && anchor.model === model.id;
 
-// FROZEN — the marker never follows a product rename. It opens the anchor
-// block in every todo issue already filed in customer trackers; under any
-// other spelling parseAnchor returns null for them, so those todos lose their
-// element anchor and stripAnchor leaves the raw block in the text shown to
-// people and agents. Pinned by apps/live-host/test/todo-anchor.test.ts.
+// FROZEN — the marker never follows a product rename (the rename decision,
+// ADR 0008): it opens the block in the issues todos are filed as, and the
+// repo's manual todo form pre-fills it. Pinned by
+// apps/live-host/test/todo-anchor.test.ts.
 const OPEN = "<!-- bpmiq:todo v1"; // legacy-name-ok: stored in customer issue bodies
 const CLOSE = "-->";
 
@@ -102,11 +89,7 @@ const cleanName = (name: string | null): string =>
     .trim();
 
 export function encodeAnchor(anchor: TodoAnchor): string {
-  // a process todo keeps the line every host has read since v1
-  const lines =
-    anchor.notation === DEFAULT_NOTATION
-      ? [OPEN, `process: ${anchor.model}`]
-      : [OPEN, `notation: ${anchor.notation}`, `model: ${anchor.model}`];
+  const lines = [OPEN, `notation: ${anchor.notation}`, `model: ${anchor.model}`];
   if (anchor.file) lines.push(`file: ${anchor.file}`);
   if (anchor.processVersion) lines.push(`version: ${anchor.processVersion}`);
   for (const el of anchor.elements) lines.push(`element: ${el.id} | ${cleanName(el.name)}`);
@@ -142,15 +125,15 @@ export function parseAnchor(text: string): TodoAnchor | null {
   if (start === -1) return null;
   const end = text.indexOf(CLOSE, start);
   if (end === -1) return null;
-  const anchor: TodoAnchor = { notation: DEFAULT_NOTATION, model: "", file: null, elements: [], processVersion: null };
+  const anchor: TodoAnchor = { notation: "", model: "", file: null, elements: [], processVersion: null };
   for (const raw of text.slice(start + OPEN.length, end).split("\n")) {
     const line = raw.trim();
     const sep = line.indexOf(": ");
     if (sep === -1) continue;
     const key = line.slice(0, sep);
     const value = line.slice(sep + 2).trim();
-    if (key === "process" || key === "model") anchor.model = value;
-    else if (key === "notation") anchor.notation = value || DEFAULT_NOTATION;
+    if (key === "model") anchor.model = value;
+    else if (key === "notation") anchor.notation = value;
     else if (key === "file") anchor.file = value;
     else if (key === "version") anchor.processVersion = value;
     else if (key === "type") {
@@ -164,5 +147,5 @@ export function parseAnchor(text: string): TodoAnchor | null {
       else anchor.elements.push({ id: value.slice(0, pipe).trim(), name: value.slice(pipe + 3).trim() || null });
     }
   }
-  return anchor.model ? anchor : null;
+  return anchor.notation && anchor.model ? anchor : null;
 }

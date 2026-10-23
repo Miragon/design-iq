@@ -89,7 +89,7 @@ config, which is why `Todo.id` is an opaque string and nothing in the contract a
 numbers, labels, or markdown. The anchor codec (which model of which notation, which of
 its elements) is platform domain (`@designiq/contracts/todo-anchor`); an adapter only
 decides WHERE the encoded block is stored (GitHub: the issue body) and how a listing is
-narrowed to one model (GitHub: a label per model, `process:<id>` or `<notation>:<id>`).
+narrowed to one model (GitHub: a label per model, `<notation>:<id>`).
 
 ## The rule (ADR 0003)
 

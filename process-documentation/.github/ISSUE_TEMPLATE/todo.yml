@@ -1,22 +1,22 @@
 # Manual counterpart to the canvas-created todos (the platform files those via
 # the API with the anchor block prefilled). The `todo` label is what makes an
-# issue a todo; add the `process:<id>` label so it shows up in that process's
-# panel on the canvas.
+# issue a todo; add the `<notation>:<id>` label (e.g. `bpmn:order-to-cash`) so
+# it shows up in that model's Todos panel on the canvas.
 name: Todo (model work item)
-description: File a work item on a process model — anchored todos show up on the designIQ canvas
+description: File a work item on a model. Anchored todos show up on the designIQ canvas
 labels: ["todo"]
 body:
   - type: markdown
     attributes:
       value: |
-        Todos created **from the designIQ canvas** carry their anchor automatically — this form is the
-        manual path. After submitting, also add the `process:<id>` **label** to the issue so the todo
-        appears in that process's panel.
+        Todos created **from the designIQ canvas** carry their anchor automatically; this form is the
+        manual path. After submitting, also add the `<notation>:<id>` **label** to the issue (e.g.
+        `bpmn:order-to-cash`, `wardley:tea-shop`) so the todo appears in that model's panel.
   - type: input
-    id: process
+    id: model
     attributes:
-      label: Process id
-      description: the `processes/<id>/` directory this todo belongs to
+      label: Model id
+      description: the model's file name without its extension (`order-to-cash` for `order-to-cash.bpmn`)
       placeholder: order-to-cash
     validations:
       required: true
@@ -30,10 +30,11 @@ body:
   - type: textarea
     id: anchor
     attributes:
-      label: Anchor block (optional — pins the todo to concrete BPMN elements)
-      description: Adjust ids/names and keep the comment markers — the platform parses this block.
+      label: Anchor block (optional, pins the todo to concrete elements of the model)
+      description: Adjust the notation, the model id and the elements, and keep the comment markers. The platform parses this block.
       value: |
         <!-- bpmiq:todo v1
-        process: order-to-cash
+        notation: bpmn
+        model: order-to-cash
         element: Task_CheckCredit | Check credit
         -->

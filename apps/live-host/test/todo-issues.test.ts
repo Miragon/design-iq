@@ -96,7 +96,7 @@ test("createTodo: bootstraps labels, creates the issue, returns the mapped Todo"
 
   // labels were created in the tracker
   const labels = (await (await fetch(`${STUB_URL}/repos/${REPO}/labels`)).json()) as Array<{ name: string }>;
-  assert.deepEqual(labels.map((l) => l.name).sort(), ["process:order-to-cash", "todo"]);
+  assert.deepEqual(labels.map((l) => l.name).sort(), ["bpmn:order-to-cash", "todo"]);
 });
 
 test("createTodo: a second todo for the same process tolerates already-existing labels", async () => {
@@ -162,7 +162,7 @@ test("a todo on another notation: its own label, and a process of the same id is
   const labels = (await (await fetch(`${STUB_URL}/repos/${REPO}/labels`)).json()) as Array<{ name: string }>;
   assert.ok(
     labels.some((l) => l.name === "wardley:hire-to-retire"),
-    "the map's own label, beside process:hire-to-retire",
+    "the map's own label, beside bpmn:hire-to-retire",
   );
   const map = await tracker.listTodos(REPO, { notation: "wardley", id: "hire-to-retire" });
   assert.deepEqual(
@@ -405,7 +405,7 @@ test("retargetTodo: ONE write swaps the process label and re-anchors the body; a
   assert.equal(moved, "moved");
   const writes = (await (await fetch(`${STUB_URL}/_control/writes`)).json()) as Array<{ labels?: string[] }>;
   assert.equal(writes.length - writesBefore, 1, "labels and body change in ONE PATCH");
-  assert.deepEqual(writes.at(-1)?.labels, ["todo", "process:billing"]);
+  assert.deepEqual(writes.at(-1)?.labels, ["todo", "bpmn:billing"]);
 
   assert.equal((await linked.listTodos(RENAME_REPO, bpmn("invoice-handling"))).length, 0, "gone from the old process");
   const [todo] = await linked.listTodos(RENAME_REPO, bpmn("billing"));
@@ -467,7 +467,7 @@ test("retargetTodo: a renamed model of another notation swaps its own label and 
 
 test("retargetTodo: a hand-filed item (no anchor) only changes its labels; other labels survive", async () => {
   await control({
-    addIssue: { repo: RENAME_REPO, title: "by hand", body: "plain text", labels: ["todo", "process:a", "urgent"] },
+    addIssue: { repo: RENAME_REPO, title: "by hand", body: "plain text", labels: ["todo", "bpmn:a", "urgent"] },
   });
   const [item] = await linked.listTodos(RENAME_REPO, bpmn("a"));
   assert.ok(item);
@@ -479,7 +479,7 @@ test("retargetTodo: a hand-filed item (no anchor) only changes its labels; other
   assert.equal(raw.body, "plain text");
   assert.deepEqual(
     raw.labels.map((l) => l.name),
-    ["todo", "urgent", "process:b"],
+    ["todo", "urgent", "bpmn:b"],
   );
 });
 
@@ -601,7 +601,7 @@ test("createTodo with a type: the form's body, todo + process + the template lab
   };
   assert.deepEqual(
     raw.labels.map((l) => l.name),
-    ["todo", "process:order-to-cash", "Bug"],
+    ["todo", "bpmn:order-to-cash", "Bug"],
     "the repo's spelling of `bug`; `needs-triage` does not exist there and is not invented",
   );
   assert.equal(
@@ -615,7 +615,7 @@ test("the type survives hand-edited labels and a rename: it lives in the anchor 
   assert.ok(item);
   await fetch(`${STUB_URL}/repos/${TEMPLATED_REPO}/issues/${item.id}`, {
     method: "PATCH",
-    body: JSON.stringify({ labels: ["todo", "process:order-to-cash"] }),
+    body: JSON.stringify({ labels: ["todo", "bpmn:order-to-cash"] }),
   });
   await templated.retargetTodo(TEMPLATED_REPO, item.id, bpmn("order-to-cash"), {
     model: "o2c",

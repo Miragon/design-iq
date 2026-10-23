@@ -3,8 +3,7 @@
  * Without DESIGNIQ_TODOS_REPO + DESIGNIQ_TODOS_TOKEN (also read under the legacy
  * BPM_TODOS_* names — todosConfigFromEnv) the tool must not exist (the server // legacy-name-ok
  * stays zero-auth by default); with both set it lists open todos from a tiny
- * local GitHub-shaped HTTP stub: label filter (todo + process:<id> or
- * <notation>:<id>), PR-row
+ * local GitHub-shaped HTTP stub: label filter (todo + <notation>:<id>), PR-row
  * exclusion, anchor parsing via @designiq/contracts/todo-anchor, token forwarding.
  * Drives the REAL server over an in-memory transport, like tools.test.ts.
  */
@@ -38,7 +37,7 @@ const rows = [
     title: "Check credit limits with finance",
     state: "open",
     body: `${anchorBlock}\n\nThe threshold looks stale.`,
-    labels: [{ name: "todo" }, { name: "process:order-to-cash" }],
+    labels: [{ name: "todo" }, { name: "bpmn:order-to-cash" }],
     assignees: [{ login: "petra" }],
     created_at: "2026-07-15T09:00:00Z",
   },

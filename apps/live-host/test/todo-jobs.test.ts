@@ -301,7 +301,7 @@ test("a process and a Wardley Map of the same id are two models: two jobs, each 
   );
 });
 
-test("SQLite store: a table from before the notations is rebuilt, its jobs kept as process jobs", () => {
+test("SQLite store: a table from before the notations is dropped, not migrated", () => {
   const db = new DatabaseSync(":memory:");
   db.exec(
     "CREATE TABLE todo_jobs (repo TEXT NOT NULL, kind TEXT NOT NULL, from_process TEXT NOT NULL, " +
@@ -316,18 +316,9 @@ test("SQLite store: a table from before the notations is rebuilt, its jobs kept 
     "petra",
   );
   const store = new SqliteTodoJobStore(db);
-  assert.deepEqual(store.list(), [
-    {
-      repo: REPO,
-      kind: "move",
-      notation: "bpmn",
-      from: "a",
-      to: { model: "b", file: "processes/b.bpmn" },
-      by: "petra",
-    },
-  ]);
-  // the key now holds the notation: the same id of another notation is a row of its own
+  assert.deepEqual(store.list(), [], "its jobs would look under labels no todo carries any more");
+  // the key holds the notation: the same id of two notations is two rows
+  store.put({ repo: REPO, kind: "move", notation: "bpmn", from: "a", to: { model: "b", file: "b.bpmn" }, by: "kai" });
   store.put({ repo: REPO, kind: "move", notation: "wardley", from: "a", to: { model: "c", file: "c.owm" }, by: "kai" });
-  assert.equal(store.list().length, 2);
-  assert.deepEqual(new SqliteTodoJobStore(db).list().length, 2, "a second open finds the new table as it is");
+  assert.equal(new SqliteTodoJobStore(db).list().length, 2, "a second open finds the new table as it is");
 });

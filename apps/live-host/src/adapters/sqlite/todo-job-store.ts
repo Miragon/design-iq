@@ -11,29 +11,26 @@ import type { TodoModelRef } from "@designiq/contracts/todo-anchor";
 
 import type { TodoJobKind, TodoJobSpec, TodoJobStore } from "../../application/todo-jobs.ts";
 
-/** one job per (repo, kind, notation, from) — `from_process` and
- *  `to_process` hold model ids of every notation, under their old names */
-const COLUMNS =
-  "(repo TEXT NOT NULL, kind TEXT NOT NULL, notation TEXT NOT NULL DEFAULT 'bpmn', from_process TEXT NOT NULL, " +
-  "to_process TEXT, to_file TEXT, by_login TEXT NOT NULL, PRIMARY KEY (repo, kind, notation, from_process))";
-
 export class SqliteTodoJobStore implements TodoJobStore {
   private readonly listState: StatementSync;
   private readonly putState: StatementSync;
   private readonly removeState: StatementSync;
 
   constructor(db: DatabaseSync) {
-    migrateToNotations(db);
-    db.exec(`CREATE TABLE IF NOT EXISTS todo_jobs ${COLUMNS}`);
-    this.listState = db.prepare(
-      "SELECT repo, kind, notation, from_process, to_process, to_file, by_login FROM todo_jobs",
+    dropPreNotationTable(db);
+    // one job per (repo, kind, notation, from)
+    db.exec(
+      "CREATE TABLE IF NOT EXISTS todo_jobs (repo TEXT NOT NULL, kind TEXT NOT NULL, notation TEXT NOT NULL, " +
+        "from_model TEXT NOT NULL, to_model TEXT, to_file TEXT, by_login TEXT NOT NULL, " +
+        "PRIMARY KEY (repo, kind, notation, from_model))",
     );
+    this.listState = db.prepare("SELECT repo, kind, notation, from_model, to_model, to_file, by_login FROM todo_jobs");
     this.putState = db.prepare(
-      "INSERT OR REPLACE INTO todo_jobs (repo, kind, notation, from_process, to_process, to_file, by_login) " +
+      "INSERT OR REPLACE INTO todo_jobs (repo, kind, notation, from_model, to_model, to_file, by_login) " +
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
     );
     this.removeState = db.prepare(
-      "DELETE FROM todo_jobs WHERE repo = ? AND kind = ? AND notation = ? AND from_process = ?",
+      "DELETE FROM todo_jobs WHERE repo = ? AND kind = ? AND notation = ? AND from_model = ?",
     );
   }
 
@@ -42,8 +39,8 @@ export class SqliteTodoJobStore implements TodoJobStore {
       repo: string;
       kind: string;
       notation: string;
-      from_process: string;
-      to_process: string | null;
+      from_model: string;
+      to_model: string | null;
       to_file: string | null;
       by_login: string;
     }>;
@@ -53,8 +50,8 @@ export class SqliteTodoJobStore implements TodoJobStore {
         repo: r.repo,
         kind: r.kind as TodoJobKind,
         notation: r.notation,
-        from: r.from_process,
-        ...(r.to_process ? { to: { model: r.to_process, file: r.to_file ?? "" } } : {}),
+        from: r.from_model,
+        ...(r.to_model ? { to: { model: r.to_model, file: r.to_file ?? "" } } : {}),
         by: r.by_login,
       }));
   }
@@ -77,25 +74,11 @@ export class SqliteTodoJobStore implements TodoJobStore {
 }
 
 /**
- * Jobs before #275 were all process jobs, keyed without a notation: a table
- * of that time is rebuilt with the column in its key, its rows as BPMN jobs
- * (a primary key cannot be altered in place).
+ * A table from before the notations keyed its jobs without one; its jobs
+ * look for todos under labels no todo carries any more, so it is dropped,
+ * not migrated.
  */
-function migrateToNotations(db: DatabaseSync): void {
+function dropPreNotationTable(db: DatabaseSync): void {
   const cols = (db.prepare("PRAGMA table_info(todo_jobs)").all() as Array<{ name: string }>).map((c) => c.name);
-  if (cols.length === 0 || cols.includes("notation")) return;
-  db.exec("BEGIN");
-  try {
-    db.exec("ALTER TABLE todo_jobs RENAME TO todo_jobs_before_notations");
-    db.exec(`CREATE TABLE todo_jobs ${COLUMNS}`);
-    db.exec(
-      "INSERT INTO todo_jobs (repo, kind, notation, from_process, to_process, to_file, by_login) " +
-        "SELECT repo, kind, 'bpmn', from_process, to_process, to_file, by_login FROM todo_jobs_before_notations",
-    );
-    db.exec("DROP TABLE todo_jobs_before_notations");
-    db.exec("COMMIT");
-  } catch (e) {
-    db.exec("ROLLBACK");
-    throw e;
-  }
+  if (cols.length > 0 && !cols.includes("notation")) db.exec("DROP TABLE todo_jobs");
 }

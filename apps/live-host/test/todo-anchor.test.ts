@@ -94,28 +94,17 @@ test("a type id or name with pipes/newlines is flattened at encode time", () => 
 test("missing/unclosed block yields null", () => {
   assert.equal(parseAnchor("just an ordinary issue body"), null);
   assert.equal(parseAnchor(""), null);
-  assert.equal(parseAnchor("<!-- bpmiq:todo v1\nprocess: x"), null, "opened but never closed"); // legacy-name-ok
+  assert.equal(parseAnchor("<!-- bpmiq:todo v1\nnotation: bpmn\nmodel: x"), null, "opened but never closed"); // legacy-name-ok
 });
 
-test("a block without a process or model line yields null (the model is the one required field)", () => {
+test("a block without its notation or its model yields null (the two required fields)", () => {
   assert.equal(parseAnchor("<!-- bpmiq:todo v1\nfile: some/file.bpmn\n-->"), null); // legacy-name-ok: frozen marker
   assert.equal(parseAnchor("<!-- bpmiq:todo v1\nnotation: wardley\n-->"), null); // legacy-name-ok: frozen marker
+  assert.equal(parseAnchor("<!-- bpmiq:todo v1\nmodel: tea-shop\n-->"), null); // legacy-name-ok: frozen marker
+  assert.equal(parseAnchor("<!-- bpmiq:todo v1\nprocess: order-to-cash\n-->"), null, "no process line any more"); // legacy-name-ok
 });
 
-test("a process todo is written as every host has read it since v1: a process line, no notation", () => {
-  const anchor: TodoAnchor = {
-    notation: "bpmn",
-    model: "order-to-cash",
-    file: "processes/order-to-cash.bpmn",
-    elements: [],
-    processVersion: null,
-  };
-  const lines = encodeAnchor(anchor).split("\n");
-  assert.equal(lines[1], "process: order-to-cash");
-  assert.ok(!lines.some((l) => l.startsWith("notation:") || l.startsWith("model:")));
-});
-
-test("a todo on another notation names its notation and model, and round-trips", () => {
+test("every todo names its notation and model, a process too, and round-trips", () => {
   const anchor: TodoAnchor = {
     notation: "wardley",
     model: "tea-shop",
@@ -125,8 +114,9 @@ test("a todo on another notation names its notation and model, and round-trips",
   };
   const lines = encodeAnchor(anchor).split("\n");
   assert.deepEqual(lines.slice(1, 3), ["notation: wardley", "model: tea-shop"]);
-  assert.ok(!lines.some((l) => l.startsWith("process:")), "no process line: an older host lists it under no process");
   assert.deepEqual(parseAnchor(encodeAnchor(anchor)), anchor);
+  const processAnchor: TodoAnchor = { ...anchor, notation: "bpmn", model: "order-to-cash", file: null, elements: [] };
+  assert.deepEqual(encodeAnchor(processAnchor).split("\n").slice(1, 3), ["notation: bpmn", "model: order-to-cash"]);
   // re-anchoring keeps the notation
   const moved = parseAnchor(replaceAnchor(encodeAnchor(anchor), { ...anchor, model: "tea-house" }));
   assert.deepEqual([moved?.notation, moved?.model], ["wardley", "tea-house"]);
@@ -136,7 +126,8 @@ test("hand-written sloppy block parses (indentation, blank lines, unknown keys s
   const body = [
     "Please double-check this.",
     "<!-- bpmiq:todo v1", // legacy-name-ok: frozen marker
-    "   process: order-to-cash   ",
+    "   notation: bpmn",
+    "   model: order-to-cash   ",
     "",
     "priority: high", // unknown key — skipped
     "not a key-value line", // no ': ' separator — skipped
@@ -174,7 +165,8 @@ test("the marker is frozen: a todo filed before any product rename keeps its anc
     "Limit check is missing here.",
     "",
     marker,
-    "process: order-to-cash",
+    "notation: bpmn",
+    "model: order-to-cash",
     "file: processes/order-to-cash.bpmn",
     "element: Task_CheckCredit | Bonität prüfen",
     "-->",

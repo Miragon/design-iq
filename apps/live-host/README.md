@@ -52,7 +52,7 @@ cross-repo bleed) and per-(user,repo) authorization.
 ## Todos — model-anchored work items in the repo's own tracker
 
 `GET/POST /api/repos/:fullName/todos` (+ `POST …/todos/:id/close`) stores todos as **GitHub
-Issues in the content repo** (label `todo` + `process:<id>`, the anchor block from
+Issues in the content repo** (label `todo` + `<notation>:<id>`, the anchor block from
 `@designiq/contracts/todo-anchor` embedded in the issue body) — never in a platform database.
 The MCP twins are `list_todos` / `list_todo_types` / `create_todo` / `close_todo` (below), so agents and the
 embedded modeler widget file and complete the same items humans see in the web app.

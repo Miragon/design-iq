@@ -18,11 +18,10 @@ export interface LabeledModel {
   id: string;
 }
 
-/** the per-model label that makes the tracker-side filter cheap: a process
- *  keeps the `process:<id>` every todo filed before #275 carries, a model of
- *  any other notation is `<notation>:<id>` (ids are unique per notation only) */
-export const modelLabel = (model: LabeledModel): string =>
-  `${model.notation === "bpmn" ? "process" : model.notation}:${model.id}`;
+/** the per-model label that makes the tracker-side filter cheap:
+ *  `<notation>:<id>` (`bpmn:order-to-cash`, `wardley:tea-shop`) — ids are
+ *  unique per notation only */
+export const modelLabel = (model: LabeledModel): string => `${model.notation}:${model.id}`;
 
 /** the `labels=` filter for listing: every todo, or one model's */
 export const todoLabelQuery = (model?: LabeledModel): string =>

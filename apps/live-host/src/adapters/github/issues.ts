@@ -1,7 +1,7 @@
 /**
  * GitHub implementation of the IssueTracker port — todos are repo ISSUES in
  * the customer's own repository, never rows in a platform database. Each todo
- * carries the `todo` label plus one for the anchored model (`process:<id>`,
+ * carries the `todo` label plus one for the anchored model (`bpmn:<id>`,
  * `wardley:<id>`, … — @designiq/github-app/todos modelLabel); the
  * platform anchor block (the codec lives in @designiq/contracts/todo-anchor (mcp needs it too)) lives invisibly
  * at the top of the issue body, followed by the author's text and a textual
