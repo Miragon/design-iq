@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.8.1](https://github.com/Miragon/design-iq/compare/v5.8.0...v5.8.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **live-client,web:** repair when the first-ranked writer leaves, and say when the shared text stays unrenderable ([#308](https://github.com/Miragon/design-iq/issues/308)) ([139cc90](https://github.com/Miragon/design-iq/commit/139cc9016c443ce871d3b933ae3f08c0a99f4d78))
+* **live-client:** hold a peer's change back while a drag or palette create runs on the canvas ([#307](https://github.com/Miragon/design-iq/issues/307)) ([b7a26eb](https://github.com/Miragon/design-iq/commit/b7a26ebafa840d88188536054eb1ee6423e44c7f))
+
 ## [5.8.0](https://github.com/Miragon/design-iq/compare/v5.7.0...v5.8.0) (2026-10-22)
 
 
