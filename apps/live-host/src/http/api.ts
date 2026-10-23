@@ -36,6 +36,7 @@
  *   GET  /api/repos/:owner/:repo/history/content → that file's content at a commit (repo write required)
  *   GET  /api/repos/:owner/:repo/todos           → open model-anchored todos (repo write required)
  *   POST /api/repos/:owner/:repo/todos           → create a todo in the repo's tracker (repo write required)
+ *   GET  /api/repos/:owner/:repo/todo-types      → the types a todo can be filed with (repo write required)
  *   POST /api/repos/:owner/:repo/todos/:id/close → close a todo in the tracker (repo write required)
  *   GET  /api/repos/:owner/:repo/todo-jobs       → background todo moves/closes + progress (repo write required)
  *   POST /api/repos/:owner/:repo/todo-jobs/retry → run a failed todo job again (repo write required)
@@ -97,6 +98,7 @@ import type {
   RetryTodoJobBody,
   SyncResult,
   TodoJobWire,
+  TodoTypeWire,
   TodoWire,
 } from "@designiq/contracts/live-host";
 import { AppError, bearerAuth, errorBody, readBody, redirect, securityHeaders, send } from "@designiq/http-kit";
@@ -144,7 +146,7 @@ import {
 } from "../application/scaffold.ts";
 import { syncRepo } from "../application/sync.ts";
 import type { TodoJobs } from "../application/todo-jobs.ts";
-import { closeTodoFor, fileTodo, listOpenTodos } from "../application/todos.ts";
+import { closeTodoFor, fileTodo, listOpenTodos, listTodoTypesFor } from "../application/todos.ts";
 import type { WsTicketStore } from "../application/ws-tickets.ts";
 import { isCrossSite } from "../auth/none.ts";
 import type { RepoConnectionSource } from "../ports/connection-source.ts";
@@ -721,7 +723,7 @@ export function startApi(port: number, opts: ApiOptions): Server {
       // named "image" keeps its release route, so a repo literally named
       // "<owner>/release" cannot address /image over REST.
       const repoRoute = url.pathname.match(
-        /^\/api\/repos\/(.+)\/(processes|decisions|models|folders|move|rename|duplicate|delete|references|changes|conflicts|sync|history(?:\/content)?|todos(?:\/([0-9A-Za-z-]+)\/close)?|todo-jobs(?:\/retry)?|release(?:\/([^/]+))?|(?<!\/release\/)image|(?<!\/history\/)content)$/,
+        /^\/api\/repos\/(.+)\/(processes|decisions|models|folders|move|rename|duplicate|delete|references|changes|conflicts|sync|history(?:\/content)?|todos(?:\/([0-9A-Za-z-]+)\/close)?|todo-jobs(?:\/retry)?|todo-types|release(?:\/([^/]+))?|(?<!\/release\/)image|(?<!\/history\/)content)$/,
       );
       if (repoRoute) {
         const session = await sessionOf(req);
@@ -986,11 +988,15 @@ export function startApi(port: number, opts: ApiOptions): Server {
           console.log(`todo job retried in ${repo.fullName} by @${session.user.login}: ${job.id}`);
           return send(res, 200, job satisfies TodoJobWire);
         }
-        if (repoRoute[2]?.startsWith("todos")) {
+        if (repoRoute[2]?.startsWith("todos") || repoRoute[2] === "todo-types") {
           // the tracker seam needs a platform credential (installation token) —
           // a credential-less local spike has no way to act on the repo's issues
           if (!opts.issues) {
             return send(res, 501, { error: "todo tracking is not configured (requires platform credentials)" });
+          }
+          if (repoRoute[2] === "todo-types") {
+            if (req.method !== "GET") return send(res, 405, { error: "method not allowed" });
+            return send(res, 200, (await listTodoTypesFor(opts.issues, repo)) satisfies TodoTypeWire[]);
           }
           // todos/:id/close — the close itself is bot-authored, the SESSION user is
           // attributed (same model as create); unknown ids surface as upstream errors
@@ -1029,6 +1035,8 @@ export function startApi(port: number, opts: ApiOptions): Server {
                 file: typeof body?.anchor?.file === "string" ? body.anchor.file : undefined,
                 elements: Array.isArray(body?.anchor?.elements) ? body.anchor.elements : [],
                 processVersion: body?.anchor?.processVersion,
+                type: body?.type,
+                fields: body?.fields,
               },
               "rest",
             );

@@ -12,6 +12,7 @@
  * decide WHERE the encoded block lives (GitHub: issue body).
  */
 import type { TodoAnchor } from "@designiq/contracts/todo-anchor";
+import type { TodoFieldValues, TodoType } from "@designiq/contracts/todo-types";
 
 export interface TodoInput {
   title: string;
@@ -20,6 +21,16 @@ export interface TodoInput {
   anchor: TodoAnchor;
   /** platform login of the human author (items are bot-authored, attribution is textual) */
   author: string;
+  /** the values of the tracker's own todo type `anchor.type` names
+   *  (listTodoTypes), already checked — absent: a plain todo, `body` is the whole text */
+  fields?: TodoFieldValues;
+}
+
+/** the forms the tracker files todos with (GitHub: the issue templates) */
+export interface TrackerTodoTypes {
+  types: TodoType[];
+  /** a plain todo (title + text) may be filed besides them */
+  blankAllowed: boolean;
 }
 
 export interface Todo {
@@ -67,6 +78,8 @@ export class TrackerRateLimited extends Error {
 export interface IssueTracker {
   /** id used in logs ("github-issues") */
   readonly id: string;
+  /** the repo's own todo types — empty when it has none */
+  listTodoTypes(repoFullName: string): Promise<TrackerTodoTypes>;
   /** create a todo in the tracker backing this repo; returns the created item */
   createTodo(repoFullName: string, input: TodoInput): Promise<Todo>;
   /** OPEN todos for one repo, optionally narrowed to a process */

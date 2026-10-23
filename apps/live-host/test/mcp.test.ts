@@ -18,6 +18,7 @@ import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
 
 import { presenceColor } from "@designiq/contracts/live";
+import type { TodoType } from "@designiq/contracts/todo-types";
 import { DIAGRAMS_IN_DOCUMENTS } from "@designiq/mcp-kit";
 import { toolNamesIn, toolText } from "@designiq/mcp-kit/testing";
 import { NOTATIONS } from "@designiq/notations";
@@ -35,7 +36,7 @@ import { DocSizeGuard } from "../src/domain/doc-size-guard.ts";
 import { type ApiOptions, startApi } from "../src/http/api.ts";
 import { createLiveMcpServer, type LiveToolContribution, type McpDeps, WIDGET_FILES } from "../src/http/mcp.ts";
 import type { GitProvider } from "../src/ports/git-provider.ts";
-import type { IssueTracker, Todo, TodoInput } from "../src/ports/issue-tracker.ts";
+import type { IssueTracker, Todo, TodoInput, TrackerTodoTypes } from "../src/ports/issue-tracker.ts";
 import { loadContentConfig } from "../src/repos/content.ts";
 import type { ConnectedRepo } from "../src/repos/registry.ts";
 
@@ -169,7 +170,9 @@ function deps(over: Partial<McpDeps> = {}, widgets: readonly string[] = WIDGET_F
 
 /** in-memory IssueTracker — the port is the seam, so the tools are testable
  *  without GitHub (the REAL adapter has its own suite: todo-issues.test.ts) */
-function fakeIssues(): IssueTracker & { created: Array<{ repo: string; input: TodoInput }>; closed: string[] } {
+function fakeIssues(
+  todoTypes: TrackerTodoTypes = { types: [], blankAllowed: true },
+): IssueTracker & { created: Array<{ repo: string; input: TodoInput }>; closed: string[] } {
   const items: Todo[] = [];
   const created: Array<{ repo: string; input: TodoInput }> = [];
   const closed: string[] = [];
@@ -177,6 +180,9 @@ function fakeIssues(): IssueTracker & { created: Array<{ repo: string; input: To
     id: "fake-tracker",
     created,
     closed,
+    async listTodoTypes() {
+      return todoTypes;
+    },
     async createTodo(repo, input) {
       created.push({ repo, input });
       const todo: Todo = {
@@ -315,7 +321,12 @@ test("registration: LIVE_MCP_BPMN_EDIT adds the semantic BPMN tools; read-only k
 test("registration: the todo tools appear only WITH a tracker; read-only keeps the listing one", async () => {
   const withTracker = await connect(deps({ issues: fakeIssues() }));
   const names = (await withTracker.client.listTools()).tools.map((t) => t.name);
-  assert.deepEqual(names.filter((n) => n.includes("todo")).sort(), ["close_todo", "create_todo", "list_todos"]);
+  assert.deepEqual(names.filter((n) => n.includes("todo")).sort(), [
+    "close_todo",
+    "create_todo",
+    "list_todo_types",
+    "list_todos",
+  ]);
 
   // no tracker configured → absent from tools/list, never a call that fails
   const none = await connect(deps());
@@ -472,12 +483,125 @@ test("todos: create anchors to the open process, list filters by it, close compl
   assert.equal(issues.created.length, 2);
 });
 
+const BUG_TYPE: TodoType = {
+  id: "bug",
+  name: "Bug report",
+  description: "Something is broken",
+  titlePrefix: "[Bug]: ",
+  fields: [
+    {
+      id: "hint",
+      kind: "markdown",
+      label: "",
+      description: null,
+      placeholder: null,
+      value: "Thanks for reporting!",
+      options: [],
+      multiple: false,
+      required: false,
+    },
+    {
+      id: "repro",
+      kind: "textarea",
+      label: "Steps to reproduce",
+      description: null,
+      placeholder: null,
+      value: null,
+      options: [],
+      multiple: false,
+      required: true,
+    },
+  ],
+};
+
+test("todo types: a repo without templates offers the built-in Todo alone, filed exactly as before", async () => {
+  const issues = fakeIssues();
+  const { callJson } = await connect(deps({ issues }));
+  const listed = await callJson("list_todo_types", { repo: REPO.fullName });
+  assert.deepEqual(
+    listed.types.map((t: TodoType) => t.id),
+    ["todo"],
+  );
+  await callJson("create_todo", { repo: REPO.fullName, id: "order", title: "Plain", body: "Free text" });
+  const input = issues.created[0]!.input;
+  assert.equal(input.body, "Free text");
+  assert.ok(!("fields" in input) && !("type" in input.anchor), "a built-in todo carries no type");
+  await callJson("create_todo", {
+    repo: REPO.fullName,
+    id: "order",
+    title: "Typed built-in",
+    type: "todo",
+    fields: { description: "Via fields" },
+  });
+  assert.equal(issues.created[1]!.input.body, "Via fields");
+});
+
+test("todo types: templates without blank issues — the type is required, its fields are checked, the anchor keeps it", async () => {
+  const issues = fakeIssues({ types: [BUG_TYPE], blankAllowed: false });
+  const { call, callJson } = await connect(deps({ issues }));
+  assert.deepEqual(
+    (await callJson("list_todo_types", { repo: REPO.fullName })).types.map((t: TodoType) => t.id),
+    ["bug"],
+  );
+
+  const untyped = await call("create_todo", { repo: REPO.fullName, id: "order", title: "x", body: "y" });
+  assert.ok(untyped.isError);
+  assert.match(untyped.text, /choose one: Bug report \(bug\)/);
+
+  const incomplete = await call("create_todo", { repo: REPO.fullName, id: "order", title: "x", type: "bug" });
+  assert.ok(incomplete.isError);
+  assert.equal(incomplete.text, "The Bug report form is not complete:\n- Steps to reproduce (repro) is required");
+
+  const withBody = await call("create_todo", {
+    repo: REPO.fullName,
+    id: "order",
+    title: "x",
+    type: "bug",
+    body: "free",
+    fields: { repro: "Click" },
+  });
+  assert.ok(withBody.isError);
+  assert.match(withBody.text, /takes its text in `fields`/);
+  assert.equal(issues.created.length, 0, "nothing incomplete reaches the tracker");
+
+  const created = await callJson("create_todo", {
+    repo: REPO.fullName,
+    id: "order",
+    title: "Saving fails",
+    type: "bug",
+    fields: { repro: "Click save" },
+  });
+  assert.equal(created.todo.title, "[Bug]: Saving fails", "the template's title prefix is applied once");
+  assert.deepEqual(created.todo.anchor.type, { id: "bug", name: "Bug report" });
+  const input = issues.created[0]!.input;
+  assert.equal(input.anchor.type?.id, "bug");
+  assert.deepEqual(input.fields, { repro: "Click save" });
+
+  const prefixed = await callJson("create_todo", {
+    repo: REPO.fullName,
+    id: "order",
+    title: "[Bug]: Already prefixed",
+    type: "bug",
+    fields: { repro: "x" },
+  });
+  assert.equal(prefixed.todo.title, "[Bug]: Already prefixed");
+});
+
+test("todo types: blank issues allowed — the built-in Todo comes first, beside the templates", async () => {
+  const { callJson } = await connect(deps({ issues: fakeIssues({ types: [BUG_TYPE], blankAllowed: true }) }));
+  assert.deepEqual(
+    (await callJson("list_todo_types", { repo: REPO.fullName })).types.map((t: TodoType) => t.id),
+    ["todo", "bug"],
+  );
+});
+
 test("todos: per-call authz gates the tracker too — no write access, no todo access", async () => {
   const issues = fakeIssues();
   const { call } = await connect(deps({ issues, access: { canWrite: async () => false } }));
   for (const [tool, args] of [
     ["list_todos", { repo: REPO.fullName }],
     ["create_todo", { repo: REPO.fullName, id: "order", title: "x" }],
+    ["list_todo_types", { repo: REPO.fullName }],
     ["close_todo", { repo: REPO.fullName, todoId: "1" }],
   ] as const) {
     const denied = await call(tool, args);
@@ -1515,4 +1639,42 @@ test("widgets: a generated open tool forces its notation — shared stems, forei
   assert.ok(foreign.isError && /not a Wardley Map/.test(foreign.text), foreign.text);
   const unknown = await call("open_wardley_modeler", { repo: REPO.fullName, id: "nope" });
   assert.ok(unknown.isError && /list_models/.test(unknown.text), unknown.text);
+});
+
+test("todo types over REST: the same types, the same typed 400, the same filed todo as create_todo", async () => {
+  const issues = fakeIssues({ types: [BUG_TYPE], blankAllowed: false });
+  const d = deps({ issues });
+  const sessions = new SessionStore(new DatabaseSync(":memory:"));
+  const bot = sessions.create({ login: "petra", name: "Petra", avatarUrl: null, provider: "github" });
+  const httpServer = startApi(0, { ...apiOpts(d, sessions), issues });
+  cleanups.push(() => new Promise((r) => httpServer.close(r)));
+  await new Promise<void>((r) => httpServer.once("listening", r));
+  const base = `http://127.0.0.1:${(httpServer.address() as { port: number }).port}/api/repos/${REPO.fullName}`;
+  const headers = { "content-type": "application/json", authorization: `Bearer ${bot.id}` };
+
+  const types = await fetch(`${base}/todo-types`, { headers });
+  assert.equal(types.status, 200);
+  assert.deepEqual(await types.json(), [BUG_TYPE]);
+
+  const post = (body: unknown) => fetch(`${base}/todos`, { method: "POST", headers, body: JSON.stringify(body) });
+  const anchor = { process: "order", file: PATH };
+  const incomplete = await post({ title: "Saving fails", type: "bug", fields: {}, anchor });
+  assert.equal(incomplete.status, 400);
+  assert.deepEqual(await incomplete.json(), {
+    error: "The Bug report form is not complete:\n- Steps to reproduce (repro) is required",
+    code: "todos/fields-required",
+  });
+
+  const created = await post({ title: "Saving fails", type: "bug", fields: { repro: "Click save" }, anchor });
+  assert.equal(created.status, 201);
+  const { callJson } = await connect(d);
+  await callJson("create_todo", {
+    repo: REPO.fullName,
+    path: PATH,
+    title: "Saving fails",
+    type: "bug",
+    fields: { repro: "Click save" },
+  });
+  assert.equal(issues.created.length, 2);
+  assert.deepEqual(issues.created[0], issues.created[1], "the web dialog and the agent file the same todo");
 });

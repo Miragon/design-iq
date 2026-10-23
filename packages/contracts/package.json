@@ -13,6 +13,7 @@
     "./deep-link": "./src/deep-link.ts",
     "./live": "./src/live.ts",
     "./todo-anchor": "./src/todo-anchor.ts",
+    "./todo-types": "./src/todo-types.ts",
     "./assist": "./src/assist.ts",
     "./mcp-app": "./src/mcp-app.ts"
   },

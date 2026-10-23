@@ -10,8 +10,21 @@
  * never a stored anchor pointing at nothing. A client file is kept only when
  * it names that process (the platform contract: a path names its own process);
  * anything else normalizes to the discovered path. Elements drop empty ids.
+ *
+ * Every todo is filed with a type (#313): one of the repo's own (its issue
+ * templates) or the built-in `Todo`, which a repo without templates — or one
+ * allowing blank issues — gets. Its required fields are checked here, with the
+ * same module the web dialog and the widget check them with.
  */
 import type { TodoWire } from "@designiq/contracts/live-host";
+import {
+  BUILT_IN_TODO_TYPE,
+  fieldProblemsMessage,
+  isBuiltInTodoType,
+  type TodoFieldValues,
+  type TodoType,
+  validateTodoFields,
+} from "@designiq/contracts/todo-types";
 import { AppError } from "@designiq/http-kit";
 import { byExtension, modelStem } from "@designiq/notations";
 
@@ -36,6 +49,47 @@ export interface FileTodoInput {
   file?: string;
   elements?: Array<{ id?: unknown; name?: unknown }>;
   processVersion?: unknown;
+  /** a type id from listTodoTypesFor — omitted: the built-in `Todo` */
+  type?: unknown;
+  fields?: unknown;
+}
+
+/** the types a todo can be filed with in this repo, the built-in `Todo` first
+ *  when it is offered */
+export async function listTodoTypesFor(issues: IssueTracker, repo: ConnectedRepo): Promise<TodoType[]> {
+  const { types, blankAllowed } = await issues.listTodoTypes(repo.fullName);
+  return types.length === 0 || blankAllowed ? [BUILT_IN_TODO_TYPE, ...types] : types;
+}
+
+const badRequest = (code: string, message: string): AppError =>
+  new AppError(code, message, { status: 400, expose: true });
+
+const typeList = (types: TodoType[]): string => types.map((t) => `${t.name} (${t.id})`).join(", ");
+
+function resolveType(types: TodoType[], requested: unknown, repo: ConnectedRepo): TodoType {
+  if (requested === undefined || requested === null || requested === "") {
+    const builtIn = types.find(isBuiltInTodoType);
+    if (builtIn) return builtIn;
+    throw badRequest(
+      "todos/type-required",
+      `${repo.fullName} files todos with its issue templates, choose one: ${typeList(types)}`,
+    );
+  }
+  const type = types.find((t) => t.id === requested);
+  if (type) return type;
+  throw badRequest(
+    "todos/unknown-type",
+    `${repo.fullName} has no todo type '${String(requested)}': ${typeList(types)}`,
+  );
+}
+
+function fieldValuesOf(fields: unknown): TodoFieldValues {
+  if (fields === undefined || fields === null) return {};
+  const isValue = (v: unknown) => typeof v === "string" || (Array.isArray(v) && v.every((x) => typeof x === "string"));
+  if (typeof fields !== "object" || Array.isArray(fields) || !Object.values(fields).every(isValue)) {
+    throw badRequest("todos/fields-invalid", "fields must map field ids to a string or a list of strings");
+  }
+  return fields as TodoFieldValues;
 }
 
 /** validate, resolve the anchor, file the todo, write the audit line */
@@ -61,9 +115,28 @@ export async function fileTodo(
   const resolvedPath = await findProcessPath(opts, repo, process);
   const file = input.file && processIdOf(input.file) === process ? input.file : resolvedPath;
 
+  const type = resolveType(await listTodoTypesFor(issues, repo), input.type, repo);
+  const fields = fieldValuesOf(input.fields);
+  const builtIn = isBuiltInTodoType(type);
+  const body = typeof input.body === "string" ? input.body : "";
+  if (!builtIn && body.trim()) {
+    throw badRequest("todos/body-not-allowed", `the ${type.name} form takes its text in \`fields\`, not in \`body\``);
+  }
+  const problems = validateTodoFields(type, fields);
+  if (problems.length > 0) {
+    const onlyMissing = problems.every((p) => p.reason === "missing");
+    throw badRequest(
+      onlyMissing ? "todos/fields-required" : "todos/fields-invalid",
+      fieldProblemsMessage(type, problems),
+    );
+  }
+  const title = input.title.trim();
+  const description = fields.description;
+
   const todo = await issues.createTodo(repo.fullName, {
-    title: input.title.trim(),
-    body: typeof input.body === "string" ? input.body : "",
+    title: type.titlePrefix && !title.startsWith(type.titlePrefix) ? `${type.titlePrefix}${title}` : title,
+    body: builtIn && typeof description === "string" ? description : body,
+    ...(builtIn ? {} : { fields }),
     anchor: {
       process,
       file,
@@ -71,6 +144,7 @@ export async function fileTodo(
         .filter((el) => typeof el?.id === "string" && el.id.length > 0)
         .map((el) => ({ id: el.id as string, name: typeof el.name === "string" ? el.name : null })),
       processVersion: typeof input.processVersion === "string" ? input.processVersion : null,
+      ...(builtIn ? {} : { type: { id: type.id, name: type.name } }),
     },
     // attribution: the platform login of the SESSION is authoritative,
     // never a client-supplied author field

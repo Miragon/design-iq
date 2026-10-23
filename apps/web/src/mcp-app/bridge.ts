@@ -24,6 +24,7 @@ import type {
   TodoWire,
   WidgetBootWire,
 } from "@designiq/contracts/live-host";
+import type { TodoFieldValues, TodoType } from "@designiq/contracts/todo-types";
 import type { DecisionAnalysis } from "@designiq/decisions";
 import type { CaseOutcome, SuiteOutcome, TestCase, TestSuite } from "@designiq/decisions/tests";
 import { unwrapToolResult } from "@designiq/mcp-kit";
@@ -178,9 +179,16 @@ export { isMissingTool } from "@designiq/mcp-kit";
 export const listTodos = (app: App, ref: ProcessRef): Promise<{ todos: TodoWire[] }> =>
   call(app, "list_todos", { repo: ref.repo, path: ref.path });
 
+/** the forms a todo can be filed with in this repo */
+export const listTodoTypes = (app: App, repo: string): Promise<{ types: TodoType[] }> =>
+  call(app, "list_todo_types", { repo });
+
 export interface CreateTodoInput {
   title: string;
   body?: string;
+  /** a type id from listTodoTypes — omitted: the built-in `Todo` */
+  type?: string;
+  fields?: TodoFieldValues;
   /** canvas selection at submit time — empty ⇒ a process-level todo */
   elements: TodoElementWire[];
 }

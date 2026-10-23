@@ -32,6 +32,7 @@ import {
   fetchRepos,
   fetchTodoJobs,
   fetchTodos,
+  fetchTodoTypes,
   type FolderListWire,
   logout,
   type ModelInfo,
@@ -503,6 +504,17 @@ export function useTodos(repo: string, process?: string, enabled = true) {
     // refetchOnWindowFocus: false for everything else
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
+  });
+}
+
+/** the types a todo can be filed with — issue templates change rarely, the
+ *  server reads them at most every five minutes too */
+export function useTodoTypes(repo: string, enabled = true) {
+  return useQuery({
+    queryKey: ["todo-types", repo],
+    queryFn: () => fetchTodoTypes(repo),
+    enabled: enabled && repo.length > 0,
+    staleTime: 5 * 60_000,
   });
 }
 

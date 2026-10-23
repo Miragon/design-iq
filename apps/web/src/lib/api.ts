@@ -35,6 +35,7 @@ import type {
   ResolveConflictResult,
   SyncResult,
   TodoJobWire,
+  TodoTypeWire,
   TodoWire,
 } from "@designiq/contracts/live-host";
 
@@ -81,6 +82,7 @@ export type {
   TodoAnchorWire,
   TodoElementWire,
   TodoJobWire,
+  TodoTypeWire,
   TodoWire,
 } from "@designiq/contracts/live-host";
 
@@ -208,6 +210,8 @@ export const fetchFileAtCommit = (repo: string, path: string, sha: string): Prom
 /** open todos of a repo, optionally narrowed to one process */
 export const fetchTodos = (repo: string, process?: string): Promise<TodoWire[]> =>
   api(`/api/repos/${repo}/todos${process ? `?process=${encodeURIComponent(process)}` : ""}`);
+/** the forms a todo can be filed with: the repo's issue templates and/or the built-in `Todo` */
+export const fetchTodoTypes = (repo: string): Promise<TodoTypeWire[]> => api(`/api/repos/${repo}/todo-types`);
 export const createTodo = (repo: string, body: CreateTodoBody): Promise<TodoWire> =>
   api(`/api/repos/${repo}/todos`, {
     method: "POST",

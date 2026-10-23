@@ -179,7 +179,8 @@ call is gated by the caller's per-repo permission.
 | `create_decision`             | write | Scaffold a new decision `.dmn` from the blank template.                                  |
 | `save_dmn_xml`                | write | Conflict-guarded save of DMN XML into the live document (requires `baseVersion`).        |
 | `save_decision_tests`         | write | Write `<decision>.tests.yaml` next to the model (`record` freezes today's behaviour).    |
-| `create_todo`                 | write | File a todo, anchored to the process and (optionally) concrete BPMN elements.            |
+| `list_todo_types`             | read  | Forms a todo is filed with (registered with `create_todo`, not in read-only mode).       |
+| `create_todo`                 | write | File a todo of a type, anchored to the process and (optionally) concrete BPMN elements.  |
 | `close_todo`                  | write | Complete a todo in the tracker (`todoId` from `list_todos`).                             |
 | `release_process`             | write | Open the release PR. Merge rights stay at the git provider.                              |
 
@@ -361,10 +362,26 @@ element ids with a name snapshot) rides invisibly in the item body, so an agent 
 "this gateway needs a decision table" against an element id and the modeler shows a badge
 on exactly that shape.
 
-The three tools register **only when the platform has tracker credentials**: no tracker,
+The todo tools register **only when the platform has tracker credentials**: no tracker,
 no tools in `tools/list` (agents plan against reality instead of discovering it by failing).
-Listing is a read and survives `LIVE_MCP_READONLY=1`; filing and closing do not. Every call
-runs the same per-(user, repo) authorization as the model tools.
+Listing is a read and survives `LIVE_MCP_READONLY=1`; filing and closing do not, and
+`list_todo_types` goes with them. Every call runs the same per-(user, repo) authorization as
+the model tools.
+
+**Todo types follow the repo's issue templates.** `list_todo_types` returns the forms a todo
+can be filed with: every issue form in `.github/ISSUE_TEMPLATE/` on the default branch (its
+fields, options, required flags and the form's hint text), a Markdown template as one
+prefilled description, and the built-in `todo` (a title and a description, the todo as it
+always was). The built-in is offered when the repo has no templates, when
+`blank_issues_enabled` is not `false`, and when the repo's manual `todo` form (the one
+labelled `todo`, hidden as a type: the platform fills its anchor itself) was the way to file
+plain todos. `create_todo` takes the `type` and its `fields` by id; a missing required field
+fails with the list of what is missing, the same check the web dialog and the widget run
+inline (`@designiq/contracts/todo-types`). The issue gets the form's body as GitHub renders a
+submitted form, the template's title prefix, and the labels `todo` + `process:<id>` plus the
+template's labels that exist in the repo. The type rides in the anchor block, so the lists
+show it after a label was edited by hand and after a rename. Templates are read at most every
+five minutes per repo.
 
 ### MCP Apps: the embedded modelers
 
@@ -472,8 +489,9 @@ The widget also carries the **todos** of the open process: the **Todos** toggle 
 with the open count) opens a card listing them, count badges sit on every anchored
 element (a badge click opens the card filtered to it, a chip click reveals the element
 on the canvas), **Add todo** files one against the current canvas selection (or the whole
-process), and **Done** closes it in the tracker. It drives the same `list_todos` /
-`create_todo` / `close_todo` tools over the app bridge, and discovery starts as soon as the
+process), with one of the repo's todo types and their fields, and **Done** closes it in the
+tracker. It drives the same `list_todos` / `list_todo_types` / `create_todo` / `close_todo`
+tools over the app bridge, and discovery starts as soon as the
 model's path is known, so a tracker-less host simply has no Todos toggle, and a read-only
 host gets the list without the write actions. Nothing about the modeling path depends on it.
 

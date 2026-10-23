@@ -553,11 +553,12 @@ General:
 - **Error callout** (exclusive with the empty text).
 - **Inline form** at the top:
   - Anchor preview tracking the live selection ("Anchored to: [chips]" or a dashed "Whole process" chip).
-  - Title (focused, required, max 200, "What needs to be done?"), description.
+  - Type picker ("Todo type") only when the repo offers more than one type; a single template says "Filed as <name>".
+  - Title (focused, required, max 200, "What needs to be done?"), then the built-in Todo's description, or the template's fields (label, "(optional)", hint, input / textarea / select / checkbox list; markdown hints are not shown). `novalidate`: after a submit, a missing required field gets "Required" under it (`aria-invalid` + `aria-describedby`), filling it clears the flag (lib/todo-form.ts, the server's check). An empty title says "A title is required."; until `list_todo_types` answered, a submit says the types are loading (or why they could not load) and files nothing. A host without the tool files plain todos.
   - [Cancel] [Create todo] (primary; it is the form the user opened).
 - **Rows are cards:**
   - Title 600; tracker link icon top-right ("Open #38 in the tracker").
-  - **Body visible** with a 2-line clamp (no tooltip).
+  - **Body visible** with a 2-line clamp (no tooltip); a todo filed with a template shows its type as the first chip instead.
   - Anchor chips are buttons that reveal and select the element (retitled "… — no longer in this diagram" when gone). Unanchored rows show a dashed "Whole process" chip.
   - "#id · @author" (age in `title`); [send Implement] in `--link`; [check Done] ghost (spinner while closing, row at 50%).
 - **Canvas badges** unchanged; a badge click opens the card (or sheet) filtered.
