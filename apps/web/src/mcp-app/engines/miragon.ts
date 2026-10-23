@@ -58,13 +58,14 @@ function menuHostIn(host: MenuHost, root: HTMLElement, readOnly: boolean): Mirag
  * axes, an arrow annotation, a team name wider than its shape), and
  * Wardley's pan constraint pulls a fit to any other box back. The method is
  * optional, so a renderer without it, or with nothing to fit, keeps
- * diagram-js's box around the elements.
+ * diagram-js's box around the elements. The widget fits after every import
+ * (`insets`), the SPA only after the first (`firstFit`).
  */
-export function miragonView(modeler: MiragonModeler, insets?: () => Insets): DiagramView {
-  return diagramView(modeler.diagram, {
-    ...(insets ? { insets } : {}),
-    contentBounds: () => modeler.contentBounds?.(),
-  });
+export function miragonView(
+  modeler: MiragonModeler,
+  fit: { insets?: () => Insets; firstFit?: () => Insets } = {},
+): DiagramView {
+  return diagramView(modeler.diagram, { ...fit, contentBounds: () => modeler.contentBounds?.() });
 }
 
 export function mountMiragonEngine(
@@ -83,7 +84,7 @@ export function mountMiragonEngine(
     throw error;
   }
   modeler.attachTo(container);
-  const view = miragonView(modeler, opts?.insets);
+  const view = miragonView(modeler, opts ? { insets: opts.insets } : {});
   const menu =
     opts?.menuHost && renderer.menu
       ? renderer.menu(modeler, menuHostIn(opts.menuHost, container, readonly))

@@ -18,7 +18,12 @@ import type { Insets } from "../src/mcp-app/core/engine.ts";
 import type { Box } from "../src/mcp-app/engines/fit.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
-import type { LoadedMiragonRenderer, MiragonModeler, MiragonRendererSpec } from "../src/notations/miragon/spec.ts";
+import type {
+  LoadedMiragonRenderer,
+  MiragonModeler,
+  MiragonMountOptions,
+  MiragonRendererSpec,
+} from "../src/notations/miragon/spec.ts";
 import type { EditorContext } from "../src/notations/registry.ts";
 import { closeDom, host } from "./renderer-dom.ts";
 
@@ -383,12 +388,16 @@ test("each spec hands the chrome's insets to its renderer as the contract's free
   }
 });
 
-test("with the chrome's insets the view after an import is the host's to set, without them the renderer fits it", async () => {
+test("a host that fits itself (the widget's insets, the SPA's fitOnImport: false) sets the view after an import; by default the renderer fits it", async () => {
+  const mounts: Array<[where: string, mount: MiragonMountOptions, fitsItself: boolean]> = [
+    ["the widget", { insets: () => ({ top: 56, right: 0, bottom: 0, left: 300 }) }, true],
+    ["the SPA", { fitOnImport: false }, true],
+    ["no host option", {}, false],
+  ];
   for (const [id, text] of DOCUMENTS) {
     const [spec, renderer] = await load(id);
     for (const readonly of [false, true]) {
-      for (const fitsItself of [true, false]) {
-        const mount = fitsItself ? { insets: () => ({ top: 56, right: 0, bottom: 0, left: 300 }) } : {};
+      for (const [mounted, mount, fitsItself] of mounts) {
         const modeler = readonly ? renderer.createViewer(mount) : renderer.create(mount);
         modeler.attachTo(host(spec.canvasClassName));
         await modeler.importText(text);
@@ -397,7 +406,7 @@ test("with the chrome's insets the view after an import is the host's to set, wi
         const hosts = modeler.getViewState();
         assert.notDeepEqual(hosts, ownFit, `${id}: a view of the host's own`);
         await modeler.importText(text);
-        const where = `${id}${readonly ? " viewer" : ""}, ${fitsItself ? "the widget" : "the SPA"}`;
+        const where = `${id}${readonly ? " viewer" : ""}, ${mounted}`;
         assert.deepEqual(modeler.getViewState(), fitsItself ? hosts : ownFit, where);
         modeler.destroy();
       }
@@ -464,6 +473,38 @@ test("every renderer in the widget: the chrome fits the renderer's content box i
       await wait(20);
       assertFitted(engine.modeler, engine.modeler.contentBounds!()!, insets, `${where}, the Fit button`);
       engine.destroy();
+    }
+  }
+});
+
+test("every renderer in the SPA: the first view fits the renderer's content box beside the palette, a peer's re-import keeps it", async () => {
+  const { spaFitInsets } = await import("../src/notations/miragon/editor.ts");
+  // jsdom lays nothing out: the palette measures 0
+  const insets = spaFitInsets({ paletteBottom: 0, coveredRight: 0 });
+  for (const [id, text, peer] of DOCUMENTS) {
+    const doc = new Y.Doc();
+    const ytext = doc.getText("content");
+    ytext.insert(0, text);
+    const { modeler, destroy } = await mountLive("the SPA editor", id, ytext, doc);
+    // a failed case leaves no editor behind whose keys the next case would hear
+    try {
+      await wait(50);
+      assertFitted(modeler, modeler.contentBounds!()!, insets, `${id}, the first view`);
+      const view = (): number[] => {
+        const { x, y, scale } = viewboxOf(modeler);
+        return [x, y, scale];
+      };
+      const first = view();
+      const before = modeler.exportText();
+      doc.transact(() => {
+        ytext.delete(0, ytext.length);
+        ytext.insert(0, peer);
+      });
+      await wait(450);
+      assert.notEqual(modeler.exportText(), before, `${id}: re-imported`);
+      assert.deepEqual(view(), first, `${id}: the view stays where the first fit put it`);
+    } finally {
+      destroy();
     }
   }
 });

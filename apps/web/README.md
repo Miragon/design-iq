@@ -278,7 +278,11 @@ In the SPA a Miragon editor's ⇧1 fits 24px clear of the renderer's palette as
 measured, of the canvas's sides and bottom, and of an open side panel (the
 panels dock over the canvas's right edge, `src/lib/side-panel-room.ts`);
 opening or closing a side panel re-fits a view nobody moved since the import
-or the last fit, as the widget does with its cards. Both hosts fit a Miragon
+or the last fit, as the widget does with its cards. The first view is that
+fit too: the editor mounts the renderer with `fitOnImport: false`, because
+the renderer's own import fit leaves no room for the palette over the canvas,
+and fits the first import itself (`firstFit` in `diagramView`); a peer's
+re-import keeps the view the user has. Both hosts fit a Miragon
 renderer to the box its `contentBounds()` reports (`@miragon/modeler-api`
 contract 1.3, feature-detected in `miragonView`, `engines/miragon.ts`):
 Wardley's plot with its axes, an Event Storming board's arrow annotations, a

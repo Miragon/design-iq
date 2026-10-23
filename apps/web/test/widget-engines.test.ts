@@ -30,7 +30,7 @@ import * as Y from "yjs";
 import type { Insets } from "../src/mcp-app/core/engine.ts";
 import { diagramView } from "../src/mcp-app/engines/diagram-js.ts";
 import { type Box, scaleOf, steppedLevel, zoomAround } from "../src/mcp-app/engines/fit.ts";
-import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
+import { miragonView, mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import type {
   LoadedMiragonRenderer,
   MiragonDiagram,
@@ -550,6 +550,47 @@ test("a renderer without contentBounds (contract 1.2): the fit frames diagram-js
   engine.view.fit(insets, false);
   assert.deepEqual(r.canvas.writes.at(-1), fitted(inner, r.outer, insets), "the Fit button");
   engine.destroy();
+});
+
+test("the SPA's view (a first fit, no insets): the chrome fits the first import, later imports keep the view the binding restores", async () => {
+  const inner = { x: 40, y: 20, width: 1400, height: 600 };
+  let content: Box | undefined = { x: -60, y: -40, width: 1900, height: 900 };
+  const insets: Insets = { top: 88, right: 24, bottom: 24, left: 24 };
+  const r = fakeRenderer({ inner, contentBounds: () => content });
+  const modeler = r.renderer.create({ fitOnImport: false });
+  assert.deepEqual(r.state.mounts[0]!.options, { fitOnImport: false });
+  const view = miragonView(modeler, { firstFit: () => insets });
+  await modeler.importText("map");
+  await tick(5);
+  assert.deepEqual(r.canvas.writes.at(-1), fitted(content, r.outer, insets), "the first import, beside the palette");
+  assert.equal(view.isTouched(), false);
+  const writes = r.canvas.writes.length;
+  content = { x: 0, y: 0, width: 700, height: 300 };
+  await modeler.importText("map, remote");
+  await tick(5);
+  assert.equal(r.canvas.writes.length, writes, "a later import is fitted by no one");
+  assert.equal(view.isTouched(), false);
+  view.zoomTo(1);
+  assert.equal(view.isTouched(), true, "a move after the first fit is the user's");
+  view.destroy();
+
+  // nothing to fit on the first import (an empty board): the view it leaves
+  // is the one a move is measured against, and no later import fits over it
+  const board: { drawn?: Box } = {};
+  const empty = fakeRenderer({ inner: { x: 0, y: 0, width: 0, height: 0 }, contentBounds: () => board.drawn });
+  const emptyBoard = empty.renderer.create({ fitOnImport: false });
+  const emptyView = miragonView(emptyBoard, { firstFit: () => insets });
+  await emptyBoard.importText("board");
+  await tick(5);
+  assert.equal(empty.canvas.writes.length, 0, "nothing to fit");
+  board.drawn = { x: 0, y: 0, width: 700, height: 300 };
+  await emptyBoard.importText("board, remote");
+  await tick(5);
+  assert.equal(empty.canvas.writes.length, 0, "a peer's first sticky is fitted by no one");
+  assert.equal(emptyView.isTouched(), false);
+  emptyView.zoomTo(1.5);
+  assert.equal(emptyView.isTouched(), true);
+  emptyView.destroy();
 });
 
 test("fit() on an empty canvas (mounted, not yet imported) does nothing — no fit to compare a later move against", () => {
