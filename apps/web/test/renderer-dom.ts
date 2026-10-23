@@ -9,9 +9,10 @@
  * sources without one). Import it before any renderer, and import the renderers
  * dynamically: the hooks only see imports resolved after they register.
  * Every element reports one client size (CLIENT_SIZE), so a canvas has a
- * viewbox and a view state, but shapes measure 0×0: nothing about fit, zoom
- * or label layout can be asserted, only what the renderers import, export,
- * emit and keep as their view.
+ * viewbox and a view state, but shapes measure 0×0: a fit can be asserted
+ * only to a content box a renderer computes from its model
+ * (`contentBounds()`), and nothing about label layout, only what the
+ * renderers import, export, emit and keep as their view.
  */
 import { registerHooks } from "node:module";
 

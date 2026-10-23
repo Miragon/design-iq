@@ -17,8 +17,8 @@ import { SHELL } from "@miragon/modeler-shell/core";
 import { handleChromeKey } from "@/lib/chrome-keys";
 import { attachPresenceCanvas } from "@/lib/presence-canvas";
 import type { ExportFile, Insets } from "@/mcp-app/core/engine";
-import { diagramView } from "@/mcp-app/engines/diagram-js";
 import { ZOOM_STEP } from "@/mcp-app/engines/fit";
+import { miragonView } from "@/mcp-app/engines/miragon";
 
 import type { EditorContext, MountedEditor } from "../registry";
 import type { LoadedMiragonRenderer, MiragonRendererSpec } from "./spec";
@@ -87,10 +87,7 @@ export function mountMiragonEditor(
   modeler.attachTo(container);
   // before the binding: its first import may finish right away, and the view
   // that import leaves is the one a later move is measured against
-  const view = diagramView(
-    modeler.diagram,
-    renderer.contentBounds ? { contentBounds: () => renderer.contentBounds?.(modeler) } : {},
-  );
+  const view = miragonView(modeler);
   let unbind: () => void;
   try {
     unbind = bindMiragon(modeler, spec.contractNotation, ctx.ytext, ctx.doc, ctx.onSyncError, ctx.onImportFailed, {

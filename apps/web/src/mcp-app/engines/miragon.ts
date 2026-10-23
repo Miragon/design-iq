@@ -9,8 +9,8 @@
  * reports a change. The chrome's insets reach every renderer as its free
  * area (notations/miragon/spec.ts contractOptions), so keyboard creation
  * lands clear of the chrome and a pan constraint keeps the chrome's fit; the
- * chrome fits the view itself (diagramView, on the wrapped diagram, to the
- * spec's content bounds where it names them), so the renderer does not fit
+ * chrome fits the view itself (miragonView: diagramView on the wrapped
+ * diagram, to the renderer's content bounds), so the renderer does not fit
  * on import first. A renderer's own menu entries and the document's title
  * reach the widget menu as `menu` and `displayName`.
  *
@@ -27,7 +27,7 @@ import type {
   MiragonModeler,
   MiragonRendererSpec,
 } from "../../notations/miragon/spec.ts";
-import type { EngineOptions, LiveBindHooks, MenuHost, WidgetEngine } from "../core/engine.ts";
+import type { EngineOptions, Insets, LiveBindHooks, MenuHost, WidgetEngine } from "../core/engine.ts";
 import { type DiagramView, diagramView } from "./diagram-js.ts";
 
 export interface MiragonEngine extends WidgetEngine {
@@ -51,6 +51,22 @@ function menuHostIn(host: MenuHost, root: HTMLElement, readOnly: boolean): Mirag
   };
 }
 
+/**
+ * The view controls of a mounted renderer, in both hosts. A fit frames the
+ * renderer's own content box (`contentBounds()`, contract 1.3): the elements
+ * alone leave out what a notation draws beside them (Wardley's plot and
+ * axes, an arrow annotation, a team name wider than its shape), and
+ * Wardley's pan constraint pulls a fit to any other box back. The method is
+ * optional, so a renderer without it, or with nothing to fit, keeps
+ * diagram-js's box around the elements.
+ */
+export function miragonView(modeler: MiragonModeler, insets?: () => Insets): DiagramView {
+  return diagramView(modeler.diagram, {
+    ...(insets ? { insets } : {}),
+    contentBounds: () => modeler.contentBounds?.(),
+  });
+}
+
 export function mountMiragonEngine(
   spec: Pick<MiragonRendererSpec, "contractNotation">,
   renderer: LoadedMiragonRenderer,
@@ -67,8 +83,7 @@ export function mountMiragonEngine(
     throw error;
   }
   modeler.attachTo(container);
-  const contentBounds = renderer.contentBounds && (() => renderer.contentBounds?.(modeler));
-  const view = diagramView(modeler.diagram, opts ? { insets: opts.insets, contentBounds } : {});
+  const view = miragonView(modeler, opts?.insets);
   const menu =
     opts?.menuHost && renderer.menu
       ? renderer.menu(modeler, menuHostIn(opts.menuHost, container, readonly))

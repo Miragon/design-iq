@@ -278,7 +278,12 @@ In the SPA a Miragon editor's ⇧1 fits 24px clear of the renderer's palette as
 measured, of the canvas's sides and bottom, and of an open side panel (the
 panels dock over the canvas's right edge, `src/lib/side-panel-room.ts`);
 opening or closing a side panel re-fits a view nobody moved since the import
-or the last fit, as the widget does with its cards. The ⋯ menu repeats the
+or the last fit, as the widget does with its cards. Both hosts fit a Miragon
+renderer to the box its `contentBounds()` reports (`@miragon/modeler-api`
+contract 1.3, feature-detected in `miragonView`, `engines/miragon.ts`):
+Wardley's plot with its axes, an Event Storming board's arrow annotations, a
+team or context name wider than its shape. A renderer without the method, or
+with nothing to fit, gets diagram-js's box around the elements. The ⋯ menu repeats the
 Legend toggle as a checkbox in its Model block. The inline height is declared after
 connect (480, or 420 below 600 wide), and again only on a width-class flip or
 the return to inline; no state change resizes the iframe.
@@ -349,8 +354,9 @@ sized by `miragon-styles.css`) and removes it with the engine.
    package's `createCollaborativeModeler`/`createCollaborativeViewer` with the
    contract's factory options (`contractOptions` in `spec.ts`: the free area
    and `fitOnImport`, plus `undoRedoKeys` for the editor), the names every
-   renderer on `@miragon/modeler-api` 1.2 takes, and `contentBounds` if what
-   a host fits is more than the canvas's elements (Wardley's plot and axes).
+   renderer on `@miragon/modeler-api` 1.2 or later takes. The spec names no
+   box to fit: both hosts fit to the renderer's own `contentBounds()`
+   (contract 1.3) where it has one.
    Optional: `title` (the document's title, the menu header's display name),
    `menu` (the package's own menu content, its dialogs built with the
    helpers in `menu-content.ts` inside the mount's host) and, with

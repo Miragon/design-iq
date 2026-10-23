@@ -70,6 +70,8 @@ function fakeCanvas(inner: Box, outer: { width: number; height: number }, emit: 
  * leaves the view at the renderer's own fit (`fitted`), a canonical export
  * that is not a byte copy of the import, a change event per user edit, and
  * no change event ever from the viewer. `importFails` rejects every import.
+ * `contentBounds` is contract 1.3's optional box of the content; without it
+ * the modeler is one of contract 1.2.
  */
 function fakeRenderer(
   o: {
@@ -79,6 +81,7 @@ function fakeRenderer(
     inner?: Box;
     outer?: { width: number; height: number };
     fitted?: Box;
+    contentBounds?: () => Box | undefined;
   } = {},
 ) {
   const handlers = new Map<string, Set<(event?: unknown) => void>>();
@@ -131,6 +134,7 @@ function fakeRenderer(
       return { x, y, width, height };
     },
     setViewState: (view) => void canvas.viewbox(view as Box),
+    ...(o.contentBounds ? { contentBounds: o.contentBounds } : {}),
     destroy: () => void state.destroyed++,
   });
   const renderer: LoadedMiragonRenderer = {
@@ -510,6 +514,41 @@ test("a live re-import's own viewbox writes are never a touch: the renderer's fi
   const after = r.canvas.viewbox() as Box;
   assert.deepEqual([after.x, after.y, after.width, after.height], [moved.x, moved.y, moved.width, moved.height]);
   unbind();
+  engine.destroy();
+});
+
+test("a renderer that reports its content box (contract 1.3): the import fit and the Fit button frame it, not the elements' box", async () => {
+  const inner = { x: 40, y: 20, width: 1400, height: 600 };
+  // beside the elements: a plot with axes, a label past its shape
+  let content: Box | undefined = { x: -60, y: -40, width: 1900, height: 900 };
+  const insets: Insets = { top: 104, right: 16, bottom: 56, left: 16 };
+  const r = fakeRenderer({ inner, contentBounds: () => content });
+  const engine = mountMiragonEngine(SPEC, r.renderer, container, false, { insets: () => insets });
+  await engine.importText("map");
+  assert.deepEqual(r.canvas.writes.at(-1), fitted(content, r.outer, insets), "the import fit");
+  engine.view.zoomTo(1);
+  content = { x: 0, y: 0, width: 700, height: 300 };
+  engine.view.fit(insets, false);
+  assert.deepEqual(r.canvas.writes.at(-1), fitted(content, r.outer, insets), "the Fit button reads the box afresh");
+  // nothing to fit (an empty diagram): the elements' box, as before contract 1.3
+  content = undefined;
+  engine.view.zoomTo(1);
+  engine.view.fit(insets, false);
+  assert.deepEqual(r.canvas.writes.at(-1), fitted(inner, r.outer, insets), "undefined falls back");
+  engine.destroy();
+});
+
+test("a renderer without contentBounds (contract 1.2): the fit frames diagram-js's box around the elements", async () => {
+  const inner = { x: 40, y: 20, width: 1400, height: 600 };
+  const insets: Insets = { top: 104, right: 16, bottom: 56, left: 16 };
+  const r = fakeRenderer({ inner });
+  const engine = mountMiragonEngine(SPEC, r.renderer, container, false, { insets: () => insets });
+  assert.equal("contentBounds" in engine.modeler, false, "a 1.2 modeler");
+  await engine.importText("map");
+  assert.deepEqual(r.canvas.writes.at(-1), fitted(inner, r.outer, insets), "the import fit");
+  engine.view.zoomTo(1);
+  engine.view.fit(insets, false);
+  assert.deepEqual(r.canvas.writes.at(-1), fitted(inner, r.outer, insets), "the Fit button");
   engine.destroy();
 });
 
