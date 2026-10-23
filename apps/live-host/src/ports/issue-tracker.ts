@@ -7,11 +7,11 @@
  * GitLab maps 1:1 onto project issues. Jira maps a repo to a project via
  * adapter config and issue ids look like "PROJ-123" — which is why `Todo.id`
  * is an opaque string and why nothing in this contract assumes numbers,
- * labels, or markdown. Anchor semantics (which process, which BPMN elements)
+ * labels, or markdown. Anchor semantics (which model, which of its elements)
  * are platform domain — the codec lives in @designiq/contracts/todo-anchor (mcp needs it too); adapters only
  * decide WHERE the encoded block lives (GitHub: issue body).
  */
-import type { TodoAnchor } from "@designiq/contracts/todo-anchor";
+import type { TodoAnchor, TodoModelRef } from "@designiq/contracts/todo-anchor";
 import type { TodoFieldValues, TodoType } from "@designiq/contracts/todo-types";
 
 export interface TodoInput {
@@ -44,7 +44,7 @@ export interface Todo {
   body: string;
   state: "open" | "done";
   /** null = item carries no parseable anchor (e.g. created by hand) — still a
-   *  process-level todo when the tracker-side filter matched */
+   *  model-level todo when the tracker-side filter matched */
   anchor: TodoAnchor | null;
   /** attributed platform login when known */
   author: string | null;
@@ -53,10 +53,11 @@ export interface Todo {
   createdAt: string;
 }
 
-/** where a todo is re-anchored to — a renamed process (#208) */
+/** where a todo is re-anchored to — a renamed model (#208); a rename keeps
+ *  the notation */
 export interface TodoTarget {
-  /** the process id (the .bpmn file stem) */
-  process: string;
+  /** the new model id (the file stem) */
+  model: string;
   /** its repo-relative model file */
   file: string;
 }
@@ -82,14 +83,14 @@ export interface IssueTracker {
   listTodoTypes(repoFullName: string): Promise<TrackerTodoTypes>;
   /** create a todo in the tracker backing this repo; returns the created item */
   createTodo(repoFullName: string, input: TodoInput): Promise<Todo>;
-  /** OPEN todos for one repo, optionally narrowed to a process */
-  listTodos(repoFullName: string, processId?: string): Promise<Todo[]>;
+  /** OPEN todos for one repo, optionally narrowed to one model */
+  listTodos(repoFullName: string, model?: TodoModelRef): Promise<Todo[]>;
   /** close one todo; closedBy = platform login (attribution is textual, items stay bot-authored) */
   closeTodo(repoFullName: string, id: string, closedBy: string): Promise<void>;
-  /** re-anchor ONE todo from process `from` to `to` (a rename, #208): the
-   *  tracker-side process filter and the anchor both name `to` afterwards.
+  /** re-anchor ONE todo from model `from` to `to` (a rename, #208): the
+   *  tracker-side model filter and the anchor both name `to` afterwards.
    *  Idempotent — an item already on `to` comes back "unchanged". Throws
    *  TrackerRateLimited when the tracker asks to slow down; the pacing of a
    *  batch is the caller's (application/todo-jobs.ts). */
-  retargetTodo(repoFullName: string, id: string, from: string, to: TodoTarget): Promise<"moved" | "unchanged">;
+  retargetTodo(repoFullName: string, id: string, from: TodoModelRef, to: TodoTarget): Promise<"moved" | "unchanged">;
 }

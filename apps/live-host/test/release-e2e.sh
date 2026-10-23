@@ -163,7 +163,7 @@ T=$(curl -s --max-time 60 -X POST -H "Content-Type: application/json" \
 echo "$T" | grep -q '"id": *"1"' && ok "C: todo created via HTTP (tracker issue #1)" || bad "C: todo create failed: $T"
 echo "$T" | grep -q '"author": *"petra"' && ok "C: author attributed from the session" || bad "C: wrong author: $T"
 L=$(curl -s --max-time 60 "http://localhost:$PORT_A/api/repos/acme/bpm-processes/todos?process=two-pool")
-echo "$L" | grep -q '"process": *"two-pool"' && ok "C: todo listed with parsed anchor (process filter)" || bad "C: todo list failed: $L"
+echo "$L" | grep -q '"model": *"two-pool"' && ok "C: todo listed with parsed anchor (process filter)" || bad "C: todo list failed: $L"
 CLOSE=$(curl -s --max-time 60 -X POST \
   "http://localhost:$PORT_A/api/repos/acme/bpm-processes/todos/1/close")
 echo "$CLOSE" | grep -q '"ok": *true' && ok "C: todo closed via HTTP" || bad "C: todo close failed: $CLOSE"
@@ -360,8 +360,8 @@ echo "$CH" | grep -q "$OTC" && bad "G: resolved file still in the pool: $CH" || 
 # ═══ Case H: rename a process — callers, todos and the release follow (#208) ═══
 API="http://localhost:$PORT_A/api/repos/acme/bpm-processes"
 T=$(curl -s --max-time 60 -X POST -H "Content-Type: application/json" \
-  -d '{"title":"Dunning wording","anchor":{"process":"invoice-handling"}}' "$API/todos")
-echo "$T" | grep -q '"process": *"invoice-handling"' && ok "H: a todo is filed on invoice-handling" || bad "H: todo create failed: $T"
+  -d '{"title":"Dunning wording","anchor":{"notation":"bpmn","model":"invoice-handling"}}' "$API/todos")
+echo "$T" | grep -q '"model": *"invoice-handling"' && ok "H: a todo is filed on invoice-handling" || bad "H: todo create failed: $T"
 RN=$(curl -s --max-time 60 -X POST -H "Content-Type: application/json" \
   -d "{\"path\":\"$NEW_IH\",\"name\":\"Billing run\"}" "$API/rename")
 RENAMED="processes/billing/billing-run.bpmn"
@@ -377,7 +377,7 @@ done
 echo "$J" | grep -q '"id": *"move:invoice-handling".*"state": *"done"' && ok "H: the todo job finished" || bad "H: todo job not done: $J"
 L=$(curl -s --max-time 60 "$API/todos?process=billing-run")
 echo "$L" | grep -q '"title": *"Dunning wording"' && ok "H: the todo is listed under the new id" || bad "H: todo not under billing-run: $L"
-echo "$L" | grep -q '"process": *"billing-run"' && ok "H: its anchor names the new id" || bad "H: anchor not re-anchored: $L"
+echo "$L" | grep -q '"model": *"billing-run"' && ok "H: its anchor names the new id" || bad "H: anchor not re-anchored: $L"
 L=$(curl -s --max-time 60 "$API/todos?process=invoice-handling")
 echo "$L" | grep -q "Dunning wording" && bad "H: todo still under the old id: $L" || ok "H: nothing left under the old id"
 CH=$(curl -s --max-time 60 "$API/changes")

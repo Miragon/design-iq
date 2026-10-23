@@ -85,11 +85,7 @@ export async function findModelPath(
   notation?: string,
 ): Promise<string> {
   const workspace = await opts.workspaces.ensure(repo);
-  const cfg = requireContentConfig(workspace, repo);
-  const matches = (await discoverModels(workspace, cfg)).filter(
-    (m) => m.id === id && (notation === undefined || m.notation === notation),
-  );
-  const hit = matches.find((m) => m.notation === "bpmn") ?? matches[0];
+  const hit = await modelById(workspace, requireContentConfig(workspace, repo), id, notation);
   if (!hit) {
     throw new AppError(
       "content/unknown-model",
@@ -98,4 +94,35 @@ export async function findModelPath(
     );
   }
   return hit.path;
+}
+
+/** the notation of the model with this id, by findModelPath's rule (a
+ *  process first) — undefined when the repo holds none (or is no content
+ *  repo): for the callers to whom an unknown id is no error */
+export async function findModelNotation(
+  opts: FindModelDeps,
+  repo: ConnectedRepo,
+  id: string,
+): Promise<string | undefined> {
+  const workspace = await opts.workspaces.ensure(repo);
+  const cfg = loadContentConfig(workspace);
+  return cfg ? (await modelById(workspace, cfg, id))?.notation : undefined;
+}
+
+/** where every model of the repo is now, keyed `<notation>:<id>` — empty for
+ *  a repo without a content config */
+export async function findModelPaths(opts: FindModelDeps, repo: ConnectedRepo): Promise<Map<string, string>> {
+  const workspace = await opts.workspaces.ensure(repo);
+  const cfg = loadContentConfig(workspace);
+  const models = cfg ? await discoverModels(workspace, cfg) : [];
+  return new Map(models.map((m) => [`${m.notation}:${m.id}`, m.path]));
+}
+
+/** the model of this id (of `notation`, when given): a stem shared across
+ *  notations resolves bpmn-first */
+async function modelById(workspace: string, cfg: ContentConfig, id: string, notation?: string) {
+  const matches = (await discoverModels(workspace, cfg)).filter(
+    (m) => m.id === id && (notation === undefined || m.notation === notation),
+  );
+  return matches.find((m) => m.notation === "bpmn") ?? matches[0];
 }

@@ -47,7 +47,7 @@ export interface AssistContext {
   notation: string;
   /** the Live Host's MCP endpoint (AppConfig.mcpUrl) — names the instance */
   mcpUrl: string;
-  /** current canvas selection (BPMN only) — rides along as data */
+  /** current canvas selection (an editor with element identity) — rides along as data */
   selection?: TodoElement[];
 }
 

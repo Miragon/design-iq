@@ -40,10 +40,11 @@ import type {
   RenameModelResult,
   TodoJobWire,
 } from "@designiq/contracts/live-host";
+import type { TodoModelRef } from "@designiq/contracts/todo-anchor";
 import { testsPathFor } from "@designiq/decisions/tests";
 import { AppError } from "@designiq/http-kit";
 import { readSnapshot } from "@designiq/live-client/structured";
-import { byExtension, byId, modelStem, processIdFromName } from "@designiq/notations";
+import { byExtension, byId, hasTodos, modelStem, processIdFromName } from "@designiq/notations";
 import { retargetRefs } from "@designiq/notations/retarget";
 import { newBpmnXml, newDmnXml, templateFor } from "@designiq/notations/templates";
 import * as Y from "yjs";
@@ -554,9 +555,9 @@ export interface RenameDeps {
    *  open caller sees the change and nothing is overwritten on disk behind it */
   editContent: (path: string, edit: (content: string) => string) => Promise<void>;
   recordRenames?: MoveDeps["recordRenames"];
-  /** a renamed PROCESS's open todos follow its new id — in the background
+  /** a renamed model's open todos follow its new id — in the background
    *  (application/todo-jobs.ts); absent when the host has no tracker */
-  todos?: { move(from: string, to: { process: string; file: string }): TodoJobWire };
+  todos?: { move(from: TodoModelRef, to: { model: string; file: string }): TodoJobWire };
 }
 
 /**
@@ -631,12 +632,12 @@ export async function renameModel(
   await journal(deps.recordRenames, repo, renamed);
   const newPath = renamed[0]?.to ?? pathUnderId(model, model.path, id);
 
-  // todos are filed under the process id — they follow it (a job: the tracker
+  // todos are filed under the model id — they follow it (a job: the tracker
   // takes one write at a time, the rename does not wait for that)
   let todoJob: TodoJobWire | undefined;
-  if (model.notation === "bpmn" && deps.todos) {
+  if (hasTodos(model.notation) && deps.todos) {
     try {
-      todoJob = deps.todos.move(model.id, { process: id, file: newPath });
+      todoJob = deps.todos.move({ notation: model.notation, id: model.id }, { model: id, file: newPath });
     } catch (e) {
       console.log(`rename ${model.path} → ${id}: todos not moved: ${(e as Error).message}`);
     }
@@ -720,9 +721,9 @@ export interface DeleteDeps {
   liveDocs: () => string[];
   /** forget a deleted file's Yjs lineage */
   dropLineage: (room: string) => void;
-  /** close a deleted process's open todos in the background (`closeTodos`) —
+  /** close a deleted model's open todos in the background (`closeTodos`) —
    *  absent when the host has no tracker */
-  todos?: { close(from: string): TodoJobWire };
+  todos?: { close(from: TodoModelRef): TodoJobWire };
 }
 
 /**
@@ -768,14 +769,15 @@ export async function deleteModels(
     await rm(resolve(workspace, file), { force: true });
     deps.dropLineage(roomName(repo.fullName, file));
   }
-  // asked for: the deleted processes' todos are closed (they would point at
+  // asked for: the deleted models' todos are closed (they would point at
   // nothing otherwise) — in the background, one tracker write at a time
   const todoJobs: TodoJobWire[] = [];
   if (body.closeTodos && deps.todos) {
     for (const path of requested) {
-      if (byExtension(path)?.id !== "bpmn") continue;
+      const notation = byExtension(path)?.id;
+      if (!notation || !hasTodos(notation)) continue;
       try {
-        todoJobs.push(deps.todos.close(modelStem(path)));
+        todoJobs.push(deps.todos.close({ notation, id: modelStem(path) }));
       } catch (e) {
         console.log(`delete ${path}: todos not closed: ${(e as Error).message}`);
       }

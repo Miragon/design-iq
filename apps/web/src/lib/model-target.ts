@@ -56,13 +56,15 @@ export const isReferenceable = (notation: string): boolean => notation === "bpmn
  * list, so a model that was just created or renamed is fetched first — and
  * when the list does not have it yet (a peer following a rename that is still
  * being written), the file route opens it all the same. `hash` lands on a
- * section of the model (a link from a document).
+ * section of the model (a link from a document), `element` reveals one of its
+ * elements (a deep link).
  */
 export function useOpenModel(repo: string) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [owner = "", name = ""] = repo.split("/");
-  return async (path: string, opts: { replace?: boolean; hash?: string } = {}): Promise<void> => {
+  return async (path: string, opts: { replace?: boolean; hash?: string; element?: string } = {}): Promise<void> => {
+    const search = opts.element ? { element: opts.element } : {};
     if (byExtension(path)?.id === "bpmn") {
       const id = modelStem(path);
       const processes = await qc
@@ -72,6 +74,7 @@ export function useOpenModel(repo: string) {
         await navigate({
           to: "/r/$owner/$repo/p/$processId",
           params: { owner, repo: name, processId: id },
+          search,
           hash: opts.hash,
           replace: opts.replace,
         });
@@ -81,6 +84,7 @@ export function useOpenModel(repo: string) {
     await navigate({
       to: "/r/$owner/$repo/f/$",
       params: { owner, repo: name, _splat: path },
+      search,
       hash: opts.hash,
       replace: opts.replace,
     });

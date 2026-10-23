@@ -146,7 +146,7 @@ import {
 } from "../application/scaffold.ts";
 import { syncRepo } from "../application/sync.ts";
 import type { TodoJobs } from "../application/todo-jobs.ts";
-import { closeTodoFor, fileTodo, listOpenTodos, listTodoTypesFor } from "../application/todos.ts";
+import { closeTodoFor, fileTodo, listOpenTodos, listTodoTypesFor, todoListModel } from "../application/todos.ts";
 import type { WsTicketStore } from "../application/ws-tickets.ts";
 import { isCrossSite } from "../auth/none.ts";
 import type { RepoConnectionSource } from "../ports/connection-source.ts";
@@ -203,7 +203,7 @@ export interface ApiOptions {
   /** issue-tracker seam (model-anchored todos) — absent when the platform has
    * no credentials to act on the tracker (the /todos routes then answer 501) */
   issues?: IssueTracker;
-  /** background todo work (#208/#210): a renamed process's todos move, a
+  /** background todo work (#208/#210): a renamed model's todos move, a
    * deleted one's close — present exactly when `issues` is */
   todoJobs?: Pick<TodoJobs, "move" | "close" | "status" | "retry" | "sourcesOf">;
   /** cell mode (ADR 0002): the control-plane origin (derived from
@@ -1008,20 +1008,24 @@ export function startApi(port: number, opts: ApiOptions): Server {
             return send(res, 200, { ok: true });
           }
           if (req.method === "GET") {
-            // a renamed process's todos still on their way in are listed too (#208)
-            const todos = await listOpenTodos(
-              opts.issues,
-              opts.todoJobs,
-              repo,
-              url.searchParams.get("process") ?? undefined,
-            );
+            // one model's: ?notation=&model= (?process= = a process's, as
+            // before #275); a renamed model's todos still on their way in are
+            // listed too (#208)
+            const process = url.searchParams.get("process");
+            const model = await todoListModel(opts, repo, {
+              id: url.searchParams.get("model") ?? process ?? undefined,
+              notation: url.searchParams.get("notation") ?? (process ? "bpmn" : undefined),
+            });
+            const todos = await listOpenTodos(opts.issues, opts.todoJobs, repo, model, opts);
             return send(res, 200, todos satisfies TodoWire[]);
           }
           if (req.method === "POST") {
             const body = await jsonBody<CreateTodoBody>(req, res);
             if (body === undefined) return;
-            // validation, server-side anchor resolution (unknown process = 404,
-            // client file only kept when it names that process) and the audit
+            // the anchor as REST clients sent it before #275: a process id
+            const process = typeof body?.anchor?.process === "string" ? body.anchor.process : undefined;
+            // validation, server-side anchor resolution (unknown model = 404,
+            // client file only kept when it names that model) and the audit
             // line live in the shared use-case
             const todo = await fileTodo(
               opts,
@@ -1031,7 +1035,9 @@ export function startApi(port: number, opts: ApiOptions): Server {
               {
                 title: body?.title,
                 body: body?.body,
-                process: typeof body?.anchor?.process === "string" ? body.anchor.process : undefined,
+                model: typeof body?.anchor?.model === "string" ? body.anchor.model : process,
+                notation:
+                  typeof body?.anchor?.notation === "string" ? body.anchor.notation : process ? "bpmn" : undefined,
                 file: typeof body?.anchor?.file === "string" ? body.anchor.file : undefined,
                 elements: Array.isArray(body?.anchor?.elements) ? body.anchor.elements : [],
                 processVersion: body?.anchor?.processVersion,

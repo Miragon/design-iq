@@ -12,6 +12,7 @@ import "./styles.css";
 import { processDeepLink } from "@designiq/contracts/deep-link";
 import { modelStem } from "@designiq/notations";
 
+import { attachTodoCanvas } from "@/lib/todo-canvas";
 import { tbpmToggleAction } from "@/notations/bpmn-sticky";
 
 import type { ModeChip } from "./chrome/contracts";
@@ -33,7 +34,11 @@ bootWidget<BpmnEngine>({
     if (engine.editable) chrome.setModeChip(workshopChip(engine));
     // bound BEFORE the first import: the canvas controller re-renders its
     // badges on every `import.done` (incl. the live re-imports)
-    const todos = mountTodos(app, engine, { readonly, chrome });
+    const todos = mountTodos(app, (hooks) => attachTodoCanvas(engine.raw as never, hooks), {
+      readonly,
+      chrome,
+      noun: "process",
+    });
     return {
       // discovery at the read, in parallel with the import; the toggle
       // arrives with the canvas

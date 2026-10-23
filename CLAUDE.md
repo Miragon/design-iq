@@ -32,8 +32,10 @@ Monaco alone (Value Chain). The Monaco source is one click away for every one of
 A diagram-as-code is no notation of its own: it is a `mermaid` fence in a Markdown document,
 next to the prose that explains it (`.mmd`/`.mermaid` files are plain repository files), and
 the validator checks each fence's diagram type (a WARN, `mermaid/diagram-type`).
+Todos (work items in the repo's issue tracker, anchored to a model and optionally its
+elements) are filed on every notation but DMN and Value Chain (the descriptor's `todos` flag).
 BPMN and DMN have the deepest tooling (derived process and decision views, decision
-simulation and tests, todos anchored to BPMN elements) and the BPMN/DMN hard rules below.
+simulation and tests) and the BPMN/DMN hard rules below.
 
 ## Map (pnpm workspace)
 

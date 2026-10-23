@@ -7,31 +7,38 @@
  * widgets' whole CSS scoping; the dev server resolves it to widget-spec.dev.ts
  * for `/mcp-app-miragon.html?notation=<id>`). The engine is engines/miragon.ts
  * on the shared widget core: no icon font (the renderers draw inline SVG)
- * but Geist Mono for the key chips, the file-route deep link (core/widget.ts
- * defaults); the one extra is the legend panel of a notation that has one
+ * but Geist Mono for the key chips, the file-route deep link carrying the
+ * canvas selection (?element=). The extras: the Todos card with its canvas
+ * badges (todos.ts on lib/todo-surface-canvas.ts, the controller the SPA's
+ * Miragon editor mounts too) and the legend panel of a notation that has one
  * (legend.ts).
  */
 import "./miragon-styles.css";
 
+import { fileDeepLink } from "@designiq/contracts/deep-link";
 import { byId } from "@designiq/notations";
 
+import { attachSurfaceTodoCanvas } from "@/lib/todo-surface-canvas";
 import { spec } from "@/mcp-app/widget-spec";
 import type { LoadedMiragonRenderer } from "@/notations/miragon/spec";
 
 import { h } from "./chrome/dom";
 import { bootWidget } from "./core/widget";
-import { mountMiragonEngine } from "./engines/miragon";
+import { type MiragonEngine, mountMiragonEngine } from "./engines/miragon";
 import { WIDGET_FONT_MONO } from "./font";
 import { mountLegend } from "./legend";
+import { mountTodos } from "./todos";
 
 const notation = byId(spec.id);
 if (!notation) throw new Error(`widget: no notation descriptor for renderer spec '${spec.id}'`);
 document.title = `designIQ ${notation.label} modeler`;
 
 let renderer: LoadedMiragonRenderer | undefined;
-bootWidget({
+bootWidget<MiragonEngine>({
   notation: spec.id,
   noun: notation.noun.singular,
+  // the file route, carrying the canvas selection (?element=)
+  deepLink: (publicUrl, doc, engine) => fileDeepLink(publicUrl, doc.repo, doc.path, engine.selectedElementId?.()),
   // the shortcuts dialog sets its key chips in Geist Mono (guide §5.6)
   fonts: [WIDGET_FONT_MONO],
   // the engine module is inlined into the bundle, so this resolves in a
@@ -63,7 +70,27 @@ bootWidget({
       throw error;
     }
   },
-  ...(spec.hasLegend
-    ? { extras: ({ chrome }) => mountLegend(chrome, (body) => renderer?.legend?.(body) ?? (() => {})) }
-    : {}),
+  extras: ({ app, engine, readonly, chrome }) => {
+    const legend = spec.hasLegend ? mountLegend(chrome, (body) => renderer?.legend?.(body) ?? (() => {})) : undefined;
+    // bound BEFORE the first import: the canvas controller re-renders its
+    // badges on every `import.done` (incl. the live re-imports)
+    const todos = mountTodos(
+      app,
+      (hooks) => attachSurfaceTodoCanvas(engine.modeler.diagram, engine.modeler.elements, hooks),
+      { readonly, chrome, noun: notation.noun.singular },
+    );
+    return {
+      // discovery at the read, in parallel with the import; the toggle
+      // arrives with the canvas
+      onRead: (doc) => todos.load(doc),
+      onDocument: (doc, input) => {
+        legend?.onDocument(doc, input);
+        todos.landed(doc);
+      },
+      destroy: () => {
+        todos.destroy();
+        legend?.destroy();
+      },
+    };
+  },
 });

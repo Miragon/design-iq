@@ -1,12 +1,13 @@
 /**
  * Todo anchor codec — the platform-owned block that ties a tracker item to a
- * process and (optionally) concrete BPMN elements. Trackers store it verbatim
+ * model and (optionally) concrete elements of it. Trackers store it verbatim
  * (GitHub/GitLab: inside the issue body, invisible as an HTML comment; Jira:
  * in the description) and the platform parses it back out — the tracker never
  * needs to understand it.
  *
  * Format v1 (line-based on purpose — this module is domain code and may not
- * depend on a YAML library):
+ * depend on a YAML library). A process todo, as every todo was written before
+ * the other notations got todos (#275):
  *
  *   <!-- bpmiq:todo v1
  *   process: order-to-cash
@@ -14,6 +15,17 @@
  *   version: 1.4.0
  *   element: Task_CheckCredit | Bonität prüfen
  *   type: bug_report | Bug report
+ *   -->
+ *
+ * A todo on a model of any other notation names the notation and the model
+ * instead of the process — ids are file stems, unique per notation but not
+ * across them (a process and a Wardley Map may share one):
+ *
+ *   <!-- bpmiq:todo v1
+ *   notation: wardley
+ *   model: order-to-cash
+ *   file: processes/order-to-cash.owm
+ *   element: component_payment | Payment
  *   -->
  *
  * `element:` repeats per anchored element; the part after `|` is the name
@@ -25,6 +37,14 @@
  * Parsing is tolerant: unknown lines are skipped, a missing block yields null.
  */
 
+/** the model a todo belongs to — ids are file stems, unique per notation */
+export interface TodoModelRef {
+  /** registry notation id (@designiq/notations) */
+  notation: string;
+  /** model id, the file stem */
+  id: string;
+}
+
 export interface TodoElement {
   id: string;
   /** display-name snapshot at creation time */
@@ -32,8 +52,10 @@ export interface TodoElement {
 }
 
 export interface TodoAnchor {
-  /** process id (the .bpmn file stem) */
-  process: string;
+  /** the model's notation (registry id) — "bpmn" for a block that names none */
+  notation: string;
+  /** model id (the file stem; a process's process id) */
+  model: string;
   /** repo-relative model file the elements live in */
   file: string | null;
   elements: TodoElement[];
@@ -48,6 +70,20 @@ export interface TodoTypeRef {
   /** display-name snapshot at creation time */
   name: string;
 }
+
+/** the notation a block without a `notation:` line belongs to: every todo
+ *  filed before #275 is a process todo */
+const DEFAULT_NOTATION = "bpmn";
+
+/** the model the anchor names */
+export const anchorModel = (anchor: Pick<TodoAnchor, "notation" | "model">): TodoModelRef => ({
+  notation: anchor.notation,
+  id: anchor.model,
+});
+
+/** whether the anchor names that model */
+export const anchorsModel = (anchor: Pick<TodoAnchor, "notation" | "model">, model: TodoModelRef): boolean =>
+  anchor.notation === model.notation && anchor.model === model.id;
 
 // FROZEN — the marker never follows a product rename. It opens the anchor
 // block in every todo issue already filed in customer trackers; under any
@@ -66,7 +102,11 @@ const cleanName = (name: string | null): string =>
     .trim();
 
 export function encodeAnchor(anchor: TodoAnchor): string {
-  const lines = [OPEN, `process: ${anchor.process}`];
+  // a process todo keeps the line every host has read since v1
+  const lines =
+    anchor.notation === DEFAULT_NOTATION
+      ? [OPEN, `process: ${anchor.model}`]
+      : [OPEN, `notation: ${anchor.notation}`, `model: ${anchor.model}`];
   if (anchor.file) lines.push(`file: ${anchor.file}`);
   if (anchor.processVersion) lines.push(`version: ${anchor.processVersion}`);
   for (const el of anchor.elements) lines.push(`element: ${el.id} | ${cleanName(el.name)}`);
@@ -102,14 +142,15 @@ export function parseAnchor(text: string): TodoAnchor | null {
   if (start === -1) return null;
   const end = text.indexOf(CLOSE, start);
   if (end === -1) return null;
-  const anchor: TodoAnchor = { process: "", file: null, elements: [], processVersion: null };
+  const anchor: TodoAnchor = { notation: DEFAULT_NOTATION, model: "", file: null, elements: [], processVersion: null };
   for (const raw of text.slice(start + OPEN.length, end).split("\n")) {
     const line = raw.trim();
     const sep = line.indexOf(": ");
     if (sep === -1) continue;
     const key = line.slice(0, sep);
     const value = line.slice(sep + 2).trim();
-    if (key === "process") anchor.process = value;
+    if (key === "process" || key === "model") anchor.model = value;
+    else if (key === "notation") anchor.notation = value || DEFAULT_NOTATION;
     else if (key === "file") anchor.file = value;
     else if (key === "version") anchor.processVersion = value;
     else if (key === "type") {
@@ -123,5 +164,5 @@ export function parseAnchor(text: string): TodoAnchor | null {
       else anchor.elements.push({ id: value.slice(0, pipe).trim(), name: value.slice(pipe + 3).trim() || null });
     }
   }
-  return anchor.process ? anchor : null;
+  return anchor.model ? anchor : null;
 }

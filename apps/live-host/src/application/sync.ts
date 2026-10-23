@@ -18,8 +18,9 @@
  */
 import { roomName, roomPrefix } from "@designiq/contracts/live";
 import type { SyncResult } from "@designiq/contracts/live-host";
+import type { TodoModelRef } from "@designiq/contracts/todo-anchor";
 import { AppError } from "@designiq/http-kit";
-import { byExtension, modelStem } from "@designiq/notations";
+import { byExtension, hasTodos, modelStem } from "@designiq/notations";
 
 import type { ConnectedRepo } from "../repos/registry.ts";
 
@@ -34,9 +35,9 @@ export interface SyncDeps {
     /** the platform's unreleased renames — the reset discards them (#208) */
     renames?(repo: ConnectedRepo): Promise<Array<{ from: string; to: string }>>;
   };
-  /** a discarded process rename sends its todos back to the old id (#208) —
+  /** a discarded model rename sends its todos back to the old id (#208) —
    *  absent when the host has no tracker */
-  todoJobs?: { move(repo: string, from: string, to: { process: string; file: string }, by: string): unknown };
+  todoJobs?: { move(repo: string, from: TodoModelRef, to: { model: string; file: string }, by: string): unknown };
   /** repo-qualified document names of live rooms — a non-empty match blocks the reset */
   liveDocs: () => string[];
   /** invalidate one room's Yjs lineage so the next open reseeds from the new tree */
@@ -59,15 +60,16 @@ export async function syncRepo(opts: SyncDeps, repo: ConnectedRepo, by = "platfo
     );
   }
   await opts.workspaces.ensure(repo);
-  // the reset brings back every renamed process's OLD file — its todos, which
+  // the reset brings back every renamed model's OLD file — its todos, which
   // followed the rename, go back with it (read before the reset clears the journal).
   // Only where the reset really restored it: a rename released and merged
   // meanwhile stays, and so do its todos
   const renamed = opts.todoJobs ? ((await opts.workspaces.renames?.(repo).catch(() => [])) ?? []) : [];
   const changed = await opts.workspaces.resetToDefault(repo);
   for (const { from, to } of renamed) {
-    if (byExtension(from)?.id !== "bpmn" || modelStem(from) === modelStem(to) || !changed.includes(from)) continue;
-    opts.todoJobs?.move(repo.fullName, modelStem(to), { process: modelStem(from), file: from }, by);
+    const notation = byExtension(from)?.id;
+    if (!notation || !hasTodos(notation) || modelStem(from) === modelStem(to) || !changed.includes(from)) continue;
+    opts.todoJobs?.move(repo.fullName, { notation, id: modelStem(to) }, { model: modelStem(from), file: from }, by);
   }
   // drop the lineage of every file the reset changed so the next open reseeds
   // from the fetched tree instead of write-through resurrecting the stale state

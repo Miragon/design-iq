@@ -1,7 +1,8 @@
 /**
  * GitHub implementation of the IssueTracker port — todos are repo ISSUES in
  * the customer's own repository, never rows in a platform database. Each todo
- * carries the `todo` label plus `process:<id>` for the anchored process; the
+ * carries the `todo` label plus one for the anchored model (`process:<id>`,
+ * `wardley:<id>`, … — @designiq/github-app/todos modelLabel); the
  * platform anchor block (the codec lives in @designiq/contracts/todo-anchor (mcp needs it too)) lives invisibly
  * at the top of the issue body, followed by the author's text and a textual
  * attribution line (issues are bot-authored via the installation token, the
@@ -13,23 +14,27 @@
  * (remote mint). Nothing GitHub-specific leaks through the port — GitLab/Jira
  * implement the same contract against their own issue APIs.
  */
-import { processDeepLink } from "@designiq/contracts/deep-link";
+import { modelDeepLink } from "@designiq/contracts/deep-link";
 import {
+  anchorModel,
+  anchorsModel,
   encodeAnchor,
   parseAnchor,
   replaceAnchor,
   stripAnchor,
   type TodoAnchor,
+  type TodoModelRef,
 } from "@designiq/contracts/todo-anchor";
 import { GitHubHttpError, paginate, tokenRest } from "@designiq/github-app";
 import {
   type GitHubIssueRow,
   isPullRequestRow,
-  processLabel,
+  modelLabel,
   TODO_LABEL,
   todoLabelQuery,
 } from "@designiq/github-app/todos";
 import { AppError } from "@designiq/http-kit";
+import { byId } from "@designiq/notations";
 
 import {
   type IssueTracker,
@@ -95,15 +100,16 @@ export interface DeepLinkTarget {
   repoFullName: string;
 }
 
-/** one 📍 line per anchored element, linking into the web app's process-editor
- * route — the URL shape is the shared @designiq/contracts/deep-link builder (the
+/** the link of one anchored element into the web app's editor of its model —
+ * the URL shape is the shared @designiq/contracts/deep-link builder (the
  * widget button and the open_modeler result build the very same links) */
+const elementLink = (target: DeepLinkTarget, model: TodoModelRef, file: string | null, elementId: string): string =>
+  modelDeepLink(target.publicUrl, target.repoFullName, { ...model, file }, elementId);
+
+/** one 📍 line per anchored element */
 function deepLinkLines(anchor: TodoAnchor, target: DeepLinkTarget): string {
   return anchor.elements
-    .map((el) => {
-      const url = processDeepLink(target.publicUrl, target.repoFullName, anchor.process, el.id);
-      return `📍 [${el.name ?? el.id}](${url})`;
-    })
+    .map((el) => `📍 [${el.name ?? el.id}](${elementLink(target, anchorModel(anchor), anchor.file, el.id)})`)
     .join("\n");
 }
 
@@ -120,20 +126,21 @@ export function todoBody(input: TodoInput, deepLink?: DeepLinkTarget): string {
 }
 
 /**
- * The body of a todo re-anchored from process `from` to `to` (#208): the
- * anchor block names the new process and file, the element deep links point
- * at the new process route — every other byte (the author's text, human
- * edits made on GitHub, the attribution) stays as it is. A body whose anchor
- * names another process (or none — filed by hand) comes back unchanged.
+ * The body of a todo re-anchored from model `from` to `to` (#208): the
+ * anchor block names the new model id and file, the element deep links point
+ * at the renamed model — every other byte (the author's text, human edits
+ * made on GitHub, the attribution) stays as it is. A body whose anchor names
+ * another model (or none — filed by hand) comes back unchanged.
  */
-export function retargetBody(body: string, from: string, to: TodoTarget, deepLink?: DeepLinkTarget): string {
+export function retargetBody(body: string, from: TodoModelRef, to: TodoTarget, deepLink?: DeepLinkTarget): string {
   const anchor = parseAnchor(body);
-  if (!anchor || anchor.process !== from) return body;
-  let out = replaceAnchor(body, { ...anchor, process: to.process, file: to.file });
+  if (!anchor || !anchorsModel(anchor, from)) return body;
+  let out = replaceAnchor(body, { ...anchor, model: to.model, file: to.file });
   if (deepLink) {
+    const renamed = { notation: from.notation, id: to.model };
     for (const el of anchor.elements) {
-      const link = (process: string) => processDeepLink(deepLink.publicUrl, deepLink.repoFullName, process, el.id);
-      out = out.split(`(${link(from)})`).join(`(${link(to.process)})`);
+      const before = elementLink(deepLink, from, anchor.file, el.id);
+      out = out.split(`(${before})`).join(`(${elementLink(deepLink, renamed, to.file, el.id)})`);
     }
   }
   return out;
@@ -164,7 +171,7 @@ export interface GitHubIssueRowsDeps {
   /** installation token for ONE repo — server.ts composes registry → TokenService */
   tokenFor(repoFullName: string): Promise<string>;
   /** the live host's public URL — when set, issue bodies carry 📍 deep links
-   * into the web app's process editor for every anchored element */
+   * into the web app's editor for every anchored element */
   publicUrl?: string;
   /** how long a repo's issue templates are reused before they are read again */
   templateTtlMs?: number;
@@ -204,6 +211,13 @@ export function createGitHubIssueTracker(deps: GitHubIssueRowsDeps): IssueTracke
   /** labels this process already made sure of — a re-anchoring batch would
    *  otherwise spend one extra write per item on the same 422 */
   const ensured = new Set<string>();
+
+  /** the label of one model, as ensureLabel creates it */
+  const labelOf = (model: TodoModelRef) => ({
+    name: modelLabel(model),
+    color: "ededed",
+    description: `designIQ ${byId(model.notation)?.noun.singular ?? model.notation} ${model.id}`,
+  });
 
   /** create a label, tolerating "already exists" (422) — labels are idempotent state */
   async function ensureLabel(
@@ -315,11 +329,8 @@ export function createGitHubIssueTracker(deps: GitHubIssueRowsDeps): IssueTracke
         color: "fa8100",
         description: "designIQ model-anchored todo",
       });
-      await ensureLabel(token, repoFullName, {
-        name: processLabel(input.anchor.process),
-        color: "ededed",
-        description: `designIQ process ${input.anchor.process}`,
-      });
+      const label = labelOf(anchorModel(input.anchor));
+      await ensureLabel(token, repoFullName, label);
       const text = template ? renderTemplateBody(template, input.fields ?? {}) : input.body;
       const templateLabels = template ? await existingLabels(token, repoFullName, template.labels) : [];
       const res = await rest(token, `/repos/${repoFullName}/issues`, {
@@ -330,16 +341,16 @@ export function createGitHubIssueTracker(deps: GitHubIssueRowsDeps): IssueTracke
             { ...input, body: text },
             deps.publicUrl ? { publicUrl: deps.publicUrl, repoFullName } : undefined,
           ),
-          labels: [...new Set([TODO_LABEL, processLabel(input.anchor.process), ...templateLabels])],
+          labels: [...new Set([TODO_LABEL, label.name, ...templateLabels])],
         }),
       });
       if (!res.ok) await raise(res, repoFullName, `issue creation in ${repoFullName}`);
       return toTodo((await res.json()) as GitHubIssueRow);
     },
 
-    async listTodos(repoFullName, processId) {
+    async listTodos(repoFullName, model) {
       const token = await deps.tokenFor(repoFullName);
-      const path = `/repos/${repoFullName}/issues?state=open&labels=${encodeURIComponent(todoLabelQuery(processId))}&per_page=100`;
+      const path = `/repos/${repoFullName}/issues?state=open&labels=${encodeURIComponent(todoLabelQuery(model))}&per_page=100`;
       let issues: GitHubIssueRow[];
       try {
         issues = (await paginate(ghApi, path, { token })) as GitHubIssueRow[];
@@ -359,7 +370,8 @@ export function createGitHubIssueTracker(deps: GitHubIssueRowsDeps): IssueTracke
       if (!res.ok) await raise(res, repoFullName, `todo #${id} read`);
       const issue = (await res.json()) as GitHubIssueRow & { labels?: Array<string | { name?: string }> };
       const labels = (issue.labels ?? []).map((l) => (typeof l === "string" ? l : (l.name ?? ""))).filter(Boolean);
-      const nextLabels = [...new Set([...labels.filter((l) => l !== processLabel(from)), processLabel(to.process)])];
+      const label = labelOf({ notation: from.notation, id: to.model });
+      const nextLabels = [...new Set([...labels.filter((l) => l !== modelLabel(from)), label.name])];
       const body = issue.body ?? "";
       const nextBody = retargetBody(
         body,
@@ -369,13 +381,9 @@ export function createGitHubIssueTracker(deps: GitHubIssueRowsDeps): IssueTracke
       );
       const labelsChanged = nextLabels.length !== labels.length || nextLabels.some((l) => !labels.includes(l));
       if (!labelsChanged && nextBody === body) return "unchanged";
-      const key = `${repoFullName}\n${processLabel(to.process)}`;
+      const key = `${repoFullName}\n${label.name}`;
       if (!ensured.has(key)) {
-        await ensureLabel(token, repoFullName, {
-          name: processLabel(to.process),
-          color: "ededed",
-          description: `designIQ process ${to.process}`,
-        });
+        await ensureLabel(token, repoFullName, label);
         ensured.add(key);
       }
       // ONE write: GitHub replaces the label set as a whole — computed from

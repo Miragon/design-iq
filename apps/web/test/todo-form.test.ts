@@ -98,7 +98,7 @@ test("a todo shows the type it was filed with; a plain one shows none", () => {
     assignees: [],
     createdAt: "",
   });
-  const anchor = { process: "p", file: null, elements: [], processVersion: null };
+  const anchor = { notation: "bpmn", model: "p", file: null, elements: [], processVersion: null };
   assert.equal(todoTypeLabel(todo({ ...anchor, type: { id: "bug", name: "Bug report" } })), "Bug report");
   assert.equal(todoTypeLabel(todo(anchor)), null);
   assert.equal(todoTypeLabel(todo(null)), null);

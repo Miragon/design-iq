@@ -1,8 +1,11 @@
+import { movedModelPath } from "@designiq/notations";
 import { Button } from "@designiq/ui-kit/components/button";
-import { getRouteApi, Link } from "@tanstack/react-router";
+import { getRouteApi, Link, useLocation } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 import { LiveEditor } from "@/components/live-editor";
+import { useOpenModel } from "@/lib/model-target";
 import { useDecisions, useMe, useModels, useProcesses, useRecordVisit } from "@/lib/queries";
 
 const processRoute = getRouteApi("/r/$owner/$repo/p/$processId");
@@ -61,6 +64,8 @@ export function ProcessEditorScreen() {
 
 export function FileEditorScreen() {
   const { owner, repo: name, _splat } = fileRoute.useParams();
+  // deep-link target (?element=<id>) — revealed once after the first import
+  const { element } = fileRoute.useSearch();
   const repo = `${owner}/${name}`;
   const path = _splat ?? "";
   const me = useMe();
@@ -74,7 +79,18 @@ export function FileEditorScreen() {
   // …and so is any other-notation model (wardley, team-topology, …)
   const models = useModels(repo);
   const model = models.data?.find((m) => m.path === path);
-  if (me.isLoading) return <Loading />;
+  // a link from before a move (a todo in the tracker, a widget's link, a
+  // bookmark) follows the model to its folder: the move kept its id
+  const moved = models.data ? movedModelPath(path, models.data) : undefined;
+  const hash = useLocation({ select: (l) => l.hash });
+  const openModel = useOpenModel(repo);
+  const followed = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!moved || followed.current === moved) return;
+    followed.current = moved;
+    void openModel(moved, { replace: true, hash: hash || undefined, element });
+  }, [moved, hash, element, openModel]);
+  if (me.isLoading || moved) return <Loading />;
   if (!me.data) return null;
   return (
     <LiveEditor
@@ -83,6 +99,7 @@ export function FileEditorScreen() {
       processId={proc?.id ?? ""}
       docPath={path}
       backDir={proc?.folder ?? decision?.folder ?? model?.folder}
+      revealElementId={element}
       me={me.data}
     />
   );

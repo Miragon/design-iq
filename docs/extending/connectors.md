@@ -86,9 +86,10 @@ The third port carries model-anchored **todos**: work items that live in the cus
 OWN tracker, never in a platform database. GitHub implements it with repo issues +
 labels; GitLab maps 1:1 onto project issues; Jira maps a repo to a project via adapter
 config, which is why `Todo.id` is an opaque string and nothing in the contract assumes
-numbers, labels, or markdown. The anchor codec (which process, which BPMN elements) is
-platform domain (`domain/todo-anchor.ts`); an adapter only decides WHERE the encoded
-block is stored (GitHub: the issue body).
+numbers, labels, or markdown. The anchor codec (which model of which notation, which of
+its elements) is platform domain (`@designiq/contracts/todo-anchor`); an adapter only
+decides WHERE the encoded block is stored (GitHub: the issue body) and how a listing is
+narrowed to one model (GitHub: a label per model, `process:<id>` or `<notation>:<id>`).
 
 ## The rule (ADR 0003)
 

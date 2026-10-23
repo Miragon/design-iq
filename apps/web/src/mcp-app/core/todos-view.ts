@@ -9,20 +9,27 @@
 import type { TodoWire } from "@designiq/contracts/live-host";
 
 import { emptyTodoMessage, todosForElement } from "../../lib/todo-view.ts";
+
+export { addTodoTitle } from "../../lib/todo-view.ts";
 import type { PanelBadge } from "./feedback.ts";
 import type { ToastSpec } from "./lifecycle.ts";
 
 export const LOADING_TODOS = "Loading todos…";
 export const EMPTY_HINT = "Select an element, then add a todo to anchor it there.";
 export const READONLY_FOOT = "Read-only here: filing and closing todos is disabled.";
-export const WHOLE_PROCESS = "Whole process";
-export const WHOLE_PROCESS_TITLE = "Not anchored to an element — about the process as a whole";
+/** the chip of a todo on the whole model ("Whole process", "Whole Wardley Map", …) */
+export const wholeModel = (noun: string): string => `Whole ${noun}`;
+export const wholeModelTitle = (noun: string): string => `Not anchored to an element — about the ${noun} as a whole`;
 export const IMPLEMENT_TITLE = "Hand this todo to the assistant in this chat";
 
 export interface TodoListState {
   todos: TodoWire[];
   /** the element a canvas badge narrowed the list to */
   filter: string | null;
+  /** the anchor ids that land on it (TodoCanvas.anchorIds); absent = its id alone */
+  filterIds?: readonly string[];
+  /** how the model is called ("process", "Wardley Map", …); absent = "process" */
+  noun?: string;
   loading: boolean;
   /** the last list call failed (the callout says why) */
   failed: boolean;
@@ -40,21 +47,22 @@ export type TodoListView =
 
 export function todoListView(s: TodoListState): TodoListView {
   if (s.loading && s.todos.length === 0) return { kind: "loading", text: LOADING_TODOS };
-  const rows = s.filter ? todosForElement(s.todos, s.filter) : s.todos;
+  const rows = s.filter ? todosForElement(s.todos, s.filterIds ?? s.filter) : s.todos;
   if (rows.length > 0) return { kind: "rows", rows };
   if (s.failed) return { kind: "error" };
   if (s.filter) return { kind: "filtered-empty", title: emptyTodoMessage(true) };
   return {
     kind: "empty",
-    title: emptyTodoMessage(false),
+    title: emptyTodoMessage(false, s.noun),
     ...(s.canWrite ? { hint: EMPTY_HINT } : {}),
     add: s.canWrite,
   };
 }
 
-/** the head's count: "3", or "1 of 3" while a badge filters the list */
-export function headCount(todos: TodoWire[], filter: string | null): string {
-  return filter ? `${todosForElement(todos, filter).length} of ${todos.length}` : String(todos.length);
+/** the head's count: "3", or "1 of 3" while a badge filters the list (by
+ *  the anchor ids that land on its element, `filterIds`) */
+export function headCount(todos: TodoWire[], filter: string | null, filterIds?: readonly string[]): string {
+  return filter ? `${todosForElement(todos, filterIds ?? filter).length} of ${todos.length}` : String(todos.length);
 }
 
 /** the TR toggle's chip and its name once the label drops (degrade step 4);
@@ -62,13 +70,6 @@ export function headCount(todos: TodoWire[], filter: string | null): string {
 export function todosBadge(count: number, failed = false): PanelBadge {
   if (failed && count === 0) return { count, ariaLabel: "Todos, could not load" };
   return { count, ariaLabel: count === 0 ? "Todos, none open" : `Todos, ${count} open` };
-}
-
-/** the SPA's Add todo titles — the anchor is the selection at submit time */
-export function addTodoTitle(selected: number): string {
-  return selected > 0
-    ? `Anchor a todo to the ${selected} selected element${selected === 1 ? "" : "s"}`
-    : "Create a process-level todo (no element selected)";
 }
 
 /** "#38 · @octocat" */

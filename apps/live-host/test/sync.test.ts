@@ -98,8 +98,8 @@ test("syncRepo: a foreign repo's live session does not block", async () => {
   assert.equal(calls.reset, 1, "only THIS repo's sessions gate the reset");
 });
 
-test("syncRepo: a discarded process rename sends its todos back to the old id; decisions, moves and merged renames need nothing (#208)", async () => {
-  const moves: Array<{ from: string; to: string; file: string }> = [];
+test("syncRepo: a discarded model rename sends its todos back to the old id; decisions, moves and merged renames need nothing (#208)", async () => {
+  const moves: Array<{ notation: string; from: string; to: string; file: string }> = [];
   const order: string[] = [];
   const { deps: base } = deps();
   const d: SyncDeps = {
@@ -111,6 +111,7 @@ test("syncRepo: a discarded process rename sends its todos back to the old id; d
         return [
           { from: "processes/invoice-handling.bpmn", to: "processes/billing.bpmn" },
           { from: "processes/credit.dmn", to: "processes/credit-limit.dmn" },
+          { from: "processes/tea.owm", to: "processes/tea-house.owm" },
           { from: "processes/order.bpmn", to: "processes/archive/order.bpmn" },
           // released and merged meanwhile — the reset keeps delivery.bpmn
           { from: "processes/shipping.bpmn", to: "processes/delivery.bpmn" },
@@ -126,12 +127,19 @@ test("syncRepo: a discarded process rename sends its todos back to the old id; d
           "processes/credit.dmn",
           "processes/invoice-handling.bpmn",
           "processes/order.bpmn",
+          "processes/tea.owm",
         ];
       },
     },
-    todoJobs: { move: (_repo, from, to) => void moves.push({ from, to: to.process, file: to.file }) },
+    todoJobs: {
+      move: (_repo, from, to) =>
+        void moves.push({ notation: from.notation, from: from.id, to: to.model, file: to.file }),
+    },
   };
   await syncRepo(d, REPO, "petra");
   assert.deepEqual(order, ["renames", "reset"], "the journal is read BEFORE the reset clears it");
-  assert.deepEqual(moves, [{ from: "billing", to: "invoice-handling", file: "processes/invoice-handling.bpmn" }]);
+  assert.deepEqual(moves, [
+    { notation: "bpmn", from: "billing", to: "invoice-handling", file: "processes/invoice-handling.bpmn" },
+    { notation: "wardley", from: "tea-house", to: "tea", file: "processes/tea.owm" },
+  ]);
 });

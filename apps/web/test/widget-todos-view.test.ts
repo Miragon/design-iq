@@ -35,7 +35,8 @@ const todo = (id: string, elements: string[] = [], extra: Partial<TodoWire> = {}
   state: "open",
   anchor: elements.length
     ? {
-        process: "order-to-cash",
+        notation: "bpmn",
+        model: "order-to-cash",
         file: "processes/order-to-cash.bpmn",
         elements: elements.map((e) => ({ id: e, name: null })),
         processVersion: null,
@@ -104,7 +105,8 @@ test("the toggle badge: the count and the name once the label drops", () => {
 });
 
 test("Add todo carries the SPA's titles", () => {
-  assert.equal(addTodoTitle(0), "Create a process-level todo (no element selected)");
+  assert.equal(addTodoTitle(0), "Create a todo on the whole process (no element selected)");
+  assert.equal(addTodoTitle(0, "Wardley Map"), "Create a todo on the whole Wardley Map (no element selected)");
   assert.equal(addTodoTitle(1), "Anchor a todo to the 1 selected element");
   assert.equal(addTodoTitle(3), "Anchor a todo to the 3 selected elements");
 });

@@ -22,8 +22,9 @@ test("the Legend panel: a toggle in the top-right cluster, a labelled panel the 
 
   const app = host();
   const tr = document.createElement("div");
+  const fullscreen = document.createElement("button");
   const open = document.createElement("button");
-  tr.append(open);
+  tr.append(fullscreen, open);
   const lane = document.createElement("div");
   app.append(tr, lane);
   const panels = mountPanels({
@@ -32,7 +33,7 @@ test("the Legend panel: a toggle in the top-right cluster, a labelled panel the 
   });
   const registered: PanelSpec[] = [];
   const chrome = {
-    els: { tr, lane },
+    els: { tr, fullscreen, lane },
     registerPanel: (spec: PanelSpec) => {
       registered.push(spec);
       return panels.register(spec);
@@ -41,7 +42,8 @@ test("the Legend panel: a toggle in the top-right cluster, a labelled panel the 
 
   const extras = mountLegend(chrome, (body) => renderer.legend!(body));
   const toggle = tr.firstElementChild as HTMLButtonElement;
-  assert.equal(toggle.id, "legend-toggle", "the toggle leads the cluster: it grows leftwards");
+  assert.equal(toggle.id, "legend-toggle", "the toggle leads fullscreen and Open: the cluster grows leftwards");
+  assert.equal(toggle.nextElementSibling, fullscreen, "a Todos toggle, arriving later, lands left of it");
   assert.equal(toggle.hidden, true, "hidden until the model is on screen");
   assert.equal(registered[0]?.id, "legend");
   const panel = document.getElementById("legend")!;

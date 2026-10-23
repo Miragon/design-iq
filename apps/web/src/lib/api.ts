@@ -38,9 +38,11 @@ import type {
   TodoTypeWire,
   TodoWire,
 } from "@designiq/contracts/live-host";
+import type { TodoModelRef } from "@designiq/contracts/todo-anchor";
 
 // re-export so app-internal `instanceof ApiError` call sites keep one import path
 export { ApiError } from "@designiq/api-client";
+export type { TodoModelRef } from "@designiq/contracts/todo-anchor";
 // the wire types live in @designiq/contracts (the backend assembles them under
 // `satisfies` checks) — re-exported so component imports keep one import path
 export type {
@@ -207,9 +209,11 @@ export const fetchFileHistory = (repo: string, path: string): Promise<FileCommit
 /** the file's content at one commit — the Compare/Restore source */
 export const fetchFileAtCommit = (repo: string, path: string, sha: string): Promise<FileAtCommitWire> =>
   api(`/api/repos/${repo}/history/content?path=${encodeURIComponent(path)}&sha=${encodeURIComponent(sha)}`);
-/** open todos of a repo, optionally narrowed to one process */
-export const fetchTodos = (repo: string, process?: string): Promise<TodoWire[]> =>
-  api(`/api/repos/${repo}/todos${process ? `?process=${encodeURIComponent(process)}` : ""}`);
+/** open todos of a repo, optionally narrowed to one model */
+export const fetchTodos = (repo: string, model?: TodoModelRef): Promise<TodoWire[]> =>
+  api(
+    `/api/repos/${repo}/todos${model ? `?notation=${encodeURIComponent(model.notation)}&model=${encodeURIComponent(model.id)}` : ""}`,
+  );
 /** the forms a todo can be filed with: the repo's issue templates and/or the built-in `Todo` */
 export const fetchTodoTypes = (repo: string): Promise<TodoTypeWire[]> => api(`/api/repos/${repo}/todo-types`);
 export const createTodo = (repo: string, body: CreateTodoBody): Promise<TodoWire> =>
@@ -221,7 +225,7 @@ export const createTodo = (repo: string, body: CreateTodoBody): Promise<TodoWire
 /** close (resolve) a todo in its tracker — errors (403 permission, 501 no tracker) carry actionable messages */
 export const closeTodo = (repo: string, id: string): Promise<{ ok: true }> =>
   api(`/api/repos/${repo}/todos/${encodeURIComponent(id)}/close`, { method: "POST" });
-/** background todo work of a repo — a renamed process's todos moving, a deleted one's closing */
+/** background todo work of a repo — a renamed model's todos moving, a deleted one's closing */
 export const fetchTodoJobs = (repo: string): Promise<TodoJobWire[]> => api(`/api/repos/${repo}/todo-jobs`);
 /** run a failed todo job again */
 export const retryTodoJob = (repo: string, id: string): Promise<TodoJobWire> =>

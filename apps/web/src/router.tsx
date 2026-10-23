@@ -38,19 +38,22 @@ const repoRoute = createRoute({
   },
   component: ProcessList,
 });
+// deep links (e.g. from todo/issue bodies): ?element=<element id> reveals that
+// element once after the diagram's first import; unknown ids are ignored
+const elementSearch = (search: Record<string, unknown>): { element?: string } => ({
+  element: typeof search.element === "string" && search.element.length > 0 ? search.element : undefined,
+});
 const processEditorRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/r/$owner/$repo/p/$processId",
-  // deep links (e.g. from todo/issue bodies): ?element=<bpmn element id> reveals
-  // that element once after the diagram's first import; unknown ids are ignored
-  validateSearch: (search: Record<string, unknown>): { element?: string } => ({
-    element: typeof search.element === "string" && search.element.length > 0 ? search.element : undefined,
-  }),
+  validateSearch: elementSearch,
   component: ProcessEditorScreen,
 });
 const fileEditorRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/r/$owner/$repo/f/$",
+  // the same deep link into a model of any other notation (a Wardley component, …)
+  validateSearch: elementSearch,
   component: FileEditorScreen,
 });
 
