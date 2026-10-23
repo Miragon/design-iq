@@ -2,7 +2,7 @@
  * IssueTracker (GitHub adapter, src/adapters/github/issues.ts) — runs the REAL
  * createGitHubIssueTracker against the offline stub provider: label bootstrap
  * (idempotent), issue creation with the anchor block + attribution, list
- * mapping (anchor roundtrip, PR exclusion, process filter), close (attribution
+ * mapping (anchor roundtrip, PR exclusion, model filter), close (attribution
  * comment first, then the state transition), element deep links (todoBody with
  * publicUrl), the attribution written in the designIQ wording and read back
  * in it AND the legacy one, and the missing-Issues-permission 403 → AppError
@@ -14,7 +14,7 @@ import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import type { TodoAnchor } from "@designiq/contracts/todo-anchor";
+import type { TodoAnchor, TodoModelRef } from "@designiq/contracts/todo-anchor";
 import { AppError } from "@designiq/http-kit";
 
 import {
@@ -38,8 +38,11 @@ const REPO = "acme/bpm-processes";
 // the stub never verifies issue-route tokens, a static one exercises the path
 const tracker = createGitHubIssueTracker({ apiUrl: STUB_URL, tokenFor: async () => "stub-installation-token-1" });
 
+const bpmn = (id: string): TodoModelRef => ({ notation: "bpmn", id });
+
 const anchorOf = (process: string): TodoAnchor => ({
-  process,
+  notation: "bpmn",
+  model: process,
   file: `processes/${process}/${process}.bpmn`,
   elements: [{ id: "Task_CheckCredit", name: "Bonität prüfen" }],
   processVersion: "1.4.0",
@@ -93,7 +96,7 @@ test("createTodo: bootstraps labels, creates the issue, returns the mapped Todo"
 
   // labels were created in the tracker
   const labels = (await (await fetch(`${STUB_URL}/repos/${REPO}/labels`)).json()) as Array<{ name: string }>;
-  assert.deepEqual(labels.map((l) => l.name).sort(), ["process:order-to-cash", "todo"]);
+  assert.deepEqual(labels.map((l) => l.name).sort(), ["bpmn:order-to-cash", "todo"]);
 });
 
 test("createTodo: a second todo for the same process tolerates already-existing labels", async () => {
@@ -111,7 +114,7 @@ test("listTodos: returns the open todos with parsed anchors", async () => {
   const todos = await tracker.listTodos(REPO);
   assert.equal(todos.length, 2);
   assert.deepEqual(todos.map((t) => t.id).sort(), ["1", "2"]);
-  assert.ok(todos.every((t) => t.anchor?.process === "order-to-cash"));
+  assert.ok(todos.every((t) => t.anchor?.model === "order-to-cash"));
 });
 
 test("listTodos: pull requests wearing the todo label are excluded", async () => {
@@ -140,10 +143,37 @@ test("listTodos: the process filter narrows via the process label", async () => 
     author: "petra",
   });
   const all = await tracker.listTodos(REPO);
-  const filtered = await tracker.listTodos(REPO, "hire-to-retire");
+  const filtered = await tracker.listTodos(REPO, bpmn("hire-to-retire"));
   assert.equal(all.length, 4);
   assert.equal(filtered.length, 1);
-  assert.equal(filtered[0]?.anchor?.process, "hire-to-retire");
+  assert.equal(filtered[0]?.anchor?.model, "hire-to-retire");
+});
+
+test("a todo on another notation: its own label, and a process of the same id is another model", async () => {
+  const anchor: TodoAnchor = {
+    notation: "wardley",
+    model: "hire-to-retire",
+    file: "maps/hire-to-retire.owm",
+    elements: [{ id: "component_onboarding", name: "Onboarding" }],
+    processVersion: null,
+  };
+  const todo = await tracker.createTodo(REPO, { title: "Evolve onboarding", body: "", anchor, author: "petra" });
+  assert.deepEqual(todo.anchor, anchor, "the notation round-trips through the issue body");
+  const labels = (await (await fetch(`${STUB_URL}/repos/${REPO}/labels`)).json()) as Array<{ name: string }>;
+  assert.ok(
+    labels.some((l) => l.name === "wardley:hire-to-retire"),
+    "the map's own label, beside bpmn:hire-to-retire",
+  );
+  const map = await tracker.listTodos(REPO, { notation: "wardley", id: "hire-to-retire" });
+  assert.deepEqual(
+    map.map((t) => t.id),
+    [todo.id],
+  );
+  const process = await tracker.listTodos(REPO, bpmn("hire-to-retire"));
+  assert.ok(
+    process.every((t) => t.anchor?.notation === "bpmn"),
+    "the process's list leaves the map's todo out",
+  );
 });
 
 test("upstream 403 'Resource not accessible' maps to a clear missing-permission AppError", async () => {
@@ -186,7 +216,8 @@ const deepLinkInput = {
   title: "Check credit limits",
   body: "The threshold looks stale.",
   anchor: {
-    process: "order-to-cash",
+    notation: "bpmn",
+    model: "order-to-cash",
     file: "processes/order-to-cash/order-to-cash.bpmn",
     elements: [
       { id: "Task_CheckCredit", name: "Bonität prüfen" },
@@ -212,6 +243,28 @@ test("todoBody: publicUrl adds one encoded editor deep link per anchored element
     `nameless element links with its encoded id:\n${body}`,
   );
   assert.ok(body.indexOf("📍") < body.indexOf(attributionLine("petra")), "deep links precede the attribution line");
+});
+
+test("todoBody: an element of another notation links into the file editor of its model", () => {
+  const body = todoBody(
+    {
+      ...deepLinkInput,
+      anchor: {
+        notation: "event-storming",
+        model: "checkout",
+        file: "boards/check out.storm",
+        elements: [{ id: "evt_order_placed", name: "Order placed" }],
+        processVersion: null,
+      },
+    },
+    { publicUrl: "https://design.example", repoFullName: "acme/bpm-processes" },
+  );
+  assert.ok(
+    body.includes(
+      "📍 [Order placed](https://design.example/r/acme/bpm-processes/f/boards/check%20out.storm?element=evt_order_placed)",
+    ),
+    body,
+  );
 });
 
 test("todoBody: the repo splits at the FIRST slash (GitLab subgroups stay in the repo segment)", () => {
@@ -242,7 +295,7 @@ test("parseBody: strips deep links with `]` in the element name and `)` in the U
     // land in the URL — encodeURIComponent leaves them unescaped
     anchor: {
       ...deepLinkInput.anchor,
-      process: "order (v2)",
+      model: "order (v2)",
       elements: [{ id: "Task_Check", name: "Prüfen [manuell]" }],
     },
   };
@@ -322,7 +375,7 @@ test("listTodos: an issue a host filed before the rename keeps its author, ancho
   assert.deepEqual(todo?.anchor, deepLinkInput.anchor);
 });
 
-// ── retargetTodo (#208): a renamed process's todo follows its new id ────────
+// ── retargetTodo (#208): a renamed model's todo follows its new id ──────────
 
 const RENAME_REPO = "acme/renames";
 const linked = createGitHubIssueTracker({
@@ -336,7 +389,8 @@ test("retargetTodo: ONE write swaps the process label and re-anchors the body; a
     title: "Check the dunning step",
     body: "Reminder wording is outdated.",
     anchor: {
-      process: "invoice-handling",
+      notation: "bpmn",
+      model: "invoice-handling",
       file: "processes/sub/invoice-handling.bpmn",
       elements: [{ id: "Task_Remind", name: "Send reminder" }],
       processVersion: null,
@@ -344,20 +398,21 @@ test("retargetTodo: ONE write swaps the process label and re-anchors the body; a
     author: "petra",
   });
   const writesBefore = ((await (await fetch(`${STUB_URL}/_control/writes`)).json()) as unknown[]).length;
-  const moved = await linked.retargetTodo(RENAME_REPO, created.id, "invoice-handling", {
-    process: "billing",
+  const moved = await linked.retargetTodo(RENAME_REPO, created.id, bpmn("invoice-handling"), {
+    model: "billing",
     file: "processes/sub/billing.bpmn",
   });
   assert.equal(moved, "moved");
   const writes = (await (await fetch(`${STUB_URL}/_control/writes`)).json()) as Array<{ labels?: string[] }>;
   assert.equal(writes.length - writesBefore, 1, "labels and body change in ONE PATCH");
-  assert.deepEqual(writes.at(-1)?.labels, ["todo", "process:billing"]);
+  assert.deepEqual(writes.at(-1)?.labels, ["todo", "bpmn:billing"]);
 
-  assert.equal((await linked.listTodos(RENAME_REPO, "invoice-handling")).length, 0, "gone from the old process");
-  const [todo] = await linked.listTodos(RENAME_REPO, "billing");
+  assert.equal((await linked.listTodos(RENAME_REPO, bpmn("invoice-handling"))).length, 0, "gone from the old process");
+  const [todo] = await linked.listTodos(RENAME_REPO, bpmn("billing"));
   assert.equal(todo?.id, created.id);
   assert.deepEqual(todo?.anchor, {
-    process: "billing",
+    notation: "bpmn",
+    model: "billing",
     file: "processes/sub/billing.bpmn",
     elements: [{ id: "Task_Remind", name: "Send reminder" }],
     processVersion: null,
@@ -370,21 +425,53 @@ test("retargetTodo: ONE write swaps the process label and re-anchors the body; a
   assert.ok(!raw.body.includes("/p/invoice-handling"), "no deep link left on the old id");
 
   assert.equal(
-    await linked.retargetTodo(RENAME_REPO, created.id, "invoice-handling", {
-      process: "billing",
+    await linked.retargetTodo(RENAME_REPO, created.id, bpmn("invoice-handling"), {
+      model: "billing",
       file: "processes/sub/billing.bpmn",
     }),
     "unchanged",
   );
 });
 
+test("retargetTodo: a renamed model of another notation swaps its own label and its file links", async () => {
+  const created = await linked.createTodo(RENAME_REPO, {
+    title: "Split the platform team",
+    body: "",
+    anchor: {
+      notation: "team-topology",
+      model: "platform",
+      file: "teams/platform.tt",
+      elements: [{ id: "team-1", name: "Platform" }],
+      processVersion: null,
+    },
+    author: "petra",
+  });
+  const from = { notation: "team-topology", id: "platform" };
+  assert.equal(
+    await linked.retargetTodo(RENAME_REPO, created.id, from, { model: "core", file: "teams/core.tt" }),
+    "moved",
+  );
+  const writes = (await (await fetch(`${STUB_URL}/_control/writes`)).json()) as Array<{ labels?: string[] }>;
+  assert.deepEqual(writes.at(-1)?.labels, ["todo", "team-topology:core"]);
+  const [todo] = await linked.listTodos(RENAME_REPO, { notation: "team-topology", id: "core" });
+  assert.deepEqual(
+    [todo?.anchor?.notation, todo?.anchor?.model, todo?.anchor?.file],
+    ["team-topology", "core", "teams/core.tt"],
+  );
+  const raw = (await (await fetch(`${STUB_URL}/repos/${RENAME_REPO}/issues/${created.id}`)).json()) as {
+    body: string;
+  };
+  assert.ok(raw.body.includes("https://design.example/r/acme/renames/f/teams/core.tt?element=team-1"), raw.body);
+  assert.ok(!raw.body.includes("teams/platform.tt?element"), "no deep link left on the old file");
+});
+
 test("retargetTodo: a hand-filed item (no anchor) only changes its labels; other labels survive", async () => {
   await control({
-    addIssue: { repo: RENAME_REPO, title: "by hand", body: "plain text", labels: ["todo", "process:a", "urgent"] },
+    addIssue: { repo: RENAME_REPO, title: "by hand", body: "plain text", labels: ["todo", "bpmn:a", "urgent"] },
   });
-  const [item] = await linked.listTodos(RENAME_REPO, "a");
+  const [item] = await linked.listTodos(RENAME_REPO, bpmn("a"));
   assert.ok(item);
-  await linked.retargetTodo(RENAME_REPO, item.id, "a", { process: "b", file: "processes/b.bpmn" });
+  await linked.retargetTodo(RENAME_REPO, item.id, bpmn("a"), { model: "b", file: "processes/b.bpmn" });
   const raw = (await (await fetch(`${STUB_URL}/repos/${RENAME_REPO}/issues/${item.id}`)).json()) as {
     body: string;
     labels: Array<{ name: string }>;
@@ -392,21 +479,21 @@ test("retargetTodo: a hand-filed item (no anchor) only changes its labels; other
   assert.equal(raw.body, "plain text");
   assert.deepEqual(
     raw.labels.map((l) => l.name),
-    ["todo", "urgent", "process:b"],
+    ["todo", "urgent", "bpmn:b"],
   );
 });
 
 test("retargetTodo: a secondary rate limit surfaces as TrackerRateLimited with the asked-for wait", async () => {
-  const [item] = await linked.listTodos(RENAME_REPO, "b");
+  const [item] = await linked.listTodos(RENAME_REPO, bpmn("b"));
   assert.ok(item);
   await control({ rateLimitWrites: 1 });
   await assert.rejects(
-    () => linked.retargetTodo(RENAME_REPO, item.id, "b", { process: "c", file: "processes/c.bpmn" }),
+    () => linked.retargetTodo(RENAME_REPO, item.id, bpmn("b"), { model: "c", file: "processes/c.bpmn" }),
     (e: unknown) => e instanceof TrackerRateLimited && e.retryAfterMs === 1000,
   );
   // the next attempt goes through
   assert.equal(
-    await linked.retargetTodo(RENAME_REPO, item.id, "b", { process: "c", file: "processes/c.bpmn" }),
+    await linked.retargetTodo(RENAME_REPO, item.id, bpmn("b"), { model: "c", file: "processes/c.bpmn" }),
     "moved",
   );
 });
@@ -415,19 +502,24 @@ test("retargetBody: only a body anchored to `from` changes — anchor block and 
   const body = todoBody(deepLinkInput, { publicUrl: "https://design.example", repoFullName: "acme/x" });
   const out = retargetBody(
     body,
-    "order-to-cash",
-    { process: "o2c", file: "processes/o2c.bpmn" },
+    bpmn("order-to-cash"),
+    { model: "o2c", file: "processes/o2c.bpmn" },
     { publicUrl: "https://design.example", repoFullName: "acme/x" },
   );
   assert.equal(
     out,
     todoBody(
-      { ...deepLinkInput, anchor: { ...deepLinkInput.anchor, process: "o2c", file: "processes/o2c.bpmn" } },
+      { ...deepLinkInput, anchor: { ...deepLinkInput.anchor, model: "o2c", file: "processes/o2c.bpmn" } },
       { publicUrl: "https://design.example", repoFullName: "acme/x" },
     ),
   );
-  assert.equal(retargetBody(body, "other", { process: "o2c", file: "x" }), body, "anchored elsewhere: untouched");
-  assert.equal(retargetBody("hand-written", "order-to-cash", { process: "o2c", file: "x" }), "hand-written");
+  assert.equal(retargetBody(body, bpmn("other"), { model: "o2c", file: "x" }), body, "anchored elsewhere: untouched");
+  assert.equal(
+    retargetBody(body, { notation: "wardley", id: "order-to-cash" }, { model: "o2c", file: "x" }),
+    body,
+    "the same id of another notation is another model",
+  );
+  assert.equal(retargetBody("hand-written", bpmn("order-to-cash"), { model: "o2c", file: "x" }), "hand-written");
 });
 
 test("rateLimitWait: retry-after, an exhausted quota and the secondary message are waits; a plain 403 is not", () => {
@@ -509,7 +601,7 @@ test("createTodo with a type: the form's body, todo + process + the template lab
   };
   assert.deepEqual(
     raw.labels.map((l) => l.name),
-    ["todo", "process:order-to-cash", "Bug"],
+    ["todo", "bpmn:order-to-cash", "Bug"],
     "the repo's spelling of `bug`; `needs-triage` does not exist there and is not invented",
   );
   assert.equal(
@@ -519,17 +611,17 @@ test("createTodo with a type: the form's body, todo + process + the template lab
 });
 
 test("the type survives hand-edited labels and a rename: it lives in the anchor block", async () => {
-  const [item] = await templated.listTodos(TEMPLATED_REPO, "order-to-cash");
+  const [item] = await templated.listTodos(TEMPLATED_REPO, bpmn("order-to-cash"));
   assert.ok(item);
   await fetch(`${STUB_URL}/repos/${TEMPLATED_REPO}/issues/${item.id}`, {
     method: "PATCH",
-    body: JSON.stringify({ labels: ["todo", "process:order-to-cash"] }),
+    body: JSON.stringify({ labels: ["todo", "bpmn:order-to-cash"] }),
   });
-  await templated.retargetTodo(TEMPLATED_REPO, item.id, "order-to-cash", {
-    process: "o2c",
+  await templated.retargetTodo(TEMPLATED_REPO, item.id, bpmn("order-to-cash"), {
+    model: "o2c",
     file: "processes/o2c.bpmn",
   });
-  const [moved] = await templated.listTodos(TEMPLATED_REPO, "o2c");
+  const [moved] = await templated.listTodos(TEMPLATED_REPO, bpmn("o2c"));
   assert.deepEqual(moved?.anchor?.type, { id: "bug.yml", name: "Bug report" });
 });
 

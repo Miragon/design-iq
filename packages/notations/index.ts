@@ -53,6 +53,10 @@ export interface NotationDescriptor {
    *  analyses (path enumeration, cycles) work per notation instead of
    *  hard-coding BPMN vocabulary (consumed in epic #118 step 5) */
   graphHints?: { flowEdgeKinds: string[]; entryNodeTypes: string[] };
+  /** todos are filed on its models: work items in the repo's own issue
+   *  tracker, anchored to one model and optionally to elements of it. Absent
+   *  = not offered (a decision and a Value Chain have no todos yet) */
+  todos?: true;
 }
 
 export const NOTATIONS: readonly NotationDescriptor[] = [
@@ -64,6 +68,7 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
     mediaKind: "xml",
     docShape: "text",
     monacoLanguage: "xml",
+    todos: true,
     graphHints: { flowEdgeKinds: ["sequenceFlow"], entryNodeTypes: ["startEvent"] },
   },
   {
@@ -84,6 +89,7 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
     mediaKind: "dsl",
     docShape: "text",
     monacoLanguage: "plaintext",
+    todos: true,
     graphHints: { flowEdgeKinds: ["dependency"], entryNodeTypes: [] },
   },
   {
@@ -94,6 +100,7 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
     mediaKind: "json",
     docShape: "text",
     monacoLanguage: "json",
+    todos: true,
   },
   {
     id: "event-storming",
@@ -103,6 +110,7 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
     mediaKind: "dsl",
     docShape: "text",
     monacoLanguage: "plaintext",
+    todos: true,
     graphHints: { flowEdgeKinds: ["arrow"], entryNodeTypes: [] },
   },
   {
@@ -113,6 +121,7 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
     mediaKind: "json",
     docShape: "text",
     monacoLanguage: "json",
+    todos: true,
     // every relationship pattern is an edge kind; the asymmetric ones point
     // upstream → downstream, the symmetric ones simply from → to
     graphHints: {
@@ -139,11 +148,17 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
     mediaKind: "markdown",
     docShape: "text",
     monacoLanguage: "markdown",
+    todos: true,
   },
 ];
 
 export function byId(id: string): NotationDescriptor | undefined {
   return NOTATIONS.find((n) => n.id === id);
+}
+
+/** whether todos are filed on models of this notation (descriptor `todos`) */
+export function hasTodos(notationId: string | undefined): boolean {
+  return notationId !== undefined && byId(notationId)?.todos === true;
 }
 
 /** longest-suffix winner across every registered extension, so ".vc.json"
@@ -174,6 +189,24 @@ export function modelStem(path: string): string {
   const base = path.split("/").pop() ?? path;
   const ext = longestMatch(base)?.ext;
   return ext ? base.slice(0, -ext.length) : base.replace(/\.[^.]+$/, "");
+}
+
+/**
+ * Where the model a path names went: a move keeps the file stem (the model's
+ * id) and stems are unique per notation, so the one listed model with the
+ * path's notation and stem is that model, now in another folder. Undefined
+ * while the path itself is listed, for a path of no notation, and when no
+ * single model matches (a deleted or renamed one — a rename changes the id).
+ */
+export function movedModelPath(
+  path: string,
+  models: ReadonlyArray<{ path: string; notation: string; id: string }>,
+): string | undefined {
+  const notation = byExtension(path)?.id;
+  if (!notation || models.some((m) => m.path === path)) return undefined;
+  const id = modelStem(path);
+  const matches = models.filter((m) => m.notation === notation && m.id === id);
+  return matches.length === 1 ? matches[0]?.path : undefined;
 }
 
 /**

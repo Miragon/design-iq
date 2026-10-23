@@ -47,6 +47,18 @@
       </div>
       <div id="tr" class="corner tr">
         <button
+          id="todo-toggle"
+          class="fb toggle"
+          type="button"
+          hidden
+          aria-controls="todos"
+          aria-expanded="false"
+          title="Open todos"
+          data-icon="list-todo"
+        >
+          <span class="label">Todos</span><span id="todo-toggle-count" class="count" hidden></span>
+        </button>
+        <button
           id="fullscreen"
           class="fb icon"
           type="button"
@@ -82,6 +94,88 @@
           ></button>
         </div>
       </div>
+      <!-- the Todos card (mcp-app/todos.ts owns everything inside #todos; the
+           card shell — open/close, focus, Escape, the sheet — is chrome/panel.ts.
+           Only the list, the chips and the filter chip are built imperatively) -->
+      <aside id="todos" class="panel" hidden aria-labelledby="todos-h">
+        <div class="panel-head">
+          <h2 id="todos-h" tabindex="-1" data-icon="list-todo">Todos <span id="todo-count" class="count"></span></h2>
+          <span class="spacer"></span>
+          <button
+            id="todo-new"
+            class="pb"
+            type="button"
+            hidden
+            aria-expanded="false"
+            aria-controls="todo-form"
+            data-icon="list-plus"
+            data-icon-size="14"
+          >
+            Add todo
+          </button>
+          <button
+            id="todo-refresh"
+            class="pb icon ghost"
+            type="button"
+            title="Reload from the tracker"
+            aria-label="Reload from the tracker"
+            data-icon="refresh-cw"
+            data-icon-size="14"
+          ></button>
+          <button
+            id="todo-hide"
+            class="pb icon ghost"
+            type="button"
+            title="Close todos (Esc)"
+            aria-label="Close todos"
+            data-icon="x"
+          ></button>
+        </div>
+        <div id="todo-filter" class="panel-row" hidden>
+          <span class="muted">On</span>
+          <button id="todo-filter-name" class="chip on" type="button"></button>
+          <span class="spacer"></span>
+          <button id="todo-filter-clear" class="pb ghost" type="button">Show all</button>
+        </div>
+        <!-- one scroller under the head and the filter row: the error, the
+             form and the list scroll together — the head never scrolls away -->
+        <div id="todo-scroll" class="panel-scroll">
+          <div id="todo-error" class="callout danger" role="alert" hidden>
+            <span id="todo-error-text"></span>
+            <button id="todo-retry" class="pb" type="button" hidden>Try again</button>
+          </div>
+          <form id="todo-form" class="panel-form" hidden aria-label="Add todo" novalidate>
+            <div id="todo-anchor" class="todo-anchor"></div>
+            <!-- the repo's todo types (#313): a picker only when there is a choice -->
+            <select id="todo-type" class="input" aria-label="Todo type" hidden></select>
+            <p id="todo-type-name" class="muted" hidden></p>
+            <input
+              id="todo-title"
+              class="input"
+              aria-label="Todo title"
+              placeholder="What needs to be done?"
+              maxlength="200"
+              required
+            />
+            <textarea
+              id="todo-body"
+              class="input"
+              rows="3"
+              aria-label="Description"
+              placeholder="Description (optional)"
+            ></textarea>
+            <!-- a template's fields, built from its type (mcp-app/todos.ts) -->
+            <div id="todo-fields" class="todo-fields" hidden></div>
+            <p id="todo-form-error" class="form-error" role="alert" hidden></p>
+            <div class="form-actions">
+              <button type="button" id="todo-cancel" class="pb">Cancel</button>
+              <button type="submit" id="todo-submit" class="pb primary">Create todo</button>
+            </div>
+          </form>
+          <div id="todo-list" class="panel-body"></div>
+        </div>
+        <p id="todo-foot" class="panel-foot" hidden></p>
+      </aside>
       <div id="lane" class="lane"></div>
       <div id="state" class="state" hidden></div>
       <div id="menu" class="menu" role="menu" aria-labelledby="menu-trigger" hidden></div>

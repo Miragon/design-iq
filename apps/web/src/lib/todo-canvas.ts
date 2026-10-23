@@ -4,6 +4,7 @@
  * torn down in its cleanup. Framework-free on purpose — BOTH modeler surfaces
  * use it: the React SPA (components/live-editor.tsx) and the vanilla MCP-App
  * widget (mcp-app/todos.ts). Each styles `.designiq-todo-badge` in its own sheet.
+ * The Miragon renderers get the same contract from lib/todo-surface-canvas.ts.
  * Responsibilities:
  *
  *  - count badges (overlays service) on every element with ≥1 open anchored
@@ -60,19 +61,23 @@ export interface TodoCanvas {
    *  otherwise after the FIRST `import.done`; an unknown id is silently ignored
    *  and the shot is consumed either way (later re-imports never re-zoom) */
   revealOnce(elementId: string): void;
+  /** the anchor ids that land on this element — its own id, and on a canvas
+   *  that also resolves anchors by name (lib/todo-surface-canvas.ts) its name;
+   *  the badge filter matches all of them. Absent = the id alone */
+  anchorIds?(elementId: string): string[];
   destroy(): void;
+}
+
+/** what a canvas controller reports to the Todos panel (SPA and widget) */
+export interface TodoCanvasHooks {
+  onBadgeClick: (elementId: string) => void;
+  onSelectionChanged: (elements: TodoElementWire[]) => void;
 }
 
 /** overlay type marker — lets us remove exactly our badges before re-rendering */
 const OVERLAY_TYPE = "designiq-todo-badge";
 
-export function attachTodoCanvas(
-  modeler: ModelerLike,
-  hooks: {
-    onBadgeClick: (elementId: string) => void;
-    onSelectionChanged: (elements: TodoElementWire[]) => void;
-  },
-): TodoCanvas {
+export function attachTodoCanvas(modeler: ModelerLike, hooks: TodoCanvasHooks): TodoCanvas {
   let todos: TodoWire[] = [];
   // one-shot deep-link reveal state: set by revealOnce before the first import,
   // consumed (and cleared) by the first `import.done`

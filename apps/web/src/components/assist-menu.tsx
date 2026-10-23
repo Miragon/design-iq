@@ -76,7 +76,7 @@ export function AssistMenu({
   /** repo-relative model path */
   path: string;
   notation: string;
-  /** current canvas selection — rides along as data (BPMN editor only) */
+  /** current canvas selection — rides along as data (an editor with element identity) */
   selection?: TodoElementWire[];
   /** "row" = compact icon trigger for an overview table row */
   variant?: "toolbar" | "row";

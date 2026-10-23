@@ -77,6 +77,7 @@ import { type ComponentType, type ReactNode, type Ref, useEffect, useReducer, us
 
 import type { EditorView } from "@/lib/editor-view";
 import { safeAvatarUrl, safePresenceColor } from "@/lib/presence-format";
+import { addTodoTitle } from "@/lib/todo-view";
 import type { ModelerMenu, ModelerMenuEntry, ModelerMenuIcon } from "@/mcp-app/core/menu-model";
 import type { CanvasViewLabel, EditorToolbarAction, SourceMenu } from "@/notations/registry";
 
@@ -148,7 +149,8 @@ export function EditorToolbar({
   menuPanels: ToolbarPanelItem[];
   activePanel: string | null;
   onTogglePanel(id: string): void;
-  addTodo?: { selectionCount: number; onAdd(): void };
+  /** `noun` names the model a todo without elements is filed on ("process", "document", …) */
+  addTodo?: { selectionCount: number; noun: string; onAdd(): void };
   /** the Analyse-with-AI menu (owns its own trigger button) */
   assist?: ReactNode;
   onRelease(): void;
@@ -294,11 +296,7 @@ export function EditorToolbar({
                 variant="outline"
                 size="sm"
                 aria-label="Add todo"
-                title={
-                  addTodo.selectionCount > 0
-                    ? `Anchor a todo to the ${addTodo.selectionCount} selected element${addTodo.selectionCount === 1 ? "" : "s"}`
-                    : "Create a process-level todo (no element selected)"
-                }
+                title={addTodoTitle(addTodo.selectionCount, addTodo.noun)}
                 onClick={addTodo.onAdd}
               >
                 <ListPlus />

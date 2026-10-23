@@ -4,7 +4,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { byExtension, byId, EDITABLE_EXTENSIONS, modelStem, processIdFromName } from "../index.ts";
+import {
+  byExtension,
+  byId,
+  EDITABLE_EXTENSIONS,
+  hasTodos,
+  modelStem,
+  movedModelPath,
+  processIdFromName,
+} from "../index.ts";
 
 test("modelStem: the file stem is the model id", () => {
   assert.equal(modelStem("processes/order.bpmn"), "order");
@@ -60,4 +68,26 @@ test("processIdFromName: collapses punctuation, keeps digits, trims dashes", () 
   assert.equal(processIdFromName("---"), "");
   assert.equal(processIdFromName("!!!"), "");
   assert.equal(processIdFromName(""), "");
+});
+
+test("hasTodos: todos are filed on the notations whose descriptor offers them", () => {
+  for (const id of ["bpmn", "wardley", "team-topology", "event-storming", "context-map", "markdown"]) {
+    assert.ok(hasTodos(id), id);
+  }
+  for (const id of ["dmn", "value-chain", "nope", undefined]) assert.ok(!hasTodos(id), String(id));
+});
+
+test("movedModelPath: a moved model is found again by its notation and stem", () => {
+  const models = [
+    { path: "processes/billing/order.bpmn", notation: "bpmn", id: "order" },
+    { path: "processes/maps/order.owm", notation: "wardley", id: "order" },
+    { path: "processes/tea.owm", notation: "wardley", id: "tea" },
+  ];
+  assert.equal(movedModelPath("processes/order.owm", models), "processes/maps/order.owm", "the map, not the process");
+  assert.equal(movedModelPath("processes/order.bpmn", models), "processes/billing/order.bpmn");
+  assert.equal(movedModelPath("processes/tea.owm", models), undefined, "still where it was");
+  assert.equal(movedModelPath("processes/gone.owm", models), undefined, "deleted or renamed: no stand-in");
+  assert.equal(movedModelPath("processes/order.tests.yaml", models), undefined, "a file of no notation");
+  const twice = [...models, { path: "elsewhere/tea.owm", notation: "wardley", id: "tea" }];
+  assert.equal(movedModelPath("old/tea.owm", twice), undefined, "a stem twice (by hand): no guess");
 });

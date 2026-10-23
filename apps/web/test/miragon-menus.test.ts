@@ -144,6 +144,8 @@ async function editorOf(id: string, panels = sidePanels()) {
       docPath: `processes/${id}.model`,
       onSyncError: assert.fail,
       onImportFailed: assert.fail,
+      onBadgeClick: () => {},
+      onSelectionChanged: () => {},
       menuTrigger: () => trigger,
       onActionFailed: (message: string) => void failed.push(message),
       sidePanels: panels.room,

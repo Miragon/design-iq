@@ -7,10 +7,11 @@
  * module fills it. What the list area shows and every outcome's copy is
  * core/todos-view.ts.
  *
- * Canvas integration is the SHARED controller (lib/todo-canvas.ts): count
- * badges per anchored element, badge click → the card filtered to it,
- * selection → the anchor a new todo gets. It re-renders on every `import.done`,
- * so live (Yjs) re-imports keep their badges.
+ * Canvas integration is a SHARED controller, handed in by the widget: bpmn's
+ * lib/todo-canvas.ts, the Miragon renderers' lib/todo-surface-canvas.ts (the
+ * SPA mounts the same two). Count badges per anchored element, badge click →
+ * the card filtered to it, selection → the anchor a new todo gets. They
+ * re-render on every `import.done`, so live (Yjs) re-imports keep their badges.
  *
  * Capability-driven, never assumed: the todo tools are absent without a
  * configured tracker, and the write ones in read-only mode. Discovery starts
@@ -39,7 +40,7 @@ import {
 } from "@designiq/contracts/todo-types";
 import type { App } from "@modelcontextprotocol/ext-apps";
 
-import { attachTodoCanvas, type TodoCanvas } from "@/lib/todo-canvas";
+import type { TodoCanvas, TodoCanvasHooks } from "@/lib/todo-canvas";
 import {
   defaultTodoType,
   fieldFlags,
@@ -73,10 +74,9 @@ import {
   todoMeta,
   todosBadge,
   typesNotLoaded,
-  WHOLE_PROCESS,
-  WHOLE_PROCESS_TITLE,
+  wholeModel,
+  wholeModelTitle,
 } from "./core/todos-view";
-import type { BpmnEngine } from "./engines/bpmn";
 import { icon } from "./icons";
 import { el, openExternal } from "./shell";
 import { implementPrompt, type PromptTarget } from "./todo-prompt";
@@ -92,11 +92,18 @@ export interface TodosHandle {
 
 export function mountTodos(
   app: App,
-  modeler: BpmnEngine,
-  opts: { readonly: boolean; chrome: WidgetChrome },
+  /** the engine's canvas controller, attached with the card's hooks */
+  attachCanvas: (hooks: TodoCanvasHooks) => TodoCanvas,
+  opts: {
+    readonly: boolean;
+    chrome: WidgetChrome;
+    /** how the model is called in the card ("process", "Wardley Map", …) */
+    noun: string;
+  },
 ): TodosHandle {
-  const { chrome } = opts;
+  const { chrome, noun } = opts;
   const toggle = el<HTMLButtonElement>("todo-toggle");
+  toggle.title = `Open todos for this ${noun}`;
   const heading = el<HTMLElement>("todos-h");
   const countEl = el<HTMLSpanElement>("todo-count");
   const newBtn = el<HTMLButtonElement>("todo-new");
@@ -167,7 +174,7 @@ export function mountTodos(
     },
   });
 
-  const canvas: TodoCanvas = attachTodoCanvas(modeler.raw as never, {
+  const canvas: TodoCanvas = attachCanvas({
     onBadgeClick: (elementId) => {
       filter = elementId;
       if (panel.isOpen()) render();
@@ -185,11 +192,14 @@ export function mountTodos(
   // ── rendering ─────────────────────────────────────────────────────────────
 
   const chip = (label: string, title: string, cls = "chip"): HTMLElement => h("span", { class: cls, title }, label);
-  const whole = (): HTMLElement => chip(WHOLE_PROCESS, WHOLE_PROCESS_TITLE, "chip whole");
+  const whole = (): HTMLElement => chip(wholeModel(noun), wholeModelTitle(noun), "chip whole");
+  /** the anchor ids the badge filter matches — on a Wardley map an element's
+   *  name too (TodoCanvas.anchorIds) */
+  const filterIds = (): readonly string[] | undefined => (filter ? canvas.anchorIds?.(filter) : undefined);
 
   /** the form's anchor preview tracks the live selection; Add todo's title too */
   function renderAnchor(): void {
-    newBtn.title = addTodoTitle(selection.length);
+    newBtn.title = addTodoTitle(selection.length, noun);
     if (form.hidden) return;
     anchorEl.replaceChildren(
       h("span", { class: "muted" }, "Anchored to:"),
@@ -261,7 +271,8 @@ export function mountTodos(
   /** the list area: exactly one of skeleton, rows, the empty states — or
    *  nothing under the error callout */
   function renderList(): void {
-    const view = todoListView({ todos, filter, loading, failed, canWrite });
+    const ids = filterIds();
+    const view = todoListView({ todos, filter, ...(ids ? { filterIds: ids } : {}), noun, loading, failed, canWrite });
     const nodes: HTMLElement[] = [];
     switch (view.kind) {
       case "loading": {
@@ -293,7 +304,7 @@ export function mountTodos(
         );
         if (view.hint) box.append(h("p", { class: "todo-empty-hint" }, view.hint));
         if (view.add && form.hidden) {
-          const add = h("button", { type: "button", class: "pb", title: addTodoTitle(selection.length) });
+          const add = h("button", { type: "button", class: "pb", title: addTodoTitle(selection.length, noun) });
           add.append(icon("list-plus", 14), "Add todo");
           add.onclick = () => openForm();
           box.append(add);
@@ -327,7 +338,7 @@ export function mountTodos(
     panel.setBadge(todosBadge(todos.length, failed));
     // a count only once there is something to count — the empty, loading
     // and error states say it in words
-    countEl.textContent = todos.length === 0 ? "" : headCount(todos, filter);
+    countEl.textContent = todos.length === 0 ? "" : headCount(todos, filter, filterIds());
     newBtn.hidden = !canWrite;
     newBtn.setAttribute("aria-expanded", String(!form.hidden));
     // aria-disabled, not disabled: a disabled button drops its focus to <body>

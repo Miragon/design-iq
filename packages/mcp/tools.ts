@@ -197,7 +197,7 @@ function readOnlyInstructions(on: { todos: boolean }): string {
       "semantics) and `which_models_use` (which models reference a given one).",
     "BPMN has deeper tooling: `list_processes`, `get_process` (the derived process view: roles, steps, flow, " +
       "sub-process calls), `who_owns` (ownership from lanes) and `which_processes_use`" +
-      (on.todos ? "; `list_todos` lists the open todos anchored to processes." : "."),
+      (on.todos ? "; `list_todos` lists the open todos filed on models and their elements." : "."),
     "Live editing, the modeler widgets and release as a pull request are on the designIQ Live Host, not here.",
   ].join(" ");
 }
@@ -603,18 +603,26 @@ export function createMcpServer(
         description:
           "List the OPEN model-anchored todos of this content repo — work items filed from the " +
           "live model into the repo's issue tracker (label 'todo'). Each row carries the tracker " +
-          "id and URL, title, assignees, createdAt and the parsed anchor (process, model file, " +
-          "anchored BPMN elements). Optional filter on one process. Use for 'what is open on " +
-          "process X' or to cross-check a model answer against known open discrepancies.",
+          "id and URL, title, assignees, createdAt and the parsed anchor (notation, model id, model " +
+          "file, anchored elements). Optional filter on one model: `id` (and `notation` for a stem " +
+          "shared across notations; without it a process wins). Use for " +
+          "'what is open on process X' or to cross-check a model answer against known open discrepancies.",
         inputSchema: z.object({
-          process: z.string().optional().describe("Only todos anchored to this process id, e.g. order-to-cash"),
+          id: z.string().optional().describe("Only todos of this model id (any notation, from list_models)"),
+          notation: z
+            .string()
+            .optional()
+            .describe("registry notation id — disambiguates a stem shared across notations"),
         }),
         // still read-only, but the ONE tool that leaves the checkout (tracker API)
         annotations: { readOnlyHint: true, openWorldHint: true },
       },
-      safe(async ({ process: processId }) => {
+      safe(async ({ id, notation }) => {
+        // an id names the model discovery finds (bpmn-first); one it does not
+        // know is still a filter — the tracker-side label decides
+        const model = id ? { notation: notation ?? (await findModel(id))?.notation ?? "bpmn", id } : undefined;
         const res = await fetch(
-          `${api}/repos/${todosRepo}/issues?state=open&labels=${encodeURIComponent(todoLabelQuery(processId))}&per_page=100`,
+          `${api}/repos/${todosRepo}/issues?state=open&labels=${encodeURIComponent(todoLabelQuery(model))}&per_page=100`,
           {
             headers: {
               accept: "application/vnd.github+json",
@@ -636,7 +644,8 @@ export function createMcpServer(
             createdAt: row.created_at,
           }));
         if (todos.length === 0) {
-          return ok(`No open todos${processId ? ` for process '${processId}'` : ""} in ${todosRepo}.`);
+          const of = model ? ` for ${model.notation === "bpmn" ? "process" : model.notation} '${model.id}'` : "";
+          return ok(`No open todos${of} in ${todosRepo}.`);
         }
         return ok(todos);
       }),

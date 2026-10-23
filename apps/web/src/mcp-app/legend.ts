@@ -48,7 +48,9 @@ export function mountLegend(chrome: WidgetChrome, render: (body: HTMLElement) =>
     h("div", { class: "panel-head" }, heading, h("span", { class: "spacer" }), close),
     scroller,
   );
-  chrome.els.tr.prepend(toggle);
+  // beside fullscreen: the Todos toggle, which arrives late (tracker
+  // discovery), stays left of it and grows the cluster leftwards
+  chrome.els.fullscreen.before(toggle);
   // in the panels' place in the DOM order: after the corners, before the lane
   chrome.els.lane.before(panel);
   const untip = render(body);

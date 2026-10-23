@@ -11,13 +11,14 @@
  *      without credentials, -32700 on garbage.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
 
 import { presenceColor } from "@designiq/contracts/live";
+import type { TodoWire } from "@designiq/contracts/live-host";
 import type { TodoType } from "@designiq/contracts/todo-types";
 import { DIAGRAMS_IN_DOCUMENTS } from "@designiq/mcp-kit";
 import { toolNamesIn, toolText } from "@designiq/mcp-kit/testing";
@@ -199,8 +200,10 @@ function fakeIssues(
       items.push(todo);
       return todo;
     },
-    async listTodos(_repo, processId) {
-      return items.filter((t) => t.state === "open" && (!processId || t.anchor?.process === processId));
+    async listTodos(_repo, model) {
+      return items.filter(
+        (t) => t.state === "open" && (!model || (t.anchor?.notation === model.notation && t.anchor.model === model.id)),
+      );
     },
     async closeTodo(_repo, id) {
       closed.push(id);
@@ -210,8 +213,8 @@ function fakeIssues(
     },
     async retargetTodo(_repo, id, _from, to) {
       const hit = items.find((t) => t.id === id);
-      if (!hit?.anchor || hit.anchor.process === to.process) return "unchanged";
-      hit.anchor = { ...hit.anchor, process: to.process, file: to.file };
+      if (!hit?.anchor || hit.anchor.model === to.model) return "unchanged";
+      hit.anchor = { ...hit.anchor, model: to.model, file: to.file };
       return "moved";
     },
   };
@@ -441,7 +444,8 @@ test("todos: create anchors to the open process, list filters by it, close compl
   assert.equal(created.todo.title, "Check the credit limit", "title is trimmed");
   assert.equal(created.todo.author, "petra", "attribution is the CALLER's login, not an argument");
   assert.deepEqual(created.todo.anchor, {
-    process: "order",
+    notation: "bpmn",
+    model: "order",
     file: PATH,
     elements: [{ id: "Task_CheckCredit", name: "Bonität prüfen" }],
     processVersion: null,
@@ -450,15 +454,15 @@ test("todos: create anchors to the open process, list filters by it, close compl
   // a `path`-addressed todo derives the process id from the file stem
   await callJson("create_todo", { repo: REPO.fullName, path: PATH, title: "Process-level note" });
   const viaPath = issues.created[1]?.input.anchor;
-  assert.equal(viaPath?.process, "order");
+  assert.equal(viaPath?.model, "order");
   assert.deepEqual(viaPath?.elements, [], "no elements ⇒ a process-level todo");
 
   // listing: whole repo vs. narrowed to one process
   const all = await callJson("list_todos", { repo: REPO.fullName });
-  assert.equal(all.process, null);
+  assert.equal(all.model, null);
   assert.equal(all.todos.length, 2);
   const narrowed = await callJson("list_todos", { repo: REPO.fullName, id: "order" });
-  assert.equal(narrowed.process, "order");
+  assert.deepEqual(narrowed.model, { notation: "bpmn", id: "order" });
   assert.equal(narrowed.todos.length, 2);
   const other = await callJson("list_todos", { repo: REPO.fullName, id: "not-a-process" });
   assert.deepEqual(other.todos, [], "an unknown process filter is an empty list, not an error");
@@ -476,11 +480,76 @@ test("todos: create anchors to the open process, list filters by it, close compl
   assert.match(blank.text, /title must be a non-empty string/);
   assert.equal(issues.created.length, 2);
 
-  // an unknown process is a typed 404, never a stored anchor pointing at nothing
+  // an unknown model is a typed 404, never a stored anchor pointing at nothing
   const dangling = await call("create_todo", { repo: REPO.fullName, id: "no-such-process", title: "x" });
   assert.ok(dangling.isError);
-  assert.match(dangling.text, /process 'no-such-process' not found/);
+  assert.match(dangling.text, /unknown model 'no-such-process'/);
+  const noProcess = await call("create_todo", { repo: REPO.fullName, id: "strategy", notation: "bpmn", title: "x" });
+  assert.match(noProcess.text, /unknown model 'strategy' \(bpmn\)/, "asked for a process, which does not exist");
   assert.equal(issues.created.length, 2);
+});
+
+test("todos on other notations: a Wardley Map takes them, the same id of a process stays apart, a decision has none", async () => {
+  const issues = fakeIssues();
+  const d = deps({ issues });
+  const { call, callJson } = await connect(d);
+
+  // the id alone finds the map (no process of that id)
+  const created = await callJson("create_todo", {
+    repo: REPO.fullName,
+    id: "strategy",
+    title: "Platform is a commodity now",
+    elements: [{ id: "Platform", name: "Platform" }],
+  });
+  assert.deepEqual(created.todo.anchor, {
+    notation: "wardley",
+    model: "strategy",
+    file: OWM_PATH,
+    elements: [{ id: "Platform", name: "Platform" }],
+    processVersion: null,
+  });
+  // a path names its model, notation included
+  await callJson("create_todo", { repo: REPO.fullName, path: OWM_PATH, title: "Map-level note" });
+  assert.equal(issues.created[1]?.input.anchor.notation, "wardley");
+
+  // processes/order.tt beside processes/order.bpmn: `notation` picks one, the id alone the process
+  await callJson("create_model", { repo: REPO.fullName, notation: "team-topology", name: "Order" });
+  await callJson("create_todo", { repo: REPO.fullName, id: "order", notation: "team-topology", title: "Teams" });
+  await callJson("create_todo", { repo: REPO.fullName, id: "order", title: "Process" });
+  assert.deepEqual(
+    issues.created.slice(2).map((c) => [c.input.anchor.notation, c.input.anchor.file]),
+    [
+      ["team-topology", "processes/order.tt"],
+      ["bpmn", PATH],
+    ],
+  );
+  const teams = await callJson("list_todos", { repo: REPO.fullName, id: "order", notation: "team-topology" });
+  assert.deepEqual(
+    teams.todos.map((t: TodoWire) => t.title),
+    ["Teams"],
+  );
+  const map = await callJson("list_todos", { repo: REPO.fullName, path: OWM_PATH });
+  assert.deepEqual(map.model, { notation: "wardley", id: "strategy" });
+  assert.equal(map.todos.length, 2);
+
+  // moved to another folder: the label still finds the todos, and the list
+  // names where the map is now (the anchor in the tracker keeps the old path)
+  const ws = await d.workspaces.ensure(REPO);
+  mkdirSync(join(ws, "processes", "maps"));
+  renameSync(join(ws, OWM_PATH), join(ws, "processes", "maps", "strategy.owm"));
+  const afterMove = await callJson("list_todos", { repo: REPO.fullName, id: "strategy", notation: "wardley" });
+  assert.deepEqual(
+    afterMove.todos.map((t: TodoWire) => t.anchor?.file),
+    ["processes/maps/strategy.owm", "processes/maps/strategy.owm"],
+  );
+  assert.equal(issues.created[0]?.input.anchor.file, OWM_PATH, "nothing was written back to the tracker");
+
+  // decisions take no todos (yet): a typed 400 naming the notations that do
+  const decision = await call("create_todo", { repo: REPO.fullName, path: DMN_PATH, title: "x" });
+  assert.ok(decision.isError);
+  assert.match(decision.text, /not filed on decisions/);
+  assert.match(decision.text, /bpmn, wardley/);
+  assert.equal(issues.created.length, 4);
 });
 
 const BUG_TYPE: TodoType = {
@@ -1657,7 +1726,7 @@ test("todo types over REST: the same types, the same typed 400, the same filed t
   assert.deepEqual(await types.json(), [BUG_TYPE]);
 
   const post = (body: unknown) => fetch(`${base}/todos`, { method: "POST", headers, body: JSON.stringify(body) });
-  const anchor = { process: "order", file: PATH };
+  const anchor = { notation: "bpmn", model: "order", file: PATH };
   const incomplete = await post({ title: "Saving fails", type: "bug", fields: {}, anchor });
   assert.equal(incomplete.status, 400);
   assert.deepEqual(await incomplete.json(), {

@@ -12,12 +12,20 @@
 /** the label every platform-managed todo carries */
 export const TODO_LABEL = "todo";
 
-/** the per-process label that makes the tracker-side filter cheap */
-export const processLabel = (processId: string): string => `process:${processId}`;
+/** a model as the labels name it: its notation (registry id) and its id */
+export interface LabeledModel {
+  notation: string;
+  id: string;
+}
 
-/** the `labels=` filter for listing: every todo, or one process's */
-export const todoLabelQuery = (processId?: string): string =>
-  processId ? `${TODO_LABEL},${processLabel(processId)}` : TODO_LABEL;
+/** the per-model label that makes the tracker-side filter cheap:
+ *  `<notation>:<id>` (`bpmn:order-to-cash`, `wardley:tea-shop`) — ids are
+ *  unique per notation only */
+export const modelLabel = (model: LabeledModel): string => `${model.notation}:${model.id}`;
+
+/** the `labels=` filter for listing: every todo, or one model's */
+export const todoLabelQuery = (model?: LabeledModel): string =>
+  model ? `${TODO_LABEL},${modelLabel(model)}` : TODO_LABEL;
 
 /** one row of GitHub's issues list.
  *  NB the list INCLUDES pull requests — every consumer must filter them out

@@ -5,11 +5,13 @@
  * never checked the process exists, while MCP resolved ids server-side but
  * anchored client paths unchecked and accepted empty element ids.
  *
- * One resolution now, for both: the anchor's process id (given, or the file
- * stem) MUST resolve through discovery — an unknown process is a typed 404,
- * never a stored anchor pointing at nothing. A client file is kept only when
- * it names that process (the platform contract: a path names its own process);
- * anything else normalizes to the discovered path. Elements drop empty ids.
+ * One resolution now, for both: the anchor's model (an id with or without its
+ * notation, or a file path) MUST resolve through discovery — an unknown model
+ * is a typed 404, never a stored anchor pointing at nothing — and its notation
+ * must take todos (@designiq/notations `todos`). A client file is kept only
+ * when it names that model (the platform contract: a path names its own
+ * model); anything else normalizes to the discovered path. Elements drop
+ * empty ids.
  *
  * Every todo is filed with a type (#313): one of the repo's own (its issue
  * templates) or the built-in `Todo`, which a repo without templates — or one
@@ -17,6 +19,7 @@
  * same module the web dialog and the widget check them with.
  */
 import type { TodoWire } from "@designiq/contracts/live-host";
+import type { TodoModelRef } from "@designiq/contracts/todo-anchor";
 import {
   BUILT_IN_TODO_TYPE,
   fieldProblemsMessage,
@@ -26,25 +29,62 @@ import {
   validateTodoFields,
 } from "@designiq/contracts/todo-types";
 import { AppError } from "@designiq/http-kit";
-import { byExtension, modelStem } from "@designiq/notations";
+import { byExtension, byId, hasTodos, modelStem, NOTATIONS } from "@designiq/notations";
 
 import type { Session } from "../adapters/sqlite/sessions.ts";
 import type { IssueTracker, Todo } from "../ports/issue-tracker.ts";
 import type { ConnectedRepo } from "../repos/registry.ts";
-import { type FindModelDeps, findProcessPath } from "./find-model.ts";
+import { type FindModelDeps, findModelNotation, findModelPath, findModelPaths } from "./find-model.ts";
 
-/** the process a model path belongs to — id IS the file stem (the content
- *  contract). Only a .bpmn path names a process; anything else keeps its
- *  basename, so it can never pass the "names that process" gate below (it
- *  fails typed in findProcessPath instead of anchoring a non-process file). */
-const processIdOf = (path: string): string =>
-  byExtension(path)?.id === "bpmn" ? modelStem(path) : (path.split("/").pop() ?? path);
+/** the model a repo-relative path names — id IS the file stem (the content
+ *  contract); undefined for a path of no registered notation */
+export function modelOfPath(path: string): TodoModelRef | undefined {
+  const notation = byExtension(path)?.id;
+  return notation ? { notation, id: modelStem(path) } : undefined;
+}
+
+/** the notations todos are filed on, for the messages that name them */
+const TODO_NOTATIONS = NOTATIONS.filter((n) => hasTodos(n.id))
+  .map((n) => n.id)
+  .join(", ");
+
+function requireTodoNotation(notation: string): void {
+  if (hasTodos(notation)) return;
+  const known = byId(notation);
+  throw new AppError(
+    "todos/notation-unsupported",
+    known
+      ? `todos are not filed on ${known.noun.plural} (yet) — only on models of: ${TODO_NOTATIONS}`
+      : `unknown notation '${notation}' — todos are filed on models of: ${TODO_NOTATIONS}`,
+    { status: 400, expose: true },
+  );
+}
+
+/**
+ * The model a todo LISTING is narrowed to — no existence check: an unknown
+ * model is simply an empty list (the tracker-side label filter decides). A
+ * path names its model; an id without a notation is the one discovery finds,
+ * a process first (the rule every id lookup follows), else a process id.
+ */
+export async function todoListModel(
+  opts: FindModelDeps,
+  repo: ConnectedRepo,
+  ref: { id?: string; path?: string; notation?: string },
+): Promise<TodoModelRef | undefined> {
+  if (ref.path) return modelOfPath(ref.path) ?? { notation: ref.notation ?? "bpmn", id: modelStem(ref.path) };
+  const id = ref.id?.trim();
+  if (!id) return undefined;
+  return { notation: ref.notation || ((await findModelNotation(opts, repo, id)) ?? "bpmn"), id };
+}
 
 export interface FileTodoInput {
   title: unknown;
   body?: unknown;
-  /** process id (the .bpmn file stem) — this or `file` is required */
-  process?: string;
+  /** model id (the file stem) — this or `file` is required */
+  model?: string;
+  /** the model's notation — narrows `model` when a stem is shared across
+   *  notations (without it a process wins, then any model of that id) */
+  notation?: string;
   /** repo-relative model path (the id alternative; sub-process todos) */
   file?: string;
   elements?: Array<{ id?: unknown; name?: unknown }>;
@@ -104,16 +144,23 @@ export async function fileTodo(
   if (typeof input.title !== "string" || input.title.trim().length === 0) {
     throw new AppError("todos/title-required", "title must be a non-empty string", { status: 400, expose: true });
   }
-  const process = input.process?.trim() || (input.file ? processIdOf(input.file) : undefined);
-  if (!process) {
-    throw new AppError("todos/anchor-required", "anchor.process must be a non-empty string", {
+  const fromFile = input.file ? modelOfPath(input.file) : undefined;
+  const id = input.model?.trim() || fromFile?.id;
+  if (!id) {
+    throw new AppError("todos/anchor-required", "anchor.model must be a non-empty string", {
       status: 400,
       expose: true,
     });
   }
+  // the file's notation, unless the id names another model than the file
+  const asked = input.notation?.trim() || (fromFile && fromFile.id === id ? fromFile.notation : undefined);
+  if (asked) requireTodoNotation(asked);
   // the existence gate BOTH transports lacked in one direction or the other
-  const resolvedPath = await findProcessPath(opts, repo, process);
-  const file = input.file && processIdOf(input.file) === process ? input.file : resolvedPath;
+  const resolvedPath = await findModelPath(opts, repo, id, asked);
+  const model = modelOfPath(resolvedPath) ?? { notation: asked ?? "bpmn", id };
+  requireTodoNotation(model.notation);
+  const named = fromFile && fromFile.notation === model.notation && fromFile.id === model.id;
+  const file = named && input.file ? input.file : resolvedPath;
 
   const type = resolveType(await listTodoTypesFor(issues, repo), input.type, repo);
   const fields = fieldValuesOf(input.fields);
@@ -138,7 +185,8 @@ export async function fileTodo(
     body: builtIn && typeof description === "string" ? description : body,
     ...(builtIn ? {} : { fields }),
     anchor: {
-      process,
+      notation: model.notation,
+      model: model.id,
       file,
       elements: (input.elements ?? [])
         .filter((el) => typeof el?.id === "string" && el.id.length > 0)
@@ -171,21 +219,45 @@ export async function closeTodoFor(
 }
 
 /**
- * The OPEN todos of a repo, optionally of one process — including those still
- * on their way in from a renamed process's old id (#208: the move runs in the
+ * The OPEN todos of a repo, optionally of one model — including those still
+ * on their way in from a renamed model's old id (#208: the move runs in the
  * background, one tracker write at a time, and nothing may disappear from the
- * process's Todos panel meanwhile).
+ * model's Todos panel meanwhile).
+ *
+ * With `find`, each anchor's `file` is where its model is NOW: a move to
+ * another folder keeps the model's id (the label still finds its todos) but
+ * not its path, and the anchor in the tracker keeps the path of the day it
+ * was filed. Corrected on every read, never written back — that would cost a
+ * tracker write per todo and move.
  */
 export async function listOpenTodos(
   issues: IssueTracker,
-  moving: { sourcesOf(repo: string, process: string): string[] } | undefined,
+  moving: { sourcesOf(repo: string, model: TodoModelRef): string[] } | undefined,
   repo: ConnectedRepo,
-  process?: string,
+  model?: TodoModelRef,
+  find?: FindModelDeps,
 ): Promise<Todo[]> {
-  const own = await issues.listTodos(repo.fullName, process);
-  const sources = process ? (moving?.sourcesOf(repo.fullName, process) ?? []) : [];
-  if (sources.length === 0) return own;
+  const todos = await openTodosOf(issues, moving, repo, model);
+  if (!find || !todos.some((t) => t.anchor)) return todos;
+  const paths = await findModelPaths(find, repo);
+  return todos.map((todo) => {
+    const file = todo.anchor && paths.get(`${todo.anchor.notation}:${todo.anchor.model}`);
+    return todo.anchor && file && file !== todo.anchor.file ? { ...todo, anchor: { ...todo.anchor, file } } : todo;
+  });
+}
+
+async function openTodosOf(
+  issues: IssueTracker,
+  moving: { sourcesOf(repo: string, model: TodoModelRef): string[] } | undefined,
+  repo: ConnectedRepo,
+  model?: TodoModelRef,
+): Promise<Todo[]> {
+  const own = await issues.listTodos(repo.fullName, model);
+  const sources = model ? (moving?.sourcesOf(repo.fullName, model) ?? []) : [];
+  if (!model || sources.length === 0) return own;
   const seen = new Set(own.map((t) => t.id));
-  const incoming = (await Promise.all(sources.map((from) => issues.listTodos(repo.fullName, from)))).flat();
+  const incoming = (
+    await Promise.all(sources.map((from) => issues.listTodos(repo.fullName, { notation: model.notation, id: from })))
+  ).flat();
   return [...own, ...incoming.filter((t) => !seen.has(t.id) && seen.add(t.id))];
 }

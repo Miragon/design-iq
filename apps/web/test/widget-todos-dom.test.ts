@@ -4,14 +4,18 @@
  * a repo's single template shows its fields without a picker and flags a
  * missing required one inline before anything is filed; with the built-in
  * `Todo` on offer, the picker appears and the built-in files today's request.
+ * The Miragon skeleton (mcp-app-miragon.html) carries the same card, on the
+ * element-surface controller (lib/todo-surface-canvas.ts).
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { after, test } from "node:test";
 
+import type { TodoWire } from "@designiq/contracts/live-host";
 import { BUILT_IN_TODO_TYPE, type TodoType } from "@designiq/contracts/todo-types";
 import { JSDOM } from "jsdom";
 
+import type { TodoCanvas, TodoCanvasHooks } from "../src/lib/todo-canvas.ts";
 import { closeDom } from "./renderer-dom.ts";
 
 after(closeDom);
@@ -50,8 +54,22 @@ const BUG: TodoType = {
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-async function widget(types: TodoType[]) {
-  const html = readFileSync(new URL("../mcp-app.html", import.meta.url), "utf8").replace(
+interface WidgetOptions {
+  skeleton?: "mcp-app.html" | "mcp-app-miragon.html";
+  notation?: string;
+  noun?: string;
+  ref?: { repo: string; path: string };
+  /** what list_todos answers */
+  listed?: TodoWire[];
+  /** the engine's canvas controller; default: bpmn's on a do-nothing modeler */
+  canvas?: (hooks: TodoCanvasHooks, doc: Document) => TodoCanvas;
+  /** open the Add todo form right away (the form tests) */
+  open?: boolean;
+}
+
+async function widget(types: TodoType[], opts: WidgetOptions = {}) {
+  const ref = opts.ref ?? REF;
+  const html = readFileSync(new URL(`../${opts.skeleton ?? "mcp-app.html"}`, import.meta.url), "utf8").replace(
     /<script[\s\S]*?<\/script>/g,
     "",
   );
@@ -95,7 +113,7 @@ async function widget(types: TodoType[]) {
     updateModelContext: async () => ({}),
     callServerTool: async (request: { name: string; arguments: Record<string, unknown> }) => {
       calls.push(request);
-      if (request.name === "list_todos") return reply({ todos: [] });
+      if (request.name === "list_todos") return reply({ todos: opts.listed ?? [] });
       if (request.name === "list_todo_types") return reply({ types });
       return reply({
         todo: {
@@ -114,10 +132,12 @@ async function widget(types: TodoType[]) {
   };
   const { mountChrome } = await import("../src/mcp-app/shell.ts");
   const { mountTodos } = await import("../src/mcp-app/todos.ts");
+  const { attachTodoCanvas } = await import("../src/lib/todo-canvas.ts");
+  const noun = opts.noun ?? "process";
   const chrome = mountChrome({
     app: app as never,
-    notation: "bpmn",
-    noun: "process",
+    notation: opts.notation ?? "bpmn",
+    noun,
     readonly: false,
     actions: {
       save() {},
@@ -134,14 +154,18 @@ async function widget(types: TodoType[]) {
   });
   const service = { remove() {}, add() {}, get: () => undefined, select() {}, scrollToElement() {} };
   const modeler = { raw: { get: () => service, on() {}, off() {} } };
-  const todos = mountTodos(app as never, modeler as never, { readonly: false, chrome });
-  todos.load(REF);
-  todos.landed(REF);
-  await tick();
-  await tick();
   const doc = window.document;
+  const todos = mountTodos(
+    app as never,
+    (hooks) => (opts.canvas ? opts.canvas(hooks, doc) : attachTodoCanvas(modeler.raw as never, hooks)),
+    { readonly: false, chrome, noun },
+  );
+  todos.load(ref);
+  todos.landed(ref);
+  await tick();
+  await tick();
   const byId = <T extends HTMLElement>(id: string) => doc.getElementById(id) as T;
-  byId<HTMLButtonElement>("todo-new").click();
+  if (opts.open !== false) byId<HTMLButtonElement>("todo-new").click();
   const submit = async () => {
     byId<HTMLFormElement>("todo-form").dispatchEvent(new window.Event("submit", { cancelable: true }));
     await tick();
@@ -212,4 +236,79 @@ test("a repo without templates: the form is the plain todo it always was, an emp
   await w.submit();
   assert.equal(w.byId("todo-form-error").hidden, true);
   assert.deepEqual(w.created(), [{ ...REF, title: "Check the limit", elements: [] }]);
+});
+
+test("a Miragon widget carries the card: its toggle and words, badges and the selection on the element surface", async () => {
+  const anchored = (id: string, elements: Array<{ id: string; name: string }>): TodoWire => ({
+    id,
+    url: `https://tracker.test/${id}`,
+    title: `Todo ${id}`,
+    body: "",
+    state: "open",
+    anchor: { notation: "wardley", model: "tea", file: "maps/tea.owm", elements, processVersion: null },
+    author: "petra",
+    assignees: [],
+    createdAt: "2026-10-23T00:00:00Z",
+  });
+  let select: (ids: string[]) => void = () => {};
+  const { attachSurfaceTodoCanvas } = await import("../src/lib/todo-surface-canvas.ts");
+  const w = await widget([BUILT_IN_TODO_TYPE], {
+    skeleton: "mcp-app-miragon.html",
+    notation: "wardley",
+    noun: "Wardley Map",
+    ref: { repo: "acme/models", path: "maps/tea.owm" },
+    // one todo an agent anchored by the component's NAME, one on the whole map
+    listed: [anchored("1", [{ id: "Kettle", name: "Kettle" }]), anchored("2", [])],
+    open: false,
+    canvas: (hooks, doc) =>
+      attachSurfaceTodoCanvas(
+        {
+          get: () => ({ getContainer: () => doc.getElementById("canvas")!, viewbox: () => ({ x: 0, y: 0, scale: 1 }) }),
+          on() {},
+          off() {},
+        },
+        {
+          list: () => [
+            { id: "cmp_kettle", name: "Kettle" },
+            { id: "cmp_tea", name: "Tea" },
+          ],
+          reveal: () => true,
+          onSelection(cb) {
+            select = cb;
+            return () => {};
+          },
+          bounds: (id) => (id === "cmp_kettle" ? { x: 100, y: 50, width: 30, height: 30 } : undefined),
+        },
+        hooks,
+      ),
+  });
+  const toggle = w.byId<HTMLButtonElement>("todo-toggle");
+  assert.equal(toggle.hidden, false, "the toggle arrives with the canvas, once the tracker answered");
+  assert.equal(toggle.title, "Open todos for this Wardley Map");
+  assert.deepEqual(
+    [...w.doc.querySelectorAll("#canvas .designiq-todo-badge")].map((b) => b.textContent),
+    ["1"],
+    "the agent's todo badges its component",
+  );
+
+  toggle.click();
+  await tick();
+  assert.deepEqual(
+    [...w.doc.querySelectorAll("#todo-list .chip.whole")].map((c) => c.textContent),
+    ["Whole Wardley Map"],
+  );
+
+  select(["cmp_tea"]);
+  w.byId<HTMLButtonElement>("todo-new").click();
+  assert.match(w.byId("todo-anchor").textContent ?? "", /Tea/);
+  w.byId<HTMLInputElement>("todo-title").value = "Tea is a commodity";
+  await w.submit();
+  assert.deepEqual(w.created(), [
+    {
+      repo: "acme/models",
+      path: "maps/tea.owm",
+      title: "Tea is a commodity",
+      elements: [{ id: "cmp_tea", name: "Tea" }],
+    },
+  ]);
 });

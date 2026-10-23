@@ -1,4 +1,5 @@
 import { queryDefaults } from "@designiq/api-client";
+import { anchorModel } from "@designiq/contracts/todo-anchor";
 import { QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { toast } from "sonner";
@@ -49,6 +50,7 @@ import {
   type ResolveConflictBody,
   retryTodoJob,
   syncRepo,
+  type TodoModelRef,
   type TodoWire,
   writeFavorite,
 } from "@/lib/api";
@@ -492,11 +494,14 @@ export function useFileHistory(repo: string, path: string, enabled = true) {
   });
 }
 
-/** open todos of a repo, optionally narrowed to one process (`?process=<id>`) */
-export function useTodos(repo: string, process?: string, enabled = true) {
+/** a model's key in the todos query keys — ids are unique per notation only */
+const todoModelKey = (model: TodoModelRef): string => `${model.notation}:${model.id}`;
+
+/** open todos of a repo, optionally narrowed to one model */
+export function useTodos(repo: string, model?: TodoModelRef, enabled = true) {
   return useQuery({
-    queryKey: ["todos", repo, process ?? null],
-    queryFn: () => fetchTodos(repo, process),
+    queryKey: ["todos", repo, model ? todoModelKey(model) : null],
+    queryFn: () => fetchTodos(repo, model),
     enabled: enabled && repo.length > 0,
     // todos change outside the app (closed on GitHub, filed by hand): poll once
     // a minute while the tab is focused (refetchIntervalInBackground stays false)
@@ -530,10 +535,11 @@ export function useCreateTodo(repo: string) {
   return useMutation({
     mutationFn: (body: CreateTodoBody) => createTodo(repo, body),
     onSuccess: (created) => {
+      const createdKey = created.anchor ? todoModelKey(anchorModel(created.anchor)) : undefined;
       for (const [key, data] of qc.getQueriesData<TodoWire[]>({ queryKey: ["todos", repo] })) {
-        const processFilter = key[2] as string | null | undefined;
-        // per-process queries only receive todos anchored to that process
-        if (processFilter != null && processFilter !== created.anchor?.process) continue;
+        const modelFilter = key[2] as string | null | undefined;
+        // per-model queries only receive todos anchored to that model
+        if (modelFilter != null && modelFilter !== createdKey) continue;
         if (data?.some((t) => t.id === created.id)) continue;
         qc.setQueryData<TodoWire[]>(key, [created, ...(data ?? [])]);
       }

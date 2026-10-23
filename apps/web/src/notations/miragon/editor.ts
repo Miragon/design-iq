@@ -11,7 +11,9 @@
  * palette; a peer's re-import keeps the view the user has.
  * The zoom keys and ⇧1 are the MCP-App widget's (lib/chrome-keys.ts): the
  * renderers bind none, and without them Cmd/Ctrl + `+` zooms the page. A
- * renderer's own menu entries reach the shell's ⋯ menu (MountedEditor.menu).
+ * renderer's own menu entries reach the shell's ⋯ menu (MountedEditor.menu),
+ * its element surface the shell's todos (MountedEditor.elements, through
+ * lib/todo-surface-canvas.ts).
  */
 import { bindMiragon } from "@designiq/live-client/miragon-sync";
 import { modelStem } from "@designiq/notations";
@@ -19,6 +21,7 @@ import { SHELL } from "@miragon/modeler-shell/core";
 
 import { handleChromeKey } from "@/lib/chrome-keys";
 import { attachPresenceCanvas } from "@/lib/presence-canvas";
+import { attachSurfaceTodoCanvas } from "@/lib/todo-surface-canvas";
 import type { ExportFile, Insets } from "@/mcp-app/core/engine";
 import { ZOOM_STEP } from "@/mcp-app/engines/fit";
 import { miragonView } from "@/mcp-app/engines/miragon";
@@ -93,6 +96,12 @@ export function mountMiragonEditor(
   // before the binding: its first import may finish right away, and the fit
   // of that import is the view a later move is measured against
   const view = miragonView(modeler, { firstFit: fitInsets });
+  // todo badges, selection and reveal on the document's element ids — before
+  // the binding too: the one-shot deep-link reveal waits for that first import
+  const todos = attachSurfaceTodoCanvas(modeler.diagram, modeler.elements, {
+    onBadgeClick: ctx.onBadgeClick,
+    onSelectionChanged: ctx.onSelectionChanged,
+  });
   let unbind: () => void;
   try {
     unbind = bindMiragon(modeler, spec.contractNotation, ctx.ytext, ctx.doc, ctx.onSyncError, ctx.onImportFailed, {
@@ -100,6 +109,7 @@ export function mountMiragonEditor(
       canvasHost: container,
     });
   } catch (error) {
+    todos.destroy();
     view.destroy();
     modeler.destroy();
     throw error;
@@ -147,12 +157,14 @@ export function mountMiragonEditor(
     download: (build) => saveFile(doc, build, ctx.onActionFailed),
   });
   return {
+    elements: todos,
     ...(menu ? { menu: menu.groups } : {}),
     destroy: () => {
       menu?.destroy();
       offSidePanels?.();
       doc.removeEventListener("keydown", onKey);
       view.destroy();
+      todos.destroy();
       presenceCanvas?.destroy();
       unbind();
       modeler.destroy();

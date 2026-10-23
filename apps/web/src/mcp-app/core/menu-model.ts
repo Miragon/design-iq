@@ -232,7 +232,7 @@ export interface MenuContext {
   inactive: boolean;
   /** bpmn editable: the Workshop switch */
   workshop?: { on: boolean };
-  /** bpmn, once the tracker answered */
+  /** a widget with the Todos card (bpmn, the Miragon renderers), once the tracker answered */
   todos?: { count: number; open: boolean };
   /** dmn, once the tests tool answered */
   checks?: { open: boolean; verdict?: MenuItem["verdict"] };
@@ -310,7 +310,7 @@ export function buildMenu(ctx: MenuContext): MenuGroup[] {
         keepsOpen: true,
       });
     }
-    if (ctx.kind === "bpmn" && ctx.todos) {
+    if (ctx.todos) {
       work.push({
         id: "todos",
         label: "Todos",

@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { CONTENT_KEY } from "@designiq/contracts/live";
+import type { TodoModelRef } from "@designiq/contracts/todo-anchor";
 import { AppError } from "@designiq/http-kit";
 import * as Y from "yjs";
 
@@ -737,45 +738,66 @@ test("renameModel: a failed file rename keeps an OPEN model's live state under i
   assert.equal(spy.ws.released, 1, "the new room is released again");
 });
 
-test("renameModel: a renamed PROCESS takes its todos along (a background job); a decision has none", async () => {
+test("renameModel: a renamed model takes its todos along (a background job); a decision has none", async () => {
   const ws = workspace();
   writeFileSync(join(ws, "processes", "credit.dmn"), "<dmn/>");
-  const moved: Array<{ from: string; to: { process: string; file: string } }> = [];
-  const job = {
-    id: "move:order",
-    kind: "move",
-    from: "order",
-    to: "o2c",
-    total: -1,
-    done: 0,
-    failed: 0,
-    state: "queued",
-  } as const;
+  writeFileSync(join(ws, "processes", "tea.owm"), "title Tea\n");
+  const moved: Array<{ from: TodoModelRef; to: { model: string; file: string } }> = [];
+  const job = (from: TodoModelRef, to: string) =>
+    ({
+      id: `move:${from.notation}:${from.id}`,
+      kind: "move",
+      notation: from.notation,
+      from: from.id,
+      to,
+      total: -1,
+      done: 0,
+      failed: 0,
+      state: "queued",
+    }) as const;
   const deps = (): RenameDeps => ({
     ...renameDeps().deps(ws),
     todos: {
       move: (from, to) => {
         moved.push({ from, to });
-        return job;
+        return job(from, to.model);
       },
     },
   });
   const out = await renameModel(REPO, ws, { path: "processes/order.bpmn", name: "o2c" }, "Petra", deps());
-  assert.deepEqual(moved, [{ from: "order", to: { process: "o2c", file: "processes/o2c.bpmn" } }]);
-  assert.deepEqual(out.todoJob, job);
+  assert.deepEqual(moved, [
+    { from: { notation: "bpmn", id: "order" }, to: { model: "o2c", file: "processes/o2c.bpmn" } },
+  ]);
+  assert.deepEqual(out.todoJob, job({ notation: "bpmn", id: "order" }, "o2c"));
+  const map = await renameModel(REPO, ws, { path: "processes/tea.owm", name: "Tea house" }, "Petra", deps());
+  assert.deepEqual(moved[1], {
+    from: { notation: "wardley", id: "tea" },
+    to: { model: "tea-house", file: "processes/tea-house.owm" },
+  });
+  assert.equal(map.todoJob?.notation, "wardley");
   const dmn = await renameModel(REPO, ws, { path: "processes/credit.dmn", name: "limit" }, "Petra", deps());
   assert.equal(dmn.todoJob, undefined);
-  assert.equal(moved.length, 1);
+  assert.equal(moved.length, 2);
 });
 
-test("deleteModels: closeTodos closes the deleted PROCESSES' todos — only when asked", async () => {
+test("deleteModels: closeTodos closes the deleted models' todos — only when asked, never a decision's", async () => {
   const ws = workspace();
   writeFileSync(join(ws, "processes", "credit.dmn"), "<dmn/>");
-  const closed: string[] = [];
+  writeFileSync(join(ws, "processes", "handbook.md"), "# Handbook\n");
+  const closed: TodoModelRef[] = [];
   const todos = {
-    close: (from: string) => {
+    close: (from: TodoModelRef) => {
       closed.push(from);
-      return { id: `close:${from}`, kind: "close", from, total: -1, done: 0, failed: 0, state: "queued" } as const;
+      return {
+        id: `close:${from.notation}:${from.id}`,
+        kind: "close",
+        notation: from.notation,
+        from: from.id,
+        total: -1,
+        done: 0,
+        failed: 0,
+        state: "queued",
+      } as const;
     },
   };
   const kept = await deleteModels(
@@ -788,12 +810,19 @@ test("deleteModels: closeTodos closes the deleted PROCESSES' todos — only when
   const out = await deleteModels(
     REPO,
     ws,
-    { paths: ["processes/order.bpmn", "processes/subprocesses/check-credit.bpmn"], closeTodos: true },
+    {
+      paths: ["processes/order.bpmn", "processes/subprocesses/check-credit.bpmn", "processes/handbook.md"],
+      closeTodos: true,
+    },
     { liveDocs: () => [], dropLineage: () => {}, todos },
   );
-  assert.deepEqual(closed, ["order", "check-credit"]);
+  assert.deepEqual(closed, [
+    { notation: "bpmn", id: "order" },
+    { notation: "bpmn", id: "check-credit" },
+    { notation: "markdown", id: "handbook" },
+  ]);
   assert.deepEqual(
     out.todoJobs?.map((j) => j.id),
-    ["close:order", "close:check-credit"],
+    ["close:bpmn:order", "close:bpmn:check-credit", "close:markdown:handbook"],
   );
 });

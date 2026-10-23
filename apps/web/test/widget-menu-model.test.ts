@@ -312,6 +312,17 @@ test("a renderer's entries join in the guide's group order: Model, Export, desig
   ]);
 });
 
+test("a Miragon widget's Todos item joins once the tracker answered, before the renderer's Model group", () => {
+  const { menu } = rendererMenu();
+  const ctx: MenuContext = { ...miragon, modeler: menu, todos: { count: 2, open: true } };
+  assert.deepEqual(
+    buildMenu(ctx).map((g) => g.id),
+    ["document", "work", "model", "export", "view", "help"],
+  );
+  assert.deepEqual([item(ctx, "todos")?.count, item(ctx, "todos")?.checked], [2, true]);
+  assert.equal(item({ ...ctx, todos: undefined }, "todos"), undefined, "no tracker, no item");
+});
+
 test("each entry kind becomes its item: a named radio group, a checkbox that stays open, a dialog, an action with its icon and key", () => {
   const { menu } = rendererMenu();
   const ctx: MenuContext = { ...miragon, modeler: menu };

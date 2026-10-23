@@ -1,13 +1,14 @@
 /**
- * Compact side panel listing the OPEN todos of the current process. Element
- * chips reveal (select + scroll) their element on the canvas; badge clicks on
- * the canvas open this panel pre-filtered to that element. Todos whose anchor
+ * Compact side panel listing the OPEN todos of the current model (a process,
+ * a Wardley Map, a document, …). Element chips reveal (select + scroll) their
+ * element on the canvas; badge clicks on the canvas open this panel
+ * pre-filtered to that element. Todos whose anchor
  * elements no longer exist stay listed — only the reveal is unavailable.
  * "Done" closes the todo in the tracker (confirm-less): the row dims while
  * the POST is pending, disappears on success (badges/counts follow via the
  * shared query cache), and close errors surface inline above the list.
  *
- * After a rename (#208) the process's todos move to its new id in the
+ * After a rename (#208) the model's todos move to its new id in the
  * background, one tracker change at a time: the panel lists them all along
  * (the server merges the ones still under the old id) and says how far the
  * move is — or, when the tracker refused some, which old id still holds
@@ -19,7 +20,7 @@ import { cn } from "@designiq/ui-kit/lib/utils";
 import { Check, CircleAlert, ExternalLink, ListTodo, Loader2 } from "lucide-react";
 
 import { SidePanel } from "@/components/side-panel";
-import type { TodoWire } from "@/lib/api";
+import type { TodoModelRef, TodoWire } from "@/lib/api";
 import { useCloseTodo, useRetryTodoJob, useTodoJobs } from "@/lib/queries";
 import { todoCount } from "@/lib/todo-jobs";
 import {
@@ -40,7 +41,8 @@ function TodoItem({
   todo: TodoWire;
   /** true while this row's close POST is pending — row dims, button disables */
   closing: boolean;
-  onRevealElement: (elementId: string) => void;
+  /** absent: the model has no canvas elements to reveal */
+  onRevealElement?: (elementId: string) => void;
   onCloseTodo: () => void;
 }) {
   const typeLabel = todoTypeLabel(todo);
@@ -61,7 +63,13 @@ function TodoItem({
       {todo.anchor && todo.anchor.elements.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1">
           {todo.anchor.elements.map((el) => (
-            <button key={el.id} type="button" title={el.id} onClick={() => onRevealElement(el.id)}>
+            <button
+              key={el.id}
+              type="button"
+              title={el.id}
+              disabled={!onRevealElement}
+              onClick={() => onRevealElement?.(el.id)}
+            >
               <Badge variant="outline" className="hover:bg-accent max-w-48 cursor-pointer">
                 <span className="truncate">{el.name ?? el.id}</span>
               </Badge>
@@ -93,11 +101,13 @@ function TodoItem({
   );
 }
 
-/** the move of a renamed process's todos INTO this process — running or failed */
-function IncomingTodos({ repo, processId }: { repo: string; processId: string }) {
+/** the move of a renamed model's todos INTO this model — running or failed */
+function IncomingTodos({ repo, model }: { repo: string; model: TodoModelRef }) {
   const jobs = useTodoJobs(repo);
   const retry = useRetryTodoJob(repo);
-  const incoming = (jobs.data ?? []).filter((j) => j.kind === "move" && j.to === processId && j.state !== "done");
+  const incoming = (jobs.data ?? []).filter(
+    (j) => j.kind === "move" && j.notation === model.notation && j.to === model.id && j.state !== "done",
+  );
   if (incoming.length === 0) return null;
   return (
     <div className="space-y-1.5 border-b px-3 py-2 text-xs" role="status">
@@ -138,30 +148,37 @@ function IncomingTodos({ repo, processId }: { repo: string; processId: string })
 
 export function TodoPanel({
   repo,
-  processId,
+  model,
+  noun,
   todos,
   isLoading,
   error,
   filterElementId,
+  filterAnchorIds,
   onClearFilter,
   onRevealElement,
   onClose,
 }: {
   repo: string;
-  /** the process the panel lists — a rename's todo move INTO it shows here */
-  processId: string;
+  /** the model the panel lists — a rename's todo move INTO it shows here */
+  model: TodoModelRef;
+  /** how the model is called ("process", "Wardley Map", "document", …) */
+  noun: string;
   todos: TodoWire[] | undefined;
   isLoading: boolean;
   error: Error | null;
   /** element id a canvas badge was clicked on — narrows the list to its todos */
   filterElementId: string | null;
+  /** the anchor ids that land on that element (TodoCanvas.anchorIds); absent = its id alone */
+  filterAnchorIds?: readonly string[];
   onClearFilter: () => void;
-  onRevealElement: (elementId: string) => void;
+  /** absent: the model has no canvas elements to reveal (a document) */
+  onRevealElement?: (elementId: string) => void;
   onClose: () => void;
 }) {
   const closeTodo = useCloseTodo(repo);
   const all = todos ?? [];
-  const list = filterElementId ? todosForElement(all, filterElementId) : all;
+  const list = filterElementId ? todosForElement(all, filterAnchorIds ?? filterElementId) : all;
   // creation-time name snapshot of the filtered element, if any todo carries one
   const filterName = filterElementId ? elementLabel(all, filterElementId) : null;
 
@@ -183,7 +200,7 @@ export function TodoPanel({
           </Button>
         </div>
       )}
-      <IncomingTodos repo={repo} processId={processId} />
+      <IncomingTodos repo={repo} model={model} />
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
         {closeTodo.error && (
           <p className="text-destructive text-sm">
@@ -195,7 +212,7 @@ export function TodoPanel({
         ) : isLoading ? (
           <p className="text-muted-foreground text-sm">Loading…</p>
         ) : list.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{emptyTodoMessage(filterElementId !== null)}</p>
+          <p className="text-muted-foreground text-sm">{emptyTodoMessage(filterElementId !== null, noun)}</p>
         ) : (
           list.map((t) => (
             <TodoItem

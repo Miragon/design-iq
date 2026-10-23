@@ -11,7 +11,7 @@
  * time it will take once that is noticeable, and a toast follows it.
  */
 import type { RenameModelResult } from "@designiq/contracts/live-host";
-import { processIdFromName } from "@designiq/notations";
+import { hasTodos, processIdFromName } from "@designiq/notations";
 import { FlaskConical, Link2, ListTodo, Users } from "lucide-react";
 import { useState } from "react";
 
@@ -40,8 +40,8 @@ export function RenameModelDialog({
   const referenceable = isReferenceable(model.notation);
   const references = useReferences(repo, [model.path], referenceable);
   const callers = [...new Set((references.data?.[0]?.referencedBy ?? []).map((r) => r.path))];
-  // todos are filed under the process id — a job moves them to the new one
-  const todos = useTodos(repo, model.id, model.notation === "bpmn");
+  // todos are filed under the model id — a job moves them to the new one
+  const todos = useTodos(repo, { notation: model.notation, id: model.id }, hasTodos(model.notation));
   const openTodos = todos.data?.length ?? 0;
   const estimate = todoJobEstimate(openTodos, "move");
 

@@ -1,7 +1,8 @@
 /* The Miragon-renderer widgets' stylesheet (miragon-main.ts): the shared
- * chrome plus the renderer palette's slot — the renderers bring their own CI
- * styling, only the slot is ours. */
+ * chrome and Todos card plus the renderer palette's slot — the renderers
+ * bring their own CI styling, only the slot is ours. */
 @import "./chrome.css";
+@import "./todos.css";
 @import "./geist-mono.css";
 @import "../lib/miragon-legend.css";
 

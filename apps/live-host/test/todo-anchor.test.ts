@@ -1,6 +1,6 @@
 /**
- * Todo anchor codec (src/domain/todo-anchor.ts) — the platform-owned block that
- * ties a tracker item to a process/model elements. Round-trips through
+ * Todo anchor codec (@designiq/contracts/todo-anchor) — the platform-owned block
+ * that ties a tracker item to a model and its elements. Round-trips through
  * encodeAnchor/parseAnchor, tolerant parsing of hand-written blocks, and the
  * name-flattening that keeps the line format unambiguous.
  */
@@ -18,7 +18,8 @@ import {
 
 test("roundtrip: encode → parse yields the same anchor", () => {
   const anchor: TodoAnchor = {
-    process: "order-to-cash",
+    notation: "bpmn",
+    model: "order-to-cash",
     file: "processes/order-to-cash/order-to-cash.bpmn",
     elements: [
       { id: "Task_CheckCredit", name: "Bonität prüfen" },
@@ -30,26 +31,28 @@ test("roundtrip: encode → parse yields the same anchor", () => {
 });
 
 test("roundtrip survives being embedded in a larger issue body", () => {
-  const anchor: TodoAnchor = { process: "p1", file: null, elements: [], processVersion: null };
+  const anchor: TodoAnchor = { notation: "bpmn", model: "p1", file: null, elements: [], processVersion: null };
   const body = `Some intro text.\n\n${encodeAnchor(anchor)}\n\nDiscussion below.\n_Created by @petra_`;
   assert.deepEqual(parseAnchor(body), anchor);
 });
 
 test("names with pipes/newlines are flattened at encode time (line format stays unambiguous)", () => {
   const anchor: TodoAnchor = {
-    process: "order-to-cash",
+    notation: "bpmn",
+    model: "order-to-cash",
     file: null,
     elements: [{ id: "Task_A", name: "a|b\nc" }],
     processVersion: null,
   };
   const parsed = parseAnchor(encodeAnchor(anchor));
   assert.deepEqual(parsed?.elements, [{ id: "Task_A", name: "a b c" }]);
-  assert.equal(parsed?.process, "order-to-cash");
+  assert.equal(parsed?.model, "order-to-cash");
 });
 
 test("element without a name round-trips as name null", () => {
   const anchor: TodoAnchor = {
-    process: "p",
+    notation: "bpmn",
+    model: "p",
     file: null,
     elements: [{ id: "Task_X", name: null }],
     processVersion: null,
@@ -59,7 +62,8 @@ test("element without a name round-trips as name null", () => {
 
 test("the type round-trips, survives a re-anchoring and an anchor without it has no type key", () => {
   const typed: TodoAnchor = {
-    process: "order-to-cash",
+    notation: "bpmn",
+    model: "order-to-cash",
     file: null,
     elements: [],
     processVersion: null,
@@ -67,7 +71,7 @@ test("the type round-trips, survives a re-anchoring and an anchor without it has
   };
   const body = `${encodeAnchor(typed)}\n\n### Steps\n\nClick`;
   assert.deepEqual(parseAnchor(body), typed);
-  const moved = replaceAnchor(body, { ...parseAnchor(body)!, process: "order-intake" });
+  const moved = replaceAnchor(body, { ...parseAnchor(body)!, model: "order-intake" });
   assert.deepEqual(parseAnchor(moved)?.type, typed.type);
   const plain = parseAnchor(encodeAnchor({ ...typed, type: undefined }))!;
   assert.ok(!("type" in plain), "a built-in todo parses exactly as before");
@@ -75,7 +79,8 @@ test("the type round-trips, survives a re-anchoring and an anchor without it has
 
 test("a type id or name with pipes/newlines is flattened at encode time", () => {
   const anchor: TodoAnchor = {
-    process: "p",
+    notation: "bpmn",
+    model: "p",
     file: null,
     elements: [],
     processVersion: null,
@@ -89,18 +94,40 @@ test("a type id or name with pipes/newlines is flattened at encode time", () => 
 test("missing/unclosed block yields null", () => {
   assert.equal(parseAnchor("just an ordinary issue body"), null);
   assert.equal(parseAnchor(""), null);
-  assert.equal(parseAnchor("<!-- bpmiq:todo v1\nprocess: x"), null, "opened but never closed"); // legacy-name-ok
+  assert.equal(parseAnchor("<!-- bpmiq:todo v1\nnotation: bpmn\nmodel: x"), null, "opened but never closed"); // legacy-name-ok
 });
 
-test("a block without a process line yields null (process is the one required field)", () => {
+test("a block without its notation or its model yields null (the two required fields)", () => {
   assert.equal(parseAnchor("<!-- bpmiq:todo v1\nfile: some/file.bpmn\n-->"), null); // legacy-name-ok: frozen marker
+  assert.equal(parseAnchor("<!-- bpmiq:todo v1\nnotation: wardley\n-->"), null); // legacy-name-ok: frozen marker
+  assert.equal(parseAnchor("<!-- bpmiq:todo v1\nmodel: tea-shop\n-->"), null); // legacy-name-ok: frozen marker
+  assert.equal(parseAnchor("<!-- bpmiq:todo v1\nprocess: order-to-cash\n-->"), null, "no process line any more"); // legacy-name-ok
+});
+
+test("every todo names its notation and model, a process too, and round-trips", () => {
+  const anchor: TodoAnchor = {
+    notation: "wardley",
+    model: "tea-shop",
+    file: "maps/tea-shop.owm",
+    elements: [{ id: "component_tea", name: "Tea" }],
+    processVersion: null,
+  };
+  const lines = encodeAnchor(anchor).split("\n");
+  assert.deepEqual(lines.slice(1, 3), ["notation: wardley", "model: tea-shop"]);
+  assert.deepEqual(parseAnchor(encodeAnchor(anchor)), anchor);
+  const processAnchor: TodoAnchor = { ...anchor, notation: "bpmn", model: "order-to-cash", file: null, elements: [] };
+  assert.deepEqual(encodeAnchor(processAnchor).split("\n").slice(1, 3), ["notation: bpmn", "model: order-to-cash"]);
+  // re-anchoring keeps the notation
+  const moved = parseAnchor(replaceAnchor(encodeAnchor(anchor), { ...anchor, model: "tea-house" }));
+  assert.deepEqual([moved?.notation, moved?.model], ["wardley", "tea-house"]);
 });
 
 test("hand-written sloppy block parses (indentation, blank lines, unknown keys skipped)", () => {
   const body = [
     "Please double-check this.",
     "<!-- bpmiq:todo v1", // legacy-name-ok: frozen marker
-    "   process: order-to-cash   ",
+    "   notation: bpmn",
+    "   model: order-to-cash   ",
     "",
     "priority: high", // unknown key — skipped
     "not a key-value line", // no ': ' separator — skipped
@@ -110,7 +137,7 @@ test("hand-written sloppy block parses (indentation, blank lines, unknown keys s
     "trailing text",
   ].join("\n");
   const anchor = parseAnchor(body);
-  assert.equal(anchor?.process, "order-to-cash");
+  assert.equal(anchor?.model, "order-to-cash");
   assert.equal(anchor?.file, null);
   assert.equal(anchor?.processVersion, null);
   assert.deepEqual(anchor?.elements, [
@@ -125,7 +152,8 @@ test("the marker is frozen: a todo filed before any product rename keeps its anc
   // round-trips stay green — this spelling it cannot reach.
   const marker = "<!-- bpm" + "iq:todo v1";
   const anchor: TodoAnchor = {
-    process: "order-to-cash",
+    notation: "bpmn",
+    model: "order-to-cash",
     file: "processes/order-to-cash.bpmn",
     elements: [{ id: "Task_CheckCredit", name: "Bonität prüfen" }],
     processVersion: null,
@@ -137,7 +165,8 @@ test("the marker is frozen: a todo filed before any product rename keeps its anc
     "Limit check is missing here.",
     "",
     marker,
-    "process: order-to-cash",
+    "notation: bpmn",
+    "model: order-to-cash",
     "file: processes/order-to-cash.bpmn",
     "element: Task_CheckCredit | Bonität prüfen",
     "-->",
@@ -157,5 +186,5 @@ test("the marker is frozen in the content repo's issue template too (the second 
     "utf8",
   );
   assert.ok(template.includes("<!-- bpm" + "iq:todo v1"), "the template pre-fills the frozen marker");
-  assert.equal(parseAnchor(template)?.process, "order-to-cash");
+  assert.equal(parseAnchor(template)?.model, "order-to-cash");
 });

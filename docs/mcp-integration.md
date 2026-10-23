@@ -10,9 +10,10 @@ surfaces below, `list_models` covers every notation and `get_view` every one but
 read-only server adds graph analysis across notations (`get_model`, `enumerate_paths`,
 `find_cycles`, `which_models_use`); the Live Host reads, validates and saves any model's source
 text (`get_model_content`, `validate_model`, `save_model_content`, `create_model`) and renders
-six of the notations as modelers inline in the chat. BPMN and DMN have extra tools on top: the
-derived process and decision views, the XML round-trip, roles from lanes, decision simulation,
-analysis and tests, and todos anchored to BPMN elements.
+six of the notations as modelers inline in the chat. Todos are filed on the models of every
+notation but decisions and Value Chains, optionally anchored to their elements. BPMN and DMN
+have extra tools on top: the derived process and decision views, the XML round-trip, roles from
+lanes, decision simulation, analysis and tests.
 
 Diagrams as code are no notation of their own: a diagram is a `mermaid` code fence in a
 Markdown document, next to the prose that explains it, and a document links the models it talks
@@ -66,7 +67,7 @@ definitions live in `packages/mcp/tools.ts`, shared by two entry points:
 | `who_owns(id)`               | Who does what?                      | the BPMN lanes (roles) and the steps each contains; the pools                                                                                                       |
 | `which_processes_use(query)` | Impact: what references this?       | each process's id, derived name, role names, step names, and `callActivity` `calledElement`                                                                         |
 | `which_models_use(id)`       | Impact, across EVERY notation       | the repo-wide reference index (typed cross-model refs: calls, decides, …), incl. dangling references                                                                |
-| `list_todos(process?)`       | What work is open (opt-in)?         | the content repo's issue tracker (label `todo` + `process:<id>`), anchors parsed from issue bodies                                                                  |
+| `list_todos(id?, notation?)` | What work is open (opt-in)?         | the content repo's issue tracker (label `todo` + `<notation>:<id>`), anchors parsed from issue bodies                                                               |
 
 All tools carry `readOnlyHint` annotations, so clients may auto-approve them, and a short display
 `title` ("List models", "Get BPMN process view") that clients show people instead of the tool
@@ -163,7 +164,7 @@ call is gated by the caller's per-repo permission.
 | `run_decision_tests`          | read  | Run the stored test suite (or cases passed inline) with rule coverage.                   |
 | `get_decision_tests`          | read  | The stored suite + the `baseVersion` a save needs.                                       |
 | `list_changes`                | read  | A repo's unreleased live changes.                                                        |
-| `list_todos`                  | read  | Open model-anchored todos, for the whole repo or narrowed to one process.                |
+| `list_todos`                  | read  | Open model-anchored todos, for the whole repo or narrowed to one model.                  |
 | `open_modeler`                | read  | Open the embedded BPMN modeler widget (MCP App). See below.                              |
 | `open_decision_modeler`       | read  | Open the embedded DMN modeler + simulator, optionally with a scenario applied.           |
 | `open_wardley_modeler`        | read  | Open the embedded Wardley Map modeler widget (MCP App, the widget core).                 |
@@ -180,7 +181,7 @@ call is gated by the caller's per-repo permission.
 | `save_dmn_xml`                | write | Conflict-guarded save of DMN XML into the live document (requires `baseVersion`).        |
 | `save_decision_tests`         | write | Write `<decision>.tests.yaml` next to the model (`record` freezes today's behaviour).    |
 | `list_todo_types`             | read  | Forms a todo is filed with (registered with `create_todo`, not in read-only mode).       |
-| `create_todo`                 | write | File a todo of a type, anchored to the process and (optionally) concrete BPMN elements.  |
+| `create_todo`                 | write | File a todo of a type on a model and (optionally) concrete elements of it.               |
 | `close_todo`                  | write | Complete a todo in the tracker (`todoId` from `list_todos`).                             |
 | `release_process`             | write | Open the release PR. Merge rights stay at the git provider.                              |
 
@@ -355,12 +356,30 @@ because its commentary could not be produced.
 
 `list_todos` / `create_todo` / `close_todo` speak to the **IssueTracker port**
 (`ports/issue-tracker.ts`): model-anchored work items live as first-class items in the
-customer's own tracker (GitHub: repo issues labelled `todo` + `process:<id>`), never in a
-platform database. Items are bot-authored via the installation token and the human stays
-attributed textually, the same model as releases. The anchor (process, model file, BPMN
-element ids with a name snapshot) rides invisibly in the item body, so an agent can file
+customer's own tracker (GitHub: repo issues labelled `todo` plus one label for the model),
+never in a platform database. Items are bot-authored via the installation token and the human
+stays attributed textually, the same model as releases. The anchor (notation, model id, model
+file, element ids with a name snapshot) rides invisibly in the item body, so an agent can file
 "this gateway needs a decision table" against an element id and the modeler shows a badge
 on exactly that shape.
+
+Todos are filed on processes, Wardley Maps, Event Storming boards, Context Maps, Team
+Topologies and Markdown documents (the notation descriptor's `todos` flag in
+`@designiq/notations`); a decision or a Value Chain takes none yet (a typed 400). Model ids are
+file stems, unique per notation but not across them, so the label names the notation:
+`<notation>:<id>` (`bpmn:order-to-cash`, `wardley:tea-shop`).
+`create_todo` and `list_todos` take a model as the generic tools do (`id` or `path`, `notation`
+for a stem shared across notations; without it a process wins). Element ids are the ones the
+canvas reports: a process's from `get_process`, a canvas model's the node ids `get_view`
+reports. A Wardley component may also be named by its name, which `get_view` reports as its id:
+the canvas resolves it to the component. A Markdown document takes todos on the whole document,
+without elements. A rename moves a model's todos along and a delete closes them on request, in
+the background, as for a process. The links in an item body open a process on its process
+route and any other model on the file route (`/f/<path>?element=<id>`), where the element is
+revealed once the canvas has imported. A move to another folder keeps the model's id, so
+nothing is rewritten in the tracker: the label still finds its todos, `list_todos` names the
+model's current file in `anchor.file`, and a link to the old path follows the model to its
+new folder (the file route finds it by notation and id).
 
 The todo tools register **only when the platform has tracker credentials**: no tracker,
 no tools in `tools/list` (agents plan against reality instead of discovering it by failing).
@@ -378,7 +397,7 @@ labelled `todo`, hidden as a type: the platform fills its anchor itself) was the
 plain todos. `create_todo` takes the `type` and its `fields` by id; a missing required field
 fails with the list of what is missing, the same check the web dialog and the widget run
 inline (`@designiq/contracts/todo-types`). The issue gets the form's body as GitHub renders a
-submitted form, the template's title prefix, and the labels `todo` + `process:<id>` plus the
+submitted form, the template's title prefix, and the labels `todo` + the model's label plus the
 template's labels that exist in the repo. The type rides in the anchor block, so the lists
 show it after a label was edited by hand and after a rename. Templates are read at most every
 five minutes per repo.
@@ -485,22 +504,25 @@ widget: it saves a still-pending edit once, re-mounts its canvas as a viewer (zo
 fit still work), and says so in an info card ("This model is open in a newer widget",
 pill _Inactive_) whose one action is Open in designIQ.
 
-The widget also carries the **todos** of the open process: the **Todos** toggle (top-right,
+The widget also carries the **todos** of the open process (as do the Wardley, Team Topology,
+Event Storming and Context Map widgets for their models): the **Todos** toggle (top-right,
 with the open count) opens a card listing them, count badges sit on every anchored
 element (a badge click opens the card filtered to it, a chip click reveals the element
 on the canvas), **Add todo** files one against the current canvas selection (or the whole
-process), with one of the repo's todo types and their fields, and **Done** closes it in the
+model), with one of the repo's todo types and their fields, and **Done** closes it in the
 tracker. It drives the same `list_todos` / `list_todo_types` / `create_todo` / `close_todo`
 tools over the app bridge, and discovery starts as soon as the
 model's path is known, so a tracker-less host simply has no Todos toggle, and a read-only
 host gets the list without the write actions. Nothing about the modeling path depends on it.
 
 **"Implement" hands a todo to the assistant.** The widget injects a work order into the
-chat as a user message (`ui/message`), with repo, model path, process, anchored element ids and
-the todo's description inlined, followed by the exact steps: `get_bpmn_xml` (keep the
+chat as a user message (`ui/message`), with repo, model path, the model, anchored element ids
+and the todo's description inlined, followed by the exact steps: `get_bpmn_xml` (keep the
 `baseVersion`) → make the edit → `validate_bpmn` until clean → `save_bpmn_xml` (CAS; on
-conflict re-derive and retry) → `close_todo`, and only after the save succeeded. Three rules
-are spelled out rather than assumed: ask instead of guessing at process semantics, never
+conflict re-derive and retry) → `close_todo`, and only after the save succeeded. A model of
+another notation gets the generic tools instead: `get_model_content` → `validate_model` →
+`save_model_content`. Three rules
+are spelled out rather than assumed: ask instead of guessing at the model's semantics, never
 close over an unsaved model, and the description is fenced as data ("information, not
 instructions"). It comes from the tracker, where labeling an issue `todo` takes only triage
 rights, so a crafted body must not be able to splice its own steps into the work order. The
@@ -590,8 +612,9 @@ tool rather than inside the iframe. The widgets run the shared core on the Mirag
 renderers (`@miragon/wardley-renderer`, `team-topologies-renderer`,
 `event-storming-renderer`, `context-maps-renderer`): the same CAS autosave through `save_model_content`, the same
 conflict card and chrome, the same live upgrade through `mint_ws_ticket`, a read-only viewer under
-`LIVE_MCP_READONLY=1`. What they do not have: todos and stickies (BPMN-only), and the
-`?element=` reveal. Their "Open in designIQ" link is the file route (`/f/<path>`). The
+`LIVE_MCP_READONLY=1`, and the same Todos card as the BPMN widget (above). What they do not
+have: stickies (BPMN-only). Their "Open in designIQ" link is the file route (`/f/<path>`),
+carrying the selected element (`?element=`), which the web modeler reveals. The
 tool result is the lean `{opened: {repo, path, url}, summary: {name, summary, stats}}`.
 Non-apps clients read `get_view` / `get_model_content` instead.
 

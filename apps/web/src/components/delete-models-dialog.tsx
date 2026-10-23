@@ -4,12 +4,13 @@
  * what the deletion breaks before it happens: links from models that stay
  * behind dangle, unreleased changes are lost. A model open in a live session
  * blocks the delete (the server refuses it too — all or nothing), so the
- * dialog says which one instead of failing on submit. A deleted process's
+ * dialog says which one instead of failing on submit. A deleted model's
  * open todos would point at nothing: the dialog counts them and offers to
  * close them along (in the background — the tracker takes one change at a
  * time); unticked, they stay open in the tracker.
  */
 import type { DeleteModelsResult } from "@designiq/contracts/live-host";
+import { hasTodos } from "@designiq/notations";
 import { CircleAlert, Link2Off, ListTodo, PencilLine } from "lucide-react";
 import { useState } from "react";
 
@@ -43,11 +44,13 @@ export function DeleteModelsDialog({
       (references.data ?? []).flatMap((r) => r.referencedBy.filter((by) => !doomed.has(by.path)).map((by) => by.path)),
     ),
   ];
-  // a deleted PROCESS's open todos lose their process — count them (anchored
-  // ones; the tracker is asked only when a process is in the selection)
-  const processes = new Set(models.filter((m) => m.notation === "bpmn").map((m) => m.id));
-  const todos = useTodos(repo, undefined, processes.size > 0);
-  const orphaned = (todos.data ?? []).filter((t) => t.anchor && processes.has(t.anchor.process)).length;
+  // a deleted model's open todos lose their model — count them (anchored
+  // ones; the tracker is asked only when a model with todos is in the selection)
+  const withTodos = new Set(models.filter((m) => hasTodos(m.notation)).map((m) => `${m.notation}:${m.id}`));
+  const todos = useTodos(repo, undefined, withTodos.size > 0);
+  const orphaned = (todos.data ?? []).filter(
+    (t) => t.anchor && withTodos.has(`${t.anchor.notation}:${t.anchor.model}`),
+  ).length;
   const [closeTodos, setCloseTodos] = useState(false);
   const estimate = todoJobEstimate(orphaned, "close");
   const open = models.filter((m) => m.liveSessions > 0);
@@ -113,7 +116,8 @@ export function DeleteModelsDialog({
         )}
         {orphaned > 0 && (
           <Consequence icon={ListTodo} tone="warning">
-            {todoCount(orphaned).replace("todo", "open todo")} would point at a process that no longer exists.
+            {todoCount(orphaned).replace("todo", "open todo")} would lose the{" "}
+            {single ? nounOf(single.notation) : "models"} they are filed on.
             <label className="mt-1.5 flex cursor-pointer items-start gap-2">
               <input
                 type="checkbox"

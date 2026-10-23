@@ -175,9 +175,9 @@ export interface RenameModelBody {
 export interface RenameModelResult {
   /** the model's new id (file stem) */
   id: string;
-  /** a renamed PROCESS takes its open todos along — in the background, one
-   *  tracker write at a time (GET …/todo-jobs follows it); absent when the
-   *  model is no process or the host has no tracker */
+  /** a renamed model takes its open todos along — in the background, one
+   *  tracker write at a time (GET …/todo-jobs follows it); absent when its
+   *  notation has no todos or the host has no tracker */
   todoJob?: TodoJobWire;
   /** its new repo-relative path */
   path: string;
@@ -220,7 +220,7 @@ export interface DuplicateModelResult {
 export interface DeleteModelsBody {
   /** repo-relative paths of the model files (non-empty) */
   paths: string[];
-  /** also close the open todos of every deleted PROCESS (in the background,
+  /** also close the open todos of every deleted model (in the background,
    *  one tracker write at a time) — default: they stay open */
   closeTodos?: boolean;
 }
@@ -228,25 +228,27 @@ export interface DeleteModelsBody {
 export interface DeleteModelsResult {
   /** every file that was deleted, companions (tests sidecars) included */
   deleted: string[];
-  /** the todo-closing jobs `closeTodos` started (one per deleted process) */
+  /** the todo-closing jobs `closeTodos` started (one per deleted model with todos) */
   todoJobs?: TodoJobWire[];
 }
 
 /**
  * GET /api/repos/:fullName/todo-jobs — background work on a repo's todos
- * (#208, #210): a renamed process's todos MOVE to its new id, a deleted
- * process's todos CLOSE. The tracker takes one write at a time (GitHub asks
+ * (#208, #210): a renamed model's todos MOVE to its new id, a deleted
+ * model's todos CLOSE. The tracker takes one write at a time (GitHub asks
  * for serial writes, a second apart), so a job runs in the background and
  * reports progress. A job survives a host restart; a FAILED job keeps its
  * todos where they are until POST …/todo-jobs/retry runs it again.
  */
 export interface TodoJobWire {
-  /** stable per repo: "<kind>:<from>" */
+  /** stable per repo: "<kind>:<notation>:<from>" */
   id: string;
   kind: "move" | "close";
-  /** the process id the todos are filed under */
+  /** the notation of the model (a rename keeps it) */
+  notation: string;
+  /** the model id the todos are filed under */
   from: string;
-  /** move: the process id they go to */
+  /** move: the model id they go to */
   to?: string;
   /** open todos the job found; -1 until it looked */
   total: number;
@@ -546,16 +548,16 @@ export interface FileAtCommitWire {
   content: string;
 }
 
-/** one BPMN element a todo is anchored to (id = anchor, name = creation-time
+/** one model element a todo is anchored to (id = anchor, name = creation-time
  *  snapshot) — the wire shape IS the codec's TodoElement (./todo-anchor.ts);
  *  changing that type changes the LIVE wire format */
 export type TodoElementWire = TodoElement;
 
-/** platform anchor of a todo — which process/file/elements it belongs to;
+/** platform anchor of a todo — which model/file/elements it belongs to;
  *  the wire shape IS the codec's TodoAnchor (./todo-anchor.ts) */
 export type TodoAnchorWire = TodoAnchor;
 
-/** GET /api/repos/:fullName/todos[?process=<id>] — one row per OPEN tracker item */
+/** GET /api/repos/:fullName/todos[?notation=<id>&model=<id>] — one row per OPEN tracker item */
 export interface TodoWire {
   /** tracker-native id as a string (GitHub/GitLab: issue number; Jira: "PROJ-123") */
   id: string;
@@ -584,7 +586,10 @@ export interface CreateTodoBody {
   /** the type's field values, by field id (validateTodoFields) */
   fields?: TodoFieldValues;
   anchor: {
-    process: string;
+    /** the model's notation — absent: the file's, else a process first */
+    notation?: string;
+    /** model id (the file stem) — this or `file` */
+    model?: string;
     file?: string;
     elements?: TodoElementWire[];
     processVersion?: string;

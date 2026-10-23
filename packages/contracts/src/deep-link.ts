@@ -38,8 +38,25 @@ export function processDeepLink(
 
 /** the file editor (any model file, e.g. a decision's .dmn):
  *  `/r/<owner>/<repo>/f/<repo-relative path>` — encoded per segment so the
- *  slashes keep separating the splat route's segments */
-export function fileDeepLink(publicUrl: string, repoFullName: string, path: string): string {
+ *  slashes keep separating the splat route's segments — optionally revealing
+ *  one element (`?element=`, as on the process route) */
+export function fileDeepLink(publicUrl: string, repoFullName: string, path: string, elementId?: string): string {
   const splat = path.split("/").map(encodeURIComponent).join("/");
-  return `${repoBase(publicUrl, repoFullName)}/f/${splat}`;
+  const url = `${repoBase(publicUrl, repoFullName)}/f/${splat}`;
+  return elementId ? `${url}?element=${encodeURIComponent(elementId)}` : url;
+}
+
+/** the editor of a model a todo is anchored to: a process opens on its
+ *  process route, a model of any other notation on the file route (and,
+ *  without a file to open, the repository overview) */
+export function modelDeepLink(
+  publicUrl: string,
+  repoFullName: string,
+  model: { notation: string; id: string; file: string | null },
+  elementId?: string,
+): string {
+  if (model.notation === "bpmn") return processDeepLink(publicUrl, repoFullName, model.id, elementId);
+  return model.file
+    ? fileDeepLink(publicUrl, repoFullName, model.file, elementId)
+    : repoDeepLink(publicUrl, repoFullName);
 }

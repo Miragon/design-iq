@@ -3,7 +3,7 @@
  * Without DESIGNIQ_TODOS_REPO + DESIGNIQ_TODOS_TOKEN (also read under the legacy
  * BPM_TODOS_* names — todosConfigFromEnv) the tool must not exist (the server // legacy-name-ok
  * stays zero-auth by default); with both set it lists open todos from a tiny
- * local GitHub-shaped HTTP stub: label filter (todo + process:<id>), PR-row
+ * local GitHub-shaped HTTP stub: label filter (todo + <notation>:<id>), PR-row
  * exclusion, anchor parsing via @designiq/contracts/todo-anchor, token forwarding.
  * Drives the REAL server over an in-memory transport, like tools.test.ts.
  */
@@ -24,7 +24,8 @@ const TRACKER_REPO = "acme/content";
 // todo (no anchor), one PR wearing the todo label, one non-todo issue, one
 // CLOSED todo (must never appear: the tool queries state=open).
 const anchorBlock = encodeAnchor({
-  process: "order-to-cash",
+  notation: "bpmn",
+  model: "order-to-cash",
   file: "processes/order-to-cash/order-to-cash.bpmn",
   elements: [{ id: "Task_CheckCredit", name: "Bonität prüfen" }],
   processVersion: "1.4.0",
@@ -36,7 +37,7 @@ const rows = [
     title: "Check credit limits with finance",
     state: "open",
     body: `${anchorBlock}\n\nThe threshold looks stale.`,
-    labels: [{ name: "todo" }, { name: "process:order-to-cash" }],
+    labels: [{ name: "todo" }, { name: "bpmn:order-to-cash" }],
     assignees: [{ login: "petra" }],
     created_at: "2026-07-15T09:00:00Z",
   },
@@ -70,6 +71,22 @@ const rows = [
     labels: [{ name: "bug" }],
     assignees: [],
     created_at: "2026-07-15T12:00:00Z",
+  },
+  {
+    number: 12,
+    html_url: `https://example.test/${TRACKER_REPO}/issues/12`,
+    title: "Tea is a commodity now",
+    state: "open",
+    body: encodeAnchor({
+      notation: "wardley",
+      model: "order-to-cash",
+      file: "maps/order-to-cash.owm",
+      elements: [{ id: "component_tea", name: "Tea" }],
+      processVersion: null,
+    }),
+    labels: [{ name: "todo" }, { name: "wardley:order-to-cash" }],
+    assignees: [],
+    created_at: "2026-07-15T12:30:00Z",
   },
   {
     number: 11,
@@ -162,18 +179,18 @@ test("list_todos: open todos with parsed anchors; PR rows excluded; the token is
     id: string;
     url: string;
     title: string;
-    anchor: { process: string; elements: Array<{ id: string; name: string | null }> } | null;
+    anchor: { notation: string; model: string; elements: Array<{ id: string; name: string | null }> } | null;
     assignees: string[];
     createdAt: string;
   }>;
   assert.deepEqual(
     todos.map((t) => t.id),
-    ["7", "8"],
+    ["7", "8", "12"],
     "open todo-labeled issues only: no PR row, no non-todo, no closed",
   );
   const anchored = todos[0]!;
   assert.equal(anchored.url, `https://example.test/${TRACKER_REPO}/issues/7`);
-  assert.equal(anchored.anchor?.process, "order-to-cash");
+  assert.deepEqual([anchored.anchor?.notation, anchored.anchor?.model], ["bpmn", "order-to-cash"]);
   assert.deepEqual(anchored.anchor?.elements, [{ id: "Task_CheckCredit", name: "Bonität prüfen" }]);
   assert.deepEqual(anchored.assignees, ["petra"]);
   assert.equal(anchored.createdAt, "2026-07-15T09:00:00Z");
@@ -182,18 +199,33 @@ test("list_todos: open todos with parsed anchors; PR rows excluded; the token is
   await close();
 });
 
-test("list_todos: the process argument narrows via the process:<id> label; misses succeed with a message", async () => {
+test("list_todos: an id narrows via its model's label, a process first; misses succeed with a message", async () => {
   const { client, close } = await connect();
-  const hit = await call(client, { process: "order-to-cash" });
+  // the content repo holds order-to-cash.bpmn AND order-to-cash.storm: the id alone is the process
+  const hit = await call(client, { id: "order-to-cash" });
   assert.ok(!hit.isError, hit.text);
   const todos = JSON.parse(hit.text) as Array<{ id: string }>;
   assert.deepEqual(
     todos.map((t) => t.id),
     ["7"],
   );
-  const miss = await call(client, { process: "does-not-exist" });
+  const miss = await call(client, { id: "does-not-exist" });
   assert.ok(!miss.isError, "an empty result is a success sentence, not an error");
   assert.match(miss.text, /No open todos for process 'does-not-exist'/);
+  await close();
+});
+
+test("list_todos: `id` + `notation` narrows to a model of any notation via its <notation>:<id> label", async () => {
+  const { client, close } = await connect();
+  const map = await call(client, { id: "order-to-cash", notation: "wardley" });
+  assert.ok(!map.isError, map.text);
+  assert.deepEqual(
+    (JSON.parse(map.text) as Array<{ id: string }>).map((t) => t.id),
+    ["12"],
+    "the map's todo — not the process's of the same id",
+  );
+  const miss = await call(client, { id: "nowhere", notation: "event-storming" });
+  assert.match(miss.text, /No open todos for event-storming 'nowhere'/);
   await close();
 });
 

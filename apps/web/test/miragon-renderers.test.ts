@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
+import type { TodoElementWire, TodoWire } from "@designiq/contracts/live-host";
 import { newCmJson, newOwmText, newStormText, newTtJson } from "@designiq/notations/templates";
 import { fitViewbox } from "@miragon/modeler-shell/core";
 import * as Y from "yjs";
@@ -51,6 +52,10 @@ async function engineOf(id: string, container: HTMLElement, readonly = false) {
 
 const HOSTS = ["the SPA editor", "the live widget"] as const;
 
+/** what the SPA's shell hands a mount, the todo hooks no-ops unless given */
+const spaContext = (ctx: Partial<EditorContext>): EditorContext =>
+  ({ onBadgeClick: () => {}, onSelectionChanged: () => {}, ...ctx }) as EditorContext;
+
 /**
  * A notation's editing mount bound to a shared Y.Text the way a host does
  * it: the SPA's editor, or the widget's engine with the chrome's insets (so
@@ -85,7 +90,7 @@ async function mountLive(
     spec,
     { ...renderer, create: (options) => (modeler = renderer.create(options)) },
     container,
-    { ytext, doc, onSyncError: assert.fail, onImportFailed: assert.fail, presence } as unknown as EditorContext,
+    spaContext({ ytext, doc, onSyncError: assert.fail, onImportFailed: assert.fail, presence }),
   );
   assert.ok(modeler, id);
   return { container, modeler, destroy: () => editor.destroy() };
@@ -321,12 +326,17 @@ test("the SPA editor names the reason a renderer refuses a document, word for wo
     const doc = new Y.Doc();
     doc.getText("content").insert(0, refused);
     const failed: string[] = [];
-    const editor = mountMiragonEditor(spec, renderer, host(), {
-      ytext: doc.getText("content"),
-      doc,
-      onSyncError: assert.fail,
-      onImportFailed: (message: string) => failed.push(message),
-    } as unknown as EditorContext);
+    const editor = mountMiragonEditor(
+      spec,
+      renderer,
+      host(),
+      spaContext({
+        ytext: doc.getText("content"),
+        doc,
+        onSyncError: assert.fail,
+        onImportFailed: (message: string) => failed.push(message),
+      }),
+    );
     await wait(50);
     assert.equal(failed.length, 1, id);
     assert.match(failed[0]!, reason, id);
@@ -1045,12 +1055,12 @@ test("Context Maps and Team Topologies: two peers' first edits at once, on a fil
         spec,
         { ...renderer, create: (options) => (modeler = renderer.create(options)) },
         host(spec.canvasClassName),
-        {
+        spaContext({
           ytext: doc.getText("content"),
           doc,
           onSyncError: (message: string) => conflicts.push(message),
           onImportFailed: (message: string) => conflicts.push(message),
-        } as unknown as EditorContext,
+        }),
       );
       return { doc, modeler: modeler!, editor, elementId, conflicts, own: "" };
     });
@@ -1093,12 +1103,12 @@ test("Context Maps: no mount draws the renderer's legend card; the spec draws th
   const spa = host("cm-canvas");
   const doc = new Y.Doc();
   doc.getText("content").insert(0, text);
-  const editor = mountMiragonEditor(spec, renderer, spa, {
-    ytext: doc.getText("content"),
-    doc,
-    onSyncError: assert.fail,
-    onImportFailed: assert.fail,
-  } as unknown as EditorContext);
+  const editor = mountMiragonEditor(
+    spec,
+    renderer,
+    spa,
+    spaContext({ ytext: doc.getText("content"), doc, onSyncError: assert.fail, onImportFailed: assert.fail }),
+  );
   await wait(50);
   assert.equal(spa.querySelector(".cm-legend, .cm-legend-toggle"), null, "the SPA editor: no card over the diagram");
   editor.destroy();
@@ -1135,4 +1145,149 @@ test("Context Maps: no mount draws the renderer's legend card; the spec draws th
     "taken off again",
   );
   body.remove();
+});
+
+test("todos on every Miragon renderer in the SPA editor: badges, selection, reveal and the deep link on document ids", async () => {
+  const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
+  const todo = (id: string, elements: string[]): TodoWire => ({
+    id,
+    url: `https://tracker.test/${id}`,
+    title: `todo ${id}`,
+    body: "",
+    state: "open",
+    anchor: {
+      notation: "x",
+      model: "m",
+      file: null,
+      elements: elements.map((e) => ({ id: e, name: null })),
+      processVersion: null,
+    },
+    author: null,
+    assignees: [],
+    createdAt: "",
+  });
+  // each fixture with two of its document ids
+  const FIXTURES: Array<[string, string, string, string]> = [
+    ["wardley", MAP, "cmp_cup_of_tea", "cmp_hot_water"],
+    [
+      "event-storming",
+      "title Checkout\ncommand Place Order [240, 300] (id cmd_place)\nevent Order Placed [620, 300] (id evt_placed)\n",
+      "cmd_place",
+      "evt_placed",
+    ],
+    ["context-map", CONTEXT_MAP, "ctx_cfp", "ctx_agenda"],
+    ["team-topology", TEAMS, "team_platform", "team_checkout"],
+  ];
+  for (const [id, text, a, b] of FIXTURES) {
+    const [spec, renderer] = await load(id);
+    const doc = new Y.Doc();
+    doc.getText("content").insert(0, text);
+    const clicked: string[] = [];
+    const selected: TodoElementWire[][] = [];
+    let modeler: MiragonModeler | undefined;
+    const container = host(spec.canvasClassName);
+    const editor = mountMiragonEditor(
+      spec,
+      { ...renderer, create: (options) => (modeler = renderer.create(options)) },
+      container,
+      spaContext({
+        ytext: doc.getText("content"),
+        doc,
+        onSyncError: assert.fail,
+        onImportFailed: assert.fail,
+        onBadgeClick: (elementId) => void clicked.push(elementId),
+        onSelectionChanged: (elements) => void selected.push(elements),
+      }),
+    );
+    const todos = editor.elements;
+    assert.ok(todos && modeler, `${id}: the editor hands the shell its element surface`);
+    // armed as the shell arms a ?element= deep link: before the first import has run
+    todos.revealOnce(b);
+    await wait(50);
+    assert.deepEqual(modeler.elements.selection(), [b], `${id}: the deep link revealed its element once imported`);
+    assert.deepEqual(
+      selected.at(-1)?.map((el) => el.id),
+      [b],
+      `${id}: the selection reaches the shell as document ids`,
+    );
+
+    todos.setTodos([todo("1", [a]), todo("2", [a, b]), todo("3", ["gone"])]);
+    const badges = [...container.querySelectorAll<HTMLButtonElement>(".designiq-todo-layer .designiq-todo-badge")];
+    assert.deepEqual(
+      badges.map((badge) => badge.textContent).sort(),
+      ["1", "2"],
+      `${id}: a badge per anchored element`,
+    );
+    const box = modeler.elements.bounds?.(a);
+    assert.ok(box, id);
+    const pin = badges.find((badge) => badge.textContent === "2")?.parentElement;
+    assert.deepEqual(
+      [pin?.style.left, pin?.style.top],
+      [`${box.x + box.width}px`, `${box.y}px`],
+      `${id}: on the element's top-right corner, in diagram coordinates`,
+    );
+    assert.match(pin?.style.transform ?? "", /^translate\(-50%, -100%\) scale\(/, `${id}: standing on it`);
+    badges.find((badge) => badge.textContent === "2")?.click();
+    assert.deepEqual(clicked, [a], `${id}: a badge click names its element`);
+
+    assert.equal(todos.reveal(a), true, id);
+    assert.deepEqual(modeler.elements.selection(), [a], id);
+    assert.equal(todos.reveal("gone"), false, `${id}: an anchor gone from the canvas reveals nothing`);
+    editor.destroy();
+    assert.equal(container.querySelector(".designiq-todo-layer"), null, `${id}: the layer goes with the editor`);
+  }
+});
+
+test("todos on a Wardley map: an anchor by component NAME (the Live Host's ids) badges, filters and reveals its component", async () => {
+  const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
+  const [spec, renderer] = await load("wardley");
+  const doc = new Y.Doc();
+  doc.getText("content").insert(0, MAP);
+  const selected: TodoElementWire[][] = [];
+  let modeler: MiragonModeler | undefined;
+  const container = host(spec.canvasClassName);
+  const editor = mountMiragonEditor(
+    spec,
+    { ...renderer, create: (options) => (modeler = renderer.create(options)) },
+    container,
+    spaContext({
+      ytext: doc.getText("content"),
+      doc,
+      onSyncError: assert.fail,
+      onImportFailed: assert.fail,
+      onSelectionChanged: (elements) => void selected.push(elements),
+    }),
+  );
+  await wait(50);
+  const todos = editor.elements!;
+  const anchored = (id: string, ...elements: string[]): TodoWire => ({
+    id,
+    url: "",
+    title: id,
+    body: "",
+    state: "open",
+    anchor: {
+      notation: "wardley",
+      model: "tea",
+      file: null,
+      elements: elements.map((e) => ({ id: e, name: e })),
+      processVersion: null,
+    },
+    author: null,
+    assignees: [],
+    createdAt: "",
+  });
+  // one by name (an agent's), one by id (the canvas's), one by both: three todos, one element
+  todos.setTodos([
+    anchored("1", "Hot Water"),
+    anchored("2", "cmp_hot_water"),
+    anchored("3", "Hot Water", "cmp_hot_water"),
+  ]);
+  const badges = [...container.querySelectorAll(".designiq-todo-badge")].map((badge) => badge.textContent);
+  assert.deepEqual(badges, ["3"], "each todo counts once on its component");
+  assert.deepEqual(todos.anchorIds?.("cmp_hot_water"), ["cmp_hot_water", "Hot Water"], "the badge filter matches both");
+  assert.equal(todos.reveal("Hot Water"), true);
+  assert.deepEqual(modeler!.elements.selection(), ["cmp_hot_water"]);
+  assert.deepEqual(selected.at(-1), [{ id: "cmp_hot_water", name: "Hot Water" }], "the selection carries the name");
+  editor.destroy();
 });

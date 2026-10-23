@@ -19,7 +19,7 @@
 import { type MovedNotice, type PresenceUser, roomName } from "@designiq/contracts/live";
 import { openLiveSession } from "@designiq/live-client";
 import { updateText } from "@designiq/live-client/text";
-import { byExtension, type MediaKind, modelStem } from "@designiq/notations";
+import { byExtension, hasTodos as offersTodos, type MediaKind, modelStem } from "@designiq/notations";
 import { cn } from "@designiq/ui-kit/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { History, ListTodo } from "lucide-react";
@@ -46,6 +46,7 @@ import {
   type Me,
   presenceColor,
   type TodoElementWire,
+  type TodoModelRef,
   type TodoWire,
 } from "@/lib/api";
 import { keepKeysFromCanvas } from "@/lib/canvas-keys";
@@ -148,9 +149,25 @@ export function LiveEditor({
   /** the canvas sync's notice that the shared text stays unrenderable (#296); null while it renders */
   const [unrenderable, setUnrenderable] = useState<string | null>(null);
 
-  // model-anchored todos — only for documents that belong to a process
-  const hasTodos = processId.length > 0;
-  const todosQuery = useTodos(repo, processId, hasTodos);
+  // model-anchored todos — on a model whose notation takes them: a process
+  // once its id is known, any other model once the listing knows its file
+  // (a file outside the models folder is no model, and gets none)
+  const models = useModels(repo);
+  const listed = models.data?.find((m) => m.path === docPath);
+  const todoModel: TodoModelRef | undefined =
+    !notation || !offersTodos(notation.id)
+      ? undefined
+      : isBpmn
+        ? processId
+          ? { notation: "bpmn", id: processId }
+          : undefined
+        : listed
+          ? { notation: notation.id, id: listed.id }
+          : undefined;
+  const hasTodos = todoModel !== undefined;
+  /** how the model is called in the todo copy ("process", "Wardley Map", "document", …) */
+  const noun = notation?.noun.singular ?? "model";
+  const todosQuery = useTodos(repo, todoModel, hasTodos);
   // the Add todo dialog opens with the repo's todo types already there
   useTodoTypes(repo, hasTodos);
   const [selectedElements, setSelectedElements] = useState<TodoElementWire[]>([]);
@@ -478,7 +495,6 @@ export function LiveEditor({
   const [renameOpen, setRenameOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const self = modelTarget(docPath, { folder: backDir ?? "", liveSessions: 1, dirty: false });
-  const models = useModels(repo);
   const takenIds = new Set((models.data ?? []).filter((m) => m.notation === self.notation).map((m) => m.id));
   const openModel = useOpenModel(repo);
   const qc = useQueryClient();
@@ -629,7 +645,7 @@ export function LiveEditor({
           {
             id: "todos",
             label: "Todos",
-            title: "Open todos for this process",
+            title: `Open todos for this ${noun}`,
             icon: ListTodo,
             count: todoList?.length,
           },
@@ -669,7 +685,7 @@ export function LiveEditor({
         activePanel={panel}
         onTogglePanel={togglePanel}
         addTodo={
-          hasTodos ? { selectionCount: selectedElements.length, onAdd: () => setTodoCreateOpen(true) } : undefined
+          hasTodos ? { selectionCount: selectedElements.length, noun, onAdd: () => setTodoCreateOpen(true) } : undefined
         }
         assist={
           plugin?.assistNotation ? (
@@ -757,27 +773,34 @@ export function LiveEditor({
             onClose={closePanel}
           />
         )}
-        {hasTodos && panel === "todos" && (
+        {todoModel && panel === "todos" && (
           <TodoPanel
             repo={repo}
-            processId={processId}
+            model={todoModel}
+            noun={noun}
             todos={todoList}
             isLoading={todosQuery.isLoading}
             error={todosQuery.error}
             filterElementId={todoFilter}
+            filterAnchorIds={todoFilter ? todoCanvasRef.current?.anchorIds?.(todoFilter) : undefined}
             onClearFilter={() => setTodoFilter(null)}
-            onRevealElement={(elementId) => {
-              if (!todoCanvasRef.current?.reveal(elementId))
-                toast(`Element '${elementId}' no longer exists in the diagram.`);
-            }}
+            onRevealElement={
+              hasElements
+                ? (elementId) => {
+                    if (todoCanvasRef.current?.reveal(elementId)) views.reveal();
+                    else toast(`Element '${elementId}' no longer exists in the diagram.`);
+                  }
+                : undefined
+            }
             onClose={closePanel}
           />
         )}
       </div>
-      {hasTodos && todoCreateOpen && (
+      {todoModel && todoCreateOpen && (
         <TodoCreateDialog
           repo={repo}
-          processId={processId}
+          model={todoModel}
+          noun={noun}
           docPath={docPath}
           elements={selectedElements}
           onClose={() => setTodoCreateOpen(false)}

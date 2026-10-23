@@ -1,7 +1,7 @@
 /**
  * "Add todo" dialog — anchors the new todo to the elements selected on the
- * canvas at open time, or creates a process-level todo when nothing is
- * selected. The todo is filed with one of the repo's types (#313): its issue
+ * canvas at open time, or files it on the whole model (a process, a Wardley
+ * Map, a document, …) when nothing is selected. The todo is filed with one of the repo's types (#313): its issue
  * templates and/or the built-in `Todo`; with a single type there is no picker,
  * and the built-in alone looks as the dialog always did. Required fields are
  * flagged inline by the check the server runs too (lib/todo-form.ts). Server
@@ -15,7 +15,7 @@ import { cn } from "@designiq/ui-kit/lib/utils";
 import { useEffect, useId, useState } from "react";
 
 import { dialogBackdrop, dialogPanel, fieldClass } from "@/components/dialog-shell";
-import type { TodoElementWire } from "@/lib/api";
+import type { TodoElementWire, TodoModelRef } from "@/lib/api";
 import { useCreateTodo, useTodoTypes } from "@/lib/queries";
 import {
   defaultTodoType,
@@ -146,16 +146,20 @@ function TodoFieldInput({
 
 export function TodoCreateDialog({
   repo,
-  processId,
+  model,
+  noun,
   docPath,
   elements,
   onClose,
 }: {
   repo: string;
-  processId: string;
+  /** the model the todo is filed on */
+  model: TodoModelRef;
+  /** how the model is called ("process", "Wardley Map", "document", …) */
+  noun: string;
   /** repo-relative path of the open model document (the todo's anchor file) */
   docPath: string;
-  /** canvas selection at open time — empty ⇒ process-level todo */
+  /** canvas selection at open time — empty ⇒ a todo on the whole model */
   elements: TodoElementWire[];
   onClose: () => void;
 }) {
@@ -205,7 +209,8 @@ export function TodoCreateDialog({
         title: trimmed,
         ...todoTypeRequest(type, values),
         anchor: {
-          process: processId,
+          notation: model.notation,
+          model: model.id,
           file: docPath,
           ...(elements.length > 0 ? { elements } : {}),
         },
@@ -234,7 +239,7 @@ export function TodoCreateDialog({
           </div>
         ) : (
           <p className="text-muted-foreground mt-1.5 text-xs">
-            No element selected — the todo applies to the process "{processId}".
+            No element selected — the todo applies to the {noun} "{model.id}".
           </p>
         )}
         <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-1">

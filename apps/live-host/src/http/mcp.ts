@@ -38,11 +38,12 @@ import type {
   WidgetBootWire,
 } from "@designiq/contracts/live-host";
 import { mcpAppToolName } from "@designiq/contracts/mcp-app";
+import type { TodoModelRef } from "@designiq/contracts/todo-anchor";
 import { analyzeDecision, simulateDecision } from "@designiq/decisions";
 import { parseTestSuite, type TestCase, testsPathFor } from "@designiq/decisions/tests";
 import { DIAGRAMS_IN_DOCUMENTS, fail, ok, READ, safe, WRITE } from "@designiq/mcp-kit";
 import { mountStatelessMcp } from "@designiq/mcp-kit/mount";
-import { byExtension, byId, modelStem, NOTATIONS } from "@designiq/notations";
+import { byExtension, byId, hasTodos, modelStem, NOTATIONS } from "@designiq/notations";
 import { deriveDecision, deriveProcess, deriveView, hasDeriver } from "@designiq/notations/derive";
 import { extractModelGraph } from "@designiq/notations/extract";
 import { hasTemplate } from "@designiq/notations/templates";
@@ -81,7 +82,7 @@ import {
 } from "../application/overview.ts";
 import { roomPresence, type RoomPresenceDeps } from "../application/room-presence.ts";
 import { createDecision, createNotationModel, createProcess } from "../application/scaffold.ts";
-import { closeTodoFor, fileTodo, listOpenTodos, listTodoTypesFor } from "../application/todos.ts";
+import { closeTodoFor, fileTodo, listOpenTodos, listTodoTypesFor, todoListModel } from "../application/todos.ts";
 import type { WsTicketStore } from "../application/ws-tickets.ts";
 import { changedElementIds } from "../domain/model-diff.ts";
 import type { GitProvider } from "../ports/git-provider.ts";
@@ -100,9 +101,9 @@ export type McpDeps = OverviewDeps &
     /** issue-tracker seam (model-anchored todos) — absent when the platform has
      * no credentials to act on the tracker; the todo tools then do not register */
     issues?: IssueTracker;
-    /** todos still on their way from a renamed process's old id (#208) are
+    /** todos still on their way from a renamed model's old id (#208) are
      *  listed with its own — absent without a tracker */
-    todoJobs?: { sourcesOf(repo: string, process: string): string[] };
+    todoJobs?: { sourcesOf(repo: string, model: TodoModelRef): string[] };
     mcpReadOnly?: boolean;
     /** the semantic BPMN tools of ADR 0009 (get_process_outline, edit_process,
      *  layout_process) — opt-in (LIVE_MCP_BPMN_EDIT=1) until the A/B gate is run */
@@ -188,6 +189,10 @@ type RefArgs = { id?: string; path?: string; notation?: string };
 const NOTATION_IDS = NOTATIONS.map((n) => n.id).join(", ");
 /** the notations a blank model can be created for (templates.ts) */
 const CREATABLE_IDS = NOTATIONS.filter((n) => hasTemplate(n.id))
+  .map((n) => n.id)
+  .join(", ");
+/** the notations todos are filed on (@designiq/notations `todos`) */
+const TODO_NOTATION_IDS = NOTATIONS.filter((n) => hasTodos(n.id))
   .map((n) => n.id)
   .join(", ");
 /** what the schema models of the Miragon JSON notations refuse (the
@@ -320,7 +325,8 @@ const generatedWidget = (id: string): WidgetSpec => {
       `Open the interactive ${n.label} modeler widget for a ${noun} (${n.extensions.join("/")}). Renders the ` +
       "canvas inline in MCP-Apps-capable clients (claude.ai, Claude Desktop): edits save through the same " +
       "validated, conflict-guarded path as save_model_content and upgrade to live co-editing where the host " +
-      "allows the socket. Other clients get a text summary — use get_view / get_model_content there. The " +
+      `allows the socket. With a tracker it carries the ${noun}'s todos, a badge on every anchored element. ` +
+      "Other clients get a text summary — use get_view / get_model_content there. The " +
       `result's \`opened.url\` links the same ${noun} in the designIQ web app.`,
     inputSchema: {
       repo: repoArg,
@@ -379,7 +385,7 @@ function liveInstructions(on: {
     `BPMN and DMN have deeper tooling: for processes ${named(["get_process", ...(on.bpmnEdit ? ["get_process_outline"] : []), "get_bpmn_xml", "validate_bpmn"])}; ` +
       `for decisions ${named(["get_decision", "simulate_decision", "analyze_decision", "run_decision_tests", ...(write ? ["save_decision_tests"] : [])])}` +
       (on.todos
-        ? `; and todos anchored to process elements in the repository's issue tracker (${named(write ? ["list_todos", "list_todo_types", "create_todo", "close_todo"] : ["list_todos"])})`
+        ? `; and todos on models and their elements in the repository's issue tracker (${named(write ? ["list_todos", "list_todo_types", "create_todo", "close_todo"] : ["list_todos"])})`
         : "") +
       ".",
     on.bpmnEdit && write
@@ -1512,21 +1518,22 @@ export function createLiveMcpServer(
       {
         title: "List open todos",
         description:
-          "OPEN todos anchored to BPMN processes — work items filed from the live model into the " +
-          "repo's issue tracker. Pass `id`/`path` to narrow to ONE process, omit both for the whole repo. " +
-          "Each row carries its tracker url, the anchored BPMN elements, the author and, in `anchor.type`, the " +
-          "issue template it was filed with (absent: a plain todo).",
-        inputSchema: z.object(processRef),
+          `OPEN todos on models (${TODO_NOTATION_IDS}) — work items filed from the live model into the ` +
+          "repo's issue tracker. Pass `id`/`path` (and `notation` for a stem shared across notations) to narrow " +
+          "to ONE model, omit them for the whole repo. Each row carries its tracker url, in `anchor` the model " +
+          "(`notation`, `model`) and the anchored elements, the author and, in `anchor.type`, the issue template " +
+          "it was filed with (absent: a plain todo).",
+        inputSchema: z.object(modelRef),
         annotations: READ,
       },
-      safe(async ({ repo, id, path }: { repo: string; id?: string; path?: string }) => {
+      safe(async ({ repo, ...ref }: { repo: string } & RefArgs) => {
         const r = await requireRepo(repo);
-        // a filter needs no existence check — an unknown process is simply an
+        // a filter needs no existence check — an unknown model is simply an
         // empty list, never an error (the tracker-side label filter decides)
-        const process = id ?? (path ? processIdOf(path) : undefined);
-        // incl. a renamed process's todos still on their way in (#208)
-        const todos = await listOpenTodos(issues, opts.todoJobs, r, process);
-        return ok({ repo: r.fullName, process: process ?? null, todos: todos satisfies TodoWire[] });
+        const model = await todoListModel(opts, r, ref);
+        // incl. a renamed model's todos still on their way in (#208)
+        const todos = await listOpenTodos(issues, opts.todoJobs, r, model, opts);
+        return ok({ repo: r.fullName, model: model ?? null, todos: todos satisfies TodoWire[] });
       }),
     );
 
@@ -1552,16 +1559,19 @@ export function createLiveMcpServer(
       server.registerTool(
         "create_todo",
         {
-          title: "Create a todo on a BPMN process",
+          title: "Create a todo on a model",
           description:
-            "File a todo on a BPMN process into the repository's issue tracker. Anchor it to concrete BPMN " +
-            "elements via `elements` (ids from get_bpmn_xml/get_process) — the modeler then shows a badge " +
-            "on each one; omit them for a process-level todo. The item is bot-authored, you stay attributed. " +
+            `File a todo on a model (${TODO_NOTATION_IDS}) into the repository's issue tracker. Anchor it to ` +
+            "concrete elements via `elements` — a process's from get_process/get_bpmn_xml, a canvas model's " +
+            "(Wardley Map, Event Storming board, Context Map, Team Topology) the node ids get_view reports, a " +
+            "Wardley component also by its name — and the modeler shows a badge on each one; omit them for a " +
+            "todo on the whole model (a Markdown document takes no elements). The item is bot-authored, you " +
+            "stay attributed. " +
             "Pick a `type` from list_todo_types and pass its `fields` by id: input and textarea take a string, " +
             "dropdown an option label (a list when it allows several), checkboxes the list of checked labels. " +
             "A missing required field fails with the list of what is missing.",
           inputSchema: z.object({
-            ...processRef,
+            ...modelRef,
             title: z.string().describe("what needs to be done — the tracker item's title"),
             type: z.string().optional().describe("a type id from list_todo_types; omit for the built-in `todo`"),
             fields: z
@@ -1572,12 +1582,12 @@ export function createLiveMcpServer(
             elements: z
               .array(
                 z.object({
-                  id: z.string().describe("BPMN element id — the anchor"),
+                  id: z.string().describe("element id — the anchor"),
                   name: z.string().nullable().optional().describe("display name; snapshotted for readability"),
                 }),
               )
               .optional()
-              .describe("BPMN elements this todo is about; omit for a process-level todo"),
+              .describe("elements of the model this todo is about; omit for a todo on the whole model"),
           }),
           annotations: WRITE,
         },
@@ -1586,6 +1596,7 @@ export function createLiveMcpServer(
             repo,
             id,
             path,
+            notation,
             title,
             type,
             fields,
@@ -1595,6 +1606,7 @@ export function createLiveMcpServer(
             repo: string;
             id?: string;
             path?: string;
+            notation?: string;
             title: string;
             type?: string;
             fields?: Record<string, string | string[]>;
@@ -1609,7 +1621,7 @@ export function createLiveMcpServer(
               issues,
               session,
               r,
-              { title, body, type, fields, process: id, file: path, elements },
+              { title, body, type, fields, model: id, notation, file: path, elements },
               "mcp",
             );
             return ok({ todo: todo satisfies TodoWire });
