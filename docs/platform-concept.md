@@ -219,7 +219,8 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
    and where a new element goes right after the one a peer moved (Wardley and Event
    Storming list it last). A gesture that outlasts 10 s gives way: it is cancelled the way
    Escape cancels it, then the import runs. Gates and repairs (rule 4) do not wait for a
-   gesture.
+   gesture. The notice of a text that stays unrenderable goes only once a text renders: a
+   fix that arrives during a gesture lifts it when the held import runs.
 4. **Validate merged XML before import** (cheap parse); on the rare interleaved-merge
    corruption, fall back to the last-good snapshot the Live Host keeps anyway.
    **Repair a merge that canvas writes alone broke** (#274). Two canvas exports that cross

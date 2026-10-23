@@ -15,7 +15,9 @@
  * pointercancel, lostpointercapture and a lost window focus end a gesture;
  * after 10 s the import goes ahead, the gesture cancelled first the way
  * Escape cancels a diagram-js drag; a drop that touches the held change in
- * the text is a conflict, which keeps the peer's edit; and the merge safety
+ * the text is a conflict, which keeps the peer's edit; a text broken during
+ * a gesture is reported after the notice delay as without one, and the
+ * notice goes once the held import of its fix runs; and the merge safety
  * net (#274) repairs as before while a gesture runs. The real renderers in a
  * browser: apps/web/test/live-gesture-chromium.ts.
  */
@@ -26,6 +28,7 @@ import type * as Y from "yjs";
 
 import { bindBpmn } from "../src/bpmn-sync.ts";
 import { bindMiragon } from "../src/miragon-sync.ts";
+import { updateText } from "../src/text-diff.ts";
 import {
   boundsOf,
   bpmnLikeModeler,
@@ -44,6 +47,8 @@ import {
   XML,
   xOf,
 } from "./fixtures/safety-net.ts";
+
+const UNRENDERABLE_NOTICE = "The shared text cannot be rendered. Your canvas shows the last good state.";
 
 /** the canvas host's DOM as the engine reads it: its pointer events, its window's, the drag marker inside it */
 function canvasHost(events: string[] = []) {
@@ -362,6 +367,41 @@ test("a drop that touches the held change in the text is a conflict: the peer's 
   assert.deepEqual(shared.log.repairs, [], "the text never broke: nothing to repair");
   unbind();
   peer.unbind();
+});
+
+test("a text broken while a gesture runs is reported as before; the notice goes once the held import of its fix runs", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.now() });
+  const net = relay();
+  const state = roomOf(XML);
+  const doc = joinRoom(net, state, 200);
+  const host = canvasHost();
+  const modeler = bpmnLikeModeler();
+  const notices: Array<string | null> = [];
+  const unbind = bindBpmn(modeler as never, doc.getText("content"), doc, undefined, undefined, {
+    onUnrenderable: (message) => notices.push(message),
+    canvasHost: host.element,
+  });
+  const typist = joinRoom(net, state);
+  const source = typist.getText("content");
+  await advance(t, 50);
+
+  host.press();
+  typist.transact(() => updateText(source, XML.replace("<definitions", "<definitions <")), { binding: "y-monaco" });
+  await advance(t, 6_000);
+  assert.deepEqual(notices, [UNRENDERABLE_NOTICE], "the gate does not wait for the gesture");
+
+  const fixed = bpmnLikeModeler();
+  fixed.move("Task_c", 0, 90);
+  typist.transact(() => updateText(source, fixed.canvas()), { binding: "y-monaco" });
+  await advance(t, 3_000);
+  assert.equal(modeler.canvas(), XML, "the fix's import waits for the gesture");
+  assert.deepEqual(notices, [UNRENDERABLE_NOTICE], "and so does the end of the notice");
+
+  host.release();
+  await advance(t, 500);
+  assert.equal(modeler.canvas(), fixed.canvas(), "the held import runs once the gesture ends");
+  assert.deepEqual(notices, [UNRENDERABLE_NOTICE, null], "and the notice goes with it");
+  unbind();
 });
 
 test("the merge safety net (#274) repairs as before while a gesture runs, on the repairing canvas and on the one it overwrites", async () => {
