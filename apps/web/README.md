@@ -309,13 +309,14 @@ through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
 
 **A gesture holds the live re-imports back.** Every live binding, the SPA's editors and
 the widget engines alike, passes live-client the element it mounts the canvas in: while a
-pointer is held on it or a diagram-js drag runs in it, a peer's change waits, for 10 s at
-most (sync rule 3 in `docs/platform-concept.md`, #295). `test/live-gesture.test.ts` covers
-every mount under jsdom, with diagram-js's dragging run without a pointer. Pointer drags in
-a browser are checked by hand, as CI has no browser: `test/live-gesture-chromium.ts` starts a
-Live Host of its own and drags in two SPA pages per notation (bpmn-js and every Miragon
-renderer) while the other page drops a move. After a renderer, diagram-js or live-client
-change, from the repository root: `pnpm build`, then
+pointer is held on it or a diagram-js drag that carries elements runs in it, a peer's
+change waits, for 10 s at most (sync rule 3 in `docs/platform-concept.md`, #295). An
+armed palette tool (hand, space, lasso) holds nothing back. `test/live-gesture.test.ts`
+covers every mount under jsdom, with diagram-js's dragging run without a pointer. Pointer
+drags in a browser are checked by hand, as CI has no browser: `test/live-gesture-chromium.ts`
+starts a Live Host of its own and drags, creates and arms palette tools in two SPA pages
+per notation (bpmn-js and every Miragon renderer) while the other page drops a move. After
+a renderer, diagram-js or live-client change, from the repository root: `pnpm build`, then
 `npx -y -p playwright@1.56.1 -c "node apps/web/test/live-gesture-chromium.ts"` (`PORT` sets
 the Live Host's port, 8392 unless set).
 

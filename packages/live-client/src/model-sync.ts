@@ -54,6 +54,16 @@ const GESTURE_HOLD_MS = 10_000;
 const GESTURE_RECHECK_MS = 100;
 /** diagram-js puts it on the root element while a drag runs, also a palette create that follows the pointer with no button held */
 const DRAG_ACTIVE_MARKER = "djs-drag-active";
+/**
+ * what diagram-js draws for the elements a drag carries (a create, a move, a
+ * connection). The marker alone is no gesture: a palette tool (hand, space,
+ * lasso, global connect) keeps it set from its selection until the next
+ * press, and re-arms after each pan or make-space, with nothing to lose to an
+ * import
+ */
+const DRAG_PREVIEW = "djs-dragger";
+/** diagram-js's cursor on the page while a create or a move carries elements: a create's preview is gone while the pointer is off the canvas */
+const CARRYING_CURSOR = "djs-cursor-grabbing";
 
 /** a canvas write as a log entry names it: its writer's count and its Lamport time */
 type Mark = [n: number, time: number];
@@ -135,7 +145,8 @@ interface CanvasGesture {
 /**
  * A gesture on the canvas, read from the DOM alone, so it holds for every
  * diagram-js editor, whatever services it registers: a pointer held on the
- * canvas host, or diagram-js's drag marker inside it.
+ * canvas host, or diagram-js's drag marker inside it while the drag carries
+ * elements (a palette create follows the pointer with no button held).
  */
 function watchCanvasGesture(host: Element): CanvasGesture {
   const page = host.ownerDocument;
@@ -147,12 +158,14 @@ function watchCanvasGesture(host: Element): CanvasGesture {
   const releaseAll = (): void => pressed.clear();
   const releases = ["pointerup", "pointercancel", "lostpointercapture"] as const;
   const drags = host.getElementsByClassName(DRAG_ACTIVE_MARKER);
+  const previews = host.getElementsByClassName(DRAG_PREVIEW);
+  const carrying = (): boolean => previews.length > 0 || page.body?.classList.contains(CARRYING_CURSOR) === true;
   // capture: a renderer that stops a pointer event on its way must not hide it
   host.addEventListener("pointerdown", press, true);
   for (const type of releases) view?.addEventListener(type, release, true);
   view?.addEventListener("blur", releaseAll);
   return {
-    active: () => pressed.size > 0 || drags.length > 0,
+    active: () => pressed.size > 0 || (drags.length > 0 && carrying()),
     cancel() {
       if (!view) return;
       // diagram-js's dragging cancels on an Escape keyup at the document

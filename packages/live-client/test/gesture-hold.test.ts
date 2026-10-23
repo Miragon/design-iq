@@ -3,16 +3,20 @@
  * replaces every shape, so a peer's change imported while a drag runs leaves
  * the drag working on shapes that are gone: its drop throws and the move is
  * lost. The engine reads the gesture from the DOM of the canvas host alone (a
- * pointer held on it, diagram-js's `djs-drag-active` marker inside it), so it
- * holds for every diagram-js editor, Miragon renderer, bpmn-js or dmn-js.
+ * pointer held on it, diagram-js's `djs-drag-active` marker inside it while a
+ * drag preview is drawn or diagram-js's grabbing cursor is set), so it holds
+ * for every diagram-js editor, Miragon renderer, bpmn-js or dmn-js.
  *
- * Pinned: a peer's change waits while a pointer is held on the canvas or the
- * marker is set, and is imported once the gesture ends, together with the
- * edit its drop committed; a pointer elsewhere holds nothing; pointercancel,
- * lostpointercapture and a lost window focus end a gesture; after 10 s the
- * import goes ahead, the gesture cancelled first the way Escape cancels a
- * diagram-js drag; and the merge safety net (#274) repairs as before while a
- * gesture runs. The real renderers in a browser: apps/web/test/live-gesture-chromium.ts.
+ * Pinned: a peer's change waits while a pointer is held on the canvas or a
+ * drag that carries elements runs (a create also while its preview is off
+ * the canvas), and is imported once the gesture ends, together with the edit
+ * its drop committed; a pointer elsewhere holds nothing, and neither does an
+ * armed palette tool (the marker with no preview) or a preview with no drag;
+ * pointercancel, lostpointercapture and a lost window focus end a gesture;
+ * after 10 s the import goes ahead, the gesture cancelled first the way
+ * Escape cancels a diagram-js drag; and the merge safety net (#274) repairs
+ * as before while a gesture runs. The real renderers in a browser:
+ * apps/web/test/live-gesture-chromium.ts.
  */
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
@@ -51,11 +55,17 @@ function canvasHost(events: string[] = []) {
     }
   }
   const view = Object.assign(new EventTarget(), { KeyboardEvent });
-  const page = Object.assign(new EventTarget(), { defaultView: view });
+  const cursors = new Set<string>();
+  const page = Object.assign(new EventTarget(), {
+    defaultView: view,
+    body: { classList: { contains: (name: string) => cursors.has(name) } },
+  });
   const dragMarkers: object[] = [];
+  const dragPreviews: object[] = [];
   const element = Object.assign(new EventTarget(), {
     ownerDocument: page,
-    getElementsByClassName: (name: string) => (name === "djs-drag-active" ? dragMarkers : []),
+    getElementsByClassName: (name: string) =>
+      name === "djs-drag-active" ? dragMarkers : name === "djs-dragger" ? dragPreviews : [],
   });
   page.addEventListener("keyup", (event) => {
     if ((event as KeyboardEvent).key === "Escape") events.push("escape");
@@ -67,8 +77,24 @@ function canvasHost(events: string[] = []) {
     release: (type = "pointerup", pointerId = 1) => view.dispatchEvent(pointer(type, pointerId)),
     pressElsewhere: () => page.dispatchEvent(pointer("pointerdown", 1)),
     blur: () => view.dispatchEvent(new Event("blur")),
-    startDrag: () => void dragMarkers.push({}),
-    endDrag: () => void dragMarkers.splice(0),
+    startDrag: () => {
+      dragMarkers.push({});
+      dragPreviews.push({});
+    },
+    /** a palette tool waits for its press: diagram-js sets the marker, and draws nothing */
+    armTool: () => void dragMarkers.push({}),
+    /** a palette create with the pointer still off the canvas: the marker and the grabbing cursor, its preview not drawn */
+    createOffCanvas: () => {
+      dragMarkers.push({});
+      cursors.add("djs-cursor-grabbing");
+    },
+    /** bpmn-js previews an append while its context pad entry is hovered: a preview, and no drag */
+    previewAppend: () => void dragPreviews.push({}),
+    endDrag: () => {
+      dragMarkers.splice(0);
+      dragPreviews.splice(0);
+      cursors.clear();
+    },
   };
 }
 
@@ -134,7 +160,7 @@ test("a pointer held on the canvas holds a peer's change back; it is imported af
   r.unbind();
 });
 
-test("diagram-js's drag marker holds it back with no button held (a palette create follows the pointer)", async () => {
+test("a diagram-js drag holds it back with no button held (a palette create follows the pointer)", async () => {
   const r = room();
   await wait(50);
   r.events.length = 0;
@@ -142,12 +168,61 @@ test("diagram-js's drag marker holds it back with no button held (a palette crea
   r.host.startDrag();
   r.peer.modeler.set("Task_f", 600);
   await wait(QUIET);
-  assert.deepEqual(r.events, [], "no import while the marker is set");
+  assert.deepEqual(r.events, [], "no import while the marker is set and the preview drawn");
 
   r.host.endDrag();
   r.modeler.set("Task_a", 300);
   await wait(SETTLED);
   bothKept(r, 300, 600);
+  r.unbind();
+});
+
+test("a palette create whose preview is off the canvas holds it back too: diagram-js's cursor says it carries elements", async () => {
+  const r = room();
+  await wait(50);
+  r.events.length = 0;
+
+  r.host.createOffCanvas();
+  r.peer.modeler.set("Task_f", 600);
+  await wait(QUIET);
+  assert.deepEqual(r.events, [], "no import while the create carries its elements");
+
+  r.host.endDrag();
+  r.modeler.set("Task_a", 300);
+  await wait(SETTLED);
+  bothKept(r, 300, 600);
+  r.unbind();
+});
+
+test("an armed palette tool holds nothing back, and no Escape disarms it, also past 10 s", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.now() });
+  const r = room();
+  await advance(t, 50);
+  r.events.length = 0;
+
+  r.host.armTool();
+  r.peer.modeler.set("Task_f", 600);
+  await advance(t, 600);
+  assert.deepEqual(r.events, ["import"], "imported after the debounce");
+  assert.equal(xOf(r.modeler.canvas(), "Task_f"), 600);
+
+  r.peer.modeler.set("Task_f", 700);
+  await advance(t, 11_000);
+  assert.deepEqual(r.events, ["import", "import"], "every change is imported, none cancels the tool");
+  assert.equal(xOf(r.modeler.canvas(), "Task_f"), 700);
+  r.unbind();
+});
+
+test("a preview with no drag holds nothing back", async () => {
+  const r = room();
+  await wait(50);
+  r.events.length = 0;
+
+  r.host.previewAppend();
+  r.peer.modeler.set("Task_f", 600);
+  await wait(QUIET);
+  assert.deepEqual(r.events, ["import"]);
+  assert.equal(xOf(r.modeler.canvas(), "Task_f"), 600);
   r.unbind();
 });
 

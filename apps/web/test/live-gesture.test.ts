@@ -4,13 +4,17 @@
  * (test/renderer-dom.ts): the SPA editor and the live widget's engine each
  * hand the element they mount the canvas in to the live binding. A pointer
  * held on the SPA's canvas keeps the widget peer's move off it until the
- * release; a diagram-js drag in the widget's canvas (its marker on the root
- * element) keeps the SPA's move off it until the drag ends. Each canvas's own
- * drop then merges with the other's: both moves in the shared text and on
- * both canvases, nobody told of a conflict. A drag that outlasts 10 s is
- * cancelled the way Escape cancels it, then the import runs. jsdom has no
- * layout, so the drags here run diagram-js's dragging without a pointer;
- * pointer drags in a browser: test/live-gesture-chromium.ts.
+ * release; a diagram-js move in the widget's canvas (its marker on the root
+ * element, its preview drawn) keeps the SPA's move off it until the drag
+ * ends. Each canvas's own drop then merges with the other's: both moves in
+ * the shared text and on both canvases, nobody told of a conflict. An armed
+ * palette tool (bpmn-js's hand tool, a Miragon renderer's lasso) sets the
+ * marker and draws no preview: it holds nothing back, and the binding sends
+ * it no Escape (bpmn-js's hand tool stays armed through the import). A drag
+ * that outlasts 10 s is cancelled the way Escape cancels it, then the import
+ * runs. jsdom has no layout, so
+ * the drags here run diagram-js's dragging without a pointer; pointer drags
+ * in a browser: test/live-gesture-chromium.ts.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -72,10 +76,23 @@ interface Dragging {
   context(): unknown;
 }
 
+/**
+ * a mouse event as diagram-js reads it; no MouseEvent, so diagram-js's hover
+ * fix does not ask jsdom for document.elementFromPoint, which it lacks
+ */
+interface PointerPosition {
+  clientX: number;
+  clientY: number;
+  target?: Element;
+}
+
 interface Diagram {
-  get(name: "elementRegistry"): { get(id: string): Point | undefined };
+  get(name: "elementRegistry"): { get(id: string): Point | undefined; getGraphics(id: string): Element };
   get(name: "modeling"): { moveElements(elements: unknown[], delta: Point): void };
   get(name: "dragging"): Dragging;
+  get(name: "move"): { start(event: PointerPosition, element: unknown, activate: boolean): unknown };
+  get(name: "handTool"): { activateHand(event: PointerPosition, autoActivate: boolean): void };
+  get(name: "lassoTool"): { activateSelection(event: PointerPosition, autoActivate: boolean): void };
 }
 
 function positionOf(diagram: Diagram, id: string): Point {
@@ -91,14 +108,18 @@ const shifted = ({ x, y }: Point, delta: Point): Point => ({ x: x + delta.x, y: 
 /** a renderer that stores coordinates rounded (Wardley: evolution and visibility to two decimals) moves a shape by about the delta */
 const near = (a: Point, b: Point): boolean => Math.abs(a.x - b.x) <= 2 && Math.abs(a.y - b.y) <= 2;
 
-/** a diagram-js drag on the canvas, with no pointer: its marker on the root element is what the binding sees */
-function startDrag(diagram: Diagram, canvasHost: HTMLElement, options: { manual?: boolean } = { manual: true }) {
-  const dragging = diagram.get("dragging");
-  dragging.init(null, { x: 0, y: 0 }, "gesture-check", options);
-  dragging.move({ clientX: 40, clientY: 40 }, true);
+/** a diagram-js move of an element, with no pointer: the marker on the root element and the preview are what the binding sees */
+function startDrag(diagram: Diagram, canvasHost: HTMLElement, id: string): Dragging {
+  const registry = diagram.get("elementRegistry");
+  // move.start reads the press's target (a hit area may refuse to move)
+  diagram.get("move").start({ clientX: 40, clientY: 40, target: registry.getGraphics(id) }, registry.get(id), true);
   assert.ok(canvasHost.getElementsByClassName("djs-drag-active").length > 0, "the drag marker is set");
-  return dragging;
+  assert.ok(canvasHost.getElementsByClassName("djs-dragger").length > 0, "the drag preview is drawn");
+  return diagram.get("dragging");
 }
+
+/** the last pointer position diagram-js keeps, which a palette tool arms at */
+const pointerAt = (): PointerPosition => ({ clientX: 60, clientY: 60 });
 
 const pointer = (type: string): PointerEvent => new PointerEvent(type, { bubbles: true, pointerId: 1 });
 
@@ -162,7 +183,7 @@ async function bothGesturesHold(
   await expectBothMoves(1, "after the SPA's drop");
 
   const before = positions(widget);
-  const dragging = startDrag(widget.diagram, widget.canvasHost);
+  const dragging = startDrag(widget.diagram, widget.canvasHost, widgetElement);
   moveElement(spa.diagram, spaElement, MOVE_IN_SPA);
   await wait(QUIET);
   assert.deepEqual(positions(widget), before, `${what}: the widget canvas waits while its drag runs`);
@@ -187,19 +208,34 @@ const BPMN = `<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>
 `;
 
-test("bpmn-js: a gesture in the SPA editor or the widget holds the other peer's move back; both drops end up in the text", async () => {
+type BpmnModelerLike = Diagram & { saveXML(options: { format: boolean }): Promise<{ xml?: string }> };
+
+/** the first edit of a file bpmn-js did not write rewrites all of it: a test starts from its own export */
+async function canonicalBpmn(): Promise<string> {
   const { default: BpmnModeler } = await import("bpmn-js/lib/Modeler.js");
-  const { mountBpmnEditor } = await import("../src/notations/bpmn-editor.ts");
-  const { mountBpmnEngine } = await import("../src/mcp-app/engines/bpmn.ts");
-  type Modeler = Diagram & { saveXML(options: { format: boolean }): Promise<{ xml?: string }> };
-  // the first edit of a file bpmn-js did not write rewrites all of it: start from its own export
-  const canonical = new BpmnModeler({ container: host() }) as unknown as Modeler & {
+  const canonical = new BpmnModeler({ container: host() }) as unknown as BpmnModelerLike & {
     importXML(xml: string): Promise<unknown>;
     destroy(): void;
   };
   await canonical.importXML(BPMN);
   const xml = (await canonical.saveXML({ format: true })).xml!;
   canonical.destroy();
+  return xml;
+}
+
+/** bpmn-js orders the DI of a re-imported move its own way on export: the shared text is read for where it puts a task */
+function boundsIn(text: string, id: string): Point {
+  const match = new RegExp(`bpmnElement="${id}">\\s*<dc:Bounds x="(-?[\\d.]+)" y="(-?[\\d.]+)"`).exec(text);
+  assert.ok(match, id);
+  return { x: Number(match[1]), y: Number(match[2]) };
+}
+
+test("bpmn-js: a gesture in the SPA editor or the widget holds the other peer's move back; both drops end up in the text", async () => {
+  const { default: BpmnModeler } = await import("bpmn-js/lib/Modeler.js");
+  const { mountBpmnEditor } = await import("../src/notations/bpmn-editor.ts");
+  const { mountBpmnEngine } = await import("../src/mcp-app/engines/bpmn.ts");
+  type Modeler = BpmnModelerLike;
+  const xml = await canonicalBpmn();
 
   // the SPA editor keeps its bpmn-js instance to itself; its first import names it
   const modelers: Modeler[] = [];
@@ -224,14 +260,6 @@ test("bpmn-js: a gesture in the SPA editor or the widget holds the other peer's 
   const widgetModeler = engine.raw as unknown as Modeler;
   const spaModeler = modelers.find((modeler) => modeler !== widgetModeler);
   assert.ok(spaModeler, "the SPA editor's bpmn-js");
-
-  // bpmn-js orders the DI of a re-imported move its own way on export: the
-  // shared text is read for where it puts the tasks
-  const boundsIn = (text: string, id: string): Point => {
-    const match = new RegExp(`bpmnElement="${id}">\\s*<dc:Bounds x="(-?[\\d.]+)" y="(-?[\\d.]+)"`).exec(text);
-    assert.ok(match, id);
-    return { x: Number(match[1]), y: Number(match[2]) };
-  };
   await bothGesturesHold(
     "bpmn-js",
     docs,
@@ -430,8 +458,7 @@ test("a drag that outlasts 10 s gives way: diagram-js cancels it the way Escape 
   await wait(100);
   const start = positionOf(local.diagram, "cmp_kettle");
 
-  // dragging bound to the document, as for a user's drag: Escape reaches it
-  const dragging = startDrag(local.diagram, local.canvasHost, {});
+  const dragging = startDrag(local.diagram, local.canvasHost, "cmp_cup_of_tea");
   moveElement(peer.diagram, "cmp_kettle", MOVE_IN_WIDGET);
   await wait(9_000);
   assert.deepEqual(positionOf(local.diagram, "cmp_kettle"), start, "held for nearly 10 s");
@@ -449,5 +476,134 @@ test("a drag that outlasts 10 s gives way: diagram-js cancels it the way Escape 
   for (const { unbind, engine } of engines) {
     unbind();
     engine.destroy();
+  }
+});
+
+interface Engine {
+  diagram: Diagram;
+  canvasHost: HTMLElement;
+  conflicts: string[];
+  destroy(): void;
+}
+
+/** one bpmn-js widget engine per doc, each bound live to its doc */
+async function bpmnEngines(docs: readonly Y.Doc[]): Promise<Engine[]> {
+  const { mountBpmnEngine } = await import("../src/mcp-app/engines/bpmn.ts");
+  const engines = docs.map((doc) => {
+    const canvasHost = host("bpmn-canvas");
+    const engine = mountBpmnEngine(canvasHost, false);
+    const conflicts: string[] = [];
+    const unbind = engine.bindLive!(doc.getText("content"), doc, {
+      onConflict: (message) => conflicts.push(message),
+      onImportError: (message) => conflicts.push(`import failed: ${message}`),
+    });
+    return {
+      diagram: engine.raw as unknown as Diagram,
+      canvasHost,
+      conflicts,
+      destroy: () => {
+        unbind();
+        engine.destroy();
+      },
+    };
+  });
+  await wait(300);
+  return engines;
+}
+
+/** one engine of a Miragon renderer per doc, each bound live to its doc */
+async function miragonEngines(id: string, text: string, count: number): Promise<{ docs: Y.Doc[]; engines: Engine[] }> {
+  const { MIRAGON_RENDERERS } = await import("../src/notations/miragon/index.ts");
+  const { mountMiragonEngine } = await import("../src/mcp-app/engines/miragon.ts");
+  const spec = MIRAGON_RENDERERS.find((s) => s.id === id);
+  assert.ok(spec, id);
+  const renderer = await spec.load();
+  const canonical = renderer.create();
+  canonical.attachTo(host(spec.canvasClassName));
+  await canonical.importText(text);
+  const docs = room(canonical.exportText()).slice(0, count);
+  canonical.destroy();
+  const engines = docs.map((doc) => {
+    const canvasHost = host(spec.canvasClassName);
+    const engine = mountMiragonEngine(spec, renderer, canvasHost, false);
+    const conflicts: string[] = [];
+    const unbind = engine.bindLive!(doc.getText("content"), doc, {
+      onConflict: (message) => conflicts.push(message),
+      onImportError: (message) => conflicts.push(`import failed: ${message}`),
+    });
+    return {
+      diagram: engine.modeler.diagram as unknown as Diagram,
+      canvasHost,
+      conflicts,
+      destroy: () => {
+        unbind();
+        engine.destroy();
+      },
+    };
+  });
+  await wait(100);
+  return { docs, engines };
+}
+
+/** what reaches the page: thrown errors, and every Escape sent to the document */
+function watchPage() {
+  const seen = { errors: [] as unknown[], escapes: 0 };
+  const onError = (event: ErrorEvent): void => void seen.errors.push(event.error);
+  const onKeyup = (event: KeyboardEvent): void => void (event.key === "Escape" && seen.escapes++);
+  window.addEventListener("error", onError);
+  document.addEventListener("keyup", onKeyup, true);
+  return {
+    seen,
+    stop: () => {
+      window.removeEventListener("error", onError);
+      document.removeEventListener("keyup", onKeyup, true);
+    },
+  };
+}
+
+test("an armed palette tool holds nothing back and is not cancelled: bpmn-js's hand tool, a Miragon renderer's lasso", async () => {
+  const bpmn = room(await canonicalBpmn());
+  const storm = await miragonEngines(
+    "event-storming",
+    "title Checkout\ncommand Place Order [240,300]\nevent Order Placed [620,300]\n",
+    2,
+  );
+  const cases: Array<[what: string, engines: Engine[], arm: (diagram: Diagram) => void, moved: string]> = [
+    [
+      "bpmn-js hand tool",
+      await bpmnEngines(bpmn),
+      (d) => d.get("handTool").activateHand(pointerAt(), true),
+      "Task_ship",
+    ],
+    [
+      "Event Storming lasso",
+      storm.engines,
+      (d) => d.get("lassoTool").activateSelection(pointerAt(), true),
+      "event_order_placed",
+    ],
+  ];
+  for (const [what, engines, arm, moved] of cases) {
+    const [local, peer] = engines as [Engine, Engine];
+    const page = watchPage();
+    arm(local.diagram);
+    assert.ok(local.canvasHost.getElementsByClassName("djs-drag-active").length > 0, `${what}: the tool is armed`);
+    assert.equal(local.canvasHost.getElementsByClassName("djs-dragger").length, 0, `${what}: and draws nothing`);
+    const start = positionOf(local.diagram, moved);
+    moveElement(peer.diagram, moved, MOVE_IN_WIDGET);
+    await wait(QUIET);
+    assert.ok(
+      near(positionOf(local.diagram, moved), shifted(start, MOVE_IN_WIDGET)),
+      `${what}: the peer's move is imported at once`,
+    );
+    assert.equal(page.seen.escapes, 0, `${what}: no Escape sent`);
+    assert.deepEqual(page.seen.errors, [], `${what}: nothing thrown`);
+    assert.deepEqual([local.conflicts, peer.conflicts], [[], []], what);
+    if (what.startsWith("bpmn-js")) {
+      assert.ok(local.diagram.get("dragging").context(), `${what}: the tool stays armed through the import`);
+      assert.ok(local.canvasHost.getElementsByClassName("djs-drag-active").length > 0, what);
+    }
+    local.diagram.get("dragging").cancel();
+    page.stop();
+    for (const engine of engines) engine.destroy();
   }
 });

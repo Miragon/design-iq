@@ -207,10 +207,14 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
    an import replaces the shapes it works on: its drop would throw and lose the move. The
    binding reads the gesture from the DOM of the element the canvas is mounted in, the same
    way for every diagram-js editor: a pointer held on it, or diagram-js's `djs-drag-active`
-   marker inside it (a palette create follows the pointer with no button held). The import
-   runs once the gesture ends, after the drop's own edit, so the canvas takes in both edits.
-   A gesture that outlasts 10 s gives way: it is cancelled the way Escape cancels it, then
-   the import runs. Gates and repairs (rule 4) do not wait for a gesture.
+   marker inside it while the drag carries elements, which a drag preview (`djs-dragger`)
+   or diagram-js's grabbing cursor shows (a palette create follows the pointer with no
+   button held, its preview gone while the pointer is off the canvas). The marker alone is
+   no gesture: a palette tool that waits for its next press (hand, space, lasso, global
+   connect) keeps it set, and is neither waited for nor cancelled. The import runs once the
+   gesture ends, after the drop's own edit, so the canvas takes in both edits. A gesture
+   that outlasts 10 s gives way: it is cancelled the way Escape cancels it, then the import
+   runs. Gates and repairs (rule 4) do not wait for a gesture.
 4. **Validate merged XML before import** (cheap parse); on the rare interleaved-merge
    corruption, fall back to the last-good snapshot the Live Host keeps anyway.
    **Repair a merge that canvas writes alone broke** (#274). Two canvas exports that cross

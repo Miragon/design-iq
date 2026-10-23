@@ -29,9 +29,20 @@
  *     no button held, while the headless session edits the title; A places
  *     the element well past the import debounce. The edit and A's new element
  *     must both end up in the shared text and on A, B and a fresh page, with
- *     no error and no toast. (A peer's move would not do here: a new element
- *     goes where the peer's move went in bpmn-js's and Event Storming's
- *     export, and the text merge takes edits that touch as one conflict.)
+ *     no error and no toast.
+ *
+ * Then on fresh pages A and B:
+ *
+ *  4. A arms a palette tool that waits for the next press (bpmn-js: the hand
+ *     tool after one pan, which re-arms it; a Miragon renderer: the lasso):
+ *     diagram-js sets its drag marker and draws no preview. B's move must
+ *     reach A within the import debounce, with no Escape sent to A's page,
+ *     no error and no toast.
+ *  5. A clicks a palette entry and leaves the pointer on the palette, so the
+ *     new element has no preview on the canvas yet, while the headless
+ *     session edits the title back. A's canvas must wait all the same; then
+ *     A places the element. Both must end up in the shared text, with no
+ *     error and no toast.
  *
  * Exits 1 on any failure.
  */
@@ -55,6 +66,7 @@ interface Page {
   click(selector: string): Promise<void>;
   close(): Promise<void>;
   mouse: Mouse;
+  keyboard: { press(key: string): Promise<void> };
   evaluate<R, A>(fn: (arg: A) => R, arg: A): Promise<Awaited<R>>;
   waitForFunction<A>(fn: (arg: A) => unknown, arg: A, options: { timeout: number; polling?: number }): Promise<unknown>;
   waitForTimeout(ms: number): Promise<void>;
@@ -108,6 +120,8 @@ interface Model {
   create: string;
   /** a peer's text edit far from where a new element goes: the title */
   retitle: [from: string, to: string];
+  /** a palette tool that waits for the next press (its data-action) */
+  tool: string;
 }
 
 const BPMN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -136,6 +150,7 @@ const MODELS: Model[] = [
     b: "Task_ship",
     create: "create.task",
     retitle: ['<bpmn:process id="Process_1"', '<bpmn:process id="Process_1" name="Orders"'],
+    tool: "hand-tool",
   },
   {
     notation: "wardley",
@@ -145,6 +160,7 @@ const MODELS: Model[] = [
     b: "cmp_cup_of_tea",
     create: "create.component",
     retitle: ["Tea Shop", "Tea House"],
+    tool: "lasso-tool",
   },
   {
     notation: "event-storming",
@@ -154,6 +170,7 @@ const MODELS: Model[] = [
     b: "event_order_shipped",
     create: "create.event",
     retitle: ["Checkout", "Checkout Flow"],
+    tool: "lasso-tool",
   },
   {
     notation: "context-map",
@@ -175,6 +192,7 @@ const MODELS: Model[] = [
     b: "ctx_agenda",
     create: "context.core",
     retitle: ["Conference", "Conference Days"],
+    tool: "lasso-tool",
   },
   {
     notation: "team-topology",
@@ -209,6 +227,7 @@ const MODELS: Model[] = [
     b: "team_payments",
     create: "team.stream-aligned",
     retitle: ["Online Shop", "Online Store"],
+    tool: "lasso-tool",
   },
 ];
 
@@ -251,7 +270,7 @@ interface Peer {
   errors: string[];
 }
 
-async function openPeer(context: BrowserContext, model: Model): Promise<Peer> {
+async function openPeer(context: BrowserContext, model: Model, fileName = model.fileName): Promise<Peer> {
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
@@ -261,7 +280,7 @@ async function openPeer(context: BrowserContext, model: Model): Promise<Peer> {
       errors.push(`console.error: ${message.text()}`);
     }
   });
-  await page.goto(`${BASE}/r/${REPO}/f/models/${model.fileName}`);
+  await page.goto(`${BASE}/r/${REPO}/f/models/${fileName}`);
   await page.waitForFunction(
     (ids) => ids.every((id) => document.querySelector(`.djs-element[data-element-id="${id}"]`)),
     [model.a, model.b],
@@ -320,6 +339,26 @@ const shapeCount = (peer: Peer): Promise<number> =>
 const dragActive = (peer: Peer): Promise<boolean> =>
   peer.page.evaluate(() => document.querySelector(".djs-drag-active") !== null, undefined);
 
+/** what diagram-js draws for the elements a drag carries: an armed palette tool draws none */
+const previewDrawn = (peer: Peer): Promise<boolean> =>
+  peer.page.evaluate(() => document.querySelector(".djs-dragger") !== null, undefined);
+
+/** runs in every page before its own scripts: counts the Escape keyups a script sends (the binding's cancel at the bound) */
+function recordSentEscapes(): void {
+  const sent = { count: 0 };
+  Object.assign(window, { __sentEscapes: sent });
+  document.addEventListener(
+    "keyup",
+    (event) => {
+      if (event.key === "Escape" && !event.isTrusted) sent.count++;
+    },
+    true,
+  );
+}
+
+const sentEscapes = (peer: Peer): Promise<number> =>
+  peer.page.evaluate(() => (window as unknown as { __sentEscapes: { count: number } }).__sentEscapes.count, undefined);
+
 /** runs in every page before its own scripts: keeps every toast it shows, also one gone again */
 function recordToasts(): void {
   const shown: string[] = [];
@@ -354,6 +393,16 @@ async function startDrag(peer: Peer, id: string, by: Point): Promise<void> {
 async function drag(peer: Peer, id: string, by: Point): Promise<void> {
   await startDrag(peer, id, by);
   await peer.page.mouse.up();
+}
+
+/** how long until a page draws an element away from `before` (ms), or -1 */
+async function latency(peer: Peer, id: string, before: Point, timeoutMs: number): Promise<number> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (!same(await positionIn(peer, id), before)) return Date.now() - start;
+    await peer.page.waitForTimeout(50);
+  }
+  return -1;
 }
 
 const moved = (from: Point, to: Point): boolean => Math.abs(to.x - from.x) + Math.abs(to.y - from.y) > 10;
@@ -402,6 +451,7 @@ try {
       for (let i = 0; i < 2; i++) {
         const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
         await context.addInitScript(recordToasts, undefined);
+        await context.addInitScript(recordSentEscapes, undefined);
         contexts.push(context);
       }
       const a = await openPeer(contexts[0]!, model);
@@ -414,7 +464,10 @@ try {
 
       // 1. A drags, B's drop arrives, A drops
       await startDrag(a, model.a, { x: 60, y: 40 });
-      check(await dragActive(a), `${model.notation}: A's drag runs (diagram-js's marker is set)`);
+      check(
+        (await dragActive(a)) && (await previewDrawn(a)),
+        `${model.notation}: A's drag runs (diagram-js's marker set, its preview drawn)`,
+      );
       const beforeB = shared();
       await drag(b, model.b, { x: 50, y: 60 });
       check(await waitFor(() => shared() !== beforeB), `${model.notation}: B's drop is written`);
@@ -493,7 +546,10 @@ try {
       await a.page.click(`.djs-palette .entry[data-action="${model.create}"]`);
       await a.page.mouse.move(createAt.x - 40, createAt.y - 40, { steps: 5 });
       await a.page.mouse.move(createAt.x, createAt.y, { steps: 5 });
-      check(await dragActive(a), `${model.notation}: A's new element follows the pointer (the drag marker is set)`);
+      check(
+        (await dragActive(a)) && (await previewDrawn(a)),
+        `${model.notation}: A's new element follows the pointer (the drag marker set, its preview drawn)`,
+      );
       await markRendered(a, model.a);
       const [from, to] = model.retitle;
       const at = shared().indexOf(from);
@@ -527,7 +583,96 @@ try {
       }
       check(a.errors.length + b.errors.length === 0, `${model.notation}: no error on A or B after the create`);
       for (const error of [...a.errors, ...b.errors]) console.log(`     ${error}`);
+      const createErrors = a.errors.length + b.errors.length;
       await fresh.page.close();
+      // fresh pages from here: bpmn-js left its label editor open on A's new element
+      await a.page.close();
+      await b.page.close();
+      const a2 = await openPeer(contexts[0]!, model);
+      const b2 = await openPeer(contexts[1]!, model);
+
+      // 4. an armed palette tool holds nothing back
+      const toolAt = await emptySpot(a2);
+      await a2.page.click(`.djs-palette .entry[data-action="${model.tool}"]`);
+      await a2.page.mouse.move(toolAt.x - 40, toolAt.y - 40, { steps: 5 });
+      if (model.tool === "hand-tool") {
+        // one pan: the hand tool re-arms after it, with no button held
+        await a2.page.mouse.move(toolAt.x, toolAt.y, { steps: 5 });
+        await a2.page.mouse.down();
+        await a2.page.mouse.move(toolAt.x + 30, toolAt.y + 20, { steps: 5 });
+        await a2.page.mouse.up();
+      }
+      await a2.page.mouse.move(toolAt.x + 10, toolAt.y + 10, { steps: 5 });
+      check(
+        (await dragActive(a2)) && !(await previewDrawn(a2)),
+        `${model.notation}: A's ${model.tool} is armed (the drag marker set, no preview)`,
+      );
+      const beforeTool = await positionIn(a2, model.b);
+      await drag(b2, model.b, { x: 30, y: -30 });
+      const toolLatency = await latency(a2, model.b, beforeTool, HOLD_PAST_DEBOUNCE + 1000);
+      check(
+        toolLatency >= 0 && toolLatency <= HOLD_PAST_DEBOUNCE,
+        `${model.notation}: B's move reaches A with the tool armed (${toolLatency} ms)`,
+      );
+      check((await sentEscapes(a2)) === 0, `${model.notation}: no Escape sent to A's page`);
+      const toolAfter = (await dragActive(a2)) ? "still armed" : "disarmed by the renderer's import";
+      console.log(`     ${model.notation}: A's ${model.tool} after the import: ${toolAfter}`);
+      await a2.page.keyboard.press("Escape");
+
+      // 5. a palette create whose preview is not on the canvas yet holds the import back too
+      const shapesBefore5 = await shapeCount(a2);
+      const createAt5 = await emptySpot(a2);
+      await a2.page.click(`.djs-palette .entry[data-action="${model.create}"]`);
+      check(
+        (await dragActive(a2)) && !(await previewDrawn(a2)),
+        `${model.notation}: A's new element waits on the palette (the drag marker set, no preview)`,
+      );
+      await markRendered(a2, model.a);
+      const [titled, retitled] = model.retitle;
+      const back = shared().indexOf(retitled);
+      check(back >= 0, `${model.notation}: the peer finds "${retitled}"`);
+      session.doc.transact(() => {
+        session.content.delete(back, retitled.length);
+        session.content.insert(back, titled);
+      });
+      const titledBack = shared();
+      await a2.page.waitForTimeout(HOLD_PAST_DEBOUNCE);
+      check(
+        await stillRendered(a2),
+        `${model.notation}: A's canvas waits with the peer's edit, its new element on the palette`,
+      );
+      await a2.page.mouse.move(createAt5.x - 40, createAt5.y - 40, { steps: 5 });
+      await a2.page.mouse.move(createAt5.x, createAt5.y, { steps: 5 });
+      check(await previewDrawn(a2), `${model.notation}: then it follows the pointer on the canvas`);
+      await a2.page.mouse.down();
+      await a2.page.mouse.up();
+      check(await waitFor(() => shared() !== titledBack, SETTLE), `${model.notation}: A's new element is written`);
+      await a2.page.waitForTimeout(SETTLE);
+      await a2.page.keyboard.press("Escape");
+      check(!(await stillRendered(a2)), `${model.notation}: A's canvas has imported since`);
+      check(
+        shared().includes(titled) && !shared().includes(retitled),
+        `${model.notation}: the peer's edit is in the shared text`,
+      );
+      const fresh5 = await openPeer(contexts[1]!, model);
+      const shapes5 = await shapeCount(fresh5);
+      check(
+        shapes5 === shapesBefore5 + 1,
+        `${model.notation}: A's new element is in the shared text (${shapesBefore5} → ${shapes5})`,
+      );
+      for (const [name, peer] of [
+        ["A", a2],
+        ["B", b2],
+      ] as const) {
+        check((await shapeCount(peer)) === shapes5, `${model.notation}: ${name}'s canvas shows the shared text`);
+        const shown = await toasts(peer);
+        check(shown.length === 0, `${model.notation}: no toast on ${name} in 4 and 5 ${shown.join(" | ")}`);
+      }
+      check(a2.errors.length + b2.errors.length === 0, `${model.notation}: no error on A or B in 4 and 5`);
+      for (const error of [...a2.errors, ...b2.errors]) console.log(`     ${error}`);
+      await fresh5.page.close();
+      await a2.page.close();
+      await b2.page.close();
 
       summary.push({
         notation: model.notation,
@@ -536,7 +681,7 @@ try {
         "errors (1)": scenario1.errors,
         "errors (bound)": bound.errors,
         "shapes after create": `${shapesBefore} → ${shapes}`,
-        "errors (create)": a.errors.length + b.errors.length,
+        "errors (create)": createErrors,
       });
     } catch (error) {
       check(false, `${model.notation}: ${error instanceof Error ? error.message : String(error)}`);
