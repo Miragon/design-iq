@@ -132,11 +132,16 @@ test("the ticket's user is announced on the session (the web roster shows the wi
 test("the engine is bound WITH a presence surface riding the session's awareness", async () => {
   const s = fakeSession();
   const engine = liveEngine();
-  const p = tryLive(deps(s), engine, hooks().hooks);
+  const notices: Array<string | null> = [];
+  const h = hooks();
+  const p = tryLive(deps(s), engine, { ...h.hooks, onUnrenderable: (message) => void notices.push(message) });
   await tick(1);
   s.sync();
   assert.ok(await p);
-  assert.equal(engine.bound?.awareness, s.session.awareness, "the binding sees who leaves the room (#296)");
+  assert.equal(engine.bound?.sync?.awareness, s.session.awareness, "the binding sees who leaves the room (#296)");
+  engine.bound?.sync?.onUnrenderable?.("cannot render");
+  engine.bound?.sync?.onUnrenderable?.(null);
+  assert.deepEqual(notices, ["cannot render", null], "its notice reaches the lifecycle (#296)");
   const presence = engine.bound?.presence;
   assert.ok(presence, "bindLive received the presence surface");
   presence.setLocal({ cursor: { x: 1, y: 2 }, selection: ["Task_1"] });

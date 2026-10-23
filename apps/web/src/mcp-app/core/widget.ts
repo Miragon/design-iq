@@ -101,6 +101,18 @@ export function bootWidget<E extends WidgetEngine>(spec: WidgetSpec<E>): void {
     return input.path ? fileDeepLink(cfg.publicUrl, input.repo, input.path) : repoDeepLink(cfg.publicUrl, input.repo);
   };
 
+  // openLink FIRST, nothing awaited before it — an await would burn the
+  // user activation the window.open fallback needs. A still-unsaved edit
+  // follows via flushOnLeave in parallel (see lifecycle).
+  const openInDesignIQ = (): void => {
+    const url = linkFor();
+    if (!url) return;
+    void openExternal(app, url, () =>
+      chrome.toast({ tone: "danger", title: "Your client blocked the link", detail: url }),
+    );
+    lc?.flushOnLeave();
+  };
+
   const chrome: WidgetChrome = mountChrome({
     app,
     notation: spec.notation,
@@ -111,17 +123,7 @@ export function bootWidget<E extends WidgetEngine>(spec: WidgetSpec<E>): void {
       save: () => void lc?.save(),
       reload: () => void lc?.reload().catch((err: unknown) => showLoadFailure(chrome, err)),
       flushNow: () => lc?.flushNow() ?? Promise.resolve(),
-      // openLink FIRST, nothing awaited before it — an await would burn the
-      // user activation the window.open fallback needs. A still-unsaved edit
-      // follows via flushOnLeave in parallel (see lifecycle).
-      openInDesignIQ: () => {
-        const url = linkFor();
-        if (!url) return;
-        void openExternal(app, url, () =>
-          chrome.toast({ tone: "danger", title: "Your client blocked the link", detail: url }),
-        );
-        lc?.flushOnLeave();
-      },
+      openInDesignIQ,
       deepLink: () => linkFor() !== undefined,
       retry: () => {
         if (rendererFailed) return start();
@@ -203,6 +205,7 @@ export function bootWidget<E extends WidgetEngine>(spec: WidgetSpec<E>): void {
     live: (doc, engine: LiveEngine, hooks) => tryLive({ mint: () => mintWsTicket(app, doc) }, engine, hooks),
     claim: claimDocument,
     chrome,
+    openInDesignIQ: { available: () => linkFor() !== undefined, run: openInDesignIQ },
     extras: spec.extras && ((engine) => spec.extras!({ app, engine, readonly: cfg.readonly, chrome })),
     // both mounts (the superseded freeze re-mounts a viewer): the zoom group,
     // Tools and the layout follow engine.view, the DRD | Table switch an

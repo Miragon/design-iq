@@ -248,10 +248,11 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
      state (a repair lands about 2 s after the break) is reported to that canvas. The SPA
      shows a persistent warning, "The shared text cannot be rendered. Your canvas shows the
      last good state.", with a Show source action, while the canvas is on screen without
-     the source; it goes once a text renders. A document that never rendered (a newcomer,
-     a reload during the break) gets the first import's report instead, BPMN included: the
-     SPA's import-failed toast and the switch to the source, the widget's "Live import
-     failed".
+     the source. The MCP-App widget, which has no text view, shows it as a warning toast
+     with Open in designIQ and in the sync popover's activity line. Both go once a text
+     renders. A document that never rendered (a newcomer, a reload during the break) gets
+     the first import's report instead, BPMN included: the SPA's import-failed toast and
+     the switch to the source, the widget's "Live import failed".
 
    What it does not guarantee:
    - One repair per state of the map, not per broken text: a writer whose updates reach the
@@ -275,8 +276,6 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
    - A peer whose own link dropped takes a writer who left meanwhile as present again when
      that writer's last canvas write reaches it only on its own reconnect; for that break
      it waits for the writer that left, as before this rule, and shows the notice.
-   - The MCP-App widget passes over writers that left, but shows no notice yet: it has no
-     source view to offer.
    - A re-sync that bundles canvas writes with a deletion typed in the source view counts
      as canvas writes when the deletion only removes characters those writes inserted (a
      deletion has no clock range of its own). One that bundles a canvas write with a later

@@ -170,7 +170,7 @@ export async function tryLive(
           onConflict: hooks.onConflict,
           onImportError: hooks.onImportError,
           presence,
-          awareness: session.awareness,
+          sync: { awareness: session.awareness, onUnrenderable: hooks.onUnrenderable },
         });
         established = true;
         // the roster rides the same awareness — from establish on, so a failed
