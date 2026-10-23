@@ -21,7 +21,7 @@
  *  - tryLive(app, ref, modeler, hooks) → deps.live(ref, engine, hooks), guarded
  *    by `engine.bindLive` (a capability) and the presence of a live port
  *  - claimDocument → deps.claim; AUTOSAVE_MS / 10_000 / 100 → deps.timing
- *  - liveHooks gains onImportError (the DSL/JSON binds report it; bpmn never)
+ *  - liveHooks gains onImportError (a binding whose first import fails reports it)
  *  - `cfg.readonly`, the deep link, the icon font and the button handlers
  *    live in widget.ts (the DOM composition)
  * Four re-delivery hazards the old code carried are closed here (each pinned
@@ -117,9 +117,12 @@ export interface LiveHooks {
    *  peer's repair of a merge broken by crossing canvas writes replaced it
    *  (model-sync rule 4) */
   onConflict(message: string): void;
-  /** a remote snapshot did not import — the binds that take the parameter
-   *  report it; bpmn's never does */
+  /** the binding's first import failed: the room's text is malformed or
+   *  empty, and the canvas keeps what the widget loaded */
   onImportError(message: string): void;
+  /** the room's text has stayed unrenderable while the canvas shows its last
+   *  good state (model-sync rule 4, #296); null once a text renders */
+  onUnrenderable?(message: string | null): void;
   /** runs after sync, before the first Yjs import replaces the canvas — flush
    *  unsaved state through the bridge here; false aborts the upgrade */
   beforeBind(): Promise<boolean>;
@@ -316,6 +319,9 @@ export interface LifecycleDeps<E extends WidgetEngine> {
   /** after every mount — the first one and the superseded freeze (`frozen`);
    *  the chrome re-binds engine.view (zoom, Tools) here */
   onMount?: (engine: E, frozen: boolean) => void;
+  /** "Open in designIQ", for a toast whose way out is the full editor;
+   *  absent or unavailable (no link can be built) = the toast has no action */
+  openInDesignIQ?: { available(): boolean; run(): void };
   /** test seams — production keeps the defaults */
   timing?: LifecycleTiming;
 }
@@ -371,6 +377,8 @@ export const AUTOSAVE_MS = 1500;
 export const FLUSH_DEADLINE_MS = 10_000;
 export const FLUSH_POLL_MS = 100;
 export const RETRY_MS = [5000, 15_000, 60_000];
+/** the key of the notice that the room's text does not render */
+export const UNRENDERABLE_TOAST = "unrenderable";
 
 interface SaveOptions {
   /** replay an EARLIER serialization ("Overwrite anyway") */
@@ -424,6 +432,15 @@ export function createWidgetLifecycle<E extends WidgetEngine>(deps: LifecycleDep
     dirty = d;
     chrome.setDirty(d);
   };
+
+  /** the notice that the room's text does not render is up */
+  let unrenderable = false;
+  /** the room's text renders again, or the live session that reported it ended */
+  function clearUnrenderable(): void {
+    if (!unrenderable) return;
+    unrenderable = false;
+    chrome.dismissToast(UNRENDERABLE_TOAST);
+  }
 
   /** the failed-save state ends — a landed save, a round trip that came back
    *  (a conflict: its card owns the next step), a load, the superseded stop.
@@ -550,6 +567,7 @@ export function createWidgetLifecycle<E extends WidgetEngine>(deps: LifecycleDep
     if (live) chrome.setPeers([]);
     live?.destroy();
     live = undefined;
+    clearUnrenderable();
     clearTimeout(autosaveTimer);
     clearDecision();
     autosavePaused = false;
@@ -686,6 +704,24 @@ export function createWidgetLifecycle<E extends WidgetEngine>(deps: LifecycleDep
         chrome.setStatus(`Live import failed: ${msg}`);
         if (isCurrent()) chrome.toast({ tone: "danger", title: "Live import failed", detail: msg });
       },
+      onUnrenderable: (msg) => {
+        if (!isCurrent()) return;
+        if (msg === null) {
+          clearUnrenderable();
+          chrome.setStatus(RESTING_STATUS.live);
+          return;
+        }
+        unrenderable = true;
+        chrome.setStatus(msg);
+        // the widget has no text view: the full editor shows the text as it is
+        const open = deps.openInDesignIQ;
+        chrome.toast({
+          tone: "warning",
+          title: msg,
+          key: UNRENDERABLE_TOAST,
+          ...(open?.available() ? { action: { label: "Open in designIQ", run: () => open.run() } } : {}),
+        });
+      },
       beforeBind: () => flushForLive(epoch),
       onDead: () => void onLiveDead(),
       onPeers: (peers) => {
@@ -733,6 +769,7 @@ export function createWidgetLifecycle<E extends WidgetEngine>(deps: LifecycleDep
     if (live) chrome.setPeers([]);
     live?.destroy();
     live = undefined;
+    clearUnrenderable();
     if (inactive || !engine || !ref) return;
     const doc = ref;
     chrome.setStatus("Live sync lost — reconnecting…");
@@ -1061,6 +1098,7 @@ export function createWidgetLifecycle<E extends WidgetEngine>(deps: LifecycleDep
     if (wasLive) chrome.setPeers([]);
     live?.destroy();
     live = undefined;
+    clearUnrenderable();
     extras?.destroy();
     extras = undefined;
     decision = false; // the superseded card replaces any open decision

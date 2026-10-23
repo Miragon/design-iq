@@ -23,6 +23,7 @@
  * Pure types: this module is imported by the node --test suites, so it must
  * never pull DOM-bound code.
  */
+import type { SyncOptions } from "@designiq/live-client";
 import type * as Y from "yjs";
 
 import type { PresenceSurface } from "../../lib/presence-canvas.ts";
@@ -42,13 +43,17 @@ export interface LiveBindHooks {
    *  peer's repair of a merge broken by crossing canvas writes replaced it
    *  (model-sync rule 4) */
   onConflict(message: string): void;
-  /** a remote snapshot did not import — reported by the binds that support it
-   *  (bindBpmn reports nothing; the core tolerates silence) */
+  /** the binding's first import failed: the room's text is malformed or empty */
   onImportError(message: string): void;
   /** live presence (#115): publish this canvas's pointer/selection, render
    *  the peers' — the diagram-js engines attach lib/presence-canvas to it.
    *  Absent = the session has no awareness (tests, older cores). */
   presence?: PresenceSurface;
+  /** the session's part of the canvas sync (model-sync rule 4, #296): the
+   *  room's awareness, so a repair passes to the next writer when the first
+   *  one leaves, and the notice that the room's text stays unrenderable.
+   *  Absent = the binding ranks every writer and tells nothing */
+  sync?: SyncOptions;
 }
 
 /** the renderer palette as the chrome moves it (bpmn/DRD: the left column;

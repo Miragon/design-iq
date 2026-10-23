@@ -145,6 +145,8 @@ export function LiveEditor({
   const [sourceMenus, setSourceMenus] = useState<SourceMenu[]>([]);
   /** where a rename moved this document (#208) — set by the session's notice */
   const [movedTo, setMovedTo] = useState<MovedNotice | null>(null);
+  /** the canvas sync's notice that the shared text stays unrenderable (#296); null while it renders */
+  const [unrenderable, setUnrenderable] = useState<string | null>(null);
 
   // model-anchored todos — only for documents that belong to a process
   const hasTodos = processId.length > 0;
@@ -303,6 +305,12 @@ export function LiveEditor({
               toast.error(`${notation?.label ?? "Model"} import failed: ${msg}`);
               views.fallBack(); // not a choice: never remembered
             },
+            sync: {
+              awareness: session.awareness,
+              onUnrenderable: (message) => {
+                if (!cancelled) setUnrenderable(message);
+              },
+            },
             onBadgeClick: (elementId) => {
               setTodoFilter(elementId);
               setPanel("todos");
@@ -430,6 +438,7 @@ export function LiveEditor({
       setEditorActions([]);
       setEditorMenu(undefined);
       setSourceMenus([]);
+      setUnrenderable(null);
       mounted?.destroy();
       sourceTools?.dispose();
       monacoBinding?.destroy();
@@ -577,6 +586,17 @@ export function LiveEditor({
     canvasShownRef.current = canvasShown;
     for (const cb of canvasShownListenersRef.current) cb();
   }, [canvasShown]);
+  // a shared text that stays unrenderable leaves the canvas on an older
+  // state than the document, so whoever sees the canvas alone is told, and
+  // offered the source, where the text shows as it is (#296)
+  useEffect(() => {
+    if (unrenderable === null || sourceShown) return undefined;
+    const id = toast.warning(unrenderable, {
+      duration: Infinity,
+      action: { label: "Show source", onClick: () => setView("source") },
+    });
+    return () => void toast.dismiss(id);
+  }, [unrenderable, sourceShown]);
   // the canvas engine stays mounted behind the source layer and the dialogs:
   // one that takes its shortcuts from document hears keys only while in front
   // (lib/canvas-keys), and in the split view not those typed in the source

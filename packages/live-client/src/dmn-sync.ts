@@ -14,7 +14,9 @@
  */
 import type * as Y from "yjs";
 
-import { bindModelSync, looksWellFormedXml, NOT_WELL_FORMED_XML } from "./model-sync.ts";
+import { bindModelSync, looksWellFormedXml, NOT_WELL_FORMED_XML, type SyncOptions } from "./model-sync.ts";
+
+export type { SyncOptions } from "./model-sync.ts";
 
 interface DrdViewbox {
   x: number;
@@ -58,6 +60,7 @@ export function bindDmn(
   onConflict?: (message: string) => void,
   /** first import failed — the document is malformed, offer the XML view */
   onImportError?: (message: string) => void,
+  sync?: SyncOptions,
 ): () => void {
   // the DRD viewer's canvas, or undefined in table/expression views
   const drdCanvas = (): DrdCanvasLike | undefined =>
@@ -143,5 +146,6 @@ export function bindDmn(
     doc,
     onConflict,
     onImportError,
+    sync,
   );
 }

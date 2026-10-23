@@ -231,7 +231,12 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
      acts: after a 500 ms settle delay, and only if the text, the map, the rank and the
      count of other changes are as they were, it writes its canvas export over the text. A
      first-ranked writer that cannot (its canvas has not taken in someone's typing or save)
-     marks its entry as standing down, and the next one acts.
+     marks its entry as standing down, and the next one acts. So does the next one when the
+     first-ranked writer's awareness disappears (its tab closed, its connection lost, #296):
+     every peer passes over a writer that left, as if it had stood down. A writer counts as
+     back once its link re-syncs (the session takes in the room's presence and renews its
+     own, so both sides see each other again at once, not at the next 15 s renewal) or once
+     a canvas write of it arrives.
    - The repair names every writer whose write the text holds and its canvas does not, in
      a second map (`CANVAS_LOSSES_KEY`). Each of them shows the conflict toast once per lost
      write, also when the notice reaches it only on reconnect, and clears the notice; the
@@ -239,6 +244,15 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
      its own state for up to 3 s, waiting for the repair, before it takes the merge in.
    - Typing, saves and restores are never written over: half-typed text is a legitimate
      state, and a save was confirmed to its author, who has no toast to learn of its loss.
+   - A text that fails the gate or the import for 5 s while a canvas shows its last good
+     state (a repair lands about 2 s after the break) is reported to that canvas. The SPA
+     shows a persistent warning, "The shared text cannot be rendered. Your canvas shows the
+     last good state.", with a Show source action, while the canvas is on screen without
+     the source. The MCP-App widget, which has no text view, shows it as a warning toast
+     with Open in designIQ and in the sync popover's activity line. Both go once a text
+     renders. A document that never rendered (a newcomer, a reload during the break) gets
+     the first import's report instead, BPMN included: the SPA's import-failed toast and
+     the switch to the source, the widget's "Live import failed".
 
    What it does not guarantee:
    - One repair per state of the map, not per broken text: a writer whose updates reach the
@@ -246,10 +260,22 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
      and the settle delay) can repair the merge as it sees it while another writer repairs
      the merge they see. The two repairs cross, a second round settles them, and a writer
      whose edit both overwrote is told once.
-   - If the first-ranked writer leaves before its delay ends, nobody repairs and the text
-     stays as it is, as before this rule. So does a break that coincides with typing or a
-     save, and a merge of crossing writes that replaced nothing in common, whatever the
-     parser makes of it.
+   - A break that coincides with typing or a save stays as it is, as before this rule, and
+     so does a merge of crossing writes that replaced nothing in common, whatever the
+     parser makes of it. While such a text does not render, the canvas peers see the
+     notice above.
+   - A writer whose own connection drops sees every other writer leave (the provider
+     clears the remote awareness states). It repairs on its side if it ranks first then,
+     and its repair reaches the room on reconnect, where it settles with the one the
+     others made like a lagging writer's: both writers can be told.
+   - A connection lost without a close reaches the others only when the Live Host or the
+     awareness timeout (about 30 s) removes the writer; until then the notice shows. After a
+     writer's link has dropped and come back once, the Live Host no longer removes it when
+     that connection closes (it ties a client's presence to the connection it first came
+     on), so a later drop of it takes the timeout.
+   - A peer whose own link dropped takes a writer who left meanwhile as present again when
+     that writer's last canvas write reaches it only on its own reconnect; for that break
+     it waits for the writer that left, as before this rule, and shows the notice.
    - A re-sync that bundles canvas writes with a deletion typed in the source view counts
      as canvas writes when the deletion only removes characters those writes inserted (a
      deletion has no clock range of its own). One that bundles a canvas write with a later

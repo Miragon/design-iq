@@ -14,8 +14,9 @@ import {
   type LifecycleTiming,
   LoadError,
   type SyncState,
+  UNRENDERABLE_TOAST,
 } from "../src/mcp-app/core/lifecycle.ts";
-import { createAnnouncer, speakBeat, type Utterance } from "../src/mcp-app/core/sync-view.ts";
+import { createAnnouncer, RESTING_STATUS, speakBeat, type Utterance } from "../src/mcp-app/core/sync-view.ts";
 import {
   fakeBridge,
   type FakeChrome,
@@ -37,6 +38,7 @@ function setup(
     live?: ReturnType<typeof fakeLive> | null;
     readonly?: boolean;
     timing?: Partial<LifecycleTiming>;
+    openInDesignIQ?: LifecycleDeps<FakeEngine>["openInDesignIQ"];
   } = {},
 ) {
   const engine = o.engine ?? fakeEngine({ editable: !(o.readonly ?? false) });
@@ -81,6 +83,7 @@ function setup(
       };
     },
     onMount: (e, frozen) => void mounted.push({ engine: e, frozen }),
+    openInDesignIQ: o.openInDesignIQ,
     timing: { ...TIMING, ...o.timing },
   };
   const lc = createWidgetLifecycle(deps);
@@ -987,6 +990,43 @@ test("live: peers ride setPeers; remote-won and import-failed toast; the roster 
   assert.deepEqual(chrome.kinds().slice(-2), ["reconnecting", "saved"]);
   assert.deepEqual(chrome.peers.at(-1), []);
   assert.deepEqual(chrome.toasts.at(-1), { tone: "info", title: "Live sync lost — changes now save automatically" });
+});
+
+test("live: a room text that stays unrenderable is a keyed warning toast that opens designIQ, gone once it renders or live ends", async () => {
+  const NOTICE = "The shared text cannot be rendered. Your canvas shows the last good state.";
+  let linkable = true;
+  let opened = 0;
+  const live = fakeLive({ handle: true, snapshot: "v1" });
+  const { lc, bridge, chrome } = setup({
+    live,
+    openInDesignIQ: { available: () => linkable, run: () => void opened++ },
+  });
+  await lc.load({ repo: REPO, id: "a" });
+  live.hooks?.onUnrenderable?.(NOTICE);
+  const toast = chrome.toasts.at(-1);
+  assert.deepEqual(
+    { ...toast, action: toast?.action?.label },
+    { tone: "warning", title: NOTICE, key: UNRENDERABLE_TOAST, action: "Open in designIQ" },
+    "an action: it never times out",
+  );
+  toast?.action?.run();
+  assert.equal(opened, 1, "the full editor shows the text as it is");
+  assert.equal(chrome.status.at(-1), NOTICE, "the popover's activity line keeps it");
+  assert.equal(chrome.kinds().at(-1), "live", "the pill stays Live");
+  live.hooks?.onUnrenderable?.(null);
+  assert.deepEqual(chrome.dismissed, [UNRENDERABLE_TOAST]);
+  assert.equal(chrome.status.at(-1), RESTING_STATUS.live);
+
+  // no deep link (no public URL): no action, the activity line still says it
+  linkable = false;
+  live.hooks?.onUnrenderable?.(NOTICE);
+  assert.equal(chrome.toasts.at(-1)?.action, undefined);
+  // live ends while the notice is up: it goes with the session that reported it
+  bridge.onLoad(async () => ({ path: "processes/a.owm", content: "v1", baseVersion: "b7" }));
+  live.next = { handle: false };
+  live.hooks?.onDead();
+  await tick(TIMING.autosaveMs * 2);
+  assert.deepEqual(chrome.dismissed, [UNRENDERABLE_TOAST, UNRENDERABLE_TOAST]);
 });
 
 test("live dead: reconnecting → live again (byte-equal), → paused (diverged, then the resolution toasts)", async () => {
