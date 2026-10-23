@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.9.0](https://github.com/Miragon/design-iq/compare/v5.8.1...v5.9.0) (2026-10-23)
+
+
+### Features
+
+* **live-host,web:** file todos with the repo's issue templates in the UI and through the agent ([#313](https://github.com/Miragon/design-iq/issues/313)) ([#315](https://github.com/Miragon/design-iq/issues/315)) ([2f574e0](https://github.com/Miragon/design-iq/commit/2f574e029dfe0da615a00c997fbad94f31491ec5))
+* **web:** fit every Miragon canvas to the content box its renderer reports (contract 1.3) ([#318](https://github.com/Miragon/design-iq/issues/318)) ([9cbc224](https://github.com/Miragon/design-iq/commit/9cbc224ba47133f16c2ae5cf64adc944a50325f2))
+
 ## [5.8.1](https://github.com/Miragon/design-iq/compare/v5.8.0...v5.8.1) (2026-10-23)
 
 
