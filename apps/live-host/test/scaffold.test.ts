@@ -745,7 +745,7 @@ test("renameModel: a renamed model takes its todos along (a background job); a d
   const moved: Array<{ from: TodoModelRef; to: { model: string; file: string } }> = [];
   const job = (from: TodoModelRef, to: string) =>
     ({
-      id: `move:${from.id}`,
+      id: `move:${from.notation}:${from.id}`,
       kind: "move",
       notation: from.notation,
       from: from.id,
@@ -789,7 +789,7 @@ test("deleteModels: closeTodos closes the deleted models' todos — only when as
     close: (from: TodoModelRef) => {
       closed.push(from);
       return {
-        id: `close:${from.id}`,
+        id: `close:${from.notation}:${from.id}`,
         kind: "close",
         notation: from.notation,
         from: from.id,
@@ -823,6 +823,6 @@ test("deleteModels: closeTodos closes the deleted models' todos — only when as
   ]);
   assert.deepEqual(
     out.todoJobs?.map((j) => j.id),
-    ["close:order", "close:check-credit", "close:handbook"],
+    ["close:bpmn:order", "close:bpmn:check-credit", "close:markdown:handbook"],
   );
 });

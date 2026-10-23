@@ -34,7 +34,7 @@ import { byExtension, byId, hasTodos, modelStem, NOTATIONS } from "@designiq/not
 import type { Session } from "../adapters/sqlite/sessions.ts";
 import type { IssueTracker, Todo } from "../ports/issue-tracker.ts";
 import type { ConnectedRepo } from "../repos/registry.ts";
-import { type FindModelDeps, findModelNotation, findModelPath, findModelPaths, findProcessPath } from "./find-model.ts";
+import { type FindModelDeps, findModelNotation, findModelPath, findModelPaths } from "./find-model.ts";
 
 /** the model a repo-relative path names — id IS the file stem (the content
  *  contract); undefined for a path of no registered notation */
@@ -155,10 +155,8 @@ export async function fileTodo(
   // the file's notation, unless the id names another model than the file
   const asked = input.notation?.trim() || (fromFile && fromFile.id === id ? fromFile.notation : undefined);
   if (asked) requireTodoNotation(asked);
-  // the existence gate BOTH transports lacked in one direction or the other —
-  // a process answers in the words it always did ("… (use list_processes)")
-  const resolvedPath =
-    asked === "bpmn" ? await findProcessPath(opts, repo, id) : await findModelPath(opts, repo, id, asked);
+  // the existence gate BOTH transports lacked in one direction or the other
+  const resolvedPath = await findModelPath(opts, repo, id, asked);
   const model = modelOfPath(resolvedPath) ?? { notation: asked ?? "bpmn", id };
   requireTodoNotation(model.notation);
   const named = fromFile && fromFile.notation === model.notation && fromFile.id === model.id;

@@ -200,16 +200,17 @@ test("list_todos: open todos with parsed anchors; PR rows excluded; the token is
   await close();
 });
 
-test("list_todos: the process argument narrows via the process:<id> label; misses succeed with a message", async () => {
+test("list_todos: an id narrows via its model's label, a process first; misses succeed with a message", async () => {
   const { client, close } = await connect();
-  const hit = await call(client, { process: "order-to-cash" });
+  // the content repo holds order-to-cash.bpmn AND order-to-cash.storm: the id alone is the process
+  const hit = await call(client, { id: "order-to-cash" });
   assert.ok(!hit.isError, hit.text);
   const todos = JSON.parse(hit.text) as Array<{ id: string }>;
   assert.deepEqual(
     todos.map((t) => t.id),
     ["7"],
   );
-  const miss = await call(client, { process: "does-not-exist" });
+  const miss = await call(client, { id: "does-not-exist" });
   assert.ok(!miss.isError, "an empty result is a success sentence, not an error");
   assert.match(miss.text, /No open todos for process 'does-not-exist'/);
   await close();

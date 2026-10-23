@@ -89,10 +89,8 @@ const keyOf = (spec: Pick<TodoJobSpec, "repo" | "kind" | "notation" | "from">): 
 /** the model a job's todos are filed under */
 const fromOf = (spec: TodoJobSpec): TodoModelRef => ({ notation: spec.notation, id: spec.from });
 
-/** the wire id, stable per repo: `<kind>:<from>` for a process (what every
- *  job was called before #275), `<kind>:<notation>:<from>` for any other model */
-const wireIdOf = (spec: TodoJobSpec): string =>
-  spec.notation === "bpmn" ? `${spec.kind}:${spec.from}` : `${spec.kind}:${spec.notation}:${spec.from}`;
+/** the wire id, stable per repo */
+const wireIdOf = (spec: TodoJobSpec): string => `${spec.kind}:${spec.notation}:${spec.from}`;
 
 export class TodoJobs {
   private readonly jobs = new Map<string, Job>();

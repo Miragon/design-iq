@@ -118,7 +118,7 @@ test("move: every open todo follows, one write at a time with a second between, 
   const t = tracker({ "invoice-handling": 3, other: 1 });
   const { j, sleeps, store } = jobs(t);
   const started = j.move(REPO, bpmn("invoice-handling"), target("billing"), "petra");
-  assert.equal(started.id, "move:invoice-handling");
+  assert.equal(started.id, "move:bpmn:invoice-handling");
   assert.equal(started.to, "billing");
   await settled(j);
   assert.deepEqual(t.under("billing"), ["1", "2", "3"]);
@@ -126,7 +126,7 @@ test("move: every open todo follows, one write at a time with a second between, 
   assert.deepEqual(sleeps, [1000, 1000], "a second between writes, none before the first");
   assert.deepEqual(j.status(REPO), [
     {
-      id: "move:invoice-handling",
+      id: "move:bpmn:invoice-handling",
       kind: "move",
       notation: "bpmn",
       from: "invoice-handling",
@@ -170,11 +170,11 @@ test("move: a refused todo fails the job, stays where it is and persists; retry 
   );
 
   t.failOn.clear();
-  assert.equal(j.retry(REPO, "move:a")?.state, "running", "the idle runner picks it up at once");
+  assert.equal(j.retry(REPO, "move:bpmn:a")?.state, "running", "the idle runner picks it up at once");
   await settled(j);
   assert.deepEqual(t.under("b"), ["1", "2", "3"]);
   assert.deepEqual(j.status(REPO)[0], {
-    id: "move:a",
+    id: "move:bpmn:a",
     kind: "move",
     notation: "bpmn",
     from: "a",
@@ -186,7 +186,7 @@ test("move: a refused todo fails the job, stays where it is and persists; retry 
   });
   assert.equal(store.rows.size, 0);
   assert.deepEqual(j.sourcesOf(REPO, bpmn("b")), []);
-  assert.equal(j.retry(REPO, "move:nope"), undefined);
+  assert.equal(j.retry(REPO, "move:bpmn:nope"), undefined);
 });
 
 test("resume: a job a previous host left unfinished runs again (SQLite store)", async () => {

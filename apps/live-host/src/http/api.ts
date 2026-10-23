@@ -1008,13 +1008,11 @@ export function startApi(port: number, opts: ApiOptions): Server {
             return send(res, 200, { ok: true });
           }
           if (req.method === "GET") {
-            // one model's: ?notation=&model= (?process= = a process's, as
-            // before #275); a renamed model's todos still on their way in are
-            // listed too (#208)
-            const process = url.searchParams.get("process");
+            // one model's (?notation=&model=); a renamed model's todos still
+            // on their way in are listed too (#208)
             const model = await todoListModel(opts, repo, {
-              id: url.searchParams.get("model") ?? process ?? undefined,
-              notation: url.searchParams.get("notation") ?? (process ? "bpmn" : undefined),
+              id: url.searchParams.get("model") ?? undefined,
+              notation: url.searchParams.get("notation") ?? undefined,
             });
             const todos = await listOpenTodos(opts.issues, opts.todoJobs, repo, model, opts);
             return send(res, 200, todos satisfies TodoWire[]);
@@ -1022,8 +1020,6 @@ export function startApi(port: number, opts: ApiOptions): Server {
           if (req.method === "POST") {
             const body = await jsonBody<CreateTodoBody>(req, res);
             if (body === undefined) return;
-            // the anchor as REST clients sent it before #275: a process id
-            const process = typeof body?.anchor?.process === "string" ? body.anchor.process : undefined;
             // validation, server-side anchor resolution (unknown model = 404,
             // client file only kept when it names that model) and the audit
             // line live in the shared use-case
@@ -1035,9 +1031,8 @@ export function startApi(port: number, opts: ApiOptions): Server {
               {
                 title: body?.title,
                 body: body?.body,
-                model: typeof body?.anchor?.model === "string" ? body.anchor.model : process,
-                notation:
-                  typeof body?.anchor?.notation === "string" ? body.anchor.notation : process ? "bpmn" : undefined,
+                model: typeof body?.anchor?.model === "string" ? body.anchor.model : undefined,
+                notation: typeof body?.anchor?.notation === "string" ? body.anchor.notation : undefined,
                 file: typeof body?.anchor?.file === "string" ? body.anchor.file : undefined,
                 elements: Array.isArray(body?.anchor?.elements) ? body.anchor.elements : [],
                 processVersion: body?.anchor?.processVersion,

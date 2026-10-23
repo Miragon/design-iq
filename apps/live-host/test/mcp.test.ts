@@ -485,7 +485,7 @@ test("todos: create anchors to the open process, list filters by it, close compl
   assert.ok(dangling.isError);
   assert.match(dangling.text, /unknown model 'no-such-process'/);
   const noProcess = await call("create_todo", { repo: REPO.fullName, id: "strategy", notation: "bpmn", title: "x" });
-  assert.match(noProcess.text, /process 'strategy' not found/, "asked for a process: the words it always had");
+  assert.match(noProcess.text, /unknown model 'strategy' \(bpmn\)/, "asked for a process, which does not exist");
   assert.equal(issues.created.length, 2);
 });
 

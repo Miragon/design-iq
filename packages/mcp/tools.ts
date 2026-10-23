@@ -604,11 +604,10 @@ export function createMcpServer(
           "List the OPEN model-anchored todos of this content repo — work items filed from the " +
           "live model into the repo's issue tracker (label 'todo'). Each row carries the tracker " +
           "id and URL, title, assignees, createdAt and the parsed anchor (notation, model id, model " +
-          "file, anchored elements). Optional filter on one model: `process` for a process, `id` " +
-          "(and `notation` for a stem shared across notations) for a model of any notation. Use for " +
+          "file, anchored elements). Optional filter on one model: `id` (and `notation` for a stem " +
+          "shared across notations; without it a process wins). Use for " +
           "'what is open on process X' or to cross-check a model answer against known open discrepancies.",
         inputSchema: z.object({
-          process: z.string().optional().describe("Only todos anchored to this process id, e.g. order-to-cash"),
           id: z.string().optional().describe("Only todos of this model id (any notation, from list_models)"),
           notation: z
             .string()
@@ -618,14 +617,10 @@ export function createMcpServer(
         // still read-only, but the ONE tool that leaves the checkout (tracker API)
         annotations: { readOnlyHint: true, openWorldHint: true },
       },
-      safe(async ({ process: processId, id, notation }) => {
+      safe(async ({ id, notation }) => {
         // an id names the model discovery finds (bpmn-first); one it does not
         // know is still a filter — the tracker-side label decides
-        const model = processId
-          ? { notation: "bpmn", id: processId }
-          : id
-            ? { notation: notation ?? (await findModel(id))?.notation ?? "bpmn", id }
-            : undefined;
+        const model = id ? { notation: notation ?? (await findModel(id))?.notation ?? "bpmn", id } : undefined;
         const res = await fetch(
           `${api}/repos/${todosRepo}/issues?state=open&labels=${encodeURIComponent(todoLabelQuery(model))}&per_page=100`,
           {

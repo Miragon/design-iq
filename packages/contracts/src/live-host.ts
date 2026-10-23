@@ -241,7 +241,7 @@ export interface DeleteModelsResult {
  * todos where they are until POST …/todo-jobs/retry runs it again.
  */
 export interface TodoJobWire {
-  /** stable per repo: "<kind>:<from>" for a process, "<kind>:<notation>:<from>" otherwise */
+  /** stable per repo: "<kind>:<notation>:<from>" */
   id: string;
   kind: "move" | "close";
   /** the notation of the model (a rename keeps it) */
@@ -557,8 +557,7 @@ export type TodoElementWire = TodoElement;
  *  the wire shape IS the codec's TodoAnchor (./todo-anchor.ts) */
 export type TodoAnchorWire = TodoAnchor;
 
-/** GET /api/repos/:fullName/todos[?notation=<id>&model=<id>] — one row per
- *  OPEN tracker item (`?process=<id>` = a process's, as before #275) */
+/** GET /api/repos/:fullName/todos[?notation=<id>&model=<id>] — one row per OPEN tracker item */
 export interface TodoWire {
   /** tracker-native id as a string (GitHub/GitLab: issue number; Jira: "PROJ-123") */
   id: string;
@@ -591,8 +590,6 @@ export interface CreateTodoBody {
     notation?: string;
     /** model id (the file stem) — this or `file` */
     model?: string;
-    /** a process id: the anchor as it was before #275 (= `model` with notation "bpmn") */
-    process?: string;
     file?: string;
     elements?: TodoElementWire[];
     processVersion?: string;
