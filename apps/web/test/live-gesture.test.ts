@@ -10,9 +10,10 @@
  * the shared text and on both canvases, nobody told of a conflict. An armed
  * palette tool (bpmn-js's hand tool, a Miragon renderer's lasso) sets the
  * marker and draws no preview: it holds nothing back, and the binding sends
- * it no Escape (bpmn-js's hand tool stays armed through the import). A drag
- * that outlasts 10 s is cancelled the way Escape cancels it, then the import
- * runs. jsdom has no layout, so
+ * it no Escape (bpmn-js's hand tool stays armed through the import). A
+ * bpmn-js drop that touches the held move in the text gives way to it, with
+ * the conflict toast and no exception. A drag that outlasts 10 s is cancelled
+ * the way Escape cancels it, then the import runs. jsdom has no layout, so
  * the drags here run diagram-js's dragging without a pointer; pointer drags
  * in a browser: test/live-gesture-chromium.ts.
  */
@@ -606,4 +607,36 @@ test("an armed palette tool holds nothing back and is not cancelled: bpmn-js's h
     page.stop();
     for (const engine of engines) engine.destroy();
   }
+});
+
+test("bpmn-js: a drop that touches the held move in the text gives way to it, with the conflict toast and no exception", async () => {
+  const docs = room(await canonicalBpmn());
+  const [local, peer] = (await bpmnEngines(docs)) as [Engine, Engine];
+  const page = watchPage();
+  const start = { check: positionOf(local.diagram, "Task_check"), ship: positionOf(local.diagram, "Task_ship") };
+
+  local.canvasHost.querySelector("svg")!.dispatchEvent(pointer("pointerdown"));
+  // Task_ship's DI is last: the peer's move rewrites that one line
+  moveElement(peer.diagram, "Task_ship", MOVE_IN_WIDGET);
+  await wait(QUIET);
+  assert.deepEqual(positionOf(local.diagram, "Task_ship"), start.ship, "held while the pointer is down");
+  window.dispatchEvent(pointer("pointerup"));
+  // bpmn-js writes a moved shape's DI last: this drop rewrites the text down through Task_ship's line
+  moveElement(local.diagram, "Task_check", MOVE_IN_SPA);
+  await wait(SETTLED);
+
+  const text = docs[0].getText("content").toString();
+  assert.equal(docs[1].getText("content").toString(), text, "the peers converge");
+  assert.deepEqual(boundsIn(text, "Task_ship"), shifted(start.ship, MOVE_IN_WIDGET), "the peer's move stays");
+  assert.deepEqual(boundsIn(text, "Task_check"), start.check, "the drop gave way to it");
+  for (const engine of [local, peer]) {
+    assert.deepEqual(positionOf(engine.diagram, "Task_check"), start.check, "each canvas shows the shared text");
+    assert.deepEqual(positionOf(engine.diagram, "Task_ship"), shifted(start.ship, MOVE_IN_WIDGET));
+  }
+  assert.equal(local.conflicts.length, 1, "the canvas whose drop gave way is told, once");
+  assert.match(local.conflicts[0]!, /could not be merged/);
+  assert.deepEqual(peer.conflicts, []);
+  assert.deepEqual(page.seen.errors, [], "nothing thrown");
+  page.stop();
+  for (const engine of [local, peer]) engine.destroy();
 });

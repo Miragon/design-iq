@@ -14,9 +14,10 @@
  * armed palette tool (the marker with no preview) or a preview with no drag;
  * pointercancel, lostpointercapture and a lost window focus end a gesture;
  * after 10 s the import goes ahead, the gesture cancelled first the way
- * Escape cancels a diagram-js drag; and the merge safety net (#274) repairs
- * as before while a gesture runs. The real renderers in a browser:
- * apps/web/test/live-gesture-chromium.ts.
+ * Escape cancels a diagram-js drag; a drop that touches the held change in
+ * the text is a conflict, which keeps the peer's edit; and the merge safety
+ * net (#274) repairs as before while a gesture runs. The real renderers in a
+ * browser: apps/web/test/live-gesture-chromium.ts.
  */
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
@@ -28,6 +29,7 @@ import { bindMiragon } from "../src/miragon-sync.ts";
 import {
   boundsOf,
   bpmnLikeModeler,
+  bpmnPeerOn,
   hostCopy,
   joinRoom,
   LINES,
@@ -318,6 +320,48 @@ test("the 10 s are counted per wait: a change a peer took back during one gestur
   assert.deepEqual(r.events, ["import"]);
   assert.equal(xOf(r.modeler.canvas(), "Task_f"), 700);
   r.unbind();
+});
+
+test("a drop that touches the held change in the text is a conflict: the peer's edit stays, the canvas is told once and shows it", async () => {
+  const net = relay();
+  const state = roomOf(XML);
+  const shared = hostCopy(net, state);
+  const doc = joinRoom(net, state, 200);
+  const host = canvasHost();
+  const modeler = bpmnLikeModeler();
+  const conflicts: string[] = [];
+  const unbind = bindBpmn(
+    modeler as never,
+    doc.getText("content"),
+    doc,
+    (message) => conflicts.push(message),
+    undefined,
+    { canvasHost: host.element },
+  );
+  const peer = bpmnPeerOn(joinRoom(net, state, 100));
+  await wait(50);
+  const start = boundsOf(XML, "Task_f")!;
+
+  host.press();
+  peer.modeler.move("Task_f", 40, 0);
+  await wait(QUIET);
+  assert.deepEqual(boundsOf(modeler.canvas(), "Task_f"), start, "held while the pointer is down");
+  host.release();
+  // the BPMN-like export writes a moved task's DI last: the drop rewrites the text down to the peer's line
+  modeler.move("Task_a", 30, 0);
+  await wait(SETTLED);
+
+  const text = shared.ytext.toString();
+  assert.deepEqual(boundsOf(text, "Task_f"), { x: start.x + 40, y: start.y }, "the peer's edit stays");
+  assert.deepEqual(boundsOf(text, "Task_a"), boundsOf(XML, "Task_a"), "the drop gave way to it");
+  assert.equal(modeler.canvas(), text, "the canvas shows the shared text");
+  assert.equal(peer.modeler.canvas(), text, "and so does the peer's");
+  assert.equal(conflicts.length, 1, "the canvas whose drop gave way is told, once");
+  assert.match(conflicts[0]!, /crossed a colleague's change and could not be merged/);
+  assert.deepEqual(peer.conflicts, []);
+  assert.deepEqual(shared.log.repairs, [], "the text never broke: nothing to repair");
+  unbind();
+  peer.unbind();
 });
 
 test("the merge safety net (#274) repairs as before while a gesture runs, on the repairing canvas and on the one it overwrites", async () => {

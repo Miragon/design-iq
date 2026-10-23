@@ -43,6 +43,12 @@
  *     session edits the title back. A's canvas must wait all the same; then
  *     A places the element. Both must end up in the shared text, with no
  *     error and no toast.
+ *  6. Edits that touch in the text: A creates from the palette while B moves
+ *     the element listed last (a new element goes after it), and in bpmn-js
+ *     A drags the task whose DI is not last while B moves the other (bpmn-js
+ *     writes a moved shape's DI last). B's edit must stay, nothing may throw,
+ *     and A's edit must either end up in the shared text with no toast, or
+ *     give way with exactly one toast on A. The run reports which.
  *
  * Exits 1 on any failure.
  */
@@ -122,6 +128,8 @@ interface Model {
   retitle: [from: string, to: string];
   /** a palette tool that waits for the next press (its data-action) */
   tool: string;
+  /** of a and b, the one the text lists last (a new element goes after it); bpmn reads it from the DI order */
+  listedLast?: string;
 }
 
 const BPMN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -161,6 +169,7 @@ const MODELS: Model[] = [
     create: "create.component",
     retitle: ["Tea Shop", "Tea House"],
     tool: "lasso-tool",
+    listedLast: "cmp_kettle",
   },
   {
     notation: "event-storming",
@@ -171,6 +180,7 @@ const MODELS: Model[] = [
     create: "create.event",
     retitle: ["Checkout", "Checkout Flow"],
     tool: "lasso-tool",
+    listedLast: "event_order_shipped",
   },
   {
     notation: "context-map",
@@ -193,6 +203,7 @@ const MODELS: Model[] = [
     create: "context.core",
     retitle: ["Conference", "Conference Days"],
     tool: "lasso-tool",
+    listedLast: "ctx_agenda",
   },
   {
     notation: "team-topology",
@@ -228,6 +239,7 @@ const MODELS: Model[] = [
     create: "team.stream-aligned",
     retitle: ["Online Shop", "Online Store"],
     tool: "lasso-tool",
+    listedLast: "team_payments",
   },
 ];
 
@@ -269,6 +281,9 @@ interface Peer {
   page: Page;
   errors: string[];
 }
+
+/** the copy of a model scenario 6 runs on: a text no create has touched, so the element listed last is known */
+const touchFile = (model: Model): string => `touch-${model.fileName}`;
 
 async function openPeer(context: BrowserContext, model: Model, fileName = model.fileName): Promise<Peer> {
   const page = await context.newPage();
@@ -430,10 +445,14 @@ for (const file of ["index.html", "assets"]) {
 const work = mkdtempSync(join(tmpdir(), "designiq-live-gesture-"));
 mkdirSync(join(work, "content", "models"), { recursive: true });
 writeFileSync(join(work, "content", "designiq.yml"), "models: models\n");
-for (const model of MODELS) writeFileSync(join(work, "content", "models", model.fileName), model.text);
+for (const model of MODELS) {
+  writeFileSync(join(work, "content", "models", model.fileName), model.text);
+  writeFileSync(join(work, "content", "models", touchFile(model)), model.text);
+}
 const host = await startLiveHost(join(work, "content"), join(work, "data"));
 const browser = await playwright.chromium.launch({ headless: true });
 const summary: Array<Record<string, string | number>> = [];
+const touching: Array<Record<string, string>> = [];
 
 const picked = process.env.NOTATIONS?.split(",");
 try {
@@ -674,6 +693,112 @@ try {
       await a2.page.close();
       await b2.page.close();
 
+      // 6. edits that touch in the text, on a copy no create has touched
+      const touchSession = openLiveSession({
+        url: `ws://localhost:${PORT}`,
+        room: roomName(REPO, `models/${touchFile(model)}`),
+        token: "local",
+      });
+      try {
+        await touchSession.whenSynced(15_000);
+        const touchText = (): string => touchSession.content.toString();
+        const a6 = await openPeer(contexts[0]!, model, touchFile(model));
+        await drag(a6, model.a, { x: 20, y: 20 });
+        check(
+          await waitFor(() => touchText() !== model.text),
+          `${model.notation}: A's first drop on the copy is written`,
+        );
+        await a6.page.waitForTimeout(SETTLE);
+        const b6 = await openPeer(contexts[1]!, model, touchFile(model));
+        /** bpmn-js writes a moved shape's DI last; the other notations keep their order */
+        const diLast = (): string =>
+          touchText().lastIndexOf(`bpmnElement="${model.a}"`) > touchText().lastIndexOf(`bpmnElement="${model.b}"`)
+            ? model.a
+            : model.b;
+
+        const touches = async (
+          what: string,
+          bMoves: string,
+          begin: () => Promise<void>,
+          drop: () => Promise<void>,
+          aEditKept: (fresh: Peer) => Promise<boolean>,
+        ): Promise<void> => {
+          await begin();
+          const bStart = await positionIn(b6, bMoves);
+          const beforeB6 = touchText();
+          await drag(b6, bMoves, { x: 40, y: 50 });
+          check(await waitFor(() => touchText() !== beforeB6), `${model.notation} ${what}: B's drop is written`);
+          await a6.page.waitForTimeout(HOLD_PAST_DEBOUNCE);
+          await drop();
+          await a6.page.waitForTimeout(SETTLE);
+          await a6.page.keyboard.press("Escape");
+          const fresh6 = await openPeer(contexts[1]!, model, touchFile(model));
+          const bOnFresh = await positionIn(fresh6, bMoves);
+          check(moved(bStart, bOnFresh), `${model.notation} ${what}: B's move stays in the shared text`);
+          const kept = await aEditKept(fresh6);
+          const shownA = await toasts(a6);
+          const gaveWay = shownA.length === 1 && shownA[0]!.includes("could not be merged");
+          check(
+            kept ? shownA.length === 0 : gaveWay,
+            `${model.notation} ${what}: ${kept ? "both edits kept, no toast" : "A's edit gave way, with one toast"} ${shownA.join(" | ")}`,
+          );
+          const shownB = await toasts(b6);
+          check(shownB.length === 0, `${model.notation} ${what}: no toast on B ${shownB.join(" | ")}`);
+          const shapes = await shapeCount(fresh6);
+          for (const [name, peer] of [
+            ["A", a6],
+            ["B", b6],
+          ] as const) {
+            check(
+              (await shapeCount(peer)) === shapes && same(await positionIn(peer, bMoves), bOnFresh),
+              `${model.notation} ${what}: ${name}'s canvas shows the shared text`,
+            );
+          }
+          check(a6.errors.length + b6.errors.length === 0, `${model.notation} ${what}: no error on A or B`);
+          for (const error of [...a6.errors, ...b6.errors]) console.log(`     ${error}`);
+          a6.errors.length = 0;
+          b6.errors.length = 0;
+          touching.push({
+            notation: model.notation,
+            case: what,
+            outcome: kept ? "both kept" : "A's edit gave way (toast)",
+          });
+          await fresh6.page.close();
+        };
+
+        if (model.notation === "bpmn") {
+          const first = diLast() === model.a ? model.b : model.a;
+          const firstStart = await positionIn(a6, first);
+          await touches(
+            "move (DI not last) / move",
+            diLast(),
+            () => startDrag(a6, first, { x: 40, y: 60 }),
+            () => a6.page.mouse.up(),
+            async (fresh) => moved(firstStart, await positionIn(fresh, first)),
+          );
+        }
+        const listedLast = model.listedLast ?? diLast();
+        const shapesBefore6 = await shapeCount(a6);
+        const createAt6 = await emptySpot(a6);
+        await touches(
+          "create / move of the element listed last",
+          listedLast,
+          async () => {
+            await a6.page.click(`.djs-palette .entry[data-action="${model.create}"]`);
+            await a6.page.mouse.move(createAt6.x - 40, createAt6.y - 40, { steps: 5 });
+            await a6.page.mouse.move(createAt6.x, createAt6.y, { steps: 5 });
+            check(await previewDrawn(a6), `${model.notation}: A's new element follows the pointer on the copy`);
+          },
+          async () => {
+            await a6.page.mouse.down();
+            await a6.page.mouse.up();
+          },
+          async (fresh) => (await shapeCount(fresh)) > shapesBefore6,
+        );
+      } finally {
+        touchSession.destroy();
+      }
+
       summary.push({
         notation: model.notation,
         "A moved (shared)": `${show(start.a)} → ${show(onC.a)}`,
@@ -692,6 +817,7 @@ try {
   }
   console.log("");
   console.table(summary);
+  console.table(touching);
 } finally {
   await browser.close();
   host.kill();
@@ -702,4 +828,6 @@ if (failures.length > 0) {
   console.error(`\n${failures.length} failed:\n${failures.map((f) => `- ${f}`).join("\n")}`);
   process.exit(1);
 }
-console.log("\nEvery drag that spanned a peer's change kept both edits and threw nothing.");
+console.log(
+  "\nEvery gesture that spanned a peer's change threw nothing and kept the peer's edit; its own edit stayed, or gave way with the toast where the two touch in the text.",
+);

@@ -212,9 +212,14 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
    button held, its preview gone while the pointer is off the canvas). The marker alone is
    no gesture: a palette tool that waits for its next press (hand, space, lasso, global
    connect) keeps it set, and is neither waited for nor cancelled. The import runs once the
-   gesture ends, after the drop's own edit, so the canvas takes in both edits. A gesture
-   that outlasts 10 s gives way: it is cancelled the way Escape cancels it, then the import
-   runs. Gates and repairs (rule 4) do not wait for a gesture.
+   gesture ends, after the drop's own edit, which merges like any local edit (rule 2):
+   where the drop and the held change are apart in the text, the canvas takes in both;
+   where they touch, the drop gives way to the peer's change, with the conflict toast.
+   Edits of different elements touch where bpmn-js writes a moved or new shape's DI last,
+   and where a new element goes right after the one a peer moved (Wardley and Event
+   Storming list it last). A gesture that outlasts 10 s gives way: it is cancelled the way
+   Escape cancels it, then the import runs. Gates and repairs (rule 4) do not wait for a
+   gesture.
 4. **Validate merged XML before import** (cheap parse); on the rare interleaved-merge
    corruption, fall back to the last-good snapshot the Live Host keeps anyway.
    **Repair a merge that canvas writes alone broke** (#274). Two canvas exports that cross

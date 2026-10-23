@@ -32,8 +32,9 @@ import { applyHunks, closingBreaksAt, diffHunks, diffRegion, type Hunk } from ".
 /** Shared origin marker: transactions tagged with it are our own canvas edits. */
 export const CANVAS_ORIGIN = "bpm-canvas";
 
+/** the edits need not share an element: a held gesture's drop, or a create, that lands next to a peer's change in the text conflicts too */
 const CONFLICT_MESSAGE =
-  "A colleague changed the same element at the same moment. Your last action was replaced by their change.";
+  "Your last action crossed a colleague's change and could not be merged with it. The model now shows their change.";
 /** a repair can undo more than the last action: every canvas edit the repairer's canvas had not taken in */
 const REPAIRED_MESSAGE =
   "Your recent canvas edits crossed a colleague's at the same moment and could not be merged. The model now shows their version.";
@@ -385,7 +386,9 @@ export function bindModelSync(
     }
     if (gesture?.active()) {
       // a gesture has committed nothing yet, so no quiet period covers it; its
-      // drop exports into ytext, and the import after it takes in both edits
+      // drop merges into ytext like any local edit, and the import after it
+      // takes in both edits. A drop that touches the held change in the text
+      // is a conflict there (applyLocalEdit): the peer's edit stays
       const since = waitingSince ?? Date.now();
       if (Date.now() - since < GESTURE_HOLD_MS) {
         heldForGestureSince = since;
