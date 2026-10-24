@@ -271,8 +271,11 @@ pans; a display-mode change always re-fits. The view math and the readout are
 `interpolateViewbox`, `zoomReadout`), and so are the Miragon widgets' zoom keys
 and ⇧1 (`decideKey`, `chrome/keys.ts` through `src/lib/chrome-keys.ts`, which
 the SPA's Miragon editors bind too): the renderers bind no zoom keys, bpmn-js
-and dmn-js keep their own. Zoom out stops at a fit below 20 % instead of
-zooming in to 20 %. The widget's geometry (the 36px corners, the
+and dmn-js keep their own. The −/+ buttons and the zoom keys step on the
+design guide's fixed zoom steps (22, 30, 41, 55, 74, 100, 135, 182, 246 and
+331 %, `zoomStepLevel` in `engines/fit.ts`), the raster of diagram-js's
+`zoomScroll.stepZoom` that bpmn-js's and dmn-js's own keys take. Zoom out
+stops at a fit below 20 % instead of zooming in to 20 %. The widget's geometry (the 36px corners, the
 12/16px insets) stays designIQ's; the full shell is not mounted.
 In the SPA a Miragon editor's ⇧1 fits 24px clear of the renderer's palette as
 measured, of the canvas's sides and bottom, and of an open side panel (the

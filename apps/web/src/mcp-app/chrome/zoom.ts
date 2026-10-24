@@ -21,7 +21,6 @@ import {
   zoomReadout,
 } from "@miragon/modeler-shell/core";
 
-import { ZOOM_STEP } from "../engines/fit.ts";
 import type { MountZoom } from "./contracts.ts";
 
 /** the widget's one UI language (spec: UI copy is English), also for numbers */
@@ -45,7 +44,8 @@ export const mountZoom: MountZoom = ({ els, fit, keys }) => {
       els.zoomPct.setAttribute("aria-label", r.ariaLabel);
     }
     // aria-disabled, not disabled: a button pressed up to the limit keeps the
-    // keyboard focus (a disabled one drops it on <body>); zoomBy clamps anyway
+    // keyboard focus (a disabled one drops it on <body>); stepZoom stops at
+    // the limits anyway
     els.zoomOut.setAttribute("aria-disabled", String(!r.canZoomOut));
     els.zoomIn.setAttribute("aria-disabled", String(!r.canZoomIn));
   };
@@ -79,8 +79,8 @@ export const mountZoom: MountZoom = ({ els, fit, keys }) => {
       if (button !== els.zoomPct) button.setAttribute("aria-label", name);
     }
   }
-  els.zoomOut.onclick = thenCanvas(() => view?.zoomBy(-ZOOM_STEP));
-  els.zoomIn.onclick = thenCanvas(() => view?.zoomBy(ZOOM_STEP));
+  els.zoomOut.onclick = thenCanvas(() => view?.stepZoom(-1));
+  els.zoomIn.onclick = thenCanvas(() => view?.stepZoom(1));
   els.zoomPct.onclick = thenCanvas(() => view?.zoomTo(1));
   els.zoomFit.onclick = thenCanvas(fit);
 

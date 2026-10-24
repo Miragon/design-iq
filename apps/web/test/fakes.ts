@@ -37,8 +37,8 @@ function fakeView(): ViewControls {
   return {
     hasViewport: () => true,
     fit: () => {},
-    zoomBy(step) {
-      level *= 1 + step;
+    stepZoom(direction) {
+      level *= direction > 0 ? 1.35 : 1 / 1.35;
     },
     zoomTo(next) {
       level = next;

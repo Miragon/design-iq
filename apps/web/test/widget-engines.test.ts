@@ -5,7 +5,7 @@
  * change event as the widget's dirty signal, the selection from the element
  * surface, and the live binding through the real live-client adapter. Plus
  * the fit and zoom math every diagram engine shares (the modeler shell's
- * view math, designIQ's zoom step in src/mcp-app/engines/fit.ts) and the
+ * view math, the guide's zoom steps in src/mcp-app/engines/fit.ts) and the
  * import fit with the chrome's insets (engines/diagram-js.ts diagramView).
  */
 import assert from "node:assert/strict";
@@ -29,7 +29,7 @@ import * as Y from "yjs";
 
 import type { Insets } from "../src/mcp-app/core/engine.ts";
 import { diagramView } from "../src/mcp-app/engines/diagram-js.ts";
-import { type Box, scaleOf, steppedLevel, zoomAround } from "../src/mcp-app/engines/fit.ts";
+import { type Box, scaleOf, zoomAround, zoomStepLevel } from "../src/mcp-app/engines/fit.ts";
 import { miragonView, mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import type {
   LoadedMiragonRenderer,
@@ -267,9 +267,9 @@ test("bindLive hands the modeler to live-client's miragon-sync: the Y.Text impor
 });
 
 // ── fit and zoom: the shell's view math (@miragon/modeler-shell/core) and
-// designIQ's own step (engines/fit.ts). The cases are the ones engines/fit.ts
-// held its own fitViewbox, isUntouched, easing and readout to; each now holds
-// the shell's function to the same numbers ───────────────────────────────────
+// the guide's zoom steps (engines/fit.ts). The cases are the ones
+// engines/fit.ts held its own fitViewbox, isUntouched, easing and readout to;
+// each now holds the shell's function to the same numbers ────────────────────
 
 /** where a diagram box lands on screen under a viewbox (px, frame-relative) */
 function onScreen(box: Box, viewbox: Box, outer: { width: number; height: number }) {
@@ -402,12 +402,27 @@ test("zoomAround: the diagram point under the screen point stays put, the level 
   close(next.y + centre.y / 1, before.y);
 });
 
-test("steppedLevel: in and out are symmetric and clamped to the shell's 20 … 400 %", () => {
-  close(steppedLevel(steppedLevel(0.56, 0.2, ZOOM_MIN, ZOOM_MAX), -0.2, ZOOM_MIN, ZOOM_MAX), 0.56);
-  assert.ok(steppedLevel(0.56, 0.2, ZOOM_MIN, ZOOM_MAX) > 0.56);
-  assert.equal(steppedLevel(0.21, -1, ZOOM_MIN, ZOOM_MAX), 0.2, "clamped at the minimum");
-  assert.equal(steppedLevel(3.9, 1, ZOOM_MIN, ZOOM_MAX), 4, "clamped at the maximum");
-  assert.deepEqual([ZOOM_MIN, ZOOM_MAX, FIT_ANIMATION_MS], [0.2, 4, 250], "designIQ's own limits and re-fit time");
+test("zoomStepLevel: − and + walk the guide's fixed steps (§5.8) from the nearest one, within 20 … 400 %", () => {
+  // diagram-js reads a scale back to three decimals, and the next step starts there
+  const readBack = (level: number): number => Math.round(level * 1000) / 1000;
+  const walk = (level: number, direction: 1 | -1): number[] => {
+    const percents: number[] = [];
+    while (direction > 0 ? level < ZOOM_MAX : level > ZOOM_MIN) {
+      level = readBack(zoomStepLevel(level, direction));
+      percents.push(Math.round(level * 100));
+    }
+    return percents;
+  };
+  // the limits are no steps: from 20 % + goes to 30 %, from 400 % − to 331 %
+  assert.deepEqual(walk(ZOOM_MIN, 1), [30, 41, 55, 74, 100, 135, 182, 246, 331, 400]);
+  assert.deepEqual(walk(ZOOM_MAX, -1), [331, 246, 182, 135, 100, 74, 55, 41, 30, 22, 20]);
+  assert.equal(readBack(zoomStepLevel(0.95, 1)), 1.349, "95 % after a fit: + to 135 %");
+  assert.equal(readBack(zoomStepLevel(0.95, -1)), 0.741, "95 % after a fit: − to 74 %");
+  assert.equal(readBack(zoomStepLevel(0.861, 1)), 1.349, "the wheel's 86 %: + to 135 %");
+  assert.equal(readBack(zoomStepLevel(0.638, 1)), 0.741, "the wheel's 64 %: + to 74 %");
+  assert.equal(zoomStepLevel(0.08, 1), ZOOM_MIN, "a fit at 8 %: + to 20 %");
+  assert.equal(readBack(zoomStepLevel(0.18, 1)), 0.224, "a fit at 18 %: + to 22 %");
+  assert.deepEqual([ZOOM_MIN, ZOOM_MAX, FIT_ANIMATION_MS], [0.2, 4, 250], "the shell's limits and re-fit time");
 });
 
 test("the re-fit easing: --cd-ease, cubic-bezier(0.4, 0, 0.2, 1), endpoints exact, as designIQ's own curve gave it", () => {
@@ -643,7 +658,7 @@ test("fit and zoom read the viewbox FRESH: a frame resize leaves diagram-js' cac
   view.destroy();
 });
 
-test("zoomBy never turns a step around: a fit below 20 % keeps its level on a step out, a step in goes to 20 %; 400 % keeps it on a step in", () => {
+test("stepZoom never turns a step around: a fit below 20 % keeps its level on a step out, a step in from 8 % goes to 20 %; 400 % keeps it on a step in", () => {
   // a board of two events 12000 units apart fits at about 8 % into the 1000x640 frame
   const inner = { x: 0, y: 0, width: 12_000, height: 400 };
   const outer = { width: 1000, height: 640 };
@@ -670,16 +685,16 @@ test("zoomBy never turns a step around: a fit below 20 % keeps its level on a st
   const fittedLevel = view.level();
   assert.ok(fittedLevel < ZOOM_MIN, `the fit sits below 20 % (${fittedLevel})`);
   const fittedView = { ...current };
-  view.zoomBy(-0.2);
+  view.stepZoom(-1);
   assert.deepEqual(current, fittedView, "a step out below 20 % leaves the view");
   assert.equal(view.isTouched(), false);
-  view.zoomBy(0.2);
+  view.stepZoom(1);
   close(view.level(), ZOOM_MIN, 1e-9);
   view.zoomTo(ZOOM_MAX);
   const atMax = { ...current };
-  view.zoomBy(0.2);
+  view.stepZoom(1);
   assert.deepEqual(current, atMax, "a step in at 400 % leaves the view");
-  view.zoomBy(-0.2);
-  assert.ok(view.level() < ZOOM_MAX);
+  view.stepZoom(-1);
+  close(view.level(), 3.314, 1e-3);
   view.destroy();
 });

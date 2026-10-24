@@ -79,8 +79,9 @@ export interface ViewControls {
   /** fit the content into the frame minus `insets`, ≤ 100 %; `animate` = the
    *  250 ms --cd-ease re-fit (the caller passes false under reduced motion) */
   fit(insets: Insets, animate: boolean): void;
-  /** multiplicative step around the viewport centre (−0.2 / +0.2) */
-  zoomBy(step: number): void;
+  /** one of the guide's fixed zoom steps (§5.8) around the viewport centre,
+   *  in (1) or out (−1) */
+  stepZoom(direction: 1 | -1): void;
   /** 1 = 100 %, around the viewport centre */
   zoomTo(level: number): void;
   /** the current zoom level (1 = 100 %) */
