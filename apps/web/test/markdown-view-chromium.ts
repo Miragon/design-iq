@@ -18,6 +18,9 @@
  *    a link and the drawn diagram, each the very node it was.
  *  - focus: an edit of the link's block moves the focus to the view; the
  *    selection elsewhere stays.
+ *  - anchor: a click on a link to a section scrolls to it and puts it in the
+ *    address; the view the router renders anew is the same one, and the
+ *    section stays on screen when an edit above it lands.
  *  - scroll: blocks inserted above the reader, a block above growing, a
  *    heading with the text every section has inserted above (their ids
  *    renumber; the reader's paragraph and the selection in it stay), a
@@ -25,10 +28,15 @@
  *    diagram never drawn (it lands asynchronously, at another height) leave
  *    the block the reader looks at where it was on screen. So does that
  *    diagram changed again while the top of the view cuts it: the block
- *    below it stays when the new drawing lands. Once with the browser's
- *    scroll anchoring, once without it (overflow-anchor: none), as in Safari
- *    before 27. A control shows that each edit moved that block down the
- *    document.
+ *    below it stays when the new drawing lands. A collapsible section
+ *    (<details>) with another in it: the reader opens both, the top of the
+ *    view through the outer one, and the inner summary stays on screen as
+ *    the section grows and, later, shrinks; an edit above keeps both open
+ *    (the same node) and the summary in place, an edit in the outer one
+ *    replaces its block and both stay open. Once with the browser's scroll
+ *    anchoring, once without it (overflow-anchor: none), as in Safari before
+ *    27. A control shows that each edit moved that block down the document,
+ *    or that the section the reader opened or closed changed its height.
  *
  * Exits 1 on any failed check.
  */
@@ -77,16 +85,30 @@ const fresh = (label: string): string =>
 /** another one, taller than that */
 const longer = (label: string): string =>
   `flowchart TD\n  A[Draft] --> B[Review]\n  B --> C[Tested ${label}]\n  C --> D[Merged]\n  D --> E[Shipped]\n  E --> F[Done]\n`;
+const section = (number: number): string =>
+  `## Section ${number}\n\n### Example\n\nParagraph ${number}. ${SENTENCE} ${SENTENCE}\n`;
+const NOTES = "Release notes";
+const OLDER = "Older notes";
+const OPEN_TEXTS = { notes: NOTES, older: OLDER };
+/** a collapsible section with another one in it, below the paragraph the scroll steps read */
+const COLLAPSIBLE = [
+  `<details>\n<summary>${NOTES}</summary>\n`,
+  ...Array.from({ length: 4 }, (_, i) => `Note ${i + 1}. ${SENTENCE}\n`),
+  `<details>\n<summary>${OLDER}</summary>\n`,
+  ...Array.from({ length: 6 }, (_, i) => `Older note ${i + 1}. ${SENTENCE} ${SENTENCE}\n`),
+  "</details>\n",
+  `Notes end. ${SENTENCE}\n`,
+  "</details>\n",
+].join("\n");
 const DOCUMENT = [
   "# Reading while others write\n",
   `${COPY}\n`,
   `${LINKED}\n`,
   "## The diagram\n",
   "```mermaid\n" + WIDE + "```\n",
-  ...Array.from(
-    { length: 30 },
-    (_, i) => `## Section ${i + 1}\n\n### Example\n\nParagraph ${i + 1}. ${SENTENCE} ${SENTENCE}\n`,
-  ),
+  ...Array.from({ length: 25 }, (_, i) => section(i + 1)),
+  COLLAPSIBLE,
+  ...Array.from({ length: 5 }, (_, i) => section(i + 26)),
 ].join("\n");
 
 /** the one npx puts on PATH */
@@ -133,6 +155,8 @@ interface Marked {
   __svg?: Element;
   __reading?: Element;
   __below?: Element;
+  __article?: Element;
+  __notes?: HTMLDetailsElement;
 }
 
 const failures: string[] = [];
@@ -221,6 +245,50 @@ const belowCutDiagram: Reader = {
       return { onScreen: box.top, inDocument: box.top - article.top };
     }, 0),
 };
+/** the summary of the inner collapsible section, with the top of the view
+ *  just below the summary of the open outer one */
+const olderSummary: Reader = {
+  readOn: (page) =>
+    page.evaluate((texts) => {
+      const summaries = [...document.querySelectorAll("article.markdown-body summary")];
+      const outer = summaries.find((s) => s.textContent === texts.notes)!.parentElement as HTMLDetailsElement;
+      const inner = summaries.find((s) => s.textContent === texts.older)!;
+      const scroller = document.querySelector(".markdown-view")!;
+      const outerSummary = outer.querySelector(":scope > summary")!;
+      scroller.scrollTop += outerSummary.getBoundingClientRect().bottom - scroller.getBoundingClientRect().top + 20;
+      const view = scroller.getBoundingClientRect();
+      const summary = inner.getBoundingClientRect();
+      return outer.open && outer.getBoundingClientRect().top < view.top && summary.top >= view.top;
+    }, OPEN_TEXTS),
+  place: (page) =>
+    page.evaluate((older) => {
+      const summaries = [...document.querySelectorAll("article.markdown-body summary")];
+      const box = summaries.find((s) => s.textContent === older)!.getBoundingClientRect();
+      const article = document.querySelector("article.markdown-body")!.getBoundingClientRect();
+      return { onScreen: box.top, inDocument: box.top - article.top };
+    }, OLDER),
+};
+/** the end of the outer collapsible section: on screen, and down the document */
+const notesEnd = (page: Page): Promise<{ onScreen: boolean; inDocument: number }> =>
+  page.evaluate((notes) => {
+    const summaries = [...document.querySelectorAll("article.markdown-body summary")];
+    const box = summaries.find((s) => s.textContent === notes)!.parentElement!.getBoundingClientRect();
+    const view = document.querySelector(".markdown-view")!.getBoundingClientRect();
+    const article = document.querySelector("article.markdown-body")!.getBoundingClientRect();
+    return { onScreen: box.bottom <= view.bottom, inDocument: box.bottom - article.top };
+  }, NOTES);
+/** which of the two collapsible sections are open, and whether the outer one is still the node the reader opened */
+const sections = (page: Page): Promise<{ notes: boolean; older: boolean; same: boolean }> =>
+  page.evaluate((texts) => {
+    const summaries = [...document.querySelectorAll("article.markdown-body summary")];
+    const outer = summaries.find((s) => s.textContent === texts.notes)?.parentElement as HTMLDetailsElement | undefined;
+    const inner = summaries.find((s) => s.textContent === texts.older)?.parentElement as HTMLDetailsElement | undefined;
+    return {
+      notes: !!outer?.open,
+      older: !!inner?.open,
+      same: !!outer && outer === (window as unknown as Marked).__notes,
+    };
+  }, OPEN_TEXTS);
 const diagramDrawn = (page: Page, text: string): Promise<boolean> =>
   page
     .waitForFunction(
@@ -312,6 +380,42 @@ try {
   );
   check("focus", "the focus moves to the view", focus.inView);
   check("focus", "the selection elsewhere stays", focus.selection === COPY, focus.selection);
+
+  // anchor: a link to a section scrolls there and puts it in the address,
+  // and the view the router renders anew is the same one
+  await page.evaluate(() => {
+    (window as unknown as Marked).__article = document.querySelector("article.markdown-body") ?? undefined;
+    document.querySelector<HTMLElement>('article.markdown-body a[href="#the-diagram"]')!.click();
+  }, 0);
+  await page.waitForTimeout(300);
+  const landing = (): Promise<{ hash: string; offset: number; same: boolean; selection: string }> =>
+    page.evaluate(() => {
+      const heading = document.getElementById("md-the-diagram")!;
+      const scroller = document.querySelector(".markdown-view")!;
+      return {
+        hash: location.hash,
+        offset: Math.round(heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top),
+        same: document.querySelector("article.markdown-body") === (window as unknown as Marked).__article,
+        selection: getSelection()!.toString(),
+      };
+    }, 0);
+  const landed = await landing();
+  check("anchor", "the link puts its section in the address", landed.hash === "#the-diagram", landed.hash);
+  check("anchor", "the view scrolls to the section", landed.offset >= 0 && landed.offset <= 40, `${landed.offset} px`);
+  check("anchor", "the view stays mounted, the selection in it", landed.same && landed.selection === COPY);
+  const above = "Written above the diagram.";
+  check(
+    "anchor",
+    "an edit above the section shows",
+    await edit(page, session, insertAfter(session, COPY, `\n\n${above} ${SENTENCE}`), above),
+  );
+  const stayed = await landing();
+  check(
+    "anchor",
+    "an edit above: the section stays on screen, in the address",
+    stayed.offset === landed.offset && stayed.hash === "#the-diagram",
+    `${stayed.offset - landed.offset} px, ${stayed.hash}`,
+  );
 
   // scroll: edits above the reader, with the browser's scroll anchoring and without it
   let diagram = WIDE;
@@ -415,6 +519,64 @@ try {
       },
       belowCutDiagram,
     );
+
+    // collapsible sections: the reader opens them; what the reader opened
+    // stays open through the co-editor's edits, and a summary the reader
+    // clicks stays put while the section around it grows or shrinks
+    await page.evaluate((notes) => {
+      for (const details of document.querySelectorAll("article.markdown-body details")) details.removeAttribute("open");
+      const summaries = [...document.querySelectorAll<HTMLElement>("article.markdown-body summary")];
+      const summary = summaries.find((s) => s.textContent === notes)!;
+      const scroller = document.querySelector(".markdown-view")!;
+      scroller.scrollTop += summary.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 100;
+      summary.click();
+      (window as unknown as Marked).__notes = summary.parentElement as HTMLDetailsElement;
+    }, NOTES);
+    await page.waitForTimeout(200);
+    check(scenario, "precondition: the reader opened the collapsible section", (await sections(page)).notes);
+    /** the reader clicks the inner section's summary, the top of the view through the outer one */
+    const toggle = async (what: string, endsOnScreen: boolean): Promise<void> => {
+      check(scenario, `precondition: ${what}: the reader is in place`, await olderSummary.readOn(page));
+      // the reader scrolled there a moment before the click
+      await page.waitForTimeout(200);
+      const endWas = await notesEnd(page);
+      if (endsOnScreen) check(scenario, `precondition: ${what}: the outer section ends on screen`, endWas.onScreen);
+      const was = await olderSummary.place(page);
+      await page.evaluate((older) => {
+        [...document.querySelectorAll<HTMLElement>("article.markdown-body summary")]
+          .find((s) => s.textContent === older)!
+          .click();
+      }, OLDER);
+      await page.waitForTimeout(200);
+      const is = await olderSummary.place(page);
+      const grown = Math.round((await notesEnd(page)).inDocument - endWas.inDocument);
+      check(scenario, `control: ${what} changed the outer section's height`, Math.abs(grown) > 20, `${grown} px`);
+      const shift = Math.round((is.onScreen - was.onScreen) * 10) / 10;
+      check(scenario, `${what}: its summary stays on screen`, Math.abs(shift) <= 1, `${shift} px`);
+    };
+    await toggle("the reader opens the inner section", true);
+    const aboveNotes = `Above the notes (${anchoring}).`;
+    await measure(
+      "an edit above the open sections",
+      () => edit(page, session, insertAfter(session, "## Section 25\n", `\n${aboveNotes} ${SENTENCE}\n`), aboveNotes),
+      olderSummary,
+    );
+    const kept = await sections(page);
+    check(
+      scenario,
+      "an edit above: both sections stay open, the outer one the same node",
+      kept.notes && kept.older && kept.same,
+    );
+    const inNotes = `Note 1b (${anchoring}).`;
+    check(
+      scenario,
+      "an edit in the outer section shows",
+      await edit(page, session, insertAfter(session, "Note 1.", `\n\n${inNotes} ${SENTENCE}`), inNotes),
+    );
+    const replaced = await sections(page);
+    check(scenario, "an edit in the outer section: its block is new", !replaced.same);
+    check(scenario, "an edit in the outer section: both sections stay open", replaced.notes && replaced.older);
+    await toggle("the reader closes the inner section", false);
   }
 
   const toasts = await page.evaluate(

@@ -589,6 +589,82 @@ test("a footnote reference scrolls to its note, and the note's Lucide arrow back
   linked.view.destroy();
 });
 
+test("a <details> the reader opened stays open, the same node, through a co-editor's edit elsewhere (#289)", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const v = mount(
+    "# Notes\n\n<details>\n<summary>More</summary>\n\nHidden text.\n\n</details>\n\nSee [the notes](#notes).\n\nLast block.",
+  );
+  const details = v.article.querySelector("details")!;
+  const link = v.article.querySelector('a[href="#notes"]')!;
+  v.click(details.querySelector("summary"));
+  assert.equal(details.open, true, "precondition: the reader opened it");
+
+  v.append(" More."); // the last block
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  assert.equal(v.article.lastElementChild?.textContent, "Last block. More.");
+  assert.equal(v.article.querySelector("details"), details, "the section stays on the page");
+  assert.equal(details.open, true, "and open");
+  assert.equal(v.article.querySelector('a[href="#notes"]'), link);
+  // a link in a block the render kept still puts its section in the address
+  assert.equal(v.click(link), false);
+  assert.equal(v.win.location.hash, "#notes");
+  assert.deepEqual(v.scrolled, ["md-notes"]);
+  assert.deepEqual(v.errors, []);
+  v.view.destroy();
+});
+
+test("an edit in a <details> keeps the reader's open or closed in its new block; one the reader left shows the author's (#289)", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const v = mount(
+    [
+      "<details>\n<summary>Opened</summary>\n\nOne.\n\n<details>\n<summary>Inner</summary>\n\nTwo.\n\n</details>\n\n</details>",
+      "<details open>\n<summary>Closed</summary>\n\nThree.\n\n</details>",
+      "<details>\n<summary>Left</summary>\n\nFour.\n\n</details>",
+    ].join("\n\n"),
+  );
+  const section = (summary: string): HTMLDetailsElement =>
+    [...v.article.querySelectorAll("summary")].find((s) => s.textContent === summary)!
+      .parentElement as HTMLDetailsElement;
+  const before = [section("Opened"), section("Inner"), section("Closed"), section("Left")];
+  v.click(section("Opened").querySelector("summary"));
+  v.click(section("Inner").querySelector("summary"));
+  v.click(section("Closed").querySelector("summary"));
+  assert.deepEqual(
+    before.map((details) => details.open),
+    [true, true, false, false],
+    "precondition: the reader opened two, closed one and left one",
+  );
+
+  for (const [text, edited] of [
+    ["Two.", "Two, edited."],
+    ["Three.", "Three, edited."],
+    ["<details>\n<summary>Left", "<details open>\n<summary>Left"],
+  ]) {
+    const at = v.ytext.toString().indexOf(text!);
+    v.ytext.delete(at, text!.length);
+    v.ytext.insert(at, edited!);
+  }
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  const after = [section("Opened"), section("Inner"), section("Closed"), section("Left")];
+  assert.deepEqual(
+    after.map((details) => before.includes(details)),
+    [false, false, false, false],
+    "every section is new",
+  );
+  assert.match(section("Inner").textContent!, /Two, edited\./);
+  assert.deepEqual(
+    after.map((details) => details.open),
+    [true, true, false, true],
+  );
+
+  // and through the next edit in it
+  v.ytext.insert(v.ytext.toString().indexOf("One."), "Now ");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  assert.notEqual(section("Opened"), after[0]);
+  assert.deepEqual([section("Opened").open, section("Inner").open], [true, true]);
+  v.view.destroy();
+});
+
 test("opened with a #section, the view lands on that heading", () => {
   const v = mount("# Guide\n\n## Scope", { url: `${DOC_URL}#Scope` });
   assert.deepEqual(v.scrolled, ["md-scope"]);
