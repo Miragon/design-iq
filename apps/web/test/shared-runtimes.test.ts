@@ -9,6 +9,13 @@
  * each of these runtimes to one copy in everything apps/web ships: its
  * dependencies and those of the workspace packages it links. devDependencies
  * are left out: they are build and test tools, never bundled (#300).
+ *
+ * didi and tiny-svg are the exception: the renderers share them with the
+ * diagram-js they draw with, so one copy has to hold there, in what the
+ * renderers reach. A library outside that may bring its own copy without
+ * touching the renderers' injector: dmn-js 18's dmn-js-shared builds an
+ * injector of its own on didi 12, while its diagram-js and table-js stay on
+ * didi 11.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -45,12 +52,12 @@ const miragonPackages = Object.entries(lock.importers[WEB_IMPORTER]?.dependencie
     snapshot: snapshotKey(name, version),
     peers: Object.keys(lock.packages[`${name}@${bare(version)}`]?.peerDependencies ?? {}),
   }));
+const renderers = miragonPackages.filter(({ peers }) => peers.length > 0);
 
-/** the snapshot keys of everything apps/web ships, one per package copy */
-function shippedCopies(): Set<string> {
-  const copies = new Set<string>();
+/** the snapshot keys of apps/web's dependencies and those of the workspace packages it links */
+function shippedRoots(): string[] {
+  const roots: string[] = [];
   const visitedImporters = new Set<string>();
-  const pending: string[] = [];
   const visitImporter = (path: string): void => {
     if (visitedImporters.has(path)) return;
     visitedImporters.add(path);
@@ -58,10 +65,17 @@ function shippedCopies(): Set<string> {
     assert.ok(importer, `the lockfile has the importer ${path}`);
     for (const [name, { version }] of Object.entries({ ...importer.dependencies, ...importer.optionalDependencies })) {
       if (version.startsWith("link:")) visitImporter(posix.join(path, version.slice("link:".length)));
-      else pending.push(snapshotKey(name, version));
+      else roots.push(snapshotKey(name, version));
     }
   };
   visitImporter(WEB_IMPORTER);
+  return roots;
+}
+
+/** the snapshot keys of everything these snapshots reach, themselves included, one per package copy */
+function reachableCopies(roots: string[]): string[] {
+  const copies = new Set<string>();
+  const pending = [...roots];
   for (let key = pending.pop(); key !== undefined; key = pending.pop()) {
     if (copies.has(key)) continue;
     copies.add(key);
@@ -71,11 +85,10 @@ function shippedCopies(): Set<string> {
       pending.push(snapshotKey(name, version));
     }
   }
-  return copies;
+  return [...copies];
 }
 
 test("apps/web pins every peer of its Miragon packages exactly, at the version they draw with", () => {
-  const renderers = miragonPackages.filter(({ peers }) => peers.length > 0);
   assert.ok(renderers.length > 0, "apps/web takes Miragon renderers with peers");
   for (const { name, snapshot, peers } of renderers) {
     const resolved = lock.snapshots[snapshot]?.dependencies ?? {};
@@ -98,22 +111,32 @@ const sharedRuntimes = new Set([
   "@miragon/modeler-api",
   ...miragonPackages.flatMap(({ peers }) => peers),
 ]);
-const copies = [...shippedCopies()];
+const sharedWithDiagramJs = new Set(["didi", "tiny-svg"]);
+const shipped = reachableCopies(shippedRoots());
+const reachedByRenderers = reachableCopies(renderers.map(({ snapshot }) => snapshot));
 
+const followsDiagramJs = (runtime: string): string =>
+  `${runtime} follows diagram-js: apps/web pins the ${runtime} diagram-js depends on, ` +
+  `so move the pin only in the PR of a diagram-js release on a new ${runtime}`;
 /** what moves with a runtime in one PR, where Dependabot opens separate ones (.github/dependabot.yml) */
 const movesWith: Record<string, string> = {
   "diagram-js": "bpmn-js and dmn-js depend on diagram-js: move their releases on it in the same PR",
+  didi: followsDiagramJs("didi"),
+  "tiny-svg": followsDiagramJs("tiny-svg"),
   "@miragon/modeler-api":
     "every Miragon renderer pins the contract exactly: move the renderers, apps/web and packages/live-client in one PR",
 };
 
 for (const runtime of sharedRuntimes) {
-  test(`apps/web ships one copy of ${runtime}`, () => {
+  const [scope, copies]: [string, string[]] = sharedWithDiagramJs.has(runtime)
+    ? ["the Miragon renderers and their diagram-js draw with", reachedByRenderers]
+    : ["apps/web ships", shipped];
+  test(`${scope} one copy of ${runtime}`, () => {
     const copiesOfRuntime = copies.filter((key) => packageName(key) === runtime);
     assert.equal(
       copiesOfRuntime.length,
       1,
-      `apps/web ships ${runtime} as ${copiesOfRuntime.join(", ") || "nothing"}; ` +
+      `${scope} ${copiesOfRuntime.join(", ") || `no ${runtime}`}; ` +
         `\`pnpm why --prod --filter @designiq/web ${runtime}\` names what brings each copy` +
         (movesWith[runtime] ? `; ${movesWith[runtime]}` : ""),
     );

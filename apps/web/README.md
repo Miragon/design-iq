@@ -390,11 +390,15 @@ versions diagram-js itself depends on. A second copy in the bundle only fails
 at runtime (a second didi breaks diagram-js's injector).
 `test/shared-runtimes.test.ts` reads the lockfile and fails on a peer apps/web
 does not pin, and on a second copy of a peer or of `@miragon/modeler-api` in
-anything apps/web ships. So what shares one of these moves in one PR:
-diagram-js with the bpmn-js and dmn-js releases on it, and a contract move with
+anything apps/web ships. didi and tiny-svg are checked where the renderers and
+the diagram-js they draw with reach them: a library outside that may bring its
+own copy, as dmn-js 18 does with an injector of its own on didi 12. So what
+shares one of these moves in one PR: diagram-js with the bpmn-js and dmn-js
+releases on it, didi and tiny-svg with diagram-js, and a contract move with
 every renderer (#300). Dependabot takes the minors of diagram-js, didi and
 tiny-svg in its weekly group next to bpmn-js and dmn-js, their majors in one
-PR of their own, and holds didi 12 back until diagram-js depends on it.
+PR of their own, and holds didi 12 back until the ignore entry is dropped for
+a diagram-js release on didi 12.
 
 ### Mixed deployments
 
