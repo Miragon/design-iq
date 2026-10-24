@@ -5,10 +5,10 @@
  * code until then: no discovery path hands them a file, and nothing else
  * exercised them). The fixtures are the de-facto format spec: tea.owm,
  * sample.tt, order-checkout.storm and conference.cm.json are the shipped
- * examples of the Miragon modeler repos (wardley-maps-modeler,
- * team-topologies-modeler, event-storming-modeler, context-maps-modeler,
- * value-chain-modeler: porter.vc.json), whose deterministic serializers
- * define what real files look like.
+ * examples of the Miragon modelers in Miragon/modeler-suite
+ * (modelers/wardley-maps, modelers/team-topologies, modelers/event-storming,
+ * modelers/context-maps, modelers/value-chain: porter.vc.json), whose
+ * deterministic serializers define what real files look like.
  *
  * Deliberately pinned quirks (documenting gaps, not endorsing them):
  *
