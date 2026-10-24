@@ -30,7 +30,7 @@
  */
 import type { EditorContext, MountedEditor } from "../registry.ts";
 import { FENCE_EXTENSIONS, type FenceExtension } from "./fences.ts";
-import { anchorId, type FenceRenderer, renderMarkdown, safeDecode } from "./render.ts";
+import { anchorId, type FenceRenderer, renderMarkdown, type RepoWeb, safeDecode } from "./render.ts";
 import { createSanitizer } from "./sanitize.ts";
 
 /** a co-editor typing must not re-render on every keystroke ... */
@@ -68,6 +68,7 @@ export function mountMarkdownView(
 
   let lastSource: string | undefined;
   let lastModels: ReadonlySet<string> | undefined;
+  let lastWeb: RepoWeb | undefined;
   /** counts the images the reader loaded: a render with a new one is not a repeat */
   let imagesLoaded = 0;
   let lastImagesLoaded = 0;
@@ -79,7 +80,9 @@ export function mountMarkdownView(
   const render = (): void => {
     const source = ctx.ytext.toString();
     const models = ctx.models?.paths();
-    if (source === lastSource && models === lastModels && imagesLoaded === lastImagesLoaded) return;
+    const web = ctx.repoWeb?.get();
+    const repeat = source === lastSource && models === lastModels && web === lastWeb;
+    if (repeat && imagesLoaded === lastImagesLoaded) return;
     // the fence languages this document has: only their extensions hydrate,
     // so a diagram engine loads only for a document that contains a diagram
     const seen = new Set<string>();
@@ -95,6 +98,7 @@ export function mountMarkdownView(
       html = renderMarkdown(source, {
         repo: ctx.repo,
         docPath: ctx.docPath,
+        repoWeb: web,
         fences: renderers,
         models,
         externalImages,
@@ -109,6 +113,7 @@ export function mountMarkdownView(
     }
     lastSource = source;
     lastModels = models;
+    lastWeb = web;
     lastImagesLoaded = imagesLoaded;
     rendered = true;
     hydration?.abort();
@@ -182,6 +187,11 @@ export function mountMarkdownView(
     } else if (href.startsWith("#")) {
       e.preventDefault();
       scrollToFragment(href.slice(1));
+      // the address names the section, so it can be shared, as on GitHub;
+      // replaced, not pushed, and with the router's state kept: no history
+      // entry per click, no hashchange
+      const at = href === "#" ? win.location.pathname + win.location.search : href;
+      win.history.replaceState(win.history.state, "", at);
     }
   };
   article.addEventListener("click", onClick);
@@ -246,6 +256,8 @@ export function mountMarkdownView(
   ctx.ytext.observe(onChange);
   // the model list arrived or changed: links to models re-classify
   const offModels = ctx.models?.onChange(update);
+  // the repository's GitHub address arrived or changed: links to it re-classify
+  const offWeb = ctx.repoWeb?.onChange(update);
   const offVisibility = ctx.visibility?.onChange(() => {
     if (behind && !hidden()) update();
   });
@@ -255,6 +267,7 @@ export function mountMarkdownView(
       clearTimeout(timer);
       ctx.ytext.unobserve(onChange);
       offModels?.();
+      offWeb?.();
       offVisibility?.();
       hydration?.abort();
       article.removeEventListener("click", onClick);

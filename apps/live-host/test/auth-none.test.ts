@@ -67,6 +67,7 @@ before(async () => {
   const opts: ApiOptions = {
     webDist: mkdtempSync(join(tmpdir(), "designiq-webdist-")),
     publicUrl: "http://live.test",
+    githubBaseUrl: "https://ghe.example.com",
     github: {} as GitProvider,
     sessions: new SessionStore(new DatabaseSync(":memory:")),
     registry: { get: () => undefined, list: () => [] } as unknown as ApiOptions["registry"],
@@ -97,6 +98,11 @@ test("none mode: /api/config says so, /api/me answers without any credential", a
   assert.equal(body.user.login, "petra");
   assert.equal(body.user.provider, LOCAL_PROVIDER);
   assert.equal(body.wsToken, LOCAL_SESSION_ID);
+});
+
+test("/api/config names the GitHub the repositories live on, for a document's links to them", async () => {
+  const config = (await (await fetch(`${base}/api/config`)).json()) as AppConfig;
+  assert.equal(config.githubBaseUrl, "https://ghe.example.com");
 });
 
 test("none mode: a credential is ignored, not rejected — and the repo routes pass the gate", async () => {

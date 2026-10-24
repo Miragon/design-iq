@@ -364,6 +364,10 @@ export interface AppConfig {
   installUrl: string | null;
   /** the MCP endpoint under the server's public URL — what an AI client connects to */
   mcpUrl: string;
+  /** the web address of the GitHub the repositories live on (GITHUB_BASE_URL;
+   *  a GitHub Enterprise server's): a document's link to a model there opens
+   *  in designIQ. Additive: absent from older servers */
+  githubBaseUrl?: string;
 }
 
 /** POST /api/repos/:fullName/release/:id and /release (file selection) */
