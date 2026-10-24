@@ -100,7 +100,10 @@ export interface MermaidFrameOptions {
  * renderMermaid behind the frame: the same source in, the same SVG string or
  * error out. ONE frame for the page, started on the first call and shared;
  * a frame that fails to start (offline, a stale deploy) rejects like a failed
- * engine load, and the next call starts another.
+ * engine load, and the next call starts another. One render at a time:
+ * mermaid lays a diagram out after awaits of its own, and a render started
+ * meanwhile at another width would set the frame to that width under it.
+ * mermaid queues its renders anyway.
  */
 export function createMermaidFrameRenderer(options: MermaidFrameOptions = {}): RenderMermaid {
   const open = options.open ?? (async (doc: Document) => openMermaidFrame(doc, await fetchFrameHtml()));
@@ -114,15 +117,20 @@ export function createMermaidFrameRenderer(options: MermaidFrameOptions = {}): R
     }
     return frame;
   };
-  return async (source, idPrefix, width) => {
-    const doc = options.doc ?? document;
-    let current = await started(doc);
-    if (!current.element.isConnected) {
-      frame = undefined;
-      current = await started(doc);
-    }
-    current.element.style.width = `${width ?? doc.body.clientWidth}px`;
-    return current.api.render(source, idPrefix);
+  let previous: Promise<unknown> = Promise.resolve();
+  return (source, idPrefix, width) => {
+    const rendered = previous.then(async () => {
+      const doc = options.doc ?? document;
+      let current = await started(doc);
+      if (!current.element.isConnected) {
+        frame = undefined;
+        current = await started(doc);
+      }
+      current.element.style.width = `${width ?? doc.body.clientWidth}px`;
+      return current.api.render(source, idPrefix);
+    });
+    previous = rendered.catch(() => undefined);
+    return rendered;
   };
 }
 
