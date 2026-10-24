@@ -87,13 +87,16 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   (#289) and keeps every other block on the page as it is, so a reader's selection, the
   keyboard focus and a drawn diagram in it survive a co-editor's pause. The blocks of the two
   renders are aligned, so a block that repeats (a heading's text, a rule) never costs an
-  unchanged block its place. The focus in a replaced block moves to the view. The view keeps
-  the first block on screen where it is, through a render and when a diagram drawn or an
-  image loaded later changes the height above it, as Safari only has CSS scroll anchoring
-  from 27 on. `test/markdown-view.test.ts` covers the sanitizer and the view under jsdom;
-  `test/markdown-view-chromium.ts` checks the selection, the focus and the scroll position in
-  headless Chromium while a guest session edits the document, with the browser's scroll
-  anchoring and without it (run like the hostile check below, `PORT` 8393 unless set).
+  unchanged block its place. The focus in a replaced block moves to the view. A `<details>`
+  the reader opened or closed keeps that state in a kept block and, found by its summary's
+  text, in the block that replaces its own. The view keeps the first block on screen where it
+  is, through a render and when a diagram drawn or an image loaded later changes the height
+  above it, as Safari only has CSS scroll anchoring from 27 on; a `<summary>` the reader
+  clicks stays put while its section opens or closes. `test/markdown-view.test.ts` covers the
+  sanitizer and the view under jsdom; `test/markdown-view-chromium.ts` checks the selection,
+  the focus, an in-page link, collapsible sections and the scroll position in headless
+  Chromium while a guest session edits the document, with the browser's scroll anchoring and
+  without it (run like the hostile check below, `PORT` 8393 unless set).
 - The split view is the shell's, for a plugin that opts in (`WebNotationPlugin.splitView`, so
   far only Markdown). It narrows the same two layers the single views stack, so neither engine
   remounts, and puts the divider between them (`src/components/split-divider.tsx`): drag it,

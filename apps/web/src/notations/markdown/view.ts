@@ -30,11 +30,14 @@
  * block its place. A block that moved past others counts as changed, and so
  * does a heading whose id a new heading with the same text renumbered. The
  * focus in a replaced block moves to the view itself, so the keyboard stays
- * in it. The reader's place stays too: the first block on screen stays where
- * it is on screen, across a render (once the fences have put their cached
- * output back) and after it, when a diagram drawn or an image loaded above it
- * changes the article's height. A block the top of the view cuts holds the
- * place by its end, so what follows it stays put when its own height changes.
+ * in it. A <details> the reader opened or closed keeps that state: in a kept
+ * block as it is, in a replaced one through its summary's text. The reader's
+ * place stays too: the first block on screen stays where it is on screen,
+ * across a render (once the fences have put their cached output back) and
+ * after it, when a diagram drawn or an image loaded above it changes the
+ * article's height. A block the top of the view cuts holds the place by its
+ * end, so what follows it stays put when its own height changes, and a
+ * <summary> the reader clicks holds it while its section opens or closes.
  * A browser's CSS scroll anchoring often did that already, and then nothing
  * is left to move; Safari has it only from 27 on, so the view does not rely
  * on it.
@@ -215,10 +218,13 @@ export function mountMarkdownView(
   /** the keys of the article's top-level nodes as the last render put them
    *  there; undefined while it shows no rendered document */
   let blockKeys: string[] | undefined;
-  /** where the reader is: the first block on screen, which of its edges
-   *  holds the place, where that edge was on screen, and the scroll offset
-   *  then */
+  /** where the reader is: the first block on screen (or the summary of a
+   *  <details> the reader opens or closes), which of its edges holds the
+   *  place, where that edge was on screen, and the scroll offset then */
   let place: { block: Element; edge: "top" | "bottom"; at: number; scrollTop: number } | undefined;
+  /** whether each <details> on the page was open as the render made it: one
+   *  that differs now the reader opened or closed */
+  const renderedOpen = new WeakMap<HTMLDetailsElement, boolean>();
 
   /** the first of these blocks on screen, and where it is. None at the top
    *  of the document: a reader there stays at the top */
@@ -254,6 +260,12 @@ export function mountMarkdownView(
     }
     place = readingPlace(article.children);
   };
+  /** the reader opens or closes a <details> by its summary: the summary,
+   *  where the reader looks, stays put while the block around it grows or
+   *  shrinks */
+  const holdPlace = (summary: Element): void => {
+    place = { block: summary, edge: "top", at: summary.getBoundingClientRect().top, scrollTop: scroller.scrollTop };
+  };
   const onScroll = (): void => {
     if (scroller.scrollTop !== place?.scrollTop) place = readingPlace(article.children);
   };
@@ -262,6 +274,40 @@ export function mountMarkdownView(
   // reader, changes the article's height: the reader stays where they were
   const resizes = "ResizeObserver" in win ? new win.ResizeObserver(() => keepPlace()) : undefined;
   resizes?.observe(article);
+
+  /** the <details> in these blocks, theirs first */
+  const sectionsIn = (blocks: readonly ChildNode[]): HTMLDetailsElement[] =>
+    blocks.flatMap((block) => {
+      if (!(block instanceof win.Element)) return [];
+      const inside = [...block.querySelectorAll("details")];
+      return block instanceof win.HTMLDetailsElement ? [block, ...inside] : inside;
+    });
+  const summaryText = (details: HTMLDetailsElement): string =>
+    details.querySelector(":scope > summary")?.textContent?.trim() ?? "";
+
+  /** the open state the reader chose for the <details> in these blocks
+   *  (only the ones the reader opened or closed), by the text of their
+   *  summary, in document order */
+  const readerChoices = (blocks: readonly ChildNode[]): Map<string, boolean[]> => {
+    const choices = new Map<string, boolean[]>();
+    for (const details of sectionsIn(blocks)) {
+      if (details.open === renderedOpen.get(details)) continue;
+      const summary = summaryText(details);
+      choices.set(summary, [...(choices.get(summary) ?? []), details.open]);
+    }
+    return choices;
+  };
+
+  /** a co-editor's edit in a block replaces its <details> too: each one the
+   *  reader opened or closed keeps that in the new block, by its summary.
+   *  The others show as the author wrote them */
+  const restoreChoices = (blocks: readonly ChildNode[], choices: Map<string, boolean[]>): void => {
+    for (const details of sectionsIn(blocks)) {
+      renderedOpen.set(details, details.open);
+      const open = choices.get(summaryText(details))?.shift();
+      if (open !== undefined) details.open = open;
+    }
+  };
 
   /** show a rendered document: the blocks the last render showed as they
    *  are, the others new */
@@ -272,12 +318,17 @@ export function mountMarkdownView(
     // the article's blocks are not the last render's (the empty document, or
     // a fence extension that added or removed one): start over
     if (blockKeys?.length !== current.length) {
+      restoreChoices(next, readerChoices(current));
       article.replaceChildren(fragment);
       blockKeys = nextKeys;
       return;
     }
     const kept = matchBlocks(blockKeys, nextKeys);
     const keep = new Set(kept.filter((at) => at >= 0));
+    restoreChoices(
+      next.filter((_, i) => kept[i]! < 0),
+      readerChoices(current.filter((_, at) => !keep.has(at))),
+    );
     // settle what moved since the last frame; the reader's block may be one
     // this render replaces, then the first block on screen that stays holds
     // the place
@@ -399,6 +450,10 @@ export function mountMarkdownView(
       e.preventDefault();
       return loadImage(button);
     }
+    // the browser opens or closes a <details> after this click on its summary
+    const target = e.target instanceof win.Element ? e.target.closest("a[href], summary") : null;
+    if (target?.localName === "summary" && target.parentElement?.localName === "details" && article.contains(target))
+      holdPlace(target);
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const link = e.target instanceof win.Element ? e.target.closest("a[href]") : null;
     if (!(link instanceof win.HTMLAnchorElement) || !article.contains(link)) return;
