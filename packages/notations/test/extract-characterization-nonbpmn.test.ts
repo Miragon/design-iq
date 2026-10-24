@@ -203,6 +203,33 @@ test("extractTeamTopology: a version 1 file without flows or a title; a note on 
   }
 });
 
+test("extractTeamTopology: a flow label or annotation text that is no string, or an empty one, leaves the node unnamed", () => {
+  const box = { position: { x: 0, y: 0 }, size: { width: 9, height: 9 } };
+  const graph = extractModelGraph(
+    "teams/malformed.tt",
+    JSON.stringify({
+      version: 3,
+      title: "Malformed",
+      nodes: [],
+      interactions: [],
+      flows: [
+        { id: "numbered", label: 42, ...box },
+        { id: "blank", label: "", ...box },
+      ],
+      annotations: [
+        { id: "listed", text: ["a"], ...box },
+        { id: "empty", text: "", ...box },
+      ],
+    }),
+  );
+  assert.deepEqual(graph?.nodes, [
+    { id: "numbered", type: "flow", name: undefined },
+    { id: "blank", type: "flow", name: undefined },
+    { id: "listed", type: "annotation", name: undefined, extra: undefined },
+    { id: "empty", type: "annotation", name: undefined, extra: undefined },
+  ]);
+});
+
 test("extractTeamTopology: a version 1 edge is dropped like the schema model drops it, a later interaction without geometry stays", () => {
   const interactions = [
     { id: "edge", mode: "collaboration", source: "a", target: "b" },

@@ -314,6 +314,7 @@ test("get_model / get_view: a Team Topology carries its flows, annotations and t
     const view = await j("get_view", { id: "shop" });
     assert.equal(view.name, "Online shop");
     assert.deepEqual(view.stats, { teams: 1, interactions: 0, flows: 1, annotations: 1 });
+    assert.deepEqual(view.detail.annotations, [{ id: "note", text: "Splits in Q3", attachedTo: "checkout" }]);
   } finally {
     await c.close();
     await s.close();

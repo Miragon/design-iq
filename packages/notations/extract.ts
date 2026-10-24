@@ -438,7 +438,8 @@ function extractWardley(raw: string): ModelGraph {
 // named by its label, the annotation by its text, like an Event Storming
 // note. An annotation's `attachedTo` survives only when it names a team,
 // interaction or flow of the graph: the renderer's importer drops any other
-// connector, so the canvas shows the note unattached.
+// connector, so the canvas shows the note unattached. A label, text or title
+// that is no string, or an empty one, names nothing.
 
 const TT_EDGE_INTERACTIONS_VERSION = 1;
 
@@ -453,6 +454,7 @@ function extractTeamTopology(raw: string): ModelGraph {
   };
   const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
   const objects = (v: unknown) => list(v).filter((i) => i !== null && typeof i === "object");
+  const text = (v: unknown): string | undefined => (typeof v === "string" && v !== "" ? v : undefined);
   const teams: ModelNode[] = list(data.nodes).map((n) => ({
     id: n.id,
     type: n.type ?? "team",
@@ -463,20 +465,19 @@ function extractTeamTopology(raw: string): ModelGraph {
   const interactions: ModelNode[] = objects(data.interactions)
     .filter((i) => data.version !== TT_EDGE_INTERACTIONS_VERSION || placed(i))
     .map((i) => ({ id: i.id, type: "interaction", name: i.label, extra: { mode: i.mode } }));
-  const flows: ModelNode[] = objects(data.flows).map((f) => ({ id: f.id, type: "flow", name: f.label }));
+  const flows: ModelNode[] = objects(data.flows).map((f) => ({ id: f.id, type: "flow", name: text(f.label) }));
   const attachable = new Set([...teams, ...interactions, ...flows].map((n) => n.id));
   const annotations: ModelNode[] = objects(data.annotations).map((a) => ({
     id: a.id,
     type: "annotation",
-    name: a.text,
+    name: text(a.text),
     extra: typeof a.attachedTo === "string" && attachable.has(a.attachedTo) ? { attachedTo: a.attachedTo } : undefined,
   }));
-  const title = typeof data.title === "string" && data.title !== "" ? data.title : null;
   return {
     notation: "team-topology",
     nodes: [...teams, ...interactions, ...flows, ...annotations],
     edges: [],
-    meta: { title },
+    meta: { title: text(data.title) ?? null },
   };
 }
 

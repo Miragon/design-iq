@@ -379,17 +379,50 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
   "team-topology": (graph) => {
     // interactions, flows and annotations are placed shapes, so nodes of
     // their own (extract.ts); every other node is a team, whatever its type
-    const count = (type: string): number => graph.nodes.filter((n) => n.type === type).length;
-    const interactions = count("interaction");
-    const flows = count("flow");
-    const annotations = count("annotation");
-    const stats = { teams: graph.nodes.length - interactions - flows - annotations, interactions, flows, annotations };
+    const ofType = (type: string): ModelNode[] => graph.nodes.filter((n) => n.type === type);
+    const interactions = ofType("interaction");
+    const flows = ofType("flow");
+    const annotations = ofType("annotation");
+    const teams = graph.nodes.filter((n) => !["interaction", "flow", "annotation"].includes(n.type));
+    const stats = {
+      teams: teams.length,
+      interactions: interactions.length,
+      flows: flows.length,
+      annotations: annotations.length,
+    };
+    // most topologies have neither, and "…, 0 flows, 0 annotations" reads as noise
+    const shown = {
+      teams: stats.teams,
+      interactions: stats.interactions,
+      ...(stats.flows > 0 ? { flows: stats.flows } : {}),
+      ...(stats.annotations > 0 ? { annotations: stats.annotations } : {}),
+    };
     const title = graph.meta?.title;
     return {
       notation: "team-topology",
       name: typeof title === "string" ? title : null,
-      summary: `Team Topology with ${counted(stats)}`,
+      summary: `Team Topology with ${counted(shown)}`,
       stats,
+      // the .tt file's own field names: an agent reads the same words in get_model_content
+      detail: {
+        teams: teams.map((n) => ({
+          id: n.id,
+          label: n.name ?? null,
+          type: n.type,
+          description: (n.extra?.description as string | undefined) ?? null,
+        })),
+        interactions: interactions.map((n) => ({
+          id: n.id,
+          label: n.name ?? null,
+          mode: (n.extra?.mode as string | undefined) ?? null,
+        })),
+        flows: flows.map((n) => ({ id: n.id, label: n.name ?? null })),
+        annotations: annotations.map((n) => ({
+          id: n.id,
+          text: n.name ?? null,
+          attachedTo: (n.extra?.attachedTo as string | undefined) ?? null,
+        })),
+      },
     };
   },
   "event-storming": (graph) => {

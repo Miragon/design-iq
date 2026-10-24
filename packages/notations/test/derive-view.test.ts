@@ -51,6 +51,76 @@ test("deriveView(dmn): name from definitions, rules counted, detail = deriveDeci
   assert.deepEqual(view?.detail, deriveDecision(graph));
 });
 
+test("deriveView(team-topology): detail lists every element by the .tt file's own field names", () => {
+  const tt = deriveView(extractModelGraph("teams/sample.tt", fixture("sample.tt")) as ModelGraph);
+  assert.deepEqual(tt?.detail, {
+    teams: [
+      {
+        id: "team_checkout",
+        label: "Checkout & Payments",
+        type: "stream-aligned",
+        description: "Owns the checkout and payment journey end-to-end.",
+      },
+      {
+        id: "team_discovery",
+        label: "Product Discovery",
+        type: "stream-aligned",
+        description: "Owns search, browsing and product pages end-to-end.",
+      },
+      {
+        id: "team_fraud",
+        label: "Fraud Detection",
+        type: "complicated-subsystem",
+        description: "Specialists for the real-time fraud scoring model.",
+      },
+      {
+        id: "team_platform",
+        label: "Cloud Platform",
+        type: "platform",
+        description: "Self-service CI/CD, runtime and observability for all teams.",
+      },
+      {
+        id: "team_test_automation",
+        label: "Test Automation",
+        type: "enabling",
+        description: "Coaches stream-aligned teams in test automation, then steps back.",
+      },
+    ],
+    interactions: [
+      { id: "int_checkout_fraud", label: "fraud rules", mode: "collaboration" },
+      { id: "int_platform_checkout", label: null, mode: "x-as-a-service" },
+      { id: "int_platform_discovery", label: null, mode: "x-as-a-service" },
+      { id: "int_testing_discovery", label: null, mode: "facilitating" },
+    ],
+    flows: [{ id: "flow_main", label: "Flow of change" }],
+    annotations: [
+      {
+        id: "ann_fraud_handover",
+        text: "Collaboration until the fraud rules are stable (Q3), then X-as-a-Service",
+        attachedTo: "int_checkout_fraud",
+      },
+    ],
+  });
+
+  const notesOnly = deriveView(
+    extractModelGraph(
+      "teams/notes.tt",
+      JSON.stringify({
+        version: 3,
+        title: "Notes",
+        nodes: [{ id: "a", type: "platform", label: "A" }],
+        interactions: [],
+        flows: [],
+        annotations: [{ id: "n", text: "free", position: { x: 0, y: 0 }, size: { width: 9, height: 9 } }],
+      }),
+    ) as ModelGraph,
+  );
+  assert.equal(notesOnly?.summary, "Team Topology with 1 team, 0 interactions, 1 annotation");
+  assert.deepEqual((notesOnly?.detail as { annotations: unknown }).annotations, [
+    { id: "n", text: "free", attachedTo: null },
+  ]);
+});
+
 test("deriveView(wardley/tt/vc): node/edge stats from the shipped fixtures", () => {
   const wardley = deriveView(extractModelGraph("maps/tea.owm", fixture("tea.owm")) as ModelGraph);
   assert.deepEqual(wardley?.stats, { components: 7, dependencies: 8 });
@@ -67,7 +137,8 @@ test("deriveView(wardley/tt/vc): node/edge stats from the shipped fixtures", () 
     ) as ModelGraph,
   );
   assert.equal(untitled?.name, null);
-  assert.equal(untitled?.summary, "Team Topology with 1 team, 0 interactions, 0 flows, 0 annotations");
+  assert.deepEqual(untitled?.stats, { teams: 1, interactions: 0, flows: 0, annotations: 0 });
+  assert.equal(untitled?.summary, "Team Topology with 1 team, 0 interactions", "no flows or notes, no noise");
 
   const es = deriveView(
     extractModelGraph("boards/order-checkout.storm", fixture("order-checkout.storm")) as ModelGraph,
