@@ -17,8 +17,10 @@
  *    (Business/Public below), and the `(outsource)` suffix is dropped;
  *  - team-topology: relations are spatial, so a .tt yields ZERO edges: an
  *    interaction is a placed shape between its teams and becomes a node of
- *    type "interaction" (its `mode` in extra); position/size/title, the
- *    `flows` and the `annotations` (free-text notes) are dropped;
+ *    type "interaction" (its `mode` in extra), and so do a flow of change
+ *    ("flow") and an annotation ("annotation", its text as name, the element
+ *    it is attached to in extra, never an edge); position and size are
+ *    dropped;
  *  - value-chain: elementType/connectionType default to "element"/
  *    "connection" and missing connection ids become `conn-<index>`
  *    (lenient like the other extractors; the schema requires all three).
@@ -80,7 +82,7 @@ test("extractWardley: the shipped tea.owm example is pinned", () => {
   });
 });
 
-test("extractTeamTopology: the shipped sample.tt example is pinned — interactions are nodes, real .tt files yield NO edges", () => {
+test("extractTeamTopology: the shipped sample.tt example is pinned — interactions, flows and annotations are nodes, real .tt files yield NO edges", () => {
   const graph = extractModelGraph("teams/sample.tt", fixture("sample.tt"));
   assert.deepEqual(JSON.parse(JSON.stringify(graph)), {
     notation: "team-topology",
@@ -119,9 +121,86 @@ test("extractTeamTopology: the shipped sample.tt example is pinned — interacti
       { id: "int_platform_checkout", type: "interaction", extra: { mode: "x-as-a-service" } },
       { id: "int_platform_discovery", type: "interaction", extra: { mode: "x-as-a-service" } },
       { id: "int_testing_discovery", type: "interaction", extra: { mode: "facilitating" } },
+      { id: "flow_main", type: "flow", name: "Flow of change" },
+      {
+        id: "ann_fraud_handover",
+        type: "annotation",
+        name: "Collaboration until the fraud rules are stable (Q3), then X-as-a-Service",
+        extra: { attachedTo: "int_checkout_fraud" },
+      },
     ],
     edges: [],
+    meta: { title: "Online shop — team topology" },
   });
+});
+
+test("extractTeamTopology: an annotation keeps only a connector the canvas draws, to a team, interaction or flow", () => {
+  const box = { position: { x: 0, y: 0 }, size: { width: 9, height: 9 } };
+  const annotation = (id: string, attachedTo?: string) => ({ id, text: `note ${id}`, ...box, attachedTo });
+  const graph = extractModelGraph(
+    "teams/notes.tt",
+    JSON.stringify({
+      version: 3,
+      title: "Notes",
+      nodes: [{ id: "team", type: "platform", label: "Team", ...box }],
+      interactions: [{ id: "talk", mode: "collaboration", ...box }],
+      flows: [{ id: "flow", ...box }, null, "flow"],
+      annotations: [
+        annotation("free"),
+        annotation("on_team", "team"),
+        annotation("on_talk", "talk"),
+        annotation("on_flow", "flow"),
+        annotation("on_note", "free"),
+        annotation("on_ghost", "ghost"),
+        null,
+      ],
+    }),
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(graph)), {
+    notation: "team-topology",
+    nodes: [
+      { id: "team", type: "platform", name: "Team" },
+      { id: "talk", type: "interaction", extra: { mode: "collaboration" } },
+      { id: "flow", type: "flow" },
+      { id: "free", type: "annotation", name: "note free" },
+      { id: "on_team", type: "annotation", name: "note on_team", extra: { attachedTo: "team" } },
+      { id: "on_talk", type: "annotation", name: "note on_talk", extra: { attachedTo: "talk" } },
+      { id: "on_flow", type: "annotation", name: "note on_flow", extra: { attachedTo: "flow" } },
+      // the importer draws no connector to another annotation or an unknown id
+      { id: "on_note", type: "annotation", name: "note on_note" },
+      { id: "on_ghost", type: "annotation", name: "note on_ghost" },
+    ],
+    edges: [],
+    meta: { title: "Notes" },
+  });
+});
+
+test("extractTeamTopology: a version 1 file without flows or a title; a note on its dropped edge stays unattached", () => {
+  const graph = extractModelGraph(
+    "teams/old.tt",
+    JSON.stringify({
+      version: 1,
+      nodes: [{ id: "a", type: "platform", label: "A" }],
+      interactions: [{ id: "edge", mode: "collaboration", source: "a", target: "a" }],
+      annotations: [{ id: "note", text: "dropped edge", attachedTo: "edge" }],
+    }),
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(graph)), {
+    notation: "team-topology",
+    nodes: [
+      { id: "a", type: "platform", name: "A" },
+      { id: "note", type: "annotation", name: "dropped edge" },
+    ],
+    edges: [],
+    meta: { title: null },
+  });
+  for (const title of ["", 42, null]) {
+    assert.deepEqual(
+      extractModelGraph("teams/blank.tt", JSON.stringify({ version: 3, title }))?.meta,
+      { title: null },
+      `title ${JSON.stringify(title)}`,
+    );
+  }
 });
 
 test("extractTeamTopology: a version 1 edge is dropped like the schema model drops it, a later interaction without geometry stays", () => {

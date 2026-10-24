@@ -279,6 +279,47 @@ test("get_model: any-notation resolution, unknown ids list every model with its 
   assert.match(unknown.text, /strategy \(wardley\)/);
 });
 
+test("get_model / get_view: a Team Topology carries its flows, annotations and title", async () => {
+  const root = mkdtempSync(join(tmpdir(), "designiq-mcp-tt-"));
+  writeFileSync(join(root, "designiq.yml"), "models: models\n");
+  mkdirSync(join(root, "models"), { recursive: true });
+  const box = { position: { x: 0, y: 0 }, size: { width: 9, height: 9 } };
+  writeFileSync(
+    join(root, "models", "shop.tt"),
+    JSON.stringify({
+      version: 3,
+      title: "Online shop",
+      nodes: [{ id: "checkout", type: "stream-aligned", label: "Checkout", ...box }],
+      interactions: [],
+      flows: [{ id: "flow", label: "Flow of change", ...box }],
+      annotations: [{ id: "note", text: "Splits in Q3", attachedTo: "checkout", ...box }],
+    }),
+  );
+  const s = createMcpServer(root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const c = new Client({ name: "tt-test", version: "0" });
+  await Promise.all([s.connect(st), c.connect(ct)]);
+  try {
+    const j = async (name: string, args: Record<string, unknown>) => {
+      const { isError, text } = toolText(await c.callTool({ name, arguments: args }));
+      assert.ok(!isError, text);
+      return JSON.parse(text);
+    };
+    const graph = await j("get_model", { id: "shop" });
+    assert.deepEqual(graph.nodes.slice(1), [
+      { id: "flow", type: "flow", name: "Flow of change" },
+      { id: "note", type: "annotation", name: "Splits in Q3", extra: { attachedTo: "checkout" } },
+    ]);
+    assert.deepEqual(graph.meta, { title: "Online shop" });
+    const view = await j("get_view", { id: "shop" });
+    assert.equal(view.name, "Online shop");
+    assert.deepEqual(view.stats, { teams: 1, interactions: 0, flows: 1, annotations: 1 });
+  } finally {
+    await c.close();
+    await s.close();
+  }
+});
+
 test("shared stems: bpmn wins by default, the notation arg disambiguates, unknown honors the filter", async () => {
   const root = mkdtempSync(join(tmpdir(), "designiq-mcp-shared-"));
   writeFileSync(join(root, "designiq.yml"), "models: models\n");

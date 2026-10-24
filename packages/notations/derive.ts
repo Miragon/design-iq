@@ -377,10 +377,20 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
     return { notation: "wardley", name: null, summary: `Wardley Map with ${counted(stats)}`, stats };
   },
   "team-topology": (graph) => {
-    // an interaction is a placed shape, so a node of its own (extract.ts)
-    const interactions = graph.nodes.filter((n) => n.type === "interaction").length;
-    const stats = { teams: graph.nodes.length - interactions, interactions };
-    return { notation: "team-topology", name: null, summary: `Team Topology with ${counted(stats)}`, stats };
+    // interactions, flows and annotations are placed shapes, so nodes of
+    // their own (extract.ts); every other node is a team, whatever its type
+    const count = (type: string): number => graph.nodes.filter((n) => n.type === type).length;
+    const interactions = count("interaction");
+    const flows = count("flow");
+    const annotations = count("annotation");
+    const stats = { teams: graph.nodes.length - interactions - flows - annotations, interactions, flows, annotations };
+    const title = graph.meta?.title;
+    return {
+      notation: "team-topology",
+      name: typeof title === "string" ? title : null,
+      summary: `Team Topology with ${counted(stats)}`,
+      stats,
+    };
   },
   "event-storming": (graph) => {
     const count = (type: string): number => graph.nodes.filter((n) => n.type === type).length;

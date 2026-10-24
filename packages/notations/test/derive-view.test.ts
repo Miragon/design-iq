@@ -57,8 +57,17 @@ test("deriveView(wardley/tt/vc): node/edge stats from the shipped fixtures", () 
   assert.equal(wardley?.summary, "Wardley Map with 7 components, 8 dependencies");
 
   const tt = deriveView(extractModelGraph("teams/sample.tt", fixture("sample.tt")) as ModelGraph);
-  assert.deepEqual(tt?.stats, { teams: 5, interactions: 4 });
-  assert.equal(tt?.summary, "Team Topology with 5 teams, 4 interactions");
+  assert.equal(tt?.name, "Online shop — team topology", "the document title is the model's own name");
+  assert.deepEqual(tt?.stats, { teams: 5, interactions: 4, flows: 1, annotations: 1 });
+  assert.equal(tt?.summary, "Team Topology with 5 teams, 4 interactions, 1 flow, 1 annotation");
+  const untitled = deriveView(
+    extractModelGraph(
+      "teams/old.tt",
+      JSON.stringify({ version: 1, nodes: [{ id: "a", type: "platform" }] }),
+    ) as ModelGraph,
+  );
+  assert.equal(untitled?.name, null);
+  assert.equal(untitled?.summary, "Team Topology with 1 team, 0 interactions, 0 flows, 0 annotations");
 
   const es = deriveView(
     extractModelGraph("boards/order-checkout.storm", fixture("order-checkout.storm")) as ModelGraph,
