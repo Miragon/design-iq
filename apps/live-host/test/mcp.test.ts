@@ -816,6 +816,28 @@ test("get_view: the derived view of ANY live model — wardley incl. baseVersion
   assert.ok(unknown.isError && /unknown model 'nope'/.test(unknown.text));
 });
 
+test("get_view: a Team Topology's detail carries its flow labels and annotation texts — the Live Host has no get_model", async () => {
+  const d = deps();
+  const box = { position: { x: 0, y: 0 }, size: { width: 9, height: 9 } };
+  writeFileSync(
+    join(await d.workspaces.ensure(REPO), "processes", "shop.tt"),
+    JSON.stringify({
+      version: 3,
+      title: "Online shop",
+      nodes: [{ id: "checkout", type: "stream-aligned", label: "Checkout", ...box }],
+      interactions: [],
+      flows: [{ id: "flow", label: "Flow of change", ...box }],
+      annotations: [{ id: "note", text: "Splits in Q3", attachedTo: "checkout", ...box }],
+    }),
+  );
+  const { callJson } = await connect(d);
+  const view = await callJson("get_view", { repo: REPO.fullName, id: "shop" });
+  assert.equal(view.name, "Online shop");
+  assert.equal(view.summary, "Team Topology with 1 team, 0 interactions, 1 flow, 1 annotation");
+  assert.deepEqual(view.detail.flows, [{ id: "flow", label: "Flow of change" }]);
+  assert.deepEqual(view.detail.annotations, [{ id: "note", text: "Splits in Q3", attachedTo: "checkout" }]);
+});
+
 test("contributions: a capability module's tools register after the core, with deps + session", async () => {
   const d = deps();
   const me = session("carla");
@@ -1639,7 +1661,7 @@ test("widgets: the generated open_<notation>_modeler tools serve their own bundl
       notation: "team-topology",
       id: "teams",
       path: "processes/teams.tt",
-      text: "flows", // quote-free: JSON.stringify would escape a quoted probe
+      text: "version", // quote-free, and never a key of the derived stats (flows is one)
     },
     {
       tool: "open_event_storming_modeler",

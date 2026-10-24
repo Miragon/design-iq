@@ -434,12 +434,27 @@ function extractWardley(raw: string): ModelGraph {
 // like the schema model's migrate() drops them. In any other file, one
 // without a version included, the schema model refuses such an interaction
 // instead, so it stays in the view of the file the validator names it in.
+// A flow of change and an annotation are placed shapes too: the flow is
+// named by its label, the annotation by its text, like an Event Storming
+// note. An annotation's `attachedTo` survives only when it names a team,
+// interaction or flow of the graph: the renderer's importer drops any other
+// connector, so the canvas shows the note unattached. A label, text or title
+// that is no string, or an empty one, names nothing.
 
 const TT_EDGE_INTERACTIONS_VERSION = 1;
 
 function extractTeamTopology(raw: string): ModelGraph {
-  const data = JSON.parse(raw) as { version?: unknown; nodes?: unknown; interactions?: unknown };
+  const data = JSON.parse(raw) as {
+    version?: unknown;
+    title?: unknown;
+    nodes?: unknown;
+    interactions?: unknown;
+    flows?: unknown;
+    annotations?: unknown;
+  };
   const list = (v: unknown): any[] => (Array.isArray(v) ? v : []);
+  const objects = (v: unknown) => list(v).filter((i) => i !== null && typeof i === "object");
+  const text = (v: unknown): string | undefined => (typeof v === "string" && v !== "" ? v : undefined);
   const teams: ModelNode[] = list(data.nodes).map((n) => ({
     id: n.id,
     type: n.type ?? "team",
@@ -447,11 +462,23 @@ function extractTeamTopology(raw: string): ModelGraph {
     extra: n.description ? { description: n.description } : undefined,
   }));
   const placed = (i: object): boolean => "position" in i && "size" in i;
-  const interactions: ModelNode[] = list(data.interactions)
-    .filter((i) => i !== null && typeof i === "object")
+  const interactions: ModelNode[] = objects(data.interactions)
     .filter((i) => data.version !== TT_EDGE_INTERACTIONS_VERSION || placed(i))
     .map((i) => ({ id: i.id, type: "interaction", name: i.label, extra: { mode: i.mode } }));
-  return { notation: "team-topology", nodes: [...teams, ...interactions], edges: [] };
+  const flows: ModelNode[] = objects(data.flows).map((f) => ({ id: f.id, type: "flow", name: text(f.label) }));
+  const attachable = new Set([...teams, ...interactions, ...flows].map((n) => n.id));
+  const annotations: ModelNode[] = objects(data.annotations).map((a) => ({
+    id: a.id,
+    type: "annotation",
+    name: text(a.text),
+    extra: typeof a.attachedTo === "string" && attachable.has(a.attachedTo) ? { attachedTo: a.attachedTo } : undefined,
+  }));
+  return {
+    notation: "team-topology",
+    nodes: [...teams, ...interactions, ...flows, ...annotations],
+    edges: [],
+    meta: { title: text(data.title) ?? null },
+  };
 }
 
 // ── the .storm DSL (Miragon/modeler-suite, modelers/event-storming) ──────────

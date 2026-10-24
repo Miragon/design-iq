@@ -69,6 +69,18 @@ definitions live in `packages/mcp/tools.ts`, shared by two entry points:
 | `which_models_use(id)`       | Impact, across EVERY notation       | the repo-wide reference index (typed cross-model refs: calls, decides, …), incl. dangling references                                                                |
 | `list_todos(id?, notation?)` | What work is open (opt-in)?         | the content repo's issue tracker (label `todo` + `<notation>:<id>`), anchors parsed from issue bodies                                                               |
 
+A Team Topology's graph has no edges: its teams, interactions, flows of change and annotations
+are all placed shapes, so each is a node (a team keeps its team type, the others are of type
+`interaction`, `flow` and `annotation`). A flow is named by its label and an annotation by its
+text; an annotation attached to a team, interaction or flow names it in `extra.attachedTo`.
+`meta.title` is the document title. `get_view`, here and on the Live Host, reports that title
+as the model's `name` and counts `teams`, `interactions`, `flows` and `annotations` in `stats`;
+the summary names flows and annotations only when the topology has any. Its `detail` lists each
+element under the `.tt` file's own field names: `teams` (`id`, `label`, `type`, `description`),
+`interactions` (`id`, `label`, `mode`), `flows` (`id`, `label`) and `annotations` (`id`, `text`,
+`attachedTo`). The Live Host has no `get_model`, so there `detail` is where an agent reads the
+flow labels and the annotation texts.
+
 All tools carry `readOnlyHint` annotations, so clients may auto-approve them, and a short display
 `title` ("List models", "Get BPMN process view") that clients show people instead of the tool
 name (`test/tools.test.ts` pins that every tool has one and no two share it). The content repo
