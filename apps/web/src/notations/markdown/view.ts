@@ -33,9 +33,11 @@
  * in it. The reader's place stays too: the first block on screen stays where
  * it is on screen, across a render (once the fences have put their cached
  * output back) and after it, when a diagram drawn or an image loaded above it
- * changes the article's height. A browser's CSS scroll anchoring often did
- * that already, and then nothing is left to move; Safari has it only from 27
- * on, so the view does not rely on it.
+ * changes the article's height. A block the top of the view cuts holds the
+ * place by its end, so what follows it stays put when its own height changes.
+ * A browser's CSS scroll anchoring often did that already, and then nothing
+ * is left to move; Safari has it only from 27 on, so the view does not rely
+ * on it.
  * While the shell shows only the source (ctx.visibility), the view does not
  * render at all, not even a document that opens that way, and catches up
  * when it shows again: an author typing in Monaco never pays for a hidden
@@ -213,26 +215,33 @@ export function mountMarkdownView(
   /** the keys of the article's top-level nodes as the last render put them
    *  there; undefined while it shows no rendered document */
   let blockKeys: string[] | undefined;
-  /** where the reader is: the first block on screen, where it was on screen,
-   *  and the scroll offset then */
-  let place: { block: Element; top: number; scrollTop: number } | undefined;
+  /** where the reader is: the first block on screen, which of its edges
+   *  holds the place, where that edge was on screen, and the scroll offset
+   *  then */
+  let place: { block: Element; edge: "top" | "bottom"; at: number; scrollTop: number } | undefined;
 
   /** the first of these blocks on screen, and where it is. None at the top
    *  of the document: a reader there stays at the top */
   const readingPlace = (blocks: ArrayLike<Element>): typeof place => {
     const scrollTop = scroller.scrollTop;
     if (scrollTop <= 0) return undefined;
-    const top = scroller.getBoundingClientRect().top;
+    const view = scroller.getBoundingClientRect();
     // the blocks stack down the page: the first one that ends below the top
     let low = 0;
     let high = blocks.length;
     while (low < high) {
       const middle = (low + high) >>> 1;
-      if (blocks[middle]!.getBoundingClientRect().bottom > top) high = middle;
+      if (blocks[middle]!.getBoundingClientRect().bottom > view.top) high = middle;
       else low = middle + 1;
     }
     const block = blocks[low];
-    return block && { block, top: block.getBoundingClientRect().top, scrollTop };
+    if (!block) return undefined;
+    const box = block.getBoundingClientRect();
+    // a block the top of the view cuts and that ends on screen: the reader
+    // reads what follows it, which stays put when the block's own height
+    // changes later (a diagram drawn in it, an image loaded)
+    const edge = box.top < view.top && box.bottom <= view.bottom ? "bottom" : "top";
+    return { block, edge, at: box[edge], scrollTop };
   };
 
   /** scroll the reader's place back to where it was, and take it anew. Not
@@ -240,7 +249,7 @@ export function mountMarkdownView(
    *  anchoring did it then */
   const keepPlace = (): void => {
     if (place?.block.isConnected && scroller.scrollTop === place.scrollTop) {
-      const shift = place.block.getBoundingClientRect().top - place.top;
+      const shift = place.block.getBoundingClientRect()[place.edge] - place.at;
       if (shift !== 0) scroller.scrollTop += shift;
     }
     place = readingPlace(article.children);
