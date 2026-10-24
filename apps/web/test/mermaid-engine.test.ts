@@ -420,6 +420,49 @@ test("pie slices and venn sets take the same greys, and a slice's label reads on
   for (const set of sets) assert.ok(contrast(paint(set, "stroke"), WHITE) >= 3);
 });
 
+/** where an xy chart label's glyphs lie: off its anchor the way mermaid aligns it, a point label's anchor in its transform */
+function labelPoint(label: Element): [x: number, y: number] {
+  const translate = /translate\(([-\d.e]+),\s*([-\d.e]+)\)/.exec(label.getAttribute("transform") ?? "");
+  if (translate) return [Number(translate[1]), Number(translate[2])];
+  const [x, y] = [Number(label.getAttribute("x")), Number(label.getAttribute("y"))];
+  const half = Math.abs(parseFloat(label.getAttribute("font-size") ?? "0")) / 2;
+  const offsets: Record<string, [number, number]> = {
+    auto: [0, -half],
+    hanging: [0, half],
+    start: [half, 0],
+    end: [-half, 0],
+  };
+  const [dx, dy] = offsets[label.getAttribute("dominant-baseline")!] ??
+    offsets[label.getAttribute("text-anchor")!] ?? [0, 0];
+  return [x + dx, y + dy];
+}
+/** what lies under a point of an xy chart before `drawnBefore`: the last bar mermaid drew there, or the plot's white */
+function groundUnder(chart: Element, drawnBefore: Element, [x, y]: [number, number]): string {
+  let ground = WHITE;
+  for (const rect of chart.querySelectorAll('[class^="bar-plot-"] > rect')) {
+    if (!(rect.compareDocumentPosition(drawnBefore) & window.Node.DOCUMENT_POSITION_FOLLOWING)) break;
+    const [left, top, width, height] = ["x", "y", "width", "height"].map((name) => Number(rect.getAttribute(name))) as [
+      number,
+      number,
+      number,
+      number,
+    ];
+    if (x >= left && x <= left + width && y >= top && y <= top + height) ground = paint(rect, "fill");
+  }
+  return ground;
+}
+/** a label holds 4.5:1 on its ground, or on the halo it is drawn on (the design guide's label halo, §10.1) */
+function assertLabelReads(label: Element, ground: string, what: string): void {
+  const text = paint(label, "fill");
+  const haloed =
+    drawnStyle(label, "paint-order") === "stroke" && parseFloat(drawnStyle(label, "stroke-width") ?? "0") >= 2;
+  const behind = haloed ? paint(label, "stroke") : ground;
+  assert.ok(
+    contrast(text, behind) >= 4.5,
+    `${what}: ${label.textContent}, ${text} on ${haloed ? "its halo " : ""}${behind}, ${contrast(text, behind).toFixed(2)}:1`,
+  );
+}
+
 test("an xy chart's bars and lines take the same greys, its labels read on what they sit on (#294)", async () => {
   const plots =
     '  x-axis [a, b, c]\n  bar [1, 5, 3]\n  bar [2, 3, 4]\n  line [2 "low", 4, 6 "high"]\n  line [3, 1, 2]\n';
@@ -449,15 +492,77 @@ test("an xy chart's bars and lines take the same greys, its labels read on what 
         const labels = [...chart.querySelectorAll(`.bar-plot-${n} > text`)];
         assert.ok(labels.length > 0, what);
         for (const label of labels) {
-          const [text, ground] = [paint(label, "fill"), outside ? WHITE : fill];
-          assert.ok(contrast(text, ground) >= 4.5, `${what}: bar ${n}'s ${label.textContent}, ${text} on ${ground}`);
+          assertLabelReads(label, groundUnder(chart, label, labelPoint(label)), `${what}: bar ${n}'s`);
         }
       }
-      // a line's point labels sit on white next to it
       const points = [...chart.querySelectorAll(".line-plot-2 .labels text")];
       assert.equal(points.length, 2, what);
-      for (const point of points) assert.equal(paint(point, "fill"), black, `${what}: ${point.textContent}`);
+      for (const point of points) {
+        assert.equal(paint(point, "fill"), black, `${what}: ${point.textContent}`);
+        assertLabelReads(point, groundUnder(chart, point, labelPoint(point)), what);
+      }
     }
+  }
+});
+
+test("an xy chart's labels outside its bars and its point labels read where a later plot lays them on a text-leise bar (#294)", async () => {
+  // mermaid draws its plots over each other in order: what a third plot labels lies on the second plot's bar
+  const bars = "  x-axis [a, b, c]\n  y-axis 0 --> 10\n  bar [9, 9, 9]\n  bar [8, 8, 8]\n";
+  for (const orientation of ["", " horizontal"]) {
+    const outside = await onPage(
+      "---\nconfig:\n  xyChart:\n    showDataLabel: true\n    showDataLabelOutsideBar: true\n---\n" +
+        `xychart${orientation}\n${bars}  bar [3, 4, 5]\n`,
+    );
+    const pointed = await onPage(`xychart${orientation}\n${bars}  line [2 "low", 3 "mid", 4 "high"]\n`);
+    for (const [what, chart, selector] of [
+      [`xychart${orientation}, labels outside`, outside, ".bar-plot-2 > text"],
+      [`xychart${orientation}, point labels`, pointed, ".line-plot-2 > .labels > text"],
+    ] as const) {
+      const labels = [...chart.querySelectorAll(selector)];
+      assert.equal(labels.length, 3, what);
+      for (const label of labels) {
+        const ground = groundUnder(chart, label, labelPoint(label));
+        assert.equal(ground, LEISE.fill, `${what}: ${label.textContent} lies on the second plot's bar`);
+        assertLabelReads(label, ground, what);
+      }
+    }
+  }
+});
+
+test("an xy chart's lines are cased in the plot's white, so they hold 3:1 across bars of either grey (#294)", async () => {
+  const chart = await onPage(
+    "xychart\n  x-axis [a, b, c, d]\n  y-axis 0 --> 10\n  bar [6, 9, 3, 8]\n  bar [4, 2, 7, 5]\n" +
+      "  line [1, 8, 2, 9]\n  line [5, 1, 8, 7]\n",
+  );
+  for (const n of [2, 3]) {
+    const path = chart.querySelector(`.line-plot-${n} > path`)!;
+    const line = paint(path, "stroke");
+    // the line's points lie on bars of both greys, where it alone would read below 3:1
+    const grounds = new Set(
+      [...path.getAttribute("d")!.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) =>
+        groundUnder(chart, path, [Number(m[1]), Number(m[2])]),
+      ),
+    );
+    assert.ok(grounds.has(KONTUR.fill) && grounds.has(LEISE.fill), `line ${n} crosses bars of both greys`);
+    for (const ground of grounds) {
+      if (ground !== WHITE) assert.ok(contrast(line, ground) < 3, `line ${n}: ${line} on ${ground} needs its casing`);
+    }
+    const shadows = [
+      ...(drawnStyle(path, "filter") ?? "").matchAll(
+        /drop-shadow\(\s*(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?\s+(#[\da-f]+|rgba?\([^)]*\))\s*\)/gi,
+      ),
+    ].map(([, x, y, blur, colour]) => ({ x: Number(x), y: Number(y), blur: Number(blur), colour: hex(colour) }));
+    assert.equal(shadows.length, 4, `line ${n}: ${drawnStyle(path, "filter")}`);
+    const reach = Math.abs(shadows[0]!.x || shadows[0]!.y);
+    // whole pixels: Chromium rounds a half pixel up on one side and down on the other
+    assert.ok(Number.isInteger(reach) && reach >= 1, `line ${n}: casing of ${reach}px`);
+    assert.deepEqual(
+      shadows.map(({ x, y }) => `${x},${y}`).sort(),
+      [`${reach},0`, `-${reach},0`, `0,${reach}`, `0,-${reach}`].sort(),
+      `line ${n}: a casing on every side`,
+    );
+    for (const shadow of shadows) assert.deepEqual([shadow.blur, shadow.colour], [0, WHITE], `line ${n}`);
+    assert.ok(contrast(line, WHITE) >= 3, `line ${n}: ${line} on its casing`);
   }
 });
 

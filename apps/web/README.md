@@ -164,14 +164,17 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   user journey's sections take white and the calm grey in turn, a radar's grid takes
   `--cd-linie` and a quadrant chart's points black (#294). Two series of the same parity (pie
   slices 1 and 3, radar curves 0 and 2, git branches 1 and 3, venn sets 1 and 3, xy plots 0
-  and 2) share a grey, so a legend cannot tell them apart. mermaid lightens a kanban column's
-  grey, fades a treemap's, brightens a timeline's events, writes an xy chart's labels in one
-  colour whatever they sit on and fills mindmap and timeline nodes white in the neo look, so a
-  kanban column takes the grey of every other group, a timeline event its section's grey, a
-  data label inside a `--cd-text-leise` bar is white on a halo of that grey (it still reads
-  where it runs past a bar too short for it), and a kanban column's title, a treemap's
-  labels, an xy chart's point labels and the labels of neo nodes stay black
-  (`MERMAID_THEME_CSS`). The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
+  and 2) share a grey, so a legend cannot tell them apart, and a git graph's ninth branch
+  after main takes main's black again (mermaid cycles through eight branch colours).
+  mermaid lightens a kanban column's grey, fades a treemap's, brightens a timeline's events,
+  writes an xy chart's labels in one colour whatever they sit on, draws its plots over each
+  other and fills mindmap and timeline nodes white in the neo look, so a kanban column takes
+  the grey of every other group, a timeline event its section's grey, a data label inside a
+  `--cd-text-leise` bar is white on a halo of that grey (it still reads where it runs past a
+  bar too short for it), a data label outside a bar and a point label are black on a white
+  halo (a later plot's label can lie on an earlier plot's bar), an xy chart's line is cased
+  in white where it crosses a bar, and a kanban column's title, a treemap's labels and the
+  labels of neo nodes stay black (`MERMAID_THEME_CSS`). The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
   theme, palette, CSS or font (`MERMAID_SECURE_KEYS`, checked against mermaid itself in
   `test/mermaid-engine.test.ts`); layout options stay the author's. What mermaid is known to
   load from an address a diagram names is kept from another site (#290). mermaid's label
