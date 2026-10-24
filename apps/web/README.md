@@ -64,8 +64,12 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
 
 - `render.ts` is pure, node-tested in `test/markdown-render.test.ts`: CommonMark plus the GFM
   tables, strikethrough, task lists and autolinks, and GitHub-style heading anchors (the ids
-  carry an `md-` prefix, URL fragments stay bare). Raw HTML never reaches the page: HTML
-  comments are hidden, as on GitHub, everything else is escaped and shows as text.
+  carry an `md-` prefix, URL fragments stay bare). The document's own HTML never reaches the
+  page: HTML comments are hidden, as on GitHub, and the small subset GitHub authors use for
+  layout (`<br>`, `<details>` and `<summary>`, `<sub>`, `<sup>`, `<kbd>`) renders as bare tags
+  the renderer writes anew, every attribute dropped but `<details open>`. Everything else is
+  escaped and shows as text. A `<kbd>` is the design guide's shortcut chip, a `<summary>`
+  shows a Lucide chevron instead of the browser's triangle.
   `javascript:`, `vbscript:`, `file:` and non-image `data:` URLs never become a link or an
   image. GFM footnotes do not render yet; their text stays in the document.
 - `sanitize.ts` sanitizes that HTML once more with DOMPurify, against an allowlist of exactly

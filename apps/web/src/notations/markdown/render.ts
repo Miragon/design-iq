@@ -8,13 +8,16 @@
  * Node-loadable on purpose (test/markdown-render.test.ts): relative `.ts`
  * imports, no "@/" alias, nothing DOM-bound.
  *
- * Content-repo Markdown is untrusted. Raw HTML is never passed through: the
- * parser recognises it (so an HTML comment stays hidden, as on GitHub), and
- * the two html render rules drop comments and escape everything else.
- * markdown-it's validateLink keeps javascript:, vbscript:, file: and
- * non-image data: URLs from becoming a link or an image; a link with any
- * scheme but http(s), mailto: and tel: renders as text; the view sanitizes
- * the result once more (DOMPurify) before it reaches the page.
+ * Content-repo Markdown is untrusted. Raw HTML passes only as the small
+ * subset GitHub authors use for layout (PASSED_TAGS: a line break, a
+ * collapsible section, sub- and superscript, a key), and only as bare tags
+ * the renderer writes itself: every attribute is dropped but a <details>'
+ * `open`. The parser recognises raw HTML (so an HTML comment stays hidden, as
+ * on GitHub), and the two html render rules drop comments, pass that subset
+ * and escape everything else. markdown-it's validateLink keeps javascript:,
+ * vbscript:, file: and non-image data: URLs from becoming a link or an image;
+ * a link with any scheme but http(s), mailto: and tel: renders as text; the
+ * view sanitizes the result once more (DOMPurify) before it reaches the page.
  *
  * Links between models: a relative link resolves against the document's
  * folder (a leading "/" against the repository root, as on GitHub). A target
@@ -330,9 +333,9 @@ function rewriteLink(token: Token, env: RenderEnv): void {
 }
 
 // `html: true` only lets the parser RECOGNISE raw HTML: the html render rules
-// below drop comments and escape the rest, so no markup of the document's own
-// reaches the page. (With `html: false` a comment would show as text, and its
-// lines would render as Markdown.)
+// below drop comments, write the passed tags anew and escape the rest, so no
+// markup of the document's own reaches the page. (With `html: false` a
+// comment would show as text, and its lines would render as Markdown.)
 const md = new MarkdownIt({ html: true, linkify: true, typographer: false });
 
 // GFM autolinks: URLs with a scheme, e-mail addresses and www. hosts. linkify-it
@@ -364,16 +367,68 @@ const { escapeHtml, unescapeAll } = md.utils;
 /** text as HTML text: what a fence renderer wraps its source in */
 export const escapeText = (text: string): string => escapeHtml(text);
 
-// raw HTML never reaches the page: comments are dropped (GitHub hides them
-// too: authoring notes, lint and toc directives), everything else is escaped
-// and shows as the text it is. An unclosed comment runs to the end, as in a
+// the document's own markup never reaches the page: comments are dropped
+// (GitHub hides them too: authoring notes, lint and toc directives), the tags
+// of PASSED_TAGS are written anew, bare, and everything else is escaped and
+// shows as the text it is. An unclosed comment runs to the end, as in a
 // browser.
 const HTML_COMMENT = /<!--[\s\S]*?(?:-->|$)/g;
+
+/** the raw HTML GitHub renders that the view renders too */
+const PASSED_TAGS: ReadonlySet<string> = new Set(["br", "details", "summary", "sub", "sup", "kbd"]);
+
+// a tag as CommonMark reads raw HTML (markdown-it's html_re)
+const ATTRIBUTE_NAME = "[a-zA-Z_:][a-zA-Z0-9:._-]*";
+const ATTRIBUTE_VALUE = `(?:\\s*=\\s*(?:[^"'=<>\`\\x00-\\x20]+|'[^']*'|"[^"]*"))?`;
+const TAG = `<([A-Za-z][A-Za-z0-9-]*)((?:\\s+${ATTRIBUTE_NAME}${ATTRIBUTE_VALUE})*)\\s*\\/?>|<\\/([A-Za-z][A-Za-z0-9-]*)\\s*>`;
+const ONE_TAG = new RegExp(`^(?:${TAG})$`);
+const TAGS = new RegExp(TAG, "g");
+const ATTRIBUTE_NAMES = new RegExp(`\\s+(${ATTRIBUTE_NAME})${ATTRIBUTE_VALUE}`, "g");
+
+/** a raw tag as the view writes it: a tag of PASSED_TAGS bare, undefined for any other */
+function passedTag(raw: string): string | undefined {
+  const match = ONE_TAG.exec(raw);
+  if (!match) return undefined;
+  const [, openName, attributes = "", closeName] = match;
+  const name = (openName ?? closeName ?? "").toLowerCase();
+  if (!PASSED_TAGS.has(name)) return undefined;
+  // a br closes nothing: a browser reads </br> as a line break as well
+  if (closeName !== undefined) return name === "br" ? "<br>" : `</${name}>`;
+  const open =
+    name === "details" && [...attributes.matchAll(ATTRIBUTE_NAMES)].some(([, attr]) => attr!.toLowerCase() === "open");
+  return open ? "<details open>" : `<${name}>`;
+}
+
+/** text of the document's raw HTML: a character reference stays one, as on
+ *  GitHub, anything else that is markup is escaped */
+const htmlText = (text: string): string =>
+  text
+    .replace(/&(?!(?:#\d{1,7}|#[xX][\da-fA-F]{1,6}|[A-Za-z][A-Za-z\d]{1,31});)/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+// an HTML block with a passed tag (a <details> and its <summary>) is that
+// markup, without a paragraph around it; any other block shows as the text it
+// is, in a paragraph of its own
 md.renderer.rules.html_block = (tokens, idx) => {
   const text = tokens[idx]!.content.replace(HTML_COMMENT, "").trim();
-  return text === "" ? "" : `<p>${escapeHtml(text)}</p>\n`;
+  if (text === "") return "";
+  let html = "";
+  let passed = false;
+  let at = 0;
+  for (const match of text.matchAll(TAGS)) {
+    const tag = passedTag(match[0]);
+    passed ||= tag !== undefined;
+    html += htmlText(text.slice(at, match.index)) + (tag ?? escapeHtml(match[0]));
+    at = match.index + match[0].length;
+  }
+  return passed ? `${html}${htmlText(text.slice(at))}\n` : `<p>${escapeHtml(text)}</p>\n`;
 };
-md.renderer.rules.html_inline = (tokens, idx) => escapeHtml(tokens[idx]!.content.replace(HTML_COMMENT, ""));
+md.renderer.rules.html_inline = (tokens, idx) => {
+  const raw = tokens[idx]!.content.replace(HTML_COMMENT, "");
+  return passedTag(raw) ?? escapeHtml(raw);
+};
 
 md.renderer.rules.task_checkbox = (tokens, idx) =>
   `<input type="checkbox" class="task-list-item-checkbox" disabled${tokens[idx]!.meta?.checked ? " checked" : ""}> `;

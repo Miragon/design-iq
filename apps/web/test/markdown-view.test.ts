@@ -143,6 +143,16 @@ test("the sanitizer keeps the renderer's markup and strips everything else", () 
     '<button type="submit" formaction="https://evil.example" onclick="x()" data-image-src="https://a.example/x.png">Load image</button>',
   );
   assert.equal(button, '<button type="button" data-image-src="https://a.example/x.png">Load image</button>');
+
+  // GitHub's HTML subset passes, without a handler: <details ontoggle> fires with no click at all
+  const subset = clean(
+    '<details open ontoggle="alert(1)"><summary onclick="alert(1)">s</summary>a<br onmouseover="alert(1)">b</details>' +
+      '<p>H<sub>2</sub>O x<sup style="color:red">2</sup> <kbd onfocus="alert(1)" tabindex="0">K</kbd></p>',
+  );
+  assert.equal(
+    subset,
+    '<details open=""><summary>s</summary>a<br>b</details><p>H<sub>2</sub>O x<sup>2</sup> <kbd>K</kbd></p>',
+  );
 });
 
 test("the sanitizer lets an image load from this origin or inline data, from another site only once the reader chose it", () => {
@@ -267,6 +277,23 @@ test("a repository image loads from the Live Host; one that does not load become
     ["/api/repos/acme/models/image?path=logo.svg", "/api/repos/acme/models/image?path=logo.svg"],
   );
   assert.deepEqual(v.errors, []);
+  v.view.destroy();
+});
+
+test("a <details> section opens on its summary, which shows a Lucide chevron, not the browser's triangle", () => {
+  const v = mount("<details>\n<summary>More</summary>\n\nHidden **text**\n\n</details>\n\n<summary>stray</summary>");
+  const details = v.article.querySelector("details")!;
+  assert.equal(details.open, false);
+  assert.match(details.querySelector("p")!.innerHTML, /Hidden <strong>text<\/strong>/);
+  const summary = details.querySelector("summary")!;
+  const chevron = summary.firstElementChild!;
+  assert.equal(chevron.tagName.toLowerCase(), "svg");
+  assert.equal(chevron.getAttribute("class"), "icon md-summary-icon");
+  assert.equal(chevron.getAttribute("aria-hidden"), "true");
+  assert.equal(summary.textContent, "More");
+  assert.equal(v.article.querySelectorAll("svg").length, 1, "a summary outside a <details> discloses nothing");
+  assert.equal(v.click(summary), true, "the view leaves the click to the browser");
+  assert.equal(details.open, true);
   v.view.destroy();
 });
 
