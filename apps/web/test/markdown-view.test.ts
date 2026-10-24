@@ -303,17 +303,103 @@ test("matchBlocks keeps the unchanged blocks in order, and never matches a line 
   const [h, a, b, c, d, x] = ["<h1>T</h1>", "<p>a</p>", "<p>b</p>", "<p>c</p>", "<p>d</p>", "<p>x</p>"];
   // a block inserted: the blocks around it stay
   assert.deepEqual(matchBlocks([h, br, a, br, b, br], [h, br, x, br, a, br, b, br]), [0, 1, -1, -1, 2, 3, 4, 5]);
-  // two blocks edited: the one between them stays, and so does the line break after it
+  // two blocks edited: the one between them stays, and so do the line breaks around it
   assert.deepEqual(
     matchBlocks([h, br, a, br, b, br, c, br, d], [h, br, x, br, b, br, x, br, d]),
-    [0, 1, -1, -1, 4, 5, -1, 7, 8],
+    [0, 1, -1, 3, 4, 5, -1, 7, 8],
   );
   // a line break pulls no match past a block that can stay
   assert.deepEqual(matchBlocks([x, a, br, b], [br, a, c]), [-1, 1, -1]);
   // two blocks swapped: one of them stays, nothing moves
-  assert.deepEqual(matchBlocks([a, br, b], [b, br, a]), [2, -1, -1]);
+  assert.deepEqual(matchBlocks([a, br, b], [b, br, a]), [-1, -1, 0]);
   assert.deepEqual(matchBlocks([], [a, br]), [-1, -1]);
   assert.deepEqual(matchBlocks([a, br], []), []);
+});
+
+test("matchBlocks never lets a repeated block (a rule, a heading's text) cost an unchanged block its place (#289)", () => {
+  const br = "#text \n";
+  const [p1, p2, edited, a, b, c, hr] = [
+    "<p>1</p>",
+    "<p>2</p>",
+    "<p>2!</p>",
+    "<p>a</p>",
+    "<p>b</p>",
+    "<p>c</p>",
+    "<hr>",
+  ];
+  // a rule inserted near the top and the last block edited, in one render:
+  // a, b, the rule that was there and c stay
+  assert.deepEqual(
+    matchBlocks([p1, br, a, br, b, br, hr, br, c, br, p2], [p1, br, hr, br, a, br, b, br, hr, br, c, br, edited]),
+    [0, 1, -1, -1, 2, 3, 4, 5, 6, 7, 8, 9, -1],
+  );
+  // a heading with the text of two others added above them renumbers their
+  // ids: the new one takes the first one's key, and every paragraph stays
+  const example = (n: string): string => `<h2 id="md-example${n}">Example</h2>`;
+  const [intro, zero, alpha, one, two] = ["<p>Intro</p>", "<p>Zero</p>", "<p>Alpha</p>", "<p>One</p>", "<p>Two</p>"];
+  assert.deepEqual(
+    matchBlocks(
+      [intro, br, alpha, br, example(""), br, one, br, example("-1"), br, two],
+      [intro, br, example(""), br, zero, br, alpha, br, example("-1"), br, one, br, example("-2"), br, two],
+    ),
+    [0, 1, -1, -1, -1, -1, 2, 3, -1, 5, 6, 7, -1, 9, 10],
+  );
+  // no block occurs once on each side: aligned block by block, a block
+  // before a line break
+  assert.deepEqual(matchBlocks([hr, br, hr, a], [b, hr, br, hr]), [-1, 0, 1, 2]);
+  assert.deepEqual(matchBlocks([br, hr, hr], [hr, br]), [1, -1]);
+});
+
+test("a heading with the text of others added above keeps every unchanged paragraph and the selection in it (#289)", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const v = mount("Intro.\n\nAlpha.\n\nBeta.\n\nGamma.\n\n## Example\n\nOne.\n\n---\n\nDelta.\n\n## Example\n\nTwo.");
+  const before = new Map([...v.article.children].map((el) => [el.textContent || el.tagName, el]));
+  const one = before.get("One.")!;
+  const selection = v.win.getSelection()!;
+  selection.selectAllChildren(one);
+
+  v.ytext.insert(v.ytext.toString().indexOf("Alpha."), "## Example\n\nZero.\n\n");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  const after = [...v.article.children];
+  assert.deepEqual(
+    after.map((el) => el.textContent || el.tagName),
+    ["Intro.", "Example", "Zero.", "Alpha.", "Beta.", "Gamma.", "Example", "One.", "HR", "Delta.", "Example", "Two."],
+  );
+  for (const text of ["Intro.", "Alpha.", "Beta.", "Gamma.", "One.", "HR", "Delta.", "Two."]) {
+    assert.equal(
+      after.find((el) => (el.textContent || el.tagName) === text),
+      before.get(text),
+      `${text} stays on the page`,
+    );
+  }
+  assert.equal(selection.anchorNode, one);
+  assert.equal(selection.toString(), "One.");
+  const fresh = mount(v.ytext.toString());
+  assert.equal(v.article.innerHTML, fresh.article.innerHTML, "the page a fresh render shows");
+  fresh.view.destroy();
+  v.view.destroy();
+});
+
+test("a rule inserted above and an edit below in one render keep the blocks between them (#289)", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const v = mount("Intro.\n\nAlpha.\n\nBeta.\n\n---\n\nGamma.\n\nOutro.");
+  const before = [...v.article.children];
+  v.ytext.insert(v.ytext.toString().indexOf("Outro.") + 5, ", edited");
+  v.ytext.insert(v.ytext.toString().indexOf("Alpha."), "---\n\n");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  const after = [...v.article.children];
+  assert.deepEqual(
+    after.map((el) => el.textContent || el.tagName),
+    ["Intro.", "HR", "Alpha.", "Beta.", "HR", "Gamma.", "Outro, edited."],
+  );
+  assert.deepEqual(
+    after.map((el) => before.indexOf(el)),
+    [0, -1, 1, 2, 3, 4, -1],
+  );
+  const fresh = mount(v.ytext.toString());
+  assert.equal(v.article.innerHTML, fresh.article.innerHTML, "the page a fresh render shows");
+  fresh.view.destroy();
+  v.view.destroy();
 });
 
 test("a fence extension that adds a node to the document has the next render replace it whole", async (t) => {

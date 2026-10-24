@@ -38,8 +38,10 @@
  *   elsewhere in its list) does not draw it again, and put it back in the
  *   synchronous part of `hydrate`, before the first `await`: the view calls
  *   `hydrate` in a microtask right after the render, so what is back by then
- *   is on screen without a flash of code, and the reader's scroll position
- *   is restored after it.
+ *   is on screen without a flash of code.
+ * - The reader's place is the view's: whatever `hydrate` inserts, at once or
+ *   later, the view keeps the first block on screen where it is when the
+ *   document's height changes, CSS scroll anchoring or not.
  */
 import { createMermaidFence } from "./mermaid-fence.ts";
 import type { FenceRenderer } from "./render.ts";
