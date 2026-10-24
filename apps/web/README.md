@@ -14,15 +14,25 @@ Desktop, ChatGPT).
 | `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and what it makes of hostile sources, the Mermaid frame and the Miragon renderers themselves (`test/renderer-dom.ts`). |
 | `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                                                                                |
 
-Four checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`
+Five checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`
 (under the Markdown view below), `test/live-gesture-chromium.ts` and `test/canvas-focus-chromium.ts`
-(both under the MCP-App widgets below) and `test/live-repair-chromium.ts`, the live merge repair and its
+(both under the MCP-App widgets below), `test/source-layers-chromium.ts` (Monaco under the side
+panels, next paragraph) and `test/live-repair-chromium.ts`, the live merge repair and its
 notice with real peers (issue 296): two tabs dropping moves at once, the first-ranked writer
 closing its tab, a link that drops and comes back, a half-typed tag seen from the canvas tabs, a
 reload during it, and the BPMN widget live in a minimal MCP-Apps host. From the repository root:
 `pnpm build`, once `npx -y playwright@1.56.1 install --only-shell chromium`, then
 `npx -y -p playwright@1.56.1 -c "node apps/web/test/live-repair-chromium.ts"` (`PORT` sets the
 Live Host's port, 8392 unless set; `ONLY` and `SHOTS` are in its header).
+
+The side panels (History, Todos, Notes, …) dock over the right edge of the editor, the source
+included (issue 288). Monaco stacks its scrollbar and its find widget above them, so
+`src/index.css` isolates Monaco's frame (its `.overflow-guard`): an open panel stays on top and
+takes the clicks at its right edge. The source pane itself is not isolated, so Monaco's context
+menu and suggestions stay over a panel they reach into, and in the split view over the preview.
+`test/source-layers.test.ts` holds the stylesheet and the pinned Monaco to this, and
+`test/source-layers-chromium.ts` checks it in the built app, run as above (`PORT`, 8393 unless
+set).
 
 ## Theming
 
