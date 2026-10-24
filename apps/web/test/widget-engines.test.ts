@@ -407,7 +407,8 @@ test("zoomStepLevel: − and + walk the guide's fixed steps (§5.8) from the nea
   const readBack = (level: number): number => Math.round(level * 1000) / 1000;
   const walk = (level: number, direction: 1 | -1): number[] => {
     const percents: number[] = [];
-    while (direction > 0 ? level < ZOOM_MAX : level > ZOOM_MIN) {
+    // bounded: a step that stalls must fail the walk, not hang the suite
+    for (let press = 0; press < 16 && (direction > 0 ? level < ZOOM_MAX : level > ZOOM_MIN); press++) {
       level = readBack(zoomStepLevel(level, direction));
       percents.push(Math.round(level * 100));
     }

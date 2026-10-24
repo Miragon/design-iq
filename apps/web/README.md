@@ -274,9 +274,11 @@ the SPA's Miragon editors bind too): the renderers bind no zoom keys, bpmn-js
 and dmn-js keep their own. The −/+ buttons and the zoom keys step on the
 design guide's fixed zoom steps (22, 30, 41, 55, 74, 100, 135, 182, 246 and
 331 %, `zoomStepLevel` in `engines/fit.ts`), the raster of diagram-js's
-`zoomScroll.stepZoom` that bpmn-js's and dmn-js's own keys take. Zoom out
-stops at a fit below 20 % instead of zooming in to 20 %. The widget's geometry (the 36px corners, the
-12/16px insets) stays designIQ's; the full shell is not mounted.
+`zoomScroll.stepZoom` that bpmn-js's and dmn-js's own keys take. The −
+button and the Miragon zoom-out keys stop at a fit below 20 % instead of
+zooming in to 20 %; bpmn-js's and dmn-js's own Ctrl/⌘ − still clamps up to
+20 % there. The widget's geometry (the 36px corners, the 12/16px insets)
+stays designIQ's; the full shell is not mounted.
 In the SPA a Miragon editor's ⇧1 fits 24px clear of the renderer's palette as
 measured, of the canvas's sides and bottom, and of an open side panel (the
 panels dock over the canvas's right edge, `src/lib/side-panel-room.ts`);
