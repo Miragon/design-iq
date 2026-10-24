@@ -47,6 +47,7 @@ const SANITIZE: Config & { RETURN_DOM_FRAGMENT: true } = {
     "p",
     "pre",
     "s",
+    "section",
     "span",
     "strong",
     "sub",

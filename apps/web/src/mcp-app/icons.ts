@@ -10,7 +10,8 @@
  * The static HTML names its icons declaratively (`<button data-icon="x">`);
  * mountIcons fills them once at boot, so each geometry lives here only.
  * The SPA's Markdown view, plain DOM like the widgets, borrows circle-alert
- * for the error notice under a mermaid fence.
+ * for the error notice under a mermaid fence, chevron-right for a <details>
+ * summary and corner-up-left for a footnote's link back to its reference.
  * Phase 2 adds git-pull-request (Release → PR) and undo-2 / redo-2 (touch).
  */
 export const LUCIDE_ICONS = {
@@ -32,6 +33,8 @@ export const LUCIDE_ICONS = {
     '<path d="M17.609 3.721a10 10 0 0 1 2.69 2.7"/><path d="M2.182 13.9a10 10 0 0 1 0-3.8"/>' +
     '<path d="M20.279 17.609a10 10 0 0 1-2.7 2.69"/><path d="M21.818 10.1a10 10 0 0 1 0 3.8"/>' +
     '<path d="M3.721 6.391a10 10 0 0 1 2.7-2.69"/><path d="M6.391 20.279a10 10 0 0 1-2.69-2.7"/>',
+  // the Markdown view: a footnote's link back to its reference
+  "corner-up-left": '<path d="M20 20v-7a4 4 0 0 0-4-4H4"/><path d="M9 14 4 9l5-5"/>',
   "external-link":
     '<path d="M15 3h6v6"/><path d="M10 14 21 3"/>' +
     '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',

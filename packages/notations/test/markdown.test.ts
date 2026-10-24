@@ -156,13 +156,46 @@ test("markdownFences: a link reference definition is no paragraph, so raw HTML o
   assert.deepEqual(fences("[r]: <http://x>\n10. x\n    ```mermaid\n    pie\n    ```\n"), [
     { line: 3, info: "mermaid", content: "pie\n" },
   ]);
-  // a footnote and a link the view refuses are no definitions: paragraph text
+  // a footnote definition holds a paragraph, which the <img> line goes on with;
+  // a link the view refuses is no definition but paragraph text
   assert.deepEqual(fences('[^1]: note\n<img src="a.png">\n```mermaid\npie\n```\n'), [
     { line: 3, info: "mermaid", content: "pie\n" },
   ]);
   assert.deepEqual(fences('[x]: javascript:alert(1)\n<img src="a.png">\n```mermaid\npie\n```\n'), [
     { line: 3, info: "mermaid", content: "pie\n" },
   ]);
+});
+
+test("markdownFences: a footnote definition holds the fences indented four columns past it", () => {
+  // blank lines never end a definition; a line indented less does
+  assert.deepEqual(
+    fences("[^1]: The flow:\n\n    ```mermaid\n    pie\n\n      x\n    ```\n```mermaid\nflowchart LR\n"),
+    [
+      { line: 3, info: "mermaid", content: "pie\n\n  x\n" },
+      { line: 8, info: "mermaid", content: "flowchart LR\n" },
+    ],
+  );
+  assert.deepEqual(fences("[^1]: note\n\n```mermaid\n    pie\n```\n"), [
+    { line: 3, info: "mermaid", content: "    pie\n" },
+  ]);
+  // a fence on the definition's own line: its content loses the definition's
+  // four columns and the blanks after the colon, which count from the fifth on
+  assert.deepEqual(fences("[^1]: ```mermaid\n     pie\n    ```\n"), [{ line: 1, info: "mermaid", content: "pie\n" }]);
+  assert.deepEqual(fences("[^1]:      ```mermaid\n     pie\n     ```\n"), [
+    { line: 1, info: "mermaid", content: "pie\n" },
+  ]);
+  assert.deepEqual(fences("[^1]:         ```mermaid\n"), []);
+  // in a list item, the definition's four columns count past the item's content
+  assert.deepEqual(fences("- [^1]: ```mermaid\n        pie\n      ```\n"), [
+    { line: 1, info: "mermaid", content: " pie\n" },
+  ]);
+  // it interrupts a paragraph, but a quote reads it as a lazy line
+  assert.deepEqual(fences("Text\n[^1]: note\n\n    ```mermaid\n    pie\n    ```\n"), [
+    { line: 4, info: "mermaid", content: "pie\n" },
+  ]);
+  assert.deepEqual(fences("> Quote\n[^1]: note\n    ```mermaid\n    pie\n"), []);
+  // a blank in the label: no definition, but paragraph text
+  assert.deepEqual(fences("[^a b]: note\n\n    ```mermaid\n"), []);
 });
 
 test("markdownFences: content nested deeper than the view parses holds no fence", () => {
@@ -187,6 +220,10 @@ test("markdownFences: linear on deep nesting and long lines, up to the save gate
     "lists 1500 deep": fill(lists(1500), `${" ".repeat(3000)}y\n`),
     "lists 49 deep, each line continuing them": fill(lists(49), `${" ".repeat(1000)}y\n`),
     "lists in a quote, too deep for the view": fill(lists(50).replace(/^(?=.)/gm, "> "), `> ${" ".repeat(1000)}y\n`),
+    "footnote definitions 99 deep, each line continuing them": fill(
+      `${"[^1]: ".repeat(99)}x\n`,
+      `${" ".repeat(396)}y\n`,
+    ),
     "one line of blanks": `${lists(49)}${" ".repeat(MB8)}\n`,
   };
   for (const [name, source] of Object.entries(documents)) {

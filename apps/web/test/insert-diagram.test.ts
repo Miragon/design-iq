@@ -240,6 +240,16 @@ test("a table, a setext heading, raw HTML and indented code stay whole", () => {
   );
 });
 
+test("a footnote definition stays whole, its indented paragraphs too: the diagram goes after it", () => {
+  const text = "Text[^1].\n\n[^1]: The note,\n    over two lines.\n\n    Its second paragraph.\n\nAfter\n";
+  const after =
+    "Text[^1].\n\n[^1]: The note,\n    over two lines.\n\n    Its second paragraph.\n\n" + FENCE + "\nAfter\n";
+  assert.equal(insert(text, { line: 3, column: 9 }).result, after);
+  assert.equal(insert(text, { line: 4, column: 9 }).result, after);
+  assert.equal(insert(text, { line: 6, column: 9 }).result, after);
+  assert.equal(insert(text, { line: 3, column: 1 }).result, "Text[^1].\n\n" + FENCE + "\n" + text.slice(11));
+});
+
 test("what the blocks do not show, the view's reading of the rest decides: a link definition keeps its title", () => {
   // markdown-it gives a link reference definition no block: the diagram after
   // its first line would part it from its title, which then reads as text

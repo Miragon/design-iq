@@ -285,10 +285,14 @@ export function mountMarkdownView(
 }
 
 /** the view's icons in a sanitized document: a Lucide chevron in place of the
- *  browser's disclosure triangle, in the summary of every <details> */
+ *  browser's disclosure triangle, in the summary of every <details>, and the
+ *  arrow of a footnote's link back to its reference */
 function withIcons(fragment: DocumentFragment, doc: Document): DocumentFragment {
   for (const summary of fragment.querySelectorAll("details > summary:first-of-type")) {
     summary.prepend(icon("chevron-right", 16, "md-summary-icon", doc));
+  }
+  for (const link of fragment.querySelectorAll("a.md-footnote-backref")) {
+    link.prepend(icon("corner-up-left", 16, "md-footnote-backref-icon", doc));
   }
   return fragment;
 }

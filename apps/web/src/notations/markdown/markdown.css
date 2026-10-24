@@ -246,6 +246,30 @@
   transform: rotate(90deg);
 }
 
+/* footnotes (GFM): a reference is a superscript number, the notes a numbered
+   list at the end in the small type (13/1.5), set off by a rule. A note's
+   link back to its reference is the view's Lucide corner-up-left (view.ts) */
+.markdown-body [id^="md-Footnote"] {
+  scroll-margin-top: var(--cd-space-3);
+}
+.markdown-body .md-footnotes {
+  margin-top: var(--cd-space-5);
+  padding-top: var(--cd-space-3);
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.markdown-body .md-footnote-ref > a,
+.markdown-body .md-footnote-backref {
+  text-decoration: none;
+}
+.markdown-body .md-footnote-backref-icon {
+  /* the base styles make an svg a block */
+  display: inline-block;
+  vertical-align: -0.125em;
+}
+
 /* a mermaid fence drawn as its diagram (./mermaid-fence.ts): centred, as
    wide as the measure up to its natural size (mermaid caps the SVG with a
    max-width), a wider one scrolls on its own. Dimmed while a newer source
