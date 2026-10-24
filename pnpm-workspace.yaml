@@ -23,9 +23,20 @@ minimumReleaseAgeExclude:
   - "@miragon/team-topologies-schema-model@0.13.0"
 overrides:
   # vitepress 1.6.4 (docs/) is the latest release and still requests vite
-  # ^5.4.14, which is stuck below the server.fs.deny bypass fix (>=6.4.3).
-  # Scoped to vitepress, so the vite of apps/web is untouched. The pin comes
-  # with the Miragon docs kit (Miragon/corporate-identity, skill docs-site),
-  # whose package.json template has it as npm "overrides"; under pnpm it
-  # lives here. It changes with a CI release of the kit.
-  vitepress>vite: 6.4.3
+  # ^5.4.14, which is stuck below the dev-server fixes; 6.4.5 also closes the
+  # advisories up to 6.4.3 (GHSA-rq7h-c2jc-7f22, GHSA-9jrq-w75r-8gcw and the
+  # bundled launch-editor ones). Scoped to vitepress, so the vite of apps/web
+  # is untouched. The pin comes with the Miragon docs kit
+  # (Miragon/corporate-identity, skill docs-site), whose package.json template
+  # has it as npm "overrides"; under pnpm it lives here. It changes with a CI
+  # release of the kit.
+  vitepress>vite: 6.4.5
+peerDependencyRules:
+  allowedVersions:
+    # vitepress-plugin-mermaid 2.0.17 (docs/) is the latest release and still
+    # declares mermaid 10 || 11 as its peer, while the docs kit since 1.24.0
+    # pins mermaid 12.2.0, which the plugin renders unchanged. The kit's npm
+    # template gives the plugin its mermaid through "overrides"; under pnpm
+    # this rule keeps `pnpm peers check` clean. It changes with a CI release
+    # of the kit.
+    vitepress-plugin-mermaid>mermaid: "12"

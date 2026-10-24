@@ -1,6 +1,6 @@
 {
   "$kommentar": "Generiert von scripts/sync-assets.mjs in Miragon/corporate-identity, nicht von Hand ändern. Jede Datei, die ein Repo aus der Skill docs-site vendort: Pfad im Repo, Quelle unter plugins/miragon-brand/skills/docs-site/assets/ und sha256. check.mjs prüft die Kopie damit.",
-  "version": "1.10.0",
+  "version": "1.24.0",
   "dateien": [
     {
       "pfad": "docs/.vitepress/miragon/check.mjs",
@@ -10,12 +10,12 @@
     {
       "pfad": "docs/.vitepress/miragon/config.ts",
       "quelle": "miragon/config.ts",
-      "sha256": "56ba36d908749227d8aa50efbdae7a1145b607717b8774bec8b40d4adfa62434"
+      "sha256": "c4bfa8b60e76b637a0df6c81aefc3975fe04d8e86885da048e45bad3f9ba3037"
     },
     {
       "pfad": "docs/.vitepress/miragon/legal.ts",
       "quelle": "miragon/legal.ts",
-      "sha256": "9768181ae8f130e22a540f70030c873b5455a314d66efdffcc49550e713c552a"
+      "sha256": "d7eac3bad6ee237876271075ac3387de8e3212ac48b58c33dc29d26b0377fdec"
     },
     {
       "pfad": "docs/.vitepress/miragon/slug.d.mts",
@@ -30,7 +30,7 @@
     {
       "pfad": "docs/.vitepress/miragon/theme/LegalRow.vue",
       "quelle": "miragon/theme/LegalRow.vue",
-      "sha256": "79f5c733137b39eed14e17b894edd00854ca484da12f2836d7314fdb7ca1552c"
+      "sha256": "2e51c8833b44041a79cc73f8c6c5e6d383aea4c2884936bdb5bbc12749e37dfc"
     },
     {
       "pfad": "docs/.vitepress/miragon/theme/cd-tokens.generated.css",
@@ -40,27 +40,17 @@
     {
       "pfad": "docs/.vitepress/miragon/theme/index.ts",
       "quelle": "miragon/theme/index.ts",
-      "sha256": "af39803bd95fea3478858379324b45bd9d86559106d6b796ace183b075d08633"
+      "sha256": "f03e84292612e5c4aa5594be950b7469b909077a421cb1cc6ab934f822ea1de3"
     },
     {
       "pfad": "docs/.vitepress/miragon/theme/miragon.css",
       "quelle": "miragon/theme/miragon.css",
-      "sha256": "cf6aeeaf5bdbdb10d184c0499ca30c72086b4a95032c8bcab1fb56067dc92220"
+      "sha256": "449aadbac19374aac077023e8bdb137a6ce0d09c960ea2186b1e320b3960bc77"
     },
     {
       "pfad": "docs/public/logo/miragon-komet-blau.svg",
       "quelle": "logo/miragon-komet-blau.svg",
       "sha256": "c44c4a00f93f4255442bb70afeb8dbcb7eaae6af331ff04b6c685b6d20f587c9"
-    },
-    {
-      "pfad": "docs/public/logo/miragon-logo-gruen.svg",
-      "quelle": "logo/miragon-logo-gruen.svg",
-      "sha256": "bc815e0698689546771e629139d86ac9dfbe29dc5618cd5e2910e6079629eae3"
-    },
-    {
-      "pfad": "docs/public/logo/miragon-logo-weiss.svg",
-      "quelle": "logo/miragon-logo-weiss.svg",
-      "sha256": "a235870d9347600d83f4294b4a31799338ead399f1351dc8880809efcc8621fd"
     }
   ]
 }
