@@ -6,7 +6,9 @@
  * text stays at the guide's `klein` size (13px, §4); a diagram drawn with
  * smaller text (a C4 type line is 10.5px) grows to it. One that is then
  * wider than its block scrolls sideways there, and the block becomes a
- * region the keyboard reaches and scrolls.
+ * region the keyboard reaches and scrolls. A diagram that takes the width it
+ * is laid out at as its own (a Gantt chart) is laid out narrower instead, so
+ * that it fits its block at 13px.
  *
  * The minimum follows the diagram's own smallest text, measured on the
  * page as the reader gets it, not a flat factor: a flowchart's 16px labels
@@ -22,8 +24,8 @@ export const SMALLEST_TEXT_PX = 13;
 /** the guide's zoom ceiling (§5.8): text an author set hair-thin does not
  *  blow the diagram up without end */
 export const MAX_MINIMUM_SCALE = 4;
-/** what a screen reader announces for a diagram wider than its block */
-export const SCROLL_REGION_LABEL = "Diagram, scroll sideways";
+/** the class of the block a drawn diagram sits in, the one that scrolls (./mermaid-fence.ts) */
+export const DIAGRAM_CLASS = "md-mermaid-diagram";
 
 /** a drawn text's font size in the diagram's own units, undefined for text the diagram does not show */
 export type FontSizeOf = (element: Element) => number | undefined;
@@ -78,6 +80,40 @@ export function minimumWidth(svg: Element, fontSizeOf?: FontSizeOf): number | un
   return width === undefined || fontSize === undefined ? undefined : Math.ceil(width * minimumScale(fontSize));
 }
 
+/**
+ * The width to lay a diagram out at once more. A Gantt chart takes the width
+ * it is laid out at as its own, and its 10px axis labels would then hold it
+ * to 130 % of its block: laid out at the block's width over its minimum
+ * scale, it fits the block at 13px. Undefined for a diagram with a width of
+ * its own (its viewBox is not the width it was given) and for one whose
+ * text needs no more. Measured on a copy in `block`, where the diagram's text
+ * inherits what it will in the figure, or in the page's body once a newer
+ * render has taken the block off the page: a detached copy has no style.
+ */
+export function refitWidth(
+  drawing: Element,
+  laidOutAt: number,
+  block: HTMLElement,
+  fontSizeOf?: FontSizeOf,
+): number | undefined {
+  const width = viewBoxWidth(drawing);
+  if (width === undefined || Math.abs(width - laidOutAt) > 1) return undefined;
+  const doc = block.ownerDocument;
+  const copy = doc.importNode(drawing, true);
+  const probe = doc.createElement("div");
+  probe.setAttribute("aria-hidden", "true");
+  Object.assign(probe.style, { position: "fixed", top: "0", left: "-100000px", width: `${laidOutAt}px` });
+  probe.append(copy);
+  (block.isConnected ? block : doc.body).append(probe);
+  try {
+    const fontSize = smallestFontSize(copy, fontSizeOf);
+    const scale = fontSize === undefined ? 1 : minimumScale(fontSize);
+    return scale > 1 ? Math.floor(laidOutAt / scale) : undefined;
+  } finally {
+    probe.remove();
+  }
+}
+
 /** measured once per drawing: the view shows the same sanitized drawing again on every render */
 const minimumWidths = new WeakMap<Element, number>();
 /** one per window: figures come and go with every render */
@@ -105,17 +141,49 @@ export function fitDiagram(figure: HTMLElement, drawing: Element, fontSizeOf?: F
   watchOverflow(figure);
 }
 
+/** a diagram type as mermaid names it on the SVG, in words: flowchart-v2 is a flowchart, classDiagram a class diagram */
+export function diagramTypeName(svg: Element): string | undefined {
+  const role = svg
+    .getAttribute("aria-roledescription")
+    ?.trim()
+    .replace(/-v\d+$/, "");
+  if (!role) return undefined;
+  return role.length <= 2 ? role.toUpperCase() : role.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+}
+
+/**
+ * What a screen reader announces for a diagram wider than its block. Each
+ * such block is a region, a landmark, and a document may hold several:
+ * WAI-ARIA asks for a name of its own on each, so it names the diagram by
+ * its place among the document's diagrams and by its title (mermaid's
+ * accTitle) or else its type.
+ */
+export function scrollRegionLabel(position: number, svg: Element | null): string {
+  const title = [...(svg?.children ?? [])].find((child) => child.localName === "title")?.textContent?.trim();
+  const type = svg ? diagramTypeName(svg) : undefined;
+  const name = title ? `Diagram ${position}: ${title}` : type ? `Diagram ${position} (${type})` : `Diagram ${position}`;
+  return `${name}, scrolls sideways`;
+}
+
 /** a figure wider than its block is a focusable region, so the keyboard scrolls it; one that fits is no tab stop */
 export function markScrollRegion(figure: HTMLElement): void {
   if (figure.scrollWidth > figure.clientWidth) {
     figure.tabIndex = 0;
     figure.setAttribute("role", "region");
-    figure.setAttribute("aria-label", SCROLL_REGION_LABEL);
   } else {
     figure.removeAttribute("tabindex");
     figure.removeAttribute("role");
     figure.removeAttribute("aria-label");
   }
+}
+
+/** every region of a document named anew: a diagram added or removed above one changes its place */
+export function nameScrollRegions(doc: Document): void {
+  doc.querySelectorAll<HTMLElement>(`.${DIAGRAM_CLASS}`).forEach((figure, index) => {
+    if (figure.getAttribute("role") === "region") {
+      figure.setAttribute("aria-label", scrollRegionLabel(index + 1, figure.querySelector("svg")));
+    }
+  });
 }
 
 /** overflow needs layout: checked once it is laid out and whenever the column changes width (the window, the split) */
@@ -125,10 +193,14 @@ function watchOverflow(figure: HTMLElement): void {
   let observer = observers.get(win);
   if (!observer) {
     const created: ResizeObserver = new win.ResizeObserver((entries) => {
+      let marked = false;
       for (const { target } of entries) {
-        if (target.isConnected) markScrollRegion(target as HTMLElement);
-        else created.unobserve(target);
+        if (target.isConnected) {
+          markScrollRegion(target as HTMLElement);
+          marked = true;
+        } else created.unobserve(target);
       }
+      if (marked) nameScrollRegions(win.document);
     });
     observers.set(win, (observer = created));
   }

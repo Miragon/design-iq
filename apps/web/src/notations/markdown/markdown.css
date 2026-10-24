@@ -250,8 +250,9 @@
    wide as the measure up to its natural size (mermaid caps the SVG with a
    max-width), but never so narrow that its smallest text reads under 13px
    (./diagram-scale.ts sets the SVG's min-width). A wider one scrolls on its
-   own, a focusable region then, with the focus ring of §8. Dimmed while a
-   newer source of it cannot be drawn */
+   own, a focusable region then, with the focus ring of §8. Its drawing is
+   dimmed while a newer source of it cannot be drawn; the block is not, or
+   the ring would lose its contrast with it */
 .markdown-body .md-mermaid-block {
   margin: 0 0 var(--cd-space-3);
 }
@@ -260,7 +261,6 @@
 }
 .markdown-body .md-mermaid-diagram {
   overflow-x: auto;
-  transition: opacity var(--cd-motion-fast) var(--cd-ease);
 }
 .markdown-body .md-mermaid-diagram:focus-visible {
   outline: 2px solid var(--ring);
@@ -269,8 +269,9 @@
 .markdown-body .md-mermaid-diagram > svg {
   display: block;
   margin-inline: auto;
+  transition: opacity var(--cd-motion-fast) var(--cd-ease);
 }
-.markdown-body .md-mermaid-diagram.is-stale {
+.markdown-body .md-mermaid-diagram.is-stale > svg {
   opacity: 0.4;
 }
 /* the error notice of a diagram mermaid cannot read, in the flow of the

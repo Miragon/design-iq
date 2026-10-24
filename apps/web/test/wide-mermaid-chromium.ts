@@ -12,17 +12,17 @@
  *
  * It starts a Live Host of its own (LIVE_AUTH=none, on PORT, 8394 unless set)
  * on a generated content repo with one document: a wide C4 context, a wide
- * flowchart, a Gantt chart, a medium and a small flowchart. In the SPA's
- * preview it checks:
+ * flowchart, two Gantt charts (one in a quote), a medium and a small
+ * flowchart. In the SPA's preview it checks:
  *
  *  - every text a diagram shows reads at 13px or more on screen;
  *  - the wide C4 and the wide flowchart scroll sideways in their block, the
- *    page does not, and each is a region labelled for a screen reader;
- *  - the Gantt chart is laid out at the reading column's width, and its
- *    10px axis labels at 13px make it scroll too;
- *  - Tab reaches the three of them from the document and no diagram that
+ *    page does not, and each is a region with a name of its own;
+ *  - each Gantt chart is laid out narrower than its block, so that with its
+ *    10px axis labels at 13px it fits the block, and is no tab stop;
+ *  - Tab reaches the two wide ones from the document and no diagram that
  *    fits, an arrow key scrolls the focused one, which shows the focus ring
- *    of §8;
+ *    of §8, at full strength also while its drawing is dimmed;
  *  - the medium flowchart fits a wide window and turns into a scroll region
  *    in a narrow one.
  *
@@ -36,7 +36,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SCROLL_REGION_LABEL, SMALLEST_TEXT_PX } from "../src/notations/markdown/diagram-scale.ts";
+import { SMALLEST_TEXT_PX } from "../src/notations/markdown/diagram-scale.ts";
 
 /** the part of Playwright's API this check uses: Playwright is no dependency of the repo */
 interface Page {
@@ -84,6 +84,7 @@ const DIAGRAMS = {
   ].join("\n"),
   "wide flowchart": [
     "flowchart LR",
+    "  accTitle: Order flow",
     ...Array.from({ length: 14 }, (_, i) => step(i)),
     ...Array.from({ length: 13 }, (_, i) => `  N${i} -->|next| N${i + 1}`),
   ].join("\n"),
@@ -95,17 +96,36 @@ const DIAGRAMS = {
     "  Design :a1, 2026-01-01, 10d",
     "  Code :after a1, 20d",
   ].join("\n"),
+  "quoted gantt": [
+    "gantt",
+    "  title Quoted release plan",
+    "  dateFormat YYYY-MM-DD",
+    "  section Build",
+    "  Design :a1, 2026-02-01, 10d",
+    "  Code :after a1, 20d",
+  ].join("\n"),
   "medium flowchart": "flowchart LR\n  A[Draft] --> B[Review] --> C[Release]",
   "small flowchart": "flowchart LR\n  A[Start] --> B[End]",
 };
 type Name = keyof typeof DIAGRAMS;
 const NAMES = Object.keys(DIAGRAMS) as Name[];
-const WIDE: Name[] = ["wide C4", "wide flowchart", "gantt"];
-const FITTING: Name[] = ["medium flowchart", "small flowchart"];
+const WIDE: Name[] = ["wide C4", "wide flowchart"];
+const GANTT: Name[] = ["gantt", "quoted gantt"];
+const FITTING: Name[] = [...GANTT, "medium flowchart", "small flowchart"];
+/** what a screen reader announces for each wide one: its place, and its accTitle or its type */
+const REGION_NAMES: Partial<Record<Name, string>> = {
+  "wide C4": "Diagram 1 (C4), scrolls sideways",
+  "wide flowchart": "Diagram 2: Order flow, scrolls sideways",
+  "medium flowchart": "Diagram 5 (flowchart), scrolls sideways",
+};
+const fenced = (name: Name): string => {
+  const block = `\`\`\`mermaid\n${DIAGRAMS[name]}\n\`\`\``;
+  return name === "quoted gantt" ? block.replace(/^/gm, "> ") : block;
+};
 const DOCUMENT = [
   "# Wide diagrams\n",
   "A document whose diagrams are wider than its column.\n",
-  ...NAMES.map((name) => `## ${name}\n\n\`\`\`mermaid\n${DIAGRAMS[name]}\n\`\`\`\n`),
+  ...NAMES.map((name) => `## ${name}\n\n${fenced(name)}\n`),
   "The end.\n",
 ].join("\n");
 /** --ring, the guide's focus colour on light (blau-link) */
@@ -150,9 +170,10 @@ async function startLiveHost(content: string, data: string): Promise<ChildProces
 
 /** what the page shows of each diagram, in document order */
 interface Shown {
-  /** the SVG's own width (its viewBox) and its width on screen */
+  /** the SVG's own width (its viewBox), its width on screen and its block's */
   natural: number;
   drawn: number;
+  block: number;
   /** the smallest text it shows, in CSS pixels on screen */
   smallestText: number;
   scrollWidth: number;
@@ -174,12 +195,15 @@ function measure(): { diagrams: Shown[]; column: number; pageScrolls: boolean } 
       if (!element || !node.textContent?.trim() || element.closest("style, title, desc")) continue;
       if (element.getClientRects().length === 0) continue;
       const graphic = element.closest<SVGGraphicsElement>("text, foreignObject");
-      const scale = graphic?.getScreenCTM()?.a ?? 1;
+      const ctm = graphic?.getScreenCTM();
+      // rotated text (a git graph's commit ids, an axis title) scales by the length of the turned unit vector
+      const scale = ctm ? Math.hypot(ctm.a, ctm.b) : 1;
       smallestText = Math.min(smallestText, parseFloat(getComputedStyle(element).fontSize) * scale);
     }
     return {
       natural: svg.viewBox.baseVal.width,
       drawn: svg.getBoundingClientRect().width,
+      block: figure.parentElement!.clientWidth,
       smallestText,
       scrollWidth: figure.scrollWidth,
       clientWidth: figure.clientWidth,
@@ -241,8 +265,8 @@ try {
     const shown = at(name);
     check(shown.scrollWidth > shown.clientWidth, `${name}: wider than its block, it scrolls sideways there`);
     check(
-      shown.tabIndex === "0" && shown.role === "region" && shown.label === SCROLL_REGION_LABEL,
-      `${name}: a focusable region labelled "${SCROLL_REGION_LABEL}"`,
+      shown.tabIndex === "0" && shown.role === "region" && shown.label === REGION_NAMES[name],
+      `${name}: a focusable region named "${shown.label}"`,
     );
   }
   check(!wide.pageScrolls, "the page itself does not scroll sideways");
@@ -250,10 +274,14 @@ try {
     const shown = at(name);
     check(shown.scrollWidth <= shown.clientWidth && shown.tabIndex === null, `${name}: fits, and is no tab stop`);
   }
-  check(
-    at("gantt").natural <= wide.column + 1,
-    `gantt: laid out at the column's width (${at("gantt").natural}px for ${wide.column}px)`,
-  );
+  for (const name of GANTT) {
+    const shown = at(name);
+    check(
+      shown.natural < shown.block && shown.drawn <= shown.block + 0.5 && shown.scrollWidth <= shown.clientWidth,
+      `${name}: laid out at ${shown.natural}px, drawn at ${px(shown.drawn)} within its ${shown.block}px block`,
+    );
+  }
+  check(at("quoted gantt").block < wide.column, "quoted gantt: its block is narrower than the column");
   check(at("wide C4").drawn > at("wide C4").natural, "wide C4: drawn above its natural size (its 10.5px type lines)");
 
   // the keyboard: from the document's own region, Tab goes to the wide diagrams and past every other
@@ -307,6 +335,25 @@ try {
   await page.waitForTimeout(400);
   check((await scrolled()) < after, "ArrowLeft scrolls it back");
 
+  // its drawing dimmed as the fence dims it while a newer source cannot be drawn: the ring keeps its colour
+  await page.evaluate(() => document.activeElement!.classList.add("is-stale"), undefined);
+  await page.waitForTimeout(400);
+  const stale = await page.evaluate(() => {
+    const figure = document.activeElement as HTMLElement;
+    const result = {
+      focused: figure.matches(".md-mermaid-diagram.is-stale:focus-visible"),
+      figure: getComputedStyle(figure).opacity,
+      drawing: getComputedStyle(figure.querySelector("svg")!).opacity,
+      outline: getComputedStyle(figure).outlineColor,
+    };
+    figure.classList.remove("is-stale");
+    return result;
+  }, undefined);
+  check(
+    stale.focused && stale.figure === "1" && stale.drawing === "0.4" && stale.outline === FOCUS_RING,
+    `a dimmed diagram's focus ring stays at full strength (block ${stale.figure}, drawing ${stale.drawing}, ring ${stale.outline})`,
+  );
+
   // a narrow window: the medium flowchart no longer fits and becomes a scroll region
   await page.setViewportSize({ width: 480, height: 900 });
   await page.waitForTimeout(500);
@@ -314,8 +361,11 @@ try {
   const medium = narrow.diagrams[NAMES.indexOf("medium flowchart")]!;
   console.log(`Window 480px, reading column ${narrow.column}px: medium flowchart ${JSON.stringify(medium)}`);
   check(
-    medium.scrollWidth > medium.clientWidth && medium.tabIndex === "0" && medium.role === "region",
-    "medium flowchart: in a narrow window it scrolls, a focusable region now",
+    medium.scrollWidth > medium.clientWidth &&
+      medium.tabIndex === "0" &&
+      medium.role === "region" &&
+      medium.label === REGION_NAMES["medium flowchart"],
+    `medium flowchart: in a narrow window it scrolls, a focusable region named "${medium.label}" now`,
   );
   check(
     medium.smallestText >= SMALLEST_TEXT_PX - 0.01,
