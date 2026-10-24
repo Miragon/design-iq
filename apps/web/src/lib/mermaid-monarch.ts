@@ -8,12 +8,15 @@
  * stays a plain code block. lib/monaco-languages.ts registers `mermaid` and
  * loads this module the first time a fence needs it (ADR 0006).
  *
- * Pure data. The first word names the diagram (MERMAID_DIAGRAM_TYPES, the
- * validator's list: a word that names none shows as invalid, since mermaid
- * draws no such diagram and the preview's error notice says so in the same
- * danger colour; the validator only warns, so that a save goes through) and
- * picks the family the rest is read in; a family Mermaid's own lexer reads
- * without case (sequence, state, ER, gantt …) matches its words without case.
+ * Pure data. The first word names the diagram, read as the validator reads it
+ * (mermaidKeywordPattern: a MERMAID_DIAGRAM_TYPES keyword in every casing
+ * mermaid draws, so `Ishikawa` and `stateDiagram-V2` name one). A word that
+ * names none shows as invalid, since mermaid draws no such diagram and the
+ * preview's error notice says so in the same danger colour; the validator
+ * only warns, so that a save goes through. The keyword picks the family the
+ * rest is read in, as its listed spelling would; a family Mermaid's own lexer
+ * reads without case (sequence, state, ER, gantt …) matches its words
+ * without case.
  * The tokens land on the theme's roles only (lib/monaco-theme.ts has a rule
  * for every one):
  *
@@ -37,7 +40,7 @@
  * closed by its own end: the stack never grows past three.
  * test/mermaid-monarch.test.ts runs it all through Monaco's own lexer.
  */
-import { MERMAID_DIAGRAM_TYPES } from "@designiq/notations/mermaid";
+import { MERMAID_DIAGRAM_TYPES, mermaidKeywordPattern } from "@designiq/notations/mermaid";
 import type { languages } from "monaco-editor";
 
 type Rule = languages.IMonarchLanguageRule;
@@ -345,15 +348,14 @@ function familyState(family: Family): Rule[] {
   return rules;
 }
 
-const header = (family: string): string => `${family}Headers`;
+/** header keywords as one alternation, each in every casing the validator
+ *  reads it in */
+const headerKeywords = (types: readonly string[]): string => types.map(mermaidKeywordPattern).join("|");
 
 export const language: languages.IMonarchLanguage = {
   defaultToken: "",
   tokenPostfix: ".mermaid",
   start: "root",
-  // the header lists the root's `cases` pick a family by (Monarch reads an
-  // `@name` case from the language's own attributes)
-  ...Object.fromEntries(Object.entries(FAMILIES).map(([name, family]) => [header(name), family.headers])),
   tokenizer: {
     // before the header: front matter, directives, comments
     root: [
@@ -361,13 +363,18 @@ export const language: languages.IMonarchLanguage = {
       { include: "@meta" },
       [/\s+/, ""],
       [
-        new RegExp(`(?:${words(MERMAID_DIAGRAM_TYPES)})(?=$|[\\s:;])`),
+        new RegExp(`(?:${headerKeywords(MERMAID_DIAGRAM_TYPES)})(?=$|[\\s:;])`),
         {
+          // a `~` case matches the header against a pattern, so a family
+          // takes its keywords in every casing the validator reads
           cases: {
             ...Object.fromEntries(
-              Object.keys(FAMILIES)
-                .filter((name) => name !== "generic")
-                .map((name) => [`@${header(name)}`, { token: "keyword", switchTo: `@${name}` }]),
+              Object.entries(FAMILIES)
+                .filter(([name]) => name !== "generic")
+                .map(([name, family]) => [
+                  `~(?:${headerKeywords(family.headers)})`,
+                  { token: "keyword", switchTo: `@${name}` },
+                ]),
             ),
             "@default": { token: "keyword", switchTo: "@generic" },
           },

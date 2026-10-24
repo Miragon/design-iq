@@ -13,14 +13,20 @@
  *   - mermaidFrontMatterLines
  *                        the lines the front matter takes: the errors
  *                        agentflow raises itself count them as well
- *   - mermaidHeader      the first line, the one that names the diagram type
+ *   - mermaidHeader      the first line, the one that names the diagram type,
+ *                        in a casing mermaid draws (ANY_CASE_AFTER)
+ *   - mermaidKeywordPattern
+ *                        a type's header keyword in those casings, for a
+ *                        reader that matches it itself (the source editor)
  *
  * Syntax knowledge, not a checker: the validator turns an unknown header
  * into a finding, the web renderer (apps/web/src/lib/mermaid-render.ts) words
  * its errors with it. Pure string logic, zero-dep and browser-safe like the
  * package index (the SPA imports it). A mermaid bump fails apps/web's
  * test/mermaid-engine.test.ts until MERMAID_VERSION follows it: re-read
- * mermaid's src/preprocess.ts and its detectors against this file first.
+ * mermaid's src/preprocess.ts and its detectors against this file first, and
+ * the casings its grammars read a header keyword in. The same test parses
+ * every type in other casings and fails where this file reads one otherwise.
  */
 
 /** the mermaid release this file mirrors: apps/web's exact pin */
@@ -102,10 +108,56 @@ const KEEPS_COMMENTS = /^(?:eventmodeling|agentflow-beta\b)/;
  *  it, mermaid parses even those types without their comment lines */
 const MAX_TEXT_SIZE = 50_000;
 
-/** a header keyword, followed by the end of the line, a space, ":" or ";" */
-const HEADER = new RegExp(
-  `^(?:${MERMAID_DIAGRAM_TYPES.map((t) => t.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")).join("|")})(?=$|[\\s:;])`,
-);
+/**
+ * The header keywords MERMAID_VERSION also draws in another casing, each with
+ * the part its detector matches as written. Past that part, the detector
+ * ignores case (src/diagrams/ishikawa/ishikawaDetector.ts) or matches no
+ * further (src/diagrams/requirement/requirementDetector.ts stops at
+ * `requirement`), and the grammar's lexer ignores case. Every other keyword
+ * draws as listed only: its detector or its grammar reads it as written
+ * (wardley-beta's and the railroad types' detectors ignore case, but their
+ * grammars refuse `Wardley-beta`).
+ */
+const ANY_CASE_AFTER: ReadonlyMap<string, string> = new Map([
+  ["ishikawa", ""],
+  ["ishikawa-beta", ""],
+  ["requirementDiagram", "requirement"],
+  ["stateDiagram-v2", "stateDiagram"],
+  ["xychart-beta", "xychart"],
+  ["sankey-beta", "sankey"],
+]);
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
+
+/** `text` in any casing, a character class per letter: the `i` flag would
+ *  cover every keyword, and not every browser reads an inline (?i:…) group */
+const anyCase = (text: string): string =>
+  [...text]
+    .map((character) =>
+      character.toLowerCase() === character.toUpperCase()
+        ? escapeRegExp(character)
+        : `[${character.toLowerCase()}${character.toUpperCase()}]`,
+    )
+    .join("");
+
+/**
+ * The header keyword `type` (a MERMAID_DIAGRAM_TYPES entry) in every casing
+ * MERMAID_VERSION draws it in, as the source of a regular expression without
+ * flags or anchors. mermaidHeader reads a header with it, and so does the web
+ * app's source editor (apps/web/src/lib/mermaid-monarch.ts): the two never
+ * disagree about a header.
+ */
+export function mermaidKeywordPattern(type: string): string {
+  const asWritten = ANY_CASE_AFTER.get(type) ?? type;
+  return escapeRegExp(asWritten) + anyCase(type.slice(asWritten.length));
+}
+
+/** a header keyword in a casing mermaid draws, followed by the end of the
+ *  line, a space, ":" or ";" */
+const HEADER = new RegExp(`^(?:${MERMAID_DIAGRAM_TYPES.map(mermaidKeywordPattern).join("|")})(?=$|[\\s:;])`);
+
+/** the listed keyword of a header keyword HEADER read in another casing */
+const LISTED_BY_LOWER_CASE = new Map(MERMAID_DIAGRAM_TYPES.map((type) => [type.toLowerCase(), type]));
 
 /** mermaid's cleanupText: line breaks to \n, tag attributes single-quoted;
  *  the line structure stays, so the source lines can be matched against it */
@@ -204,7 +256,8 @@ export interface MermaidHeader {
   line: number;
   /** the header line's text, trimmed */
   text: string;
-  /** the MERMAID_DIAGRAM_TYPES keyword it starts with, undefined when none */
+  /** the MERMAID_DIAGRAM_TYPES keyword it starts with, spelled as listed
+   *  (`Ishikawa` names `ishikawa`), undefined when none */
   diagramType: string | undefined;
 }
 
@@ -219,5 +272,10 @@ export function mermaidHeader(source: string): MermaidHeader | undefined {
   const index = headerIndex(lines);
   if (index < 0) return undefined;
   const text = lines[index]!.trim();
-  return { line: mermaidSourceLine(source, index + 1), text, diagramType: HEADER.exec(text)?.[0] };
+  const keyword = HEADER.exec(text)?.[0];
+  return {
+    line: mermaidSourceLine(source, index + 1),
+    text,
+    diagramType: keyword === undefined ? undefined : LISTED_BY_LOWER_CASE.get(keyword.toLowerCase()),
+  };
 }

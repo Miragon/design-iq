@@ -10,12 +10,13 @@
 import assert from "node:assert/strict";
 import { before, test } from "node:test";
 
-import { MERMAID_DIAGRAM_TYPES } from "@designiq/notations/mermaid";
+import { MERMAID_DIAGRAM_TYPES, mermaidHeader } from "@designiq/notations/mermaid";
 import type { editor, languages } from "monaco-editor";
 
 import { conf, language } from "../src/lib/mermaid-monarch.ts";
 import { installMonacoLanguages, type MonacoLanguagesApi } from "../src/lib/monaco-languages.ts";
 import { designiqTheme } from "../src/lib/monaco-theme.ts";
+import { otherCasings } from "./mermaid-casings.ts";
 
 /** a module of Monaco's own: plain ES modules without typings (a computed
  *  specifier, so tsc looks for none), typed by the slice used here */
@@ -141,6 +142,13 @@ const diagram = (source: string): string[] =>
       .join(" "),
   );
 
+/** the family a diagram's header opens: the state the lexer is left in */
+function family(source: string): string {
+  let state = mermaid.getInitialState();
+  for (const line of source.split("\n")) state = mermaid.tokenize(line, true, state).endState;
+  return state.stack.state;
+}
+
 test("registration: Monaco's own lazy pattern for its languages, once per page", async () => {
   assert.deepEqual(registered, [{ id: "mermaid", aliases: ["Mermaid", "mermaid"] }]);
   assert.deepEqual([...factories.keys()], ["mermaid"]);
@@ -202,21 +210,36 @@ test("every diagram type is a header keyword, and opens its family", () => {
     assert.deepEqual(diagram(type), [`${type}‹K›`], type);
     assert.deepEqual(diagram(`  ${type} ;`), [`${type}‹K› ;‹D›`], type);
   }
-  // the families' header lists name only types the validator knows
-  const families = Object.entries(language).filter(([key]) => key.endsWith("Headers"));
-  assert.ok(families.length >= 10);
-  for (const [family, headers] of families) {
-    for (const header of headers as string[]) assert.ok(MERMAID_DIAGRAM_TYPES.includes(header), `${family}: ${header}`);
-  }
+  // the listed types open every family: no family waits for a header the
+  // validator does not know
+  assert.deepEqual(
+    new Set(MERMAID_DIAGRAM_TYPES.map(family)),
+    new Set(["flowchart", "sequence", "class", "state", "er", "gantt", "c4", "git", "chart", "requirement", "generic"]),
+  );
   // -v2 and -beta forms read on in their family
   assert.deepEqual(diagram("classDiagram-v2\n  Animal <|-- Duck"), ["classDiagram-v2‹K›", "Animal‹V› <|--‹O› Duck‹V›"]);
   assert.deepEqual(diagram("stateDiagram-v2\n  [*] --> Still"), ["stateDiagram-v2‹K›", "[*]‹C› -->‹O› Still‹V›"]);
   assert.deepEqual(diagram("xychart-beta horizontal"), ["xychart-beta‹K› horizontal‹K›"]);
 });
 
+test("a header in another casing is a keyword exactly where the validator reads it, in its listed family (#283)", () => {
+  for (const type of MERMAID_DIAGRAM_TYPES) {
+    for (const spelling of otherCasings(type)) {
+      const named = mermaidHeader(spelling)?.diagramType;
+      assert.deepEqual(diagram(spelling), [`${spelling}‹${named === undefined ? "invalid" : "K"}›`], spelling);
+      assert.equal(family(spelling), named === undefined ? "generic" : family(type), spelling);
+    }
+  }
+  // what the validator reads at MERMAID_VERSION, so the loop is known to meet both outcomes
+  assert.deepEqual(diagram("Ishikawa"), ["Ishikawa‹K›"]);
+  assert.deepEqual(diagram("stateDiagram-V2\n  [*] --> Still"), ["stateDiagram-V2‹K›", "[*]‹C› -->‹O› Still‹V›"]);
+  assert.deepEqual(diagram("xychart-BETA horizontal"), ["xychart-BETA‹K› horizontal‹K›"]);
+  assert.deepEqual(diagram("Wardley-beta"), ["Wardley-beta‹invalid›"]);
+});
+
 test("a first word that names no diagram is invalid, as the validator warns, and the rest still reads", () => {
   assert.deepEqual(diagram("flowchar LR\n  A --> B"), ["flowchar‹invalid› LR‹C›", "A‹V› -->‹O› B‹V›"]);
-  // Mermaid's header is case-sensitive, and so is the validator's
+  // mermaid draws no other casing of flowchart, and the validator warns on it too
   assert.deepEqual(diagram("Flowchart LR"), ["Flowchart‹invalid› LR‹C›"]);
   assert.deepEqual(diagram("graph-beta TD"), ["graph-beta‹invalid› TD‹C›"]);
 });
@@ -643,14 +666,12 @@ test("odd text never throws, always moves on, never stacks up", () => {
     "é",
     "注文",
   ];
-  // every family's first header, a type Mermaid does not know, none at all
-  const headers = [
-    ...Object.entries(language)
-      .filter(([key]) => key.endsWith("Headers"))
-      .map(([, list]) => (list as string[])[0] ?? "pie"),
-    "nonsense",
-    "",
-  ];
+  // every family's first listed type, a type Mermaid does not know, none at all
+  const firstOfFamily = new Map<string, string>();
+  for (const type of MERMAID_DIAGRAM_TYPES) {
+    if (!firstOfFamily.has(family(type))) firstOfFamily.set(family(type), type);
+  }
+  const headers = [...firstOfFamily.values(), "nonsense", ""];
   let lines = 0;
   for (const header of headers) {
     for (let run = 0; run < 60; run++) {
