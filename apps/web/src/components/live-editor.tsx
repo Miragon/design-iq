@@ -74,7 +74,7 @@ import {
   useTodoTypes,
 } from "@/lib/queries";
 import { createRemoteCaretStyles } from "@/lib/remote-carets";
-import { sidePanelRoom } from "@/lib/side-panel-room";
+import { layoutBesideSidePanels, sidePanelRoom } from "@/lib/side-panel-room";
 import { clampRatio, DEFAULT_RATIO, ratioBounds } from "@/lib/split-ratio";
 import type { TodoCanvas } from "@/lib/todo-canvas";
 import type { ModelerMenu } from "@/mcp-app/core/menu-model";
@@ -314,6 +314,7 @@ export function LiveEditor({
     let sourceEditor: monaco.editor.IStandaloneCodeEditor | undefined;
     let sourceModel: monaco.editor.ITextModel | undefined;
     let sourceTools: AttachedSource | undefined;
+    let offSourceLayout: (() => void) | undefined;
     let offPresence: (() => void) | undefined;
     let attached = false;
 
@@ -427,12 +428,19 @@ export function LiveEditor({
         sourceEditor = monaco.editor.create(sourceRef.current, {
           ...MONACO_OPTIONS,
           model: sourceModel,
-          automaticLayout: true,
           minimap: { enabled: false },
           // prose: a paragraph is one line, and half the width (the split
           // view) must not scroll it sideways
           wordWrap: sourceModel.getLanguageId() === "markdown" ? "on" : "off",
         });
+        offSourceLayout = layoutBesideSidePanels(
+          sourceEditor,
+          sourceRef.current,
+          sidePanelRoom(
+            () => layersRef.current,
+            () => sourceRef.current,
+          ),
+        );
         monacoBinding = new MonacoBinding(ytext, sourceModel, new Set([sourceEditor]), session.awareness ?? undefined);
       }
       offPresence = session.onPresence(setPresence);
@@ -493,6 +501,7 @@ export function LiveEditor({
       mounted?.destroy();
       sourceTools?.dispose();
       monacoBinding?.destroy();
+      offSourceLayout?.();
       sourceEditor?.dispose();
       sourceModel?.dispose();
       session.destroy(); // provider AND socket

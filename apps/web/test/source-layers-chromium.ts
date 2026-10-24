@@ -1,7 +1,8 @@
 /**
  * Monaco's layers against the editor's side panels (issue 288) in the built
  * SPA, in headless Chromium: a check run by hand, not by `pnpm test`, because
- * CI has no browser (test/source-layers.test.ts holds the stylesheet to it).
+ * CI has no browser (test/source-layers.test.ts and test/side-panel-room.test.ts
+ * hold the stylesheet and the layout to it).
  * Run it after a monaco-editor bump or a change to the editor's layers, from
  * the repository root:
  *
@@ -14,17 +15,19 @@
  * Markdown document and one of a BPMN process, and checks:
  *
  *  - markdown, xml: the source view (the Markdown document's, the process's
- *    XML) with the History panel open. The panel is the topmost element at
- *    its right edge, where Monaco shows its scrollbar; its header stays over
- *    Monaco's find widget; Monaco's context menu, opened next to the panel,
- *    stays over the part of the panel it reaches into.
+ *    XML) with the History panel open. Monaco is laid out beside the panel:
+ *    its scrollbar and lines end left of it, and the panel is the topmost
+ *    element at its right edge; Monaco's find widget lies left of it, each of
+ *    its controls takes the pointer and, reached with Tab, is on screen;
+ *    Monaco's context menu, opened next to the panel, stays over the part of
+ *    the panel it reaches into; closed, the panel gives Monaco its width back.
  *  - split: the Markdown document in the split view: Monaco's suggestions,
  *    opened at the source pane's right edge, stay over the preview beside it.
  *  - diff: History's Compare: the dialog's Monaco diff is over the panel.
  *
- * Each check first makes sure that what it looks for is on screen where it
- * looks (the scrollbar shown under the panel's edge, the menu reaching into
- * the panel), so no check passes by looking at nothing. Exits 1 on any
+ * Each check first makes sure that what it looks for is on screen (the
+ * scrollbar shown, the find widget open with its controls, the menu reaching
+ * into the panel), so no check passes by looking at nothing. Exits 1 on any
  * failure.
  */
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
@@ -191,8 +194,12 @@ async function openHistory(page: Page): Promise<Box> {
   return panel;
 }
 
-/** the panel over Monaco's frame: its scrollbar, its find widget, and its context menu over the panel */
-async function sourceUnderPanel(scenario: string, path: string, view: string): Promise<void> {
+/**
+ * The source beside the panel: Monaco's scrollbar, find widget and lines stay
+ * left of it, so every control of the find widget takes the pointer and shows
+ * the focus; its context menu stays over the panel
+ */
+async function sourceBesidePanel(scenario: string, path: string, view: string): Promise<void> {
   const { page, context } = await open(path, view);
   const panel = await openHistory(page);
   // over the text left of the panel and scrolled once, Monaco shows its scrollbar
@@ -200,38 +207,87 @@ async function sourceUnderPanel(scenario: string, path: string, view: string): P
   await page.mouse.wheel(0, 200);
   await page.waitForTimeout(400);
   const edge = await page.evaluate(
-    ({ x, ys }) => {
+    ({ panelLeft, x, ys }) => {
       const bar = document.querySelector(".monaco-host .scrollbar.vertical");
-      const box = bar?.getBoundingClientRect();
+      const barBox = bar?.getBoundingClientRect();
+      const editor = document.querySelector(".monaco-host .monaco-editor")!.getBoundingClientRect();
       return {
-        shown: !!box && bar!.classList.contains("visible") && box.left <= x && x <= box.right,
+        shown: !!barBox && bar!.classList.contains("visible") && barBox.width > 0,
+        besidePanel: !!barBox && barBox.right <= panelLeft + 1 && editor.right <= panelLeft + 1,
+        detail: `scrollbar to ${Math.round(barBox?.right ?? -1)}, editor to ${Math.round(editor.right)}, panel from ${Math.round(panelLeft)}`,
         topmost: ys.map((y) => !!document.elementFromPoint(x, y)?.closest("aside")),
       };
     },
-    { x: panel.right - 4, ys: [0.25, 0.5, 0.75].map((f) => panel.top + (panel.bottom - panel.top) * f) },
+    {
+      panelLeft: panel.left,
+      x: panel.right - 4,
+      ys: [0.25, 0.5, 0.75].map((f) => panel.top + (panel.bottom - panel.top) * f),
+    },
   );
-  check(scenario, "precondition: Monaco shows its scrollbar under the panel's right edge", edge.shown);
+  check(scenario, "precondition: Monaco shows its scrollbar", edge.shown);
+  check(scenario, "Monaco's scrollbar and lines end left of the panel", edge.besidePanel, edge.detail);
   check(scenario, "the panel is topmost at its right edge", edge.topmost.every(Boolean), JSON.stringify(edge.topmost));
 
   await page.mouse.click(panel.left - 200, (panel.top + panel.bottom) / 2);
   await page.keyboard.press("ControlOrMeta+f");
   await page.waitForTimeout(400);
-  const find = await page.evaluate(() => {
-    const widget = document.querySelector(".monaco-host .find-widget.visible")?.getBoundingClientRect();
-    const header = document.querySelector("aside > div")?.getBoundingClientRect();
-    if (!widget || !header) return null;
-    const left = Math.max(widget.left, header.left);
-    const right = Math.min(widget.right, header.right);
-    const top = Math.max(widget.top, header.top);
-    const bottom = Math.min(widget.bottom, header.bottom);
-    if (right - left < 8 || bottom - top < 8) return { overlaps: false, topmost: false };
-    return {
-      overlaps: true,
-      topmost: !!document.elementFromPoint((left + right) / 2, (top + bottom) / 2)?.closest("aside"),
-    };
-  }, 0);
-  check(scenario, "precondition: Monaco's find widget reaches under the panel's header", find?.overlaps === true);
-  check(scenario, "the panel's header stays over the find widget", find?.topmost === true);
+  const find = await page.evaluate((panelLeft) => {
+    const widget = document.querySelector(".monaco-host .find-widget.visible");
+    if (!widget) return null;
+    const controls = [...widget.querySelectorAll("textarea, input, [role='button'], [role='checkbox'], .matchesCount")]
+      .filter((control) => control.getBoundingClientRect().width > 0)
+      .map((control) => {
+        const box = control.getBoundingClientRect();
+        const hit = document.elementFromPoint((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+        const name = control.getAttribute("aria-label") ?? control.getAttribute("title") ?? control.className;
+        return { name, ok: box.right <= panelLeft + 1 && !!hit && widget.contains(hit) };
+      });
+    return { right: widget.getBoundingClientRect().right, controls };
+  }, panel.left);
+  check(scenario, "precondition: Monaco's find widget opens with its controls", (find?.controls.length ?? 0) >= 6);
+  check(
+    scenario,
+    "the find widget lies left of the panel",
+    !!find && find.right <= panel.left + 1,
+    `to ${Math.round(find?.right ?? -1)}, panel from ${Math.round(panel.left)}`,
+  );
+  const hidden = find?.controls.filter((control) => !control.ok).map((control) => control.name) ?? [];
+  check(
+    scenario,
+    "every control of the find widget lies left of the panel and takes the pointer",
+    hidden.length === 0,
+    hidden.join(", "),
+  );
+  // the keyboard's way through the widget, from its input until the focus leaves it
+  const tabbed: Array<{ name: string; ok: boolean }> = [];
+  for (let step = 0; step < 12; step++) {
+    await page.keyboard.press("Tab");
+    const focused = await page.evaluate((panelLeft) => {
+      const control = document.activeElement;
+      if (!control?.closest(".monaco-host .find-widget")) return null;
+      const box = control.getBoundingClientRect();
+      const hit = document.elementFromPoint((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+      const name = control.getAttribute("aria-label") ?? control.getAttribute("title") ?? control.tagName;
+      return { name, ok: box.width > 0 && box.right <= panelLeft + 1 && !!hit && control.contains(hit) };
+    }, panel.left);
+    if (!focused) break;
+    tabbed.push(focused);
+  }
+  const unseen = tabbed.filter((control) => !control.ok).map((control) => control.name);
+  check(
+    scenario,
+    "precondition: Tab moves through the find widget's controls",
+    tabbed.length >= 4,
+    String(tabbed.length),
+  );
+  check(
+    scenario,
+    "every control Tab reaches lies left of the panel and is topmost",
+    unseen.length === 0,
+    unseen.join(", "),
+  );
+  // the focus has left the widget: back in the text, Escape closes it
+  await page.mouse.click(panel.left - 200, (panel.top + panel.bottom) / 2);
   await page.keyboard.press("Escape");
 
   await page.mouse.click(panel.left - 40, (panel.top + panel.bottom) / 2, { button: "right" });
@@ -249,6 +305,18 @@ async function sourceUnderPanel(scenario: string, path: string, view: string): P
   check(scenario, "precondition: Monaco's context menu reaches into the panel", menu?.reaches === true);
   check(scenario, "the context menu stays over the panel", menu?.topmost === true);
   await page.keyboard.press("Escape");
+
+  await page.locator("aside").getByRole("button", { name: "Close" }).click();
+  await page.waitForTimeout(300);
+  const filled = await page.evaluate(() => {
+    const host = document.querySelector(".monaco-host")!.getBoundingClientRect();
+    const editor = document.querySelector(".monaco-host .monaco-editor")!.getBoundingClientRect();
+    return {
+      ok: Math.abs(host.right - editor.right) <= 1,
+      detail: `editor to ${Math.round(editor.right)}, source to ${Math.round(host.right)}`,
+    };
+  }, 0);
+  check(scenario, "with the panel closed, Monaco fills the source again", filled.ok, filled.detail);
   await context.close();
 }
 
@@ -307,8 +375,8 @@ async function diff(): Promise<void> {
 }
 
 try {
-  await sourceUnderPanel("markdown", MARKDOWN, "Markdown");
-  await sourceUnderPanel("xml", PROCESS, "XML");
+  await sourceBesidePanel("markdown", MARKDOWN, "Markdown");
+  await sourceBesidePanel("xml", PROCESS, "XML");
   await split();
   await diff();
   check("all", "no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" | "));
