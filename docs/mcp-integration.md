@@ -251,7 +251,9 @@ The other direction is `get_presence`: who is in a model's room right now, with 
 selected element ids and pointer (model coordinates), the AI clients acting in it (`kind: "agent"`),
 and `you` on the caller's own human presence. The identity behind `you` is server-side (the ws
 connection's login, never the payload), so "analyse the element I have selected" resolves to a real
-selection. It reads a loaded room only and announces nothing itself.
+selection. It holds across reconnects: the Live Host ties a client to the connection it last came on
+(`application/awareness-ties.ts`), and a connection of another login never takes a client over. It
+reads a loaded room only and announces nothing itself.
 
 ### Decisions: DMN as a first-class model
 

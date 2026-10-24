@@ -288,10 +288,10 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
      and its repair reaches the room on reconnect, where it settles with the one the
      others made like a lagging writer's: both writers can be told.
    - A connection lost without a close reaches the others only when the Live Host or the
-     awareness timeout (about 30 s) removes the writer; until then the notice shows. After a
-     writer's link has dropped and come back once, the Live Host no longer removes it when
-     that connection closes (it ties a client's presence to the connection it first came
-     on), so a later drop of it takes the timeout.
+     awareness timeout (about 30 s) removes the writer; until then the notice shows. The Live
+     Host removes a writer as soon as the writer's connection closes, also after the link has
+     dropped and come back: it ties a client's presence to the connection it last came on
+     (#310).
    - A peer whose own link dropped takes a writer who left meanwhile as present again when
      that writer's last canvas write reaches it only on its own reconnect; for that break
      it waits for the writer that left, as before this rule, and shows the notice.

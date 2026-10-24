@@ -36,13 +36,19 @@ export interface RoomDocLike {
   getClients(connection: { context?: unknown }): Set<number>;
 }
 
+/** the login onAuthenticate admitted on a ws connection */
+export function connectionLogin(connection: { context?: unknown }): string | undefined {
+  const login = (connection.context as { user?: { login?: unknown } } | undefined)?.user?.login;
+  return typeof login === "string" ? login : undefined;
+}
+
 /** every awareness state of a loaded document except the document's own,
  *  stamped with the announcing connection's login */
 export function peersOfDocument(doc: RoomDocLike): RoomPeer[] {
   const loginOf = new Map<number, string>();
   for (const connection of doc.getConnections()) {
-    const login = (connection.context as { user?: { login?: unknown } } | undefined)?.user?.login;
-    if (typeof login !== "string") continue;
+    const login = connectionLogin(connection);
+    if (login === undefined) continue;
     for (const clientId of doc.getClients(connection)) loginOf.set(clientId, login);
   }
   const peers: RoomPeer[] = [];
