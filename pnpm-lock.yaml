@@ -574,8 +574,8 @@ importers:
         specifier: 0.13.0
         version: 0.13.0(zod@4.6.7)
       '@miragon/value-chain-schema-model':
-        specifier: 0.6.0
-        version: 0.6.0(zod@4.6.7)
+        specifier: 0.6.1
+        version: 0.6.1(zod@4.6.7)
       fast-xml-parser:
         specifier: 5.11.2
         version: 5.11.2
@@ -1482,8 +1482,8 @@ packages:
     peerDependencies:
       zod: ^4.6.0
 
-  '@miragon/value-chain-schema-model@0.6.0':
-    resolution: {integrity: sha512-k8+2Sgi4ezDaGiQsWXb0jEjM4TSMhl6yfCx+7MLobZWL8t5IXVbP3T9jqxx7ZXLnvSCKH9x37yT9fO7tuqrAmg==}
+  '@miragon/value-chain-schema-model@0.6.1':
+    resolution: {integrity: sha512-70ueVdDNDWRdgbfuXB52pfXcSYC4O5DgRA6QgHBkksCB0iHC7U5EM9GLHDn0NnbM4ssqAOW+VplX+7QIEM2gQg==}
     peerDependencies:
       zod: ^4.6.0
 
@@ -5673,7 +5673,7 @@ snapshots:
       nanoid: 6.0.2
       zod: 4.6.7
 
-  '@miragon/value-chain-schema-model@0.6.0(zod@4.6.7)':
+  '@miragon/value-chain-schema-model@0.6.1(zod@4.6.7)':
     dependencies:
       zod: 4.6.7
 
