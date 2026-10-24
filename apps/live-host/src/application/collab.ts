@@ -36,6 +36,7 @@ import {
 } from "../domain/rooms.ts";
 import { growsDocument } from "../domain/sync-message.ts";
 import type { ConnectedRepo } from "../repos/registry.ts";
+import { type AwarenessAnnouncement, tieAnnouncedClients } from "./awareness-ties.ts";
 import type { RepoActivity } from "./repo-activity.ts";
 import type { RoomMigrations } from "./room-migrations.ts";
 
@@ -274,6 +275,15 @@ export function makeCollabHooks(deps: CollabDeps) {
           (user as { kind?: string }).kind = "human";
         }
       }
+    },
+
+    // Hocuspocus ties a peer to its connection only the first time it sees
+    // the peer; a reconnected one must be tied again, or closing its
+    // connection leaves it in the room for the 30 s awareness timeout and
+    // get_presence without its login (awareness-ties.ts, #310). Hocuspocus
+    // does not await this hook, so it must never throw.
+    async onAwarenessUpdate(announcement: AwarenessAnnouncement) {
+      tieAnnouncedClients(announcement);
     },
 
     // Debounced by Hocuspocus itself (default: 2s after last change, max 10s).
