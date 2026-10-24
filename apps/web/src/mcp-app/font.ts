@@ -15,12 +15,13 @@
  * weight axis survive the rescue. In a plain browser both paths load; same
  * family, no visible difference.
  *
- * Geist also goes in under the family name "Geist" (FONT_ALIASES): the
- * event-storming and wardley renderers set their canvas text in 'Geist', the
- * CI's spelling, not fontsource's "Geist Variable". An alias face is built from
- * the same decoded bytes — no second data: rule in geist.css, so the bundle
- * still carries them once.
+ * Geist also goes in under the family name "Geist" (FONT_ALIASES), the CI's
+ * spelling, for a renderer that names 'Geist' alone (an older or another one):
+ * the pinned Miragon renderers name fontsource's "Geist Variable" first and
+ * 'Geist' after it. An alias face is built from the same decoded bytes — no
+ * second data: rule in geist.css, so the bundle still carries them once.
  */
+import { fontFaceRules, unquote } from "../lib/font-face-rules.ts";
 
 /** the CI typeface, as geist.css (and tokens.css' --designiq-font-sans) names it */
 export const WIDGET_FONT = "Geist Variable";
@@ -77,27 +78,6 @@ export async function loadInlinedFont(family: string): Promise<void> {
     }),
   );
 }
-
-/** every @font-face of the document, also inside @media / @supports / @layer */
-function* fontFaceRules(): Generator<CSSFontFaceRule> {
-  const walk = function* (rules: CSSRuleList): Generator<CSSFontFaceRule> {
-    for (const rule of rules) {
-      if (rule instanceof CSSFontFaceRule) yield rule;
-      else if (rule instanceof CSSGroupingRule) yield* walk(rule.cssRules);
-    }
-  };
-  for (const sheet of document.styleSheets) {
-    let rules: CSSRuleList;
-    try {
-      rules = sheet.cssRules;
-    } catch {
-      continue; // a cross-origin sheet hides its rules — never one of ours
-    }
-    yield* walk(rules);
-  }
-}
-
-const unquote = (value: string): string => value.trim().replace(/^(["'])(.*)\1$/, "$2");
 
 function decode(dataUri: string): ArrayBuffer {
   const bin = atob(dataUri.slice(dataUri.indexOf("base64,") + 7));
