@@ -80,16 +80,55 @@ test("file names are not autolinked although their extension reads as a top-leve
   assert.doesNotMatch(html, /<a /);
 });
 
-test("raw HTML is escaped, never passed through", () => {
+test("raw HTML outside GitHub's subset is escaped, never passed through", () => {
   const html = render(
     '<script>alert(1)</script>\n\nText <img src=x onerror="alert(1)"> and <a href="javascript:alert(1)">x</a>\n\n' +
-      '<div align="center">\n<b>logo</b>\n</div>\n\n| a | b |\n|---|---|\n| one<br>two | x |',
+      '<div align="center">\n<b>logo</b>\n</div>\n\n| a | b |\n|---|---|\n| one<b>two</b> | x |\n\n' +
+      '<details>\n<div onclick="alert(1)">inside</div>\n',
   );
-  assert.doesNotMatch(html, /<script|<img|<a |<div|<b>|<br>/);
+  assert.doesNotMatch(html, /<script|<img|<a |<div|<b>/);
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(html, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
   assert.match(html, /<p>&lt;div align=&quot;center&quot;&gt;\n&lt;b&gt;logo&lt;\/b&gt;\n&lt;\/div&gt;<\/p>/);
-  assert.match(html, /<td>one&lt;br&gt;two<\/td>/);
+  assert.match(html, /<td>one&lt;b&gt;two&lt;\/b&gt;<\/td>/);
+  // next to a passed tag, any other one is text all the same
+  assert.match(html, /<details>\n&lt;div onclick=&quot;alert\(1\)&quot;&gt;inside&lt;\/div&gt;\n/);
+});
+
+test("GitHub's raw HTML subset renders as bare tags: br, details, summary, sub, sup, kbd", () => {
+  const table = render("| a | b |\n|---|---|\n| one<br>two | a<br/>b<br />c<BR>d</br>e |");
+  assert.match(table, /<td>one<br>two<\/td>/);
+  assert.match(table, /<td>a<br>b<br>c<br>d<br>e<\/td>/);
+
+  // a collapsible section: Markdown after a blank line renders inside it
+  const details = render(
+    '<details open ontoggle=alert(1) class="x">\n<summary onclick="x()">More <b>info</b> &amp; Q&A</summary>\n\n' +
+      "- an **item**\n\n</details>",
+  );
+  assert.equal(
+    details,
+    "<details open>\n<summary>More &lt;b&gt;info&lt;/b&gt; &amp; Q&amp;A</summary>\n" +
+      "<ul>\n<li>an <strong>item</strong></li>\n</ul>\n</details>\n",
+  );
+  assert.match(render('<details class="open"><summary>s</summary></details>'), /^<details><summary>s<\/summary>/);
+
+  const inline = render('H<sub>2</sub>O, x<sup title="t">2</sup>, <kbd onclick="alert(1)">Ctrl</kbd>+<kbd/>C</KBD>');
+  assert.equal(inline, "<p>H<sub>2</sub>O, x<sup>2</sup>, <kbd>Ctrl</kbd>+<kbd>C</kbd></p>\n");
+  // no attribute of the document's reaches the page
+  assert.doesNotMatch(details + inline, /ontoggle|onclick|class=|title=/);
+});
+
+test("an HTML block keeps its paragraph unless it opens or closes a collapsible section", () => {
+  // a README header: its line break passes, the rest is escaped text in one paragraph
+  assert.equal(
+    render('<p align="center">\n<img src="logo.png"><br>\n<b>Name</b>\n</p>\n\nNext paragraph.'),
+    "<p>&lt;p align=&quot;center&quot;&gt;\n&lt;img src=&quot;logo.png&quot;&gt;<br>\n&lt;b&gt;Name&lt;/b&gt;\n" +
+      "&lt;/p&gt;</p>\n<p>Next paragraph.</p>\n",
+  );
+  assert.equal(render("<pre>\na<br>b\n</pre>"), "<p>&lt;pre&gt;\na<br>b\n&lt;/pre&gt;</p>\n");
+  assert.equal(render("<sub>\nnote\n</sub>"), "<p><sub>\nnote\n</sub></p>\n");
+  assert.equal(render("<details>\n<summary>More</summary>"), "<details>\n<summary>More</summary>\n");
+  assert.equal(render("</details>"), "</details>\n");
 });
 
 test("HTML comments stay hidden, as on GitHub, and their lines are not Markdown", () => {

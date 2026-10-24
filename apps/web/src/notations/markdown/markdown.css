@@ -199,6 +199,53 @@
   white-space: pre;
 }
 
+/* a key (raw <kbd>): the guide's shortcut chip (§5.6), Geist Mono 13/400 */
+.markdown-body kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--cd-radius-sm);
+  background: var(--secondary);
+  box-shadow: none;
+  color: var(--muted-foreground);
+  font-family: var(--designiq-font-mono);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  vertical-align: baseline;
+}
+
+/* a collapsible section (raw <details>): the view's Lucide chevron
+   (view.ts) in place of the browser's disclosure triangle, turned down
+   while open */
+.markdown-body details {
+  margin: 0 0 var(--cd-space-3);
+}
+.markdown-body details > summary {
+  display: block;
+  cursor: pointer;
+  list-style: none;
+}
+.markdown-body details > summary::-webkit-details-marker {
+  display: none;
+}
+.markdown-body details > summary:focus-visible {
+  border-radius: var(--cd-radius-sm);
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.markdown-body details[open] > summary {
+  margin-bottom: var(--cd-space-2);
+}
+.markdown-body .md-summary-icon {
+  /* the base styles make an svg a block */
+  display: inline-block;
+  margin-right: var(--cd-space-1);
+  vertical-align: -0.125em;
+  transition: transform var(--cd-motion-fast) var(--cd-ease);
+}
+.markdown-body details[open] > summary > .md-summary-icon {
+  transform: rotate(90deg);
+}
+
 /* a mermaid fence drawn as its diagram (./mermaid-fence.ts): centred, as
    wide as the measure up to its natural size (mermaid caps the SVG with a
    max-width), a wider one scrolls on its own. Dimmed while a newer source

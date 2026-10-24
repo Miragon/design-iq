@@ -5,10 +5,12 @@
  * Y.Text, a collaborator's included, re-renders the view after a short
  * debounce.
  *
- * The HTML comes from ./render.ts (raw HTML already escaped there) and is
- * sanitized again (./sanitize.ts) before it reaches the page. Links to other
- * models of the repository navigate inside designIQ through the shell;
- * #anchors scroll this view.
+ * The HTML comes from ./render.ts (raw HTML already escaped there, but for
+ * GitHub's small subset, written anew) and is sanitized again (./sanitize.ts)
+ * before it reaches the page; the view's own icons, which the sanitizer
+ * admits no SVG for, go in after it (withIcons). Links to other models of the
+ * repository navigate inside designIQ through the shell; #anchors scroll this
+ * view.
  *
  * An image from another site shows as a placeholder until the reader loads
  * it: that choice holds for this view of the document, through every
@@ -28,6 +30,7 @@
  * when it shows again: an author typing in Monaco never pays for a hidden
  * document's diagrams.
  */
+import { icon } from "../../mcp-app/icons.ts";
 import type { EditorContext, MountedEditor } from "../registry.ts";
 import { FENCE_EXTENSIONS, type FenceExtension } from "./fences.ts";
 import { anchorId, type FenceRenderer, renderMarkdown, safeDecode } from "./render.ts";
@@ -53,7 +56,8 @@ export function mountMarkdownView(
   const externalImages = new Set<string>();
   /** the routes of the repository images that did not load */
   const brokenImages = new Set<string>();
-  const sanitize = createSanitizer(win, { externalImages });
+  const sanitizeDocument = createSanitizer(win, { externalImages });
+  const sanitize = (html: string): DocumentFragment => withIcons(sanitizeDocument(html), doc);
 
   const scroller = doc.createElement("div");
   scroller.className = "markdown-view";
@@ -262,4 +266,13 @@ export function mountMarkdownView(
       scroller.remove();
     },
   };
+}
+
+/** the view's icons in a sanitized document: a Lucide chevron in place of the
+ *  browser's disclosure triangle, in the summary of every <details> */
+function withIcons(fragment: DocumentFragment, doc: Document): DocumentFragment {
+  for (const summary of fragment.querySelectorAll("details > summary:first-of-type")) {
+    summary.prepend(icon("chevron-right", 16, "md-summary-icon", doc));
+  }
+  return fragment;
 }
