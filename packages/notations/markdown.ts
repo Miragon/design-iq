@@ -9,13 +9,19 @@
  *     nothing but blanks after it. Its content loses as much indentation as
  *     the opening run had. An unclosed fence runs to the end of its
  *     container, or of the document.
- *   - fences inside block quotes and list items count. Their content comes
- *     without the container's markers (a quote's ">", a list item's content
- *     indent), and a line that does not continue the container (no ">", or
- *     indented less than the item's content) ends the fence there, closed
- *     or not.
+ *   - fences inside block quotes, list items and footnote definitions
+ *     count. Their content comes without the container's markers (a quote's
+ *     ">", a list item's content indent, a definition's four columns), and a
+ *     line that does not continue the container (no ">", or indented less
+ *     than the item's content or the definition's four columns) ends the
+ *     fence there, closed or not.
+ *   - a footnote definition ("[^label]:", a label without blanks) reads as
+ *     render.ts' markdown-it-footnote reads it: it interrupts a paragraph,
+ *     but not as a lazy line of a quote, blank lines never end it, and its
+ *     own first line takes the text after the colon as content indented by
+ *     the blanks after it, minus the definition's indent once they reach it.
  *   - to place a fence the scanner follows just enough block structure: the
- *     open quotes and list items, paragraphs (their lazy continuation lines,
+ *     open containers, paragraphs (their lazy continuation lines,
  *     what may interrupt one), indented code (four spaces of indent are
  *     never a fence), raw HTML blocks (a fence inside an HTML comment is
  *     no fence: markdown-it recognises raw HTML, render.ts' `html: true`)
@@ -30,10 +36,11 @@
  *     list item it lets a lazy line indented four columns or more, but less
  *     than the item's content, start a block (a quote, a fence, raw HTML).
  *   - content nested deeper than markdown-it parses (maxNesting: 50 list
- *     items or 100 quotes) holds no fence: the view drops the rest of the
- *     innermost quote around it, or of the document, and so does the scan.
- *     With that limit a line costs its length plus the containers it
- *     continues: the scan stays linear on any document the save gate gets.
+ *     items, 100 quotes or footnote definitions) holds no fence: the view
+ *     drops the rest of the innermost quote around it, or of the document,
+ *     and so does the scan. With that limit a line costs its length plus the
+ *     containers it continues: the scan stays linear on any document the
+ *     save gate gets.
  *
  * Pure string logic, zero-dep and browser-safe like the package index.
  * apps/web's test/markdown-fences.test.ts holds it against markdown-it on a
@@ -70,9 +77,13 @@ interface Lead {
   blank: boolean;
 }
 
-/** an open block quote or list item; `level` is the nesting inside it as
- *  markdown-it counts it (a quote one level, a list item two: its list and itself) */
-type Container = { kind: "quote"; level: number } | { kind: "item"; level: number; indent: number; fresh: boolean };
+/** an open block quote, list item or footnote definition; `level` is the
+ *  nesting inside it as markdown-it counts it (a quote and a definition one
+ *  level, a list item two: its list and itself) */
+type Container =
+  | { kind: "quote"; level: number }
+  | { kind: "footnote"; level: number }
+  | { kind: "item"; level: number; indent: number; fresh: boolean };
 
 type Leaf =
   | { kind: "none" | "paragraph" | "code" }
@@ -90,9 +101,14 @@ const SETEXT_UNDERLINE = /^(?:=+|-+)[ \t]*$/;
 const BULLET = /^[-+*](?=[ \t]|$)/;
 const ORDERED = /^(\d{1,9})[.)](?=[ \t]|$)/;
 const BLANK = /^[ \t]*$/;
+/** a footnote definition's marker: a label without blanks */
+const FOOTNOTE_DEFINITION = /^\[\^[^\] ]+\]:/;
+/** the columns a footnote definition's content is indented by past the definition */
+const FOOTNOTE_INDENT = 4;
 /** a link reference definition on one line: [label]: destination "title" (a
- *  "[^" label is a footnote, which render.ts keeps as paragraph text; a bare
- *  destination ends at a space or a control character, as in markdown-it) */
+ *  "[^" label is a footnote definition, or with a blank in it paragraph text
+ *  to render.ts; a bare destination ends at a space or a control character,
+ *  as in markdown-it) */
 const LINK_DEFINITION =
   // eslint-disable-next-line no-control-regex
   /^\[(?!\^)((?:[^[\]\\]|\\.)*)\]:[ \t]*(<(?:[^<>\\]|\\.)*>|[^ <\x00-\x1f\x7f][^ \x00-\x1f\x7f]*)(?:[ \t]+(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^()\\]|\\.)*\)))?[ \t]*$/;
@@ -184,6 +200,11 @@ function continues(container: Container, rest: Rest, lead: Lead): Rest | undefin
     const at = dropIndent(rest, lead.indent);
     return at.text.startsWith(">") ? afterQuoteMarker(at) : undefined;
   }
+  if (container.kind === "footnote") {
+    if (!lead.blank && lead.indent < FOOTNOTE_INDENT) return undefined;
+    lead.indent = Math.max(0, lead.indent - FOOTNOTE_INDENT);
+    return dropIndent(rest, FOOTNOTE_INDENT);
+  }
   // a list item that opened empty holds at most one blank line: the next
   // blank line ends it
   const fresh = container.fresh;
@@ -224,9 +245,23 @@ function htmlBlock(text: string): readonly [start: RegExp, end: RegExp, interrup
   return text.startsWith("<") ? HTML_BLOCKS.find(([start]) => start.test(text)) : undefined;
 }
 
+/**
+ * The content of a footnote definition's first line, `at` the line after its
+ * indent: the text after the colon. markdown-it-footnote indents it by the
+ * blanks after the colon, less `indent` (the columns the definition's content
+ * is indented by in the innermost quote) once there are that many.
+ */
+function footnoteContent(at: Rest, marker: string, indent: number): Rest {
+  const after: Rest = { text: at.text.slice(marker.length), col: at.col + marker.length };
+  return indentOf(after) < indent ? after : dropIndent(after, indent);
+}
+
 /** whether a line that does not continue a paragraph's containers starts a
- *  block of its own (else it is a lazy continuation line of the paragraph) */
-function startsBlock(rest: Rest): boolean {
+ *  block of its own (else it is a lazy continuation line of the paragraph).
+ *  A footnote definition does, whatever its indent, but not in a quote it
+ *  does not continue: a quote reads it as a lazy line */
+function startsBlock(rest: Rest, quoted: boolean): boolean {
+  if (!quoted && FOOTNOTE_DEFINITION.test(dropIndent(rest, indentOf(rest)).text)) return true;
   const at = blockStart(rest);
   if (!at) return false;
   const text = at.text;
@@ -292,6 +327,16 @@ export function markdownFences(source: string): MarkdownFence[] {
   const fences: MarkdownFence[] = [];
   const stack: Container[] = [];
   const level = (): number => (stack.length > 0 ? stack[stack.length - 1]!.level : 0);
+  /** the columns the innermost container's content is indented by, counted
+   *  from the innermost quote (inside a quote markdown-it counts from its ">") */
+  const contentIndent = (): number => {
+    let indent = 0;
+    for (let i = stack.length - 1; i >= 0 && stack[i]!.kind !== "quote"; i--) {
+      const container = stack[i]!;
+      indent += container.kind === "item" ? container.indent : FOOTNOTE_INDENT;
+    }
+    return indent;
+  };
   let leaf: Leaf = NONE;
   // set while the view drops the rest of the innermost quote (content nested
   // too deep, MAX_NESTING): the scan follows the quote's lines to its end
@@ -333,7 +378,7 @@ export function markdownFences(source: string): MarkdownFence[] {
         dropping.lastBlank = BLANK.test(rest.text);
         continue;
       }
-      if (!dropping.lastBlank && !BLANK.test(rest.text) && !startsBlock(rest)) continue;
+      if (!dropping.lastBlank && !BLANK.test(rest.text) && !startsBlock(rest, true)) continue;
       dropping = undefined;
     }
 
@@ -353,7 +398,8 @@ export function markdownFences(source: string): MarkdownFence[] {
     // 4. a lazy continuation line keeps a paragraph and its containers open;
     //    any other line closes the containers it does not continue
     if (!all) {
-      if (leaf.kind === "paragraph" && !BLANK.test(rest.text) && !startsBlock(rest)) continue;
+      const quoted = stack.slice(matched).some((container) => container.kind === "quote");
+      if (leaf.kind === "paragraph" && !BLANK.test(rest.text) && !startsBlock(rest, quoted)) continue;
       if (leaf.kind === "fence") finish(leaf, false);
       stack.length = matched;
       leaf = NONE;
@@ -364,9 +410,13 @@ export function markdownFences(source: string): MarkdownFence[] {
     while (level() < MAX_NESTING && !BLANK.test(rest.text)) {
       const at = blockStart(rest);
       if (!at) break;
+      const footnote = FOOTNOTE_DEFINITION.exec(at.text)?.[0];
       if (at.text.startsWith(">")) {
         stack.push({ kind: "quote", level: level() + 1 });
         rest = afterQuoteMarker(at);
+      } else if (footnote !== undefined) {
+        stack.push({ kind: "footnote", level: level() + 1 });
+        rest = footnoteContent(at, footnote, contentIndent());
       } else {
         if (THEMATIC_BREAK.test(at.text)) break;
         const opening = listItem(at, indentOf(rest), level(), leaf.kind === "paragraph");

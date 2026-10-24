@@ -59,20 +59,24 @@ A Markdown model (`.md`) opens as the rendered document. The view switch has thr
 **Preview** (the document), **Split** (the Monaco source on the left, the document on the
 right, each edit landing as you type) and **Markdown** (the source alone).
 `src/notations/markdown/plugin.ts` is the light manifest; its lazy entry `markdown-view.ts`
-loads markdown-it, DOMPurify, the view and its stylesheet as their own chunk when a document
-opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
-`web-markdown-engine-loads-lazily`).
+loads markdown-it (with markdown-it-footnote), DOMPurify, the view and its stylesheet as their
+own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module to `import()`
+(rule `web-markdown-engine-loads-lazily`).
 
 - `render.ts` is pure, node-tested in `test/markdown-render.test.ts`: CommonMark plus the GFM
-  tables, strikethrough, task lists and autolinks, and GitHub-style heading anchors (the ids
-  carry an `md-` prefix, URL fragments stay bare). The document's own HTML never reaches the
-  page: HTML comments are hidden, as on GitHub, and the small subset GitHub authors use for
-  layout (`<br>`, `<details>` and `<summary>`, `<sub>`, `<sup>`, `<kbd>`) renders as bare tags
-  the renderer writes anew, every attribute dropped but `<details open>`. Everything else is
-  escaped and shows as text. A `<kbd>` is the design guide's shortcut chip, a `<summary>`
-  shows a Lucide chevron instead of the browser's triangle.
-  `javascript:`, `vbscript:`, `file:` and non-image `data:` URLs never become a link or an
-  image. GFM footnotes do not render yet; their text stays in the document.
+  tables, strikethrough, task lists, autolinks and footnotes, and GitHub-style heading anchors
+  (the ids carry an `md-` prefix, URL fragments stay bare). A footnote reference is a superscript
+  number, the notes a list at the end of the document, each with a link back to its references (a
+  Lucide `corner-up-left`); a note nobody refers to is not shown, and inline footnotes (`^[…]`),
+  which GitHub does not have, stay text. Labels match as on GitHub: in any case (`[^Note]` refers
+  to `[^note]:`), and a label defined twice keeps its first note. Their ids (`md-Footnote-1`,
+  `md-Footnote-ref-1`) never take a heading's, whose slugs are lower-case. The document's own HTML
+  never reaches the page: HTML comments are hidden, as on GitHub, and the small subset GitHub
+  authors use for layout (`<br>`, `<details>` and `<summary>`, `<sub>`, `<sup>`, `<kbd>`) renders
+  as bare tags the renderer writes anew, every attribute dropped but `<details open>`. Everything
+  else is escaped and shows as text. A `<kbd>` is the design guide's shortcut chip, a `<summary>`
+  shows a Lucide chevron instead of the browser's triangle. `javascript:`, `vbscript:`, `file:`
+  and non-image `data:` URLs never become a link or an image.
 - `sanitize.ts` sanitizes that HTML once more with DOMPurify, against an allowlist of exactly
   the markup the renderer emits (no style, no SVG, no data-\* but `data-model-path` and
   `data-image-src`, ids only with the `md-` prefix). It holds the images to the rule below as
@@ -185,10 +189,11 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   one: after the block the cursor is in, before it when the cursor is at its start, with blank
   lines around it. A block is one as the view reads it: a paragraph over several lines, a fence
   (the cursor in one puts the diagram after it), a table, a setext heading, raw HTML, indented
-  code, a quote. In a list it goes after the cursor's item with everything nested in it (child
-  lists, fences, further lines, indented however far), and a numbered list goes on at its
-  number. The result is read back: the diagram must read as one, and every other block as it
-  did (`insert-diagram.ts`, `test/insert-diagram.test.ts`). Until the source has had the focus,
+  code, a quote, a footnote definition with everything indented under it. In a list it goes
+  after the cursor's item with everything nested in it (child lists, fences, further lines,
+  indented however far), and a numbered list goes on at its number. The result is read back:
+  the diagram must read as one, and every other block as it did (`insert-diagram.ts`,
+  `test/insert-diagram.test.ts`). Until the source has had the focus,
   it shows no cursor, so the diagram goes to the document's end. The insertion is one edit, so
   one undo step, synced to everyone like typing; then the cursor selects the label to edit
   first (each starter names it). `test/diagram-starters.test.ts` parses every starter with
@@ -217,7 +222,8 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
 - `@designiq/notations/markdown` is the validator's reading of a document's fences, a
   zero-dep scanner: the `mermaid/diagram-type` check of every `mermaid` fence stands on it and
   names the document's line. `test/markdown-fences.test.ts` holds it against the markdown-it
-  this view renders with, so a markdown-it bump that reads fences differently fails there.
+  this view renders with, footnote definitions included, so a bump of markdown-it or
+  markdown-it-footnote that reads fences differently fails there.
 
 ## The MCP-App widgets
 

@@ -67,12 +67,57 @@ test("an escaped task marker is text, not a checkbox", () => {
   assert.equal(html.match(/<input /g)?.length, 1);
 });
 
-test("footnotes are not rendered yet, but their text never goes missing", () => {
-  const html = render("Text[^1] and more.\n\n[^1]: The note.\n\n[ref]: https://example.com\n\nSee [ref].");
-  assert.match(html, /<p>Text\[\^1\] and more.<\/p>/);
-  assert.match(html, /<p>\[\^1\]: The note.<\/p>/);
+test("GFM footnotes render as on GitHub: numbered references, the notes at the end with links back", () => {
+  const html = render(
+    "Text[^b] and again[^b], then[^a].\n\n[^a]: The **first** defined,\n    on [a model](../a.bpmn).\n\n" +
+      "    Its second paragraph.\n[^b]: The first referenced.\n\n[^unused]: Never referred to.\n\n" +
+      "[ref]: https://example.com\n\nSee [ref], [^missing], [^a b]: and ^[an inline note].",
+  );
+  // a reference is its note's number, superscript, numbered in the order of the first references
+  assert.match(
+    html,
+    /^<p>Text<sup class="md-footnote-ref"><a href="#Footnote-1" id="md-Footnote-ref-1" aria-label="Footnote 1">1<\/a><\/sup>/,
+  );
+  assert.match(html, /again<sup class="md-footnote-ref"><a href="#Footnote-1" id="md-Footnote-ref-1-2" [^>]+>1<\/a>/);
+  assert.match(html, /then<sup class="md-footnote-ref"><a href="#Footnote-2" id="md-Footnote-ref-2" [^>]+>2<\/a>/);
+  // the notes: a list at the end, each with a link back to every reference to it
+  assert.match(html, /<\/p>\n<section class="md-footnotes" aria-label="Footnotes">\n<ol>\n<li id="md-Footnote-1">/);
+  assert.match(
+    html,
+    /<li id="md-Footnote-1"><p>The first referenced. <a href="#Footnote-ref-1" class="md-footnote-backref" aria-label="Back to reference 1"><\/a> <a href="#Footnote-ref-1-2" class="md-footnote-backref" aria-label="Back to reference 1-2"><sup>2<\/sup><\/a><\/p>\n<\/li>/,
+  );
+  assert.match(
+    html,
+    /<li id="md-Footnote-2"><p>The <strong>first<\/strong> defined,\non <a href="[^"]+\/a.bpmn" data-model-path=/,
+  );
+  assert.match(
+    html,
+    /<p>Its second paragraph. <a href="#Footnote-ref-2" [^>]+><\/a><\/p>\n<\/li>\n<\/ol>\n<\/section>\n$/,
+  );
+  // a definition nothing refers to is not shown; the rest stays text, as on GitHub
+  assert.doesNotMatch(html, /Never referred to|Footnote-3/);
+  assert.match(html, /\[\^missing\], \[\^a b\]: and \^\[an inline note\]\./);
   // an ordinary reference definition still works
   assert.match(html, /<a href="https:\/\/example.com" target="_blank" rel="noopener noreferrer">ref<\/a>/);
+  // a note's ids never take a heading's: a heading slug is lower-case
+  assert.match(
+    render("## Footnote 1\n\nText[^1].\n\n[^1]: Note."),
+    /<h2 id="md-footnote-1">[\s\S]+<li id="md-Footnote-1">/,
+  );
+});
+
+test("footnote labels match as on GitHub: in any case, and a label defined twice keeps its first note", () => {
+  assert.match(
+    render("Text[^Note].\n\n[^note]: The note."),
+    /^<p>Text<sup class="md-footnote-ref"><a href="#Footnote-1" [^>]+>1<\/a><\/sup>\.<\/p>\n<section [^>]+>\n<ol>\n<li id="md-Footnote-1"><p>The note\. /,
+  );
+  const twice = render("A[^x] and B[^X].\n\n[^x]: first.\n\n[^X]: second.");
+  assert.match(twice, /B<sup class="md-footnote-ref"><a href="#Footnote-1" id="md-Footnote-ref-1-2" /);
+  assert.match(
+    twice,
+    /<li id="md-Footnote-1"><p>first\. <a href="#Footnote-ref-1" [^>]+><\/a> <a href="#Footnote-ref-1-2"/,
+  );
+  assert.doesNotMatch(twice, /second|Footnote-2/);
 });
 
 test("file names are not autolinked although their extension reads as a top-level domain", () => {

@@ -2,8 +2,8 @@
  * The validator's reading of a document's fences (@designiq/notations/markdown,
  * a zero-dep scanner) against the tokens the Markdown view renders from
  * (src/notations/markdown/render.ts, markdown-it as it configures it: raw HTML
- * recognised, footnote definitions kept as text): the same fences, on the
- * same lines, with the same info string and content. A markdown-it bump, or
+ * recognised, GFM footnote definitions read where the source has them): the
+ * same fences, on the same lines, with the same info string and content. A markdown-it bump, or
  * a change to the view's parser, that reads fences differently fails here
  * until the scanner follows it.
  */
@@ -117,7 +117,7 @@ const CORPUS: Record<string, string> = {
     "    pie",
     "    ```",
     "",
-    "[^1]: a footnote, text to the view",
+    "[^1]: a footnote definition holds a paragraph, the <img> goes on with it",
     '<img src="a.png">',
     "```mermaid",
     "pie",
@@ -128,6 +128,40 @@ const CORPUS: Record<string, string> = {
     "```",
     "x",
     "```",
+  ].join("\n"),
+  // a definition holds what is indented four columns past it, blank lines never end it
+  "footnote definitions": [
+    "The flow[^flow], its states[^states] and a quote[^q].",
+    "",
+    "[^flow]: The flow as a diagram:",
+    "",
+    "    ```mermaid",
+    "    flowchart LR",
+    "      A --> B",
+    "    ```",
+    "",
+    "[^states]: ```mermaid",
+    "    stateDiagram-v2",
+    "      [*] --> Open",
+    "    ```",
+    "```mermaid",
+    "pie",
+    "```",
+    "",
+    "- [^item]: ```mermaid",
+    "        pie",
+    "      ```",
+    "",
+    "> Quoted",
+    "[^q]: is a lazy line of the quote, and so is",
+    "    ```mermaid",
+    "",
+    "[^wide]:      ```mermaid",
+    "     five blanks after the colon are one",
+    "     ```",
+    "[^code]:         indented code",
+    "    ```mermaid",
+    "    pie",
   ].join("\n"),
   // markdown-it parses 49 nested list items and drops the rest of the document at the 50th
   "lists as deep as the view parses": [
@@ -219,6 +253,10 @@ const LINES = [
   "\t```",
   "[r]: http://x",
   "[^1]: note",
+  "[^1]: ```mermaid",
+  "[^a]:",
+  "    ```",
+  "- [^1]: x",
 ];
 
 test("the scanner reads generated documents' fences as the Markdown view does", () => {

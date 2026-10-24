@@ -1,9 +1,9 @@
 /**
  * The Markdown view's renderer, PURE: Markdown source in, an HTML string out.
  * markdown-it renders CommonMark plus the GFM extensions the content repos
- * use (tables, strikethrough, task lists, autolinks) and gives every heading
- * an anchor. The DOM side is ./sanitize.ts (DOMPurify) and ./view.ts
- * (mounting, clicks, scrolling).
+ * use (tables, strikethrough, task lists, autolinks, footnotes) and gives
+ * every heading an anchor. The DOM side is ./sanitize.ts (DOMPurify) and
+ * ./view.ts (mounting, clicks, scrolling).
  *
  * Node-loadable on purpose (test/markdown-render.test.ts): relative `.ts`
  * imports, no "@/" alias, nothing DOM-bound.
@@ -38,6 +38,7 @@
 import { repoImageRoute, repoImageType } from "@designiq/contracts/live";
 import { byExtension } from "@designiq/notations";
 import MarkdownIt, { type Env, type StateCore, type Token } from "markdown-it";
+import footnote from "markdown-it-footnote";
 
 /** the language and the full info string of a fenced code block */
 export interface FenceInfo {
@@ -264,6 +265,8 @@ interface RenderEnv extends Env {
   models: ReadonlySet<string> | undefined;
   externalImages: ReadonlySet<string> | undefined;
   brokenImages: ReadonlySet<string> | undefined;
+  /** parseMarkdown: footnote definitions stay where they are in the source */
+  footnotesInPlace?: boolean;
 }
 
 const TASK_MARKER = /^\[([ xX])\](?:[ \t]+|$)/;
@@ -409,15 +412,101 @@ md.linkify.add("//", null);
 const linkifyMatch = md.linkify.match.bind(md.linkify);
 md.linkify.match = (text) => linkifyMatch(text)?.filter((m) => m.schema !== "" || /^www\./i.test(m.raw)) ?? null;
 
-// GFM footnotes are not rendered (yet). Without this a footnote definition
-// ("[^1]: note") would be taken for a link reference definition, and its text
-// would vanish from the document: keep it, and every "[^1]", as plain text.
+// GFM footnotes, as on GitHub: a reference is a superscript number, the
+// notes a numbered list at the end of the document, each with a link back to
+// its references; a definition nothing refers to is not shown. GitHub has no
+// inline footnotes: "^[note]" stays text.
+md.use(footnote);
+md.inline.ruler.disable("footnote_inline");
+
+// a "[^label]:" line that is no footnote definition (a blank in the label)
+// stays text: as a link reference definition its text would vanish
 const referenceRule = md.block.ruler.__rules__.find((rule) => rule.name === "reference")!.fn;
 md.block.ruler.at("reference", (state, startLine, endLine, silent) =>
   state.src.startsWith("[^", state.bMarks[startLine]! + state.tShift[startLine]!)
     ? false
     : referenceRule(state, startLine, endLine, silent),
 );
+
+/** markdown-it-footnote's part of the env: the defined labels (":" + label,
+ *  -1 until the first reference, then the note's index) and the notes */
+interface FootnoteEnv extends Env {
+  footnotes?: { refs?: Record<string, number>; list?: { label: string; count: number }[] };
+}
+
+// GitHub matches a footnote label as it matches a link label, case-folded and
+// with its blanks collapsed: "[^Note]" refers to "[^note]: …". The plugin
+// matches labels as written, so a definition is filed under its folded label
+// below, and the reference rule, the plugin's own but for the folding, looks
+// a label up folded
+const footnoteLabel = (label: string): string => md.utils.normalizeReference(label);
+
+// a definition's opening token gets the lines of its content, as every other
+// block's has: ./insert-diagram.ts reads a definition as one block
+const footnoteDefinition = md.block.ruler.__rules__.find((rule) => rule.name === "footnote_def")!.fn;
+md.block.ruler.at(
+  "footnote_def",
+  (state, startLine, endLine, silent) => {
+    const at = state.tokens.length;
+    if (!footnoteDefinition(state, startLine, endLine, silent)) return false;
+    if (!silent) {
+      const definition = state.tokens[at]!;
+      let end = startLine + 1;
+      for (let i = at; i < state.tokens.length; i++) end = Math.max(end, state.tokens[i]!.map?.[1] ?? 0);
+      definition.map = [startLine, end];
+      const written = definition.meta!.label as string;
+      const label = footnoteLabel(written);
+      const defined = (state.env as FootnoteEnv).footnotes!.refs!;
+      delete defined[`:${written}`];
+      defined[`:${label}`] = -1;
+      definition.meta!.label = label;
+    }
+    return true;
+  },
+  { alt: ["paragraph", "reference"] },
+);
+
+const FOOTNOTE_REFERENCE = /\[\^([^\]\n ]+)\]/y;
+md.inline.ruler.at("footnote_ref", (state, silent) => {
+  const footnotes = (state.env as FootnoteEnv).footnotes;
+  const defined = footnotes?.refs;
+  if (!footnotes || !defined) return false;
+  FOOTNOTE_REFERENCE.lastIndex = state.pos;
+  const written = FOOTNOTE_REFERENCE.exec(state.src)?.[1];
+  if (written === undefined || FOOTNOTE_REFERENCE.lastIndex > state.posMax) return false;
+  const label = footnoteLabel(written);
+  const known = defined[`:${label}`];
+  if (known === undefined) return false;
+  if (!silent) {
+    const notes = (footnotes.list ??= []);
+    const id = known < 0 ? notes.length : known;
+    if (known < 0) {
+      notes[id] = { label, count: 0 };
+      defined[`:${label}`] = id;
+    }
+    state.push("footnote_ref", "", 0).meta = { id, subId: notes[id]!.count++, label };
+  }
+  state.pos = FOOTNOTE_REFERENCE.lastIndex;
+  return true;
+});
+
+// parseMarkdown reads the blocks where the source has them: only the render
+// moves the footnotes to the end of the document (and drops the ones nothing
+// refers to)
+const footnoteTail = md.core.ruler.__rules__.find((rule) => rule.name === "footnote_tail")!.fn;
+md.core.ruler.at("footnote_tail", (state) => {
+  if ((state.env as RenderEnv).footnotesInPlace) return;
+  // a label defined twice keeps its first definition, as on GitHub, where the
+  // plugin keeps its last: a later one gets the empty label no reference has
+  const defined = new Set<string>();
+  for (const token of state.tokens) {
+    if (token.type !== "footnote_reference_open") continue;
+    const label = token.meta!.label as string;
+    if (defined.has(label)) token.meta!.label = "";
+    defined.add(label);
+  }
+  footnoteTail(state);
+});
 
 md.core.ruler.push("designiq_task_lists", taskLists);
 md.core.ruler.push("designiq_heading_anchors", headingAnchors);
@@ -497,6 +586,41 @@ md.renderer.rules.html_block = (tokens, idx) => {
 md.renderer.rules.html_inline = (tokens, idx) => {
   const raw = tokens[idx]!.content.replace(HTML_COMMENT, "");
   return passedTag(raw) ?? escapeHtml(raw);
+};
+
+// footnote ids: md- like every id of the view, then a capital letter, which
+// no heading slug has, so a note never takes a heading's anchor. A note is
+// numbered in the order of its first reference; a reference's id is its
+// note's number, the n-th reference to a note numbered once more, as on GitHub
+const FOOTNOTE = "Footnote-";
+const FOOTNOTE_REF = "Footnote-ref-";
+
+/** a footnote token's note (1-based) and which reference to it (1-based),
+ *  from markdown-it-footnote's meta: id and subId count from 0 */
+function footnoteOf(token: Token): { note: number; reference: number; name: string } {
+  const { id = 0, subId = 0 } = (token.meta ?? {}) as { id?: number; subId?: number };
+  const note = id + 1;
+  const reference = subId + 1;
+  return { note, reference, name: reference > 1 ? `${note}-${reference}` : `${note}` };
+}
+
+md.renderer.rules.footnote_ref = (tokens, idx) => {
+  const { note, name } = footnoteOf(tokens[idx]!);
+  return (
+    `<sup class="md-footnote-ref"><a href="#${FOOTNOTE}${note}" id="${anchorId(FOOTNOTE_REF + name)}"` +
+    ` aria-label="Footnote ${note}">${note}</a></sup>`
+  );
+};
+md.renderer.rules.footnote_block_open = () => '<section class="md-footnotes" aria-label="Footnotes">\n<ol>\n';
+md.renderer.rules.footnote_block_close = () => "</ol>\n</section>\n";
+md.renderer.rules.footnote_open = (tokens, idx) => `<li id="${anchorId(FOOTNOTE + footnoteOf(tokens[idx]!).note)}">`;
+md.renderer.rules.footnote_close = () => "</li>\n";
+// the link back to a reference; its icon comes from the view, which the
+// sanitizer admits no SVG for
+md.renderer.rules.footnote_anchor = (tokens, idx) => {
+  const { reference, name } = footnoteOf(tokens[idx]!);
+  const nth = reference > 1 ? `<sup>${reference}</sup>` : "";
+  return ` <a href="#${FOOTNOTE_REF}${name}" class="md-footnote-backref" aria-label="Back to reference ${name}">${nth}</a>`;
 };
 
 md.renderer.rules.task_checkbox = (tokens, idx) =>
@@ -581,9 +705,10 @@ export function renderMarkdown(source: string, options: RenderOptions): string {
 }
 
 /** the tokens renderMarkdown renders a document from (its links resolved as
- *  in a document at the repository root): test/markdown-fences.test.ts holds
- *  the validator's fence scanner against their fences, and ./insert-diagram.ts
- *  reads from them the blocks a diagram must not be inserted into */
+ *  in a document at the repository root, every footnote definition where the
+ *  source has it): test/markdown-fences.test.ts holds the validator's fence
+ *  scanner against their fences, and ./insert-diagram.ts reads from them the
+ *  blocks a diagram must not be inserted into */
 export function parseMarkdown(source: string): Token[] {
   const env: RenderEnv = {
     repo: "",
@@ -592,6 +717,7 @@ export function parseMarkdown(source: string): Token[] {
     models: undefined,
     externalImages: undefined,
     brokenImages: undefined,
+    footnotesInPlace: true,
   };
   return md.parse(source, env);
 }

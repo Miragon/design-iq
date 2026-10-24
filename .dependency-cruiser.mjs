@@ -195,7 +195,7 @@ export default {
       name: "web-markdown-engine-loads-lazily",
       severity: "error",
       comment:
-        "ADR 0006: markdown-it and DOMPurify ship in the Markdown view's own chunk. Only the " +
+        "ADR 0006: markdown-it, markdown-it-footnote and DOMPurify ship in the Markdown view's own chunk. Only the " +
         "view's modules (MARKDOWN_VIEW) import them, and each other, statically; everything else " +
         "reaches the view through import() (the manifest, notations/markdown/plugin.ts). One " +
         "static import from an eager module would pull the engine into the main bundle with a " +
@@ -209,7 +209,7 @@ export default {
         dynamic: false,
         dependencyTypesNot: ["type-only"],
         path: [
-          "(^|/)node_modules/(markdown-it|dompurify)/",
+          "(^|/)node_modules/(markdown-it|markdown-it-footnote|dompurify)/",
           `^apps/web/src/notations/${MARKDOWN_VIEW}\\.ts$`,
           `^apps/web/src/notations/${MARKDOWN_SOURCE}\\.ts$`,
           // the SPA's "@/" alias does not resolve in this cruise: match the import as written

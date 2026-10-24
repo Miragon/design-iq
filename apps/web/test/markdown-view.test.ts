@@ -179,6 +179,13 @@ test("the sanitizer keeps the renderer's markup and strips everything else", () 
     subset,
     '<details open=""><summary>s</summary>a<br>b</details><p>H<sub>2</sub>O x<sup>2</sup> <kbd>K</kbd></p>',
   );
+
+  // footnotes: the section of the notes, and the labels of the links between them and their references
+  const footnotes =
+    '<p>x<sup class="md-footnote-ref"><a href="#Footnote-1" id="md-Footnote-ref-1" aria-label="Footnote 1">1</a></sup></p>' +
+    '<section class="md-footnotes" aria-label="Footnotes"><ol><li id="md-Footnote-1"><p>n ' +
+    '<a href="#Footnote-ref-1" class="md-footnote-backref" aria-label="Back to reference 1"></a></p></li></ol></section>';
+  assert.equal(clean(footnotes.replace("<section ", '<section onclick="alert(1)" ')), footnotes);
 });
 
 test("the sanitizer lets an image load from this origin or inline data, from another site only once the reader chose it", () => {
@@ -357,6 +364,36 @@ test("a <details> section opens on its summary, which shows a Lucide chevron, no
   assert.equal(v.click(summary), true, "the view leaves the click to the browser");
   assert.equal(details.open, true);
   v.view.destroy();
+});
+
+test("a footnote reference scrolls to its note, and the note's Lucide arrow back to the reference", () => {
+  const v = mount("## Footnote 1\n\nText[^1] and again[^1].\n\n[^1]: The note.");
+  const reference = v.article.querySelector("sup.md-footnote-ref > a")!;
+  assert.equal(reference.textContent, "1");
+  assert.equal(reference.getAttribute("aria-label"), "Footnote 1");
+  assert.equal(v.click(reference), false, "the view scrolls");
+  assert.deepEqual(v.scrolled, ["md-Footnote-1"], "to the note, not to the heading of the same words");
+  assert.equal(v.win.location.hash, "#Footnote-1", "the address names the note");
+
+  const notes = v.article.querySelector("section.md-footnotes")!;
+  assert.equal(notes.getAttribute("aria-label"), "Footnotes");
+  const back = notes.querySelectorAll("a.md-footnote-backref");
+  assert.equal(back.length, 2, "one link back per reference");
+  assert.equal(back[1]!.getAttribute("aria-label"), "Back to reference 1-2");
+  assert.equal(back[1]!.textContent, "2");
+  const arrow = back[1]!.firstElementChild!;
+  assert.equal(arrow.tagName.toLowerCase(), "svg");
+  assert.equal(arrow.getAttribute("class"), "icon md-footnote-backref-icon");
+  assert.equal(arrow.getAttribute("aria-hidden"), "true");
+  assert.equal(v.click(arrow), false, "a click on the arrow is one on its link");
+  assert.deepEqual(v.scrolled, ["md-Footnote-1", "md-Footnote-ref-1-2"]);
+  assert.equal(v.win.location.hash, "#Footnote-ref-1-2");
+  v.view.destroy();
+
+  // an address with a note's fragment lands on the note
+  const linked = mount("Text[^1].\n\n[^1]: The note.", { url: `${DOC_URL}#Footnote-1` });
+  assert.deepEqual(linked.scrolled, ["md-Footnote-1"]);
+  linked.view.destroy();
 });
 
 test("opened with a #section, the view lands on that heading", () => {
