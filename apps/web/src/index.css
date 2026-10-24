@@ -43,11 +43,14 @@
   max-height: calc(100cqh - 24px);
 }
 /* Monaco stacks its own layers over the side panels as well: its scrollbar
-   (z 11) would paint over an open panel's right edge and take its clicks,
-   its find widget (z 35) over the panel's header. Isolated is the editor's
-   frame alone (Monaco's overflow guard), not the host: the popups outside it
-   (suggestions, hovers, the context menu) stay over a panel they reach into,
-   and in the split view over the canvas beside the source */
+   (z 11) and its find widget (z 35) would paint over an open panel and take
+   its clicks. The source is laid out beside an open panel
+   (lib/side-panel-room), so both stay left of it; isolated, the editor's
+   frame (Monaco's overflow guard) stays under a panel even where it reaches
+   under one (a panel over the whole of a narrow source). Not the host: the
+   popups outside the frame (suggestions, hovers, the context menu) stay over
+   a panel they reach into, and in the split view over the canvas beside the
+   source */
 .monaco-host .overflow-guard {
   isolation: isolate;
 }
