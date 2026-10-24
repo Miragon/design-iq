@@ -208,14 +208,14 @@ by `vite.widget.config.ts`'s factory; `scripts/build-widgets.ts` runs every buil
 (`apps/live-host/src/http/mcp.ts`) serves it as a `ui://` resource behind an
 `open_*` tool — a dist without a bundle simply lacks that tool.
 
-| Bundle                        | Tool                          | Engine                                             |
-| ----------------------------- | ----------------------------- | -------------------------------------------------- |
-| `mcp-app.html`                | `open_modeler`                | bpmn-js (+ stickies, t.BPM, the Todos card)        |
-| `mcp-app-dmn.html`            | `open_decision_modeler`       | dmn-js + the simulation add-on (+ the Checks card) |
-| `mcp-app-wardley.html`        | `open_wardley_modeler`        | `@miragon/wardley-renderer`                        |
-| `mcp-app-team-topology.html`  | `open_team_topology_modeler`  | `@miragon/team-topologies-renderer`                |
-| `mcp-app-event-storming.html` | `open_event_storming_modeler` | `@miragon/event-storming-renderer`                 |
-| `mcp-app-context-map.html`    | `open_context_map_modeler`    | `@miragon/context-maps-renderer`                   |
+| Bundle                        | Tool                          | Engine                                                                          |
+| ----------------------------- | ----------------------------- | ------------------------------------------------------------------------------- |
+| `mcp-app.html`                | `open_modeler`                | bpmn-js (+ stickies, t.BPM, the Todos card)                                     |
+| `mcp-app-dmn.html`            | `open_decision_modeler`       | dmn-js + the simulation add-on (+ the Checks card)                              |
+| `mcp-app-wardley.html`        | `open_wardley_modeler`        | `@miragon/wardley-renderer`                                                     |
+| `mcp-app-team-topology.html`  | `open_team_topology_modeler`  | `@miragon/team-topologies-renderer`                                             |
+| `mcp-app-event-storming.html` | `open_event_storming_modeler` | `@miragon/event-storming-renderer`                                              |
+| `mcp-app-context-map.html`    | `open_context_map_modeler`    | `@miragon/context-maps-renderer` (+ `@miragon/context-maps-cml`, Export as CML) |
 
 **One lifecycle.** Every widget shares `src/mcp-app/core/`: `lifecycle.ts`
 (tool input → load via `get_model_content` → engine → debounced CAS autosave via
@@ -363,7 +363,8 @@ sized by `miragon-styles.css`) and removes it with the engine.
    (contract 1.3) where it has one.
    Optional: `title` (the document's title, the menu header's display name),
    `menu` (the package's own menu content, its dialogs built with the
-   helpers in `menu-content.ts` inside the mount's host) and, with
+   helpers in `menu-content.ts` inside the mount's host, its exports with
+   `imageExports` and `textExport` there) and, with
    `hasLegend`, `legend` (the rows of the Legend panel both hosts show).
    Then its line in
    `src/notations/miragon/index.ts` — the SPA editor plugin, the widget engine,

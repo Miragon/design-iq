@@ -11,6 +11,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
+import type { CmBaseViewer } from "@miragon/context-maps-renderer";
 import { fitViewbox } from "@miragon/modeler-shell/core";
 import * as Y from "yjs";
 
@@ -167,8 +168,12 @@ const EXPECTED = {
     export: ["export-png", "export-svg"],
     help: ["keyboard-shortcuts"],
   },
-  // the JSON is the model's file itself, and no package writes CML
-  "context-map": { model: ["map-title"], export: ["export-png", "export-svg"], help: ["keyboard-shortcuts"] },
+  // the JSON is the model's file itself
+  "context-map": {
+    model: ["map-title"],
+    export: ["export-png", "export-svg", "export-cml"],
+    help: ["keyboard-shortcuts"],
+  },
 };
 
 test("each renderer's own entries reach both hosts as its package names them; Team Topologies brings none", async () => {
@@ -328,6 +333,36 @@ test("exports: the SVG reaches the host's download, named after the model", asyn
     assert.match(String(files[0]!.data), /<svg[\s>]/);
     engine.destroy();
   }
+});
+
+test("Context Maps: Export as CML hands the host Context Mapper's text of the map, named after the model, in an editor and a viewer", async () => {
+  const { serializeCml } = await import("@miragon/context-maps-cml");
+  for (const readonly of [false, true]) {
+    const { engine, files, failures } = await widgetOf("context-map", readonly);
+    runModelerItem(engine.menu!, "modeler:export-cml");
+    await wait(50);
+    assert.deepEqual(failures, [], readonly ? "the viewer" : "the editor");
+    assert.equal(files.length, 1);
+    assert.deepEqual([files[0]!.name, files[0]!.mimeType], ["tea-shop.cml", "text/plain"]);
+    const map = engine.modeler.diagram as unknown as CmBaseViewer;
+    assert.equal(files[0]!.data, serializeCml(map.exportDocument()));
+    assert.match(String(files[0]!.data), /^ContextMap Conference \{$/m);
+    assert.match(String(files[0]!.data), /^BoundedContext CtxCfp$/m);
+    engine.destroy();
+  }
+});
+
+test("Context Maps: a map the CML export cannot read ends in the host's failure report, never in a throw from the menu", async () => {
+  const { engine, files, failures } = await widgetOf("context-map");
+  const map = engine.modeler.diagram as unknown as CmBaseViewer;
+  map.exportDocument = () => {
+    throw new Error("the map could not be read");
+  };
+  assert.doesNotThrow(() => runModelerItem(engine.menu!, "modeler:export-cml"));
+  await wait(50);
+  assert.deepEqual(files, []);
+  assert.deepEqual(failures, ["the map could not be read"]);
+  engine.destroy();
 });
 
 test("displayName: every renderer's document title", async () => {
