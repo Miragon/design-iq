@@ -2,10 +2,11 @@
  * The focus after a click on the SPA's chrome (issue 298, guide §5.4 and
  * §5.8) in the built app, in headless Chromium, with the real modelers:
  * bpmn-js, the dmn-js DRD and every Miragon renderer. A check run by hand,
- * not by `pnpm test`, because CI has no browser; the jsdom suite
- * (test/canvas-focus-dom.test.ts) runs the rules on the real canvases, not
- * the React chrome and radix's menu around them. Run it after a change to
- * the editor's toolbar, radix or a renderer, from the repository root:
+ * not by `pnpm test`, because CI has no browser. The jsdom suites run the
+ * rules on the real canvases (test/canvas-focus-dom.test.ts) and the toolbar
+ * with radix's menu beside a stand-in canvas (test/toolbar-focus-dom.test.ts),
+ * never the two together in the live editor. Run it after a change to the
+ * editor's toolbar, radix or a renderer, from the repository root:
  *
  *   pnpm build
  *   npx -y playwright@1.56.1 install --only-shell chromium     # once
