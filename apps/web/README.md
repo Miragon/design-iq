@@ -379,6 +379,17 @@ sized by `miragon-styles.css`) and removes it with the engine.
    shows up in a reviewed diff).
 4. `docs/mcp-integration.md` (tool table + the widgets section).
 
+The renderers take `diagram-js`, `didi`, `tiny-svg` and `zod` as peers, so a
+renderer draws with the copy apps/web brings: apps/web declares each peer of
+its Miragon packages as an exact dependency instead of leaving it to pnpm's
+`autoInstallPeers`, didi and tiny-svg at the versions diagram-js itself depends
+on. A second copy in the bundle only fails at runtime (a second didi breaks
+diagram-js's injector). `test/shared-runtimes.test.ts` reads the lockfile and
+fails on a peer apps/web does not pin, and on a second copy of a peer or of
+`@miragon/modeler-api` in anything apps/web ships. Dependabot moves
+`diagram-js`, `didi` and `tiny-svg` in one group and holds didi 12 back until
+diagram-js depends on it (#300).
+
 A renderer without the `@miragon/modeler-api` factories (or a non-Miragon
 engine) gets a bespoke engine adapter + entry, the bpmn/dmn way.
 

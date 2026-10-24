@@ -1,7 +1,8 @@
 # Dependabot — balanced mode: minor+patch grouped per ecosystem, each major
-# lands as its own PR for individual review. The Miragon modeler families are
-# the exception: one PR per family, majors included, because a renderer and
-# the schema model it pins only move together. Reviewers come from CODEOWNERS.
+# lands as its own PR for individual review. The Miragon modeler families and
+# diagram-js with didi and tiny-svg are the exception: one PR per group, majors
+# included, because a renderer and the schema model it pins, and diagram-js and
+# the runtimes it brings, only move together. Reviewers come from CODEOWNERS.
 version: 2
 updates:
   # npm — one block covers the whole pnpm workspace (resolved from the root).
@@ -49,6 +50,14 @@ updates:
       # moving to inferno 6+ — then this bump follows theirs.
       - dependency-name: "inferno"
         versions: [">=6"]
+      # didi is not ours to pick either: it is the one diagram-js depends on
+      # ("^11.0.0" in 15.28.1), which apps/web pins and the Miragon renderers
+      # take as their peer (#300). A bump on its own leaves diagram-js's
+      # injector on didi 11 and the renderers on 12, two copies in the bundle
+      # that apps/web/test/shared-runtimes.test.ts refuses. Unblock: a
+      # diagram-js release on didi 12; the diagram-js group then moves both.
+      - dependency-name: "didi"
+        versions: [">=12"]
     groups:
       npm-minor-patch:
         applies-to: version-updates
@@ -67,6 +76,10 @@ updates:
           - "@miragon/team-topologies-*"
           - "@miragon/value-chain-*"
           - "@miragon/modeler-*"
+          # diagram-js and the runtimes it brings are one group (below)
+          - "diagram-js"
+          - "didi"
+          - "tiny-svg"
         update-types: ["minor", "patch"]
       # a renderer and its schema model move together (the renderer pins the
       # schema model exactly; packages/notations pins it as a devDependency to
@@ -95,6 +108,15 @@ updates:
       miragon-modeler:
         applies-to: version-updates
         patterns: ["@miragon/modeler-*"]
+      # the Miragon renderers peer on diagram-js, didi and tiny-svg, so apps/web
+      # pins all three, didi and tiny-svg at the versions diagram-js depends on;
+      # where a pin and diagram-js disagree, the bundle carries a second copy
+      # (apps/web/test/shared-runtimes.test.ts, #300). One PR, its majors
+      # included, so a diagram-js release that moves didi or tiny-svg arrives
+      # with their pins.
+      diagram-js:
+        applies-to: version-updates
+        patterns: ["diagram-js", "didi", "tiny-svg"]
       npm-security:
         applies-to: security-updates
         patterns: ["*"]

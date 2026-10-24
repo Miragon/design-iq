@@ -241,6 +241,9 @@ importers:
       diagram-js:
         specifier: 15.28.1
         version: 15.28.1
+      didi:
+        specifier: 11.0.1
+        version: 11.0.1
       dmn-js:
         specifier: 17.12.3
         version: 17.12.3
@@ -271,6 +274,9 @@ importers:
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
+      tiny-svg:
+        specifier: 4.1.4
+        version: 4.1.4
       y-monaco:
         specifier: 0.1.6
         version: 0.1.6(monaco-editor@0.55.1)(yjs@13.6.33)
@@ -311,6 +317,9 @@ importers:
       vite-plugin-singlefile:
         specifier: 2.3.4
         version: 2.3.4(rollup@4.64.6)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
 
   docs:
     devDependencies:

@@ -36,6 +36,7 @@
     "bpmn-js-color-picker": "0.7.2",
     "bpmn-js-differ": "3.2.0",
     "diagram-js": "15.28.1",
+    "didi": "11.0.1",
     "dmn-js": "17.12.3",
     "dompurify": "3.4.17",
     "lucide-react": "1.58.0",
@@ -46,6 +47,7 @@
     "react-dom": "19.3.1",
     "sonner": "2.0.8",
     "tailwindcss": "4.3.3",
+    "tiny-svg": "4.1.4",
     "y-monaco": "0.1.6",
     "yjs": "13.6.33",
     "zod": "4.6.7"
@@ -60,6 +62,7 @@
     "postcss": "8.5.30",
     "postcss-prefix-selector": "2.2.1",
     "vite": "8.3.4",
-    "vite-plugin-singlefile": "2.3.4"
+    "vite-plugin-singlefile": "2.3.4",
+    "yaml": "2.9.1"
   }
 }
