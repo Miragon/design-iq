@@ -106,6 +106,20 @@ test("GFM footnotes render as on GitHub: numbered references, the notes at the e
   );
 });
 
+test("footnote labels match as on GitHub: in any case, and a label defined twice keeps its first note", () => {
+  assert.match(
+    render("Text[^Note].\n\n[^note]: The note."),
+    /^<p>Text<sup class="md-footnote-ref"><a href="#Footnote-1" [^>]+>1<\/a><\/sup>\.<\/p>\n<section [^>]+>\n<ol>\n<li id="md-Footnote-1"><p>The note\. /,
+  );
+  const twice = render("A[^x] and B[^X].\n\n[^x]: first.\n\n[^X]: second.");
+  assert.match(twice, /B<sup class="md-footnote-ref"><a href="#Footnote-1" id="md-Footnote-ref-1-2" /);
+  assert.match(
+    twice,
+    /<li id="md-Footnote-1"><p>first\. <a href="#Footnote-ref-1" [^>]+><\/a> <a href="#Footnote-ref-1-2"/,
+  );
+  assert.doesNotMatch(twice, /second|Footnote-2/);
+});
+
 test("file names are not autolinked although their extension reads as a top-level domain", () => {
   const html = render("Edit README.md and feature-map.md, then run setup.sh.");
   assert.doesNotMatch(html, /<a /);

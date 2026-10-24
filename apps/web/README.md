@@ -64,17 +64,18 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
 
 - `render.ts` is pure, node-tested in `test/markdown-render.test.ts`: CommonMark plus the GFM
   tables, strikethrough, task lists, autolinks and footnotes, and GitHub-style heading anchors
-  (the ids carry an `md-` prefix, URL fragments stay bare). A footnote reference is a
-  superscript number, the notes a list at the end of the document, each with a link back to its
-  references (a Lucide `corner-up-left`); a note nobody refers to is not shown, and inline
-  footnotes (`^[…]`), which GitHub does not have, stay text. Their ids (`md-Footnote-1`,
-  `md-Footnote-ref-1`) never take a heading's, whose slugs are lower-case. The document's own
-  HTML never reaches the page: HTML comments are hidden, as on GitHub, and the small subset
-  GitHub authors use for layout (`<br>`, `<details>` and `<summary>`, `<sub>`, `<sup>`, `<kbd>`)
-  renders as bare tags the renderer writes anew, every attribute dropped but `<details open>`.
-  Everything else is escaped and shows as text. A `<kbd>` is the design guide's shortcut chip, a
-  `<summary>` shows a Lucide chevron instead of the browser's triangle. `javascript:`,
-  `vbscript:`, `file:` and non-image `data:` URLs never become a link or an image.
+  (the ids carry an `md-` prefix, URL fragments stay bare). A footnote reference is a superscript
+  number, the notes a list at the end of the document, each with a link back to its references (a
+  Lucide `corner-up-left`); a note nobody refers to is not shown, and inline footnotes (`^[…]`),
+  which GitHub does not have, stay text. Labels match as on GitHub: in any case (`[^Note]` refers
+  to `[^note]:`), and a label defined twice keeps its first note. Their ids (`md-Footnote-1`,
+  `md-Footnote-ref-1`) never take a heading's, whose slugs are lower-case. The document's own HTML
+  never reaches the page: HTML comments are hidden, as on GitHub, and the small subset GitHub
+  authors use for layout (`<br>`, `<details>` and `<summary>`, `<sub>`, `<sup>`, `<kbd>`) renders
+  as bare tags the renderer writes anew, every attribute dropped but `<details open>`. Everything
+  else is escaped and shows as text. A `<kbd>` is the design guide's shortcut chip, a `<summary>`
+  shows a Lucide chevron instead of the browser's triangle. `javascript:`, `vbscript:`, `file:`
+  and non-image `data:` URLs never become a link or an image.
 - `sanitize.ts` sanitizes that HTML once more with DOMPurify, against an allowlist of exactly
   the markup the renderer emits (no style, no SVG, no data-\* but `data-model-path` and
   `data-image-src`, ids only with the `md-` prefix). It holds the images to the rule below as

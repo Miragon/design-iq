@@ -126,8 +126,8 @@ export function createSanitizer(win: SanitizeWindow, options: SanitizeOptions = 
       node.setAttribute("type", "checkbox");
       node.setAttribute("disabled", "");
     }
-    // the renderer's ids are heading anchors, all prefixed: any other id
-    // could clobber a global (window.<id>) or an id of the app
+    // the renderer's ids are heading and footnote anchors, all prefixed: any
+    // other id could clobber a global (window.<id>) or an id of the app
     const id = node.getAttribute("id");
     if (id !== null && !id.startsWith(ANCHOR_PREFIX)) node.removeAttribute("id");
   });

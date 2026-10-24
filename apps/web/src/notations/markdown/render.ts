@@ -428,6 +428,19 @@ md.block.ruler.at("reference", (state, startLine, endLine, silent) =>
     : referenceRule(state, startLine, endLine, silent),
 );
 
+/** markdown-it-footnote's part of the env: the defined labels (":" + label,
+ *  -1 until the first reference, then the note's index) and the notes */
+interface FootnoteEnv extends Env {
+  footnotes?: { refs?: Record<string, number>; list?: { label: string; count: number }[] };
+}
+
+// GitHub matches a footnote label as it matches a link label, case-folded and
+// with its blanks collapsed: "[^Note]" refers to "[^note]: …". The plugin
+// matches labels as written, so a definition is filed under its folded label
+// below, and the reference rule, the plugin's own but for the folding, looks
+// a label up folded
+const footnoteLabel = (label: string): string => md.utils.normalizeReference(label);
+
 // a definition's opening token gets the lines of its content, as every other
 // block's has: ./insert-diagram.ts reads a definition as one block
 const footnoteDefinition = md.block.ruler.__rules__.find((rule) => rule.name === "footnote_def")!.fn;
@@ -437,21 +450,62 @@ md.block.ruler.at(
     const at = state.tokens.length;
     if (!footnoteDefinition(state, startLine, endLine, silent)) return false;
     if (!silent) {
+      const definition = state.tokens[at]!;
       let end = startLine + 1;
       for (let i = at; i < state.tokens.length; i++) end = Math.max(end, state.tokens[i]!.map?.[1] ?? 0);
-      state.tokens[at]!.map = [startLine, end];
+      definition.map = [startLine, end];
+      const written = definition.meta!.label as string;
+      const label = footnoteLabel(written);
+      const defined = (state.env as FootnoteEnv).footnotes!.refs!;
+      delete defined[`:${written}`];
+      defined[`:${label}`] = -1;
+      definition.meta!.label = label;
     }
     return true;
   },
   { alt: ["paragraph", "reference"] },
 );
 
+const FOOTNOTE_REFERENCE = /\[\^([^\]\n ]+)\]/y;
+md.inline.ruler.at("footnote_ref", (state, silent) => {
+  const footnotes = (state.env as FootnoteEnv).footnotes;
+  const defined = footnotes?.refs;
+  if (!footnotes || !defined) return false;
+  FOOTNOTE_REFERENCE.lastIndex = state.pos;
+  const written = FOOTNOTE_REFERENCE.exec(state.src)?.[1];
+  if (written === undefined || FOOTNOTE_REFERENCE.lastIndex > state.posMax) return false;
+  const label = footnoteLabel(written);
+  const known = defined[`:${label}`];
+  if (known === undefined) return false;
+  if (!silent) {
+    const notes = (footnotes.list ??= []);
+    const id = known < 0 ? notes.length : known;
+    if (known < 0) {
+      notes[id] = { label, count: 0 };
+      defined[`:${label}`] = id;
+    }
+    state.push("footnote_ref", "", 0).meta = { id, subId: notes[id]!.count++, label };
+  }
+  state.pos = FOOTNOTE_REFERENCE.lastIndex;
+  return true;
+});
+
 // parseMarkdown reads the blocks where the source has them: only the render
 // moves the footnotes to the end of the document (and drops the ones nothing
 // refers to)
 const footnoteTail = md.core.ruler.__rules__.find((rule) => rule.name === "footnote_tail")!.fn;
 md.core.ruler.at("footnote_tail", (state) => {
-  if (!(state.env as RenderEnv).footnotesInPlace) footnoteTail(state);
+  if ((state.env as RenderEnv).footnotesInPlace) return;
+  // a label defined twice keeps its first definition, as on GitHub, where the
+  // plugin keeps its last: a later one gets the empty label no reference has
+  const defined = new Set<string>();
+  for (const token of state.tokens) {
+    if (token.type !== "footnote_reference_open") continue;
+    const label = token.meta!.label as string;
+    if (defined.has(label)) token.meta!.label = "";
+    defined.add(label);
+  }
+  footnoteTail(state);
 });
 
 md.core.ruler.push("designiq_task_lists", taskLists);
