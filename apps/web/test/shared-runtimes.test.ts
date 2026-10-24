@@ -1,13 +1,14 @@
 /**
- * The Miragon renderers take diagram-js, didi, tiny-svg and zod as peers: they
- * draw with the copies apps/web brings. A second copy in the bundle fails only
- * at runtime (a second didi breaks diagram-js's injector, a second zod
- * `instanceof` and schema identity, a second @miragon/modeler-api the contract
- * the renderers and live-client meet on) while the build and the type check
- * pass. So apps/web pins every peer of its Miragon packages exactly instead of
- * leaving it to pnpm's autoInstallPeers, and the lockfile resolves each of these
- * runtimes to one copy in everything apps/web ships: its dependencies and those
- * of the workspace packages it links, devDependencies left out (#300).
+ * The Miragon renderers take diagram-js, didi and tiny-svg (most of them zod
+ * too) as peers: they draw with the copies apps/web brings. A second copy in
+ * the bundle fails only at runtime (a second didi breaks diagram-js's injector,
+ * a second zod `instanceof` and schema identity, a second @miragon/modeler-api
+ * the contract the renderers and live-client meet on) while the build and the
+ * type check pass. So apps/web pins every peer of its Miragon packages exactly
+ * instead of leaving it to pnpm's autoInstallPeers, and the lockfile resolves
+ * each of these runtimes to one copy in everything apps/web ships: its
+ * dependencies and those of the workspace packages it links. devDependencies
+ * are left out: they are build and test tools, never bundled (#300).
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -99,6 +100,13 @@ const sharedRuntimes = new Set([
 ]);
 const copies = [...shippedCopies()];
 
+/** what moves with a runtime in one PR, where Dependabot opens separate ones (.github/dependabot.yml) */
+const movesWith: Record<string, string> = {
+  "diagram-js": "bpmn-js and dmn-js depend on diagram-js: move their releases on it in the same PR",
+  "@miragon/modeler-api":
+    "every Miragon renderer pins the contract exactly: move the renderers, apps/web and packages/live-client in one PR",
+};
+
 for (const runtime of sharedRuntimes) {
   test(`apps/web ships one copy of ${runtime}`, () => {
     const copiesOfRuntime = copies.filter((key) => packageName(key) === runtime);
@@ -106,7 +114,8 @@ for (const runtime of sharedRuntimes) {
       copiesOfRuntime.length,
       1,
       `apps/web ships ${runtime} as ${copiesOfRuntime.join(", ") || "nothing"}; ` +
-        `\`pnpm why --prod --filter @designiq/web ${runtime}\` names what brings each copy`,
+        `\`pnpm why --prod --filter @designiq/web ${runtime}\` names what brings each copy` +
+        (movesWith[runtime] ? `; ${movesWith[runtime]}` : ""),
     );
   });
 }

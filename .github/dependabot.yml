@@ -1,8 +1,8 @@
 # Dependabot — balanced mode: minor+patch grouped per ecosystem, each major
-# lands as its own PR for individual review. The Miragon modeler families and
-# diagram-js with didi and tiny-svg are the exception: one PR per group, majors
-# included, because a renderer and the schema model it pins, and diagram-js and
-# the runtimes it brings, only move together. Reviewers come from CODEOWNERS.
+# lands as its own PR for individual review. The Miragon modeler families are
+# the exception: one PR per family, majors included, because a renderer and
+# the schema model it pins only move together. The majors of diagram-js, didi
+# and tiny-svg share one PR too. Reviewers come from CODEOWNERS.
 version: 2
 updates:
   # npm — one block covers the whole pnpm workspace (resolved from the root).
@@ -55,7 +55,8 @@ updates:
       # take as their peer (#300). A bump on its own leaves diagram-js's
       # injector on didi 11 and the renderers on 12, two copies in the bundle
       # that apps/web/test/shared-runtimes.test.ts refuses. Unblock: a
-      # diagram-js release on didi 12; the diagram-js group then moves both.
+      # diagram-js release on didi 12, which takes the didi pin along in its PR
+      # (the diagram-js group does that for a diagram-js major).
       - dependency-name: "didi"
         versions: [">=12"]
     groups:
@@ -76,10 +77,6 @@ updates:
           - "@miragon/team-topologies-*"
           - "@miragon/value-chain-*"
           - "@miragon/modeler-*"
-          # diagram-js and the runtimes it brings are one group (below)
-          - "diagram-js"
-          - "didi"
-          - "tiny-svg"
         update-types: ["minor", "patch"]
       # a renderer and its schema model move together (the renderer pins the
       # schema model exactly; packages/notations pins it as a devDependency to
@@ -104,19 +101,28 @@ updates:
         patterns: ["@miragon/value-chain-*"]
       # the contract the renderers implement (@miragon/modeler-api), which
       # apps/web and live-client take directly (#136), and the shell whose
-      # view math and keymap apps/web takes (@miragon/modeler-shell, #265)
+      # view math and keymap apps/web takes (@miragon/modeler-shell, #265).
+      # Every renderer pins the contract exactly, so a contract move from this
+      # group or a family group alone ships two copies, which
+      # apps/web/test/shared-runtimes.test.ts refuses (#300): take it by hand
+      # in one PR with every renderer, as #279 and #318 did.
       miragon-modeler:
         applies-to: version-updates
         patterns: ["@miragon/modeler-*"]
       # the Miragon renderers peer on diagram-js, didi and tiny-svg, so apps/web
       # pins all three, didi and tiny-svg at the versions diagram-js depends on;
       # where a pin and diagram-js disagree, the bundle carries a second copy
-      # (apps/web/test/shared-runtimes.test.ts, #300). One PR, its majors
-      # included, so a diagram-js release that moves didi or tiny-svg arrives
-      # with their pins.
+      # that apps/web/test/shared-runtimes.test.ts refuses (#300). Their majors
+      # share this PR, so a diagram-js major that moves didi or tiny-svg
+      # arrives with their pins. Their minors and patches stay in
+      # npm-minor-patch: bpmn-js and dmn-js depend on diagram-js and raise its
+      # minimum in most releases, so its minors have to move with theirs. A
+      # diagram-js major also needs the bpmn-js and dmn-js majors on it, which
+      # land as PRs of their own: take them by hand in one PR.
       diagram-js:
         applies-to: version-updates
         patterns: ["diagram-js", "didi", "tiny-svg"]
+        update-types: ["major"]
       npm-security:
         applies-to: security-updates
         patterns: ["*"]
