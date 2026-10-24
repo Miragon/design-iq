@@ -373,6 +373,7 @@ test("a footnote reference scrolls to its note, and the note's Lucide arrow back
   assert.equal(reference.getAttribute("aria-label"), "Footnote 1");
   assert.equal(v.click(reference), false, "the view scrolls");
   assert.deepEqual(v.scrolled, ["md-Footnote-1"], "to the note, not to the heading of the same words");
+  assert.equal(v.win.location.hash, "#Footnote-1", "the address names the note");
 
   const notes = v.article.querySelector("section.md-footnotes")!;
   assert.equal(notes.getAttribute("aria-label"), "Footnotes");
@@ -386,6 +387,7 @@ test("a footnote reference scrolls to its note, and the note's Lucide arrow back
   assert.equal(arrow.getAttribute("aria-hidden"), "true");
   assert.equal(v.click(arrow), false, "a click on the arrow is one on its link");
   assert.deepEqual(v.scrolled, ["md-Footnote-1", "md-Footnote-ref-1-2"]);
+  assert.equal(v.win.location.hash, "#Footnote-ref-1-2");
   v.view.destroy();
 
   // an address with a note's fragment lands on the note
