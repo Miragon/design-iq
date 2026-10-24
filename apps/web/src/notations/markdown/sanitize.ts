@@ -199,5 +199,66 @@ export function createDiagramSanitizer(win: WindowLike): Sanitize {
     }
     if (node.nodeName.toLowerCase() === "style" && CSS_RESOURCE.test(node.textContent ?? "")) node.remove();
   });
-  return (svg) => purify.sanitize(svg, DIAGRAM);
+  return (svg) => {
+    const fragment = purify.sanitize(svg, DIAGRAM);
+    for (const drawing of fragment.children) scopeIds(drawing);
+    return fragment;
+  };
+}
+
+/** a url() that names an element of the diagram */
+const URL_REFERENCE = /url\(\s*(["']?)#([^"')\s]+)\1\s*\)/g;
+/** the attributes that name elements of the diagram as a list of ids */
+const ID_LISTS = new Set(["aria-labelledby", "aria-describedby"]);
+
+/**
+ * Every id in a drawn diagram starts with its SVG's id, and each is there
+ * once (#294). mermaid scopes most ids with the render id, which names the
+ * SVG, but not all: a sequence diagram's actors, an architecture diagram's
+ * services (named by the author), a sankey's gradients and a treemap's clip
+ * paths keep ids of their own, and a mindmap writes a node's id on its
+ * shape a second time. Two diagrams on one page, or a diagram and the app,
+ * would share an id, and a url(#…), a label or an anchor would find another
+ * element. Such an id gets the SVG's id as a prefix and every reference
+ * within the SVG follows it; an id seen before in the SVG is dropped, so
+ * the first element keeps it, the one a reference expects. A reference to
+ * an id the SVG does not hold gets the prefix too, so it can never reach an
+ * element outside the diagram: a vertical timeline points its lines at
+ * #arrowhead, an id mermaid never writes. A link's #… is where a reader
+ * goes, a heading of the document say, and keeps its target.
+ */
+function scopeIds(svg: Element): void {
+  const own = svg.id;
+  const isScoped = (id: string): boolean => !own || (id.startsWith(own) && !/^[A-Za-z0-9]/.test(id.slice(own.length)));
+  const renamed = new Map<string, string>();
+  const seen = new Set([own]);
+  for (const element of svg.querySelectorAll("[id]")) {
+    const id = element.id;
+    const scoped = isScoped(id) ? id : `${own}-${id}`;
+    if (seen.has(scoped)) {
+      element.removeAttribute("id");
+      continue;
+    }
+    seen.add(scoped);
+    if (scoped !== id) {
+      element.id = scoped;
+      if (!renamed.has(id)) renamed.set(id, scoped);
+    }
+  }
+  const follow = (id: string): string => renamed.get(id) ?? (isScoped(id) ? id : `${own}-${id}`);
+  const followUrls = (text: string): string =>
+    text.replace(URL_REFERENCE, (_url, quote: string, id: string) => `url(${quote}#${follow(id)}${quote})`);
+  for (const element of [svg, ...svg.querySelectorAll("*")]) {
+    const link = element.localName === "a";
+    for (const { name, value } of [...element.attributes]) {
+      let next = followUrls(value);
+      if ((name === "href" || name === "xlink:href") && value.startsWith("#")) {
+        const id = value.slice(1);
+        next = `#${link ? (renamed.get(id) ?? id) : follow(id)}`;
+      }
+      if (ID_LISTS.has(name)) next = value.split(/\s+/).map(follow).join(" ");
+      if (next !== value) element.setAttribute(name, next);
+    }
+    if (element.localName === "style") element.textContent = followUrls(element.textContent ?? "");
+  }
 }

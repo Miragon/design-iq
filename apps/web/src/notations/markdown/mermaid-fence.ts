@@ -23,7 +23,12 @@
  *   the browser paints, and only a changed diagram is drawn again. Until it
  *   is, the new block shows what the one it replaced showed (the n-th
  *   diagram takes over the n-th one's drawing while no diagram is added or
- *   removed), so a live edit never flashes a diagram back to code.
+ *   removed), so a live edit never flashes a diagram back to code. One
+ *   drawing is never in two places, which would put each of its ids on the
+ *   page twice (#294): a source the document shows twice is drawn twice,
+ *   each block of it keeps its own drawing while another is edited, and a
+ *   block whose last drawing another block now shows waits for its new one
+ *   with its code.
  * - A source mermaid cannot read gets a notice (the error and its line)
  *   under the block's last good drawing, dimmed, or under its code when it
  *   never drew.
@@ -58,8 +63,9 @@ export const MERMAID_BLOCK_CLASS = "md-mermaid";
 const SLOT_CLASS = "md-mermaid-block";
 /** drawings kept by source: a long document's diagrams and their recent edits */
 export const DRAWING_CACHE_SIZE = 64;
-/** drawings laid out anew for another block width, kept by width and source:
- *  the same source in a quote and outside it, a column back at a width it had */
+/** drawings laid out anew for another block width, kept by width and drawing
+ *  (./drawingKey): the same source in a quote and outside it, a column back
+ *  at a width it had */
 const RELAYOUT_CACHE_SIZE = 16;
 /** the drawn SVGs' id prefix: md- like every id of the view, and never a
  *  heading anchor (render.ts slugs are lower-case). mermaid starts a render
@@ -94,6 +100,8 @@ interface Block {
   /** the slot shows what its source draws as; not while that is drawn, nor
    *  after the renderer did not load (the next hydration tries again) */
   done: boolean;
+  /** which of its source's drawings the block takes (./drawingKey) */
+  repeat: number;
 }
 
 /** the window of the view's document */
@@ -116,61 +124,75 @@ const layoutWidth = (block: HTMLElement): number | undefined => (block.clientWid
 const loadRenderer = async (): Promise<RenderMermaid> =>
   (await import("../../lib/mermaid-frame.ts")).renderMermaidInFrame;
 
+/** what a drawing is cached by: its source, and which of that source's drawings it is (a source two fences show has two) */
+const drawingKey = (source: string, repeat: number): string => `${repeat}:${source}`;
+
 /** `load` resolves the renderer; tests hand in a fake, the view the lazy chunk */
 export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRenderer): MermaidFence {
-  const drawings = new Map<string, Drawing>(); // by source, least recently used first
+  const drawings = new Map<string, Drawing>(); // by drawingKey, least recently used first
   const inFlight = new Map<string, Promise<Drawing>>();
   /** what each slot on a page shows, and for which source */
   const blocks = new WeakMap<HTMLElement, Block>();
   /** a document's slots in order, as its last hydration left them */
   const slotsByView = new WeakMap<HTMLElement, HTMLElement[]>();
   const sanitizers = new WeakMap<View, Sanitize>();
+  /** the source a drawing shows, and which of that source's drawings it is */
+  const origins = new WeakMap<Element, { source: string; repeat: number }>();
 
-  const recall = (source: string): Drawing | undefined => {
-    const known = drawings.get(source);
+  const recall = (key: string): Drawing | undefined => {
+    const known = drawings.get(key);
     if (known) {
-      drawings.delete(source);
-      drawings.set(source, known);
+      drawings.delete(key);
+      drawings.set(key, known);
     }
     return known;
   };
-  const remember = (source: string, drawing: Drawing): void => {
-    drawings.delete(source);
-    drawings.set(source, drawing);
+  const remember = (key: string, drawing: Drawing): void => {
+    drawings.delete(key);
+    drawings.set(key, drawing);
     if (drawings.size > DRAWING_CACHE_SIZE) drawings.delete(drawings.keys().next().value!);
   };
 
-  const drawingOf = (result: MermaidRenderResult, win: View): Drawing => {
+  const drawingOf = (result: MermaidRenderResult, win: View, source: string, repeat: number): Drawing => {
     if (!("svg" in result)) return { error: result.error };
     let sanitize = sanitizers.get(win);
     if (!sanitize) sanitizers.set(win, (sanitize = createDiagramSanitizer(win)));
     const svg = sanitize(result.svg).firstElementChild;
-    return svg ? { svg } : { error: { message: "The diagram could not be drawn." } };
+    if (!svg) return { error: { message: "The diagram could not be drawn." } };
+    origins.set(svg, { source, repeat });
+    return { svg };
   };
 
   /** laid out at its block's width, and once more, narrower, when it took
    *  that width as its own and its text would hold it wider. Such a drawing
    *  is laid out anew whenever its block changes width (./diagram-scale.ts) */
-  const layOut = async (render: RenderMermaid, source: string, win: View, block: HTMLElement): Promise<Drawing> => {
+  const layOut = async (
+    render: RenderMermaid,
+    source: string,
+    repeat: number,
+    win: View,
+    block: HTMLElement,
+  ): Promise<Drawing> => {
     const width = layoutWidth(block);
-    const drawing = drawingOf(await render(source, ID_PREFIX, width), win);
+    const drawing = drawingOf(await render(source, ID_PREFIX, width), win, source, repeat);
     if (width === undefined || !("svg" in drawing) || !takesItsWidth(drawing.svg, width)) return drawing;
     const refit = refitWidth(drawing.svg, width, block);
-    const refitted = refit === undefined ? drawing : drawingOf(await render(source, ID_PREFIX, refit), win);
+    const refitted =
+      refit === undefined ? drawing : drawingOf(await render(source, ID_PREFIX, refit), win, source, repeat);
     const fitted = "svg" in refitted ? refitted : drawing;
-    followBlockWidth(fitted.svg, width, relayoutOf(render, source, win));
+    followBlockWidth(fitted.svg, width, relayoutOf(render, source, repeat, win));
     return fitted;
   };
 
-  const relaidOut = new Map<string, Promise<Drawing>>(); // by width and source, least recently used first
-  /** the source laid out for its block's width now, and kept as its drawing */
+  const relaidOut = new Map<string, Promise<Drawing>>(); // by width and drawingKey, least recently used first
+  /** one of the source's drawings laid out for its block's width now, and kept as that drawing */
   const relayoutOf =
-    (render: RenderMermaid, source: string, win: View): Relayout =>
+    (render: RenderMermaid, source: string, repeat: number, win: View): Relayout =>
     async (block) => {
       const width = layoutWidth(block);
       if (width === undefined) return undefined;
-      const key = `${width}\n${source}`;
-      const pending = relaidOut.get(key) ?? layOut(render, source, win, block);
+      const key = `${width}\n${drawingKey(source, repeat)}`;
+      const pending = relaidOut.get(key) ?? layOut(render, source, repeat, win, block);
       relaidOut.delete(key);
       relaidOut.set(key, pending);
       if (relaidOut.size > RELAYOUT_CACHE_SIZE) relaidOut.delete(relaidOut.keys().next().value!);
@@ -183,22 +205,30 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
         return undefined;
       }
       if (!("svg" in drawing)) return undefined;
-      remember(source, drawing);
+      remember(drawingKey(source, repeat), drawing);
       return drawing.svg;
     };
 
-  /** draw one source, once: a render already under way for it is shared.
-   *  Rejects only when the engine does not load (that is not cached) */
-  const draw = (render: RenderMermaid, source: string, win: View, block: HTMLElement): Promise<Drawing> => {
-    let pending = inFlight.get(source);
+  /** draw one of a source's drawings, once: a render already under way for
+   *  it is shared. Rejects only when the engine does not load (that is not
+   *  cached) */
+  const draw = (
+    render: RenderMermaid,
+    source: string,
+    repeat: number,
+    win: View,
+    block: HTMLElement,
+  ): Promise<Drawing> => {
+    const key = drawingKey(source, repeat);
+    let pending = inFlight.get(key);
     if (!pending) {
-      pending = layOut(render, source, win, block)
+      pending = layOut(render, source, repeat, win, block)
         .then((drawing) => {
-          remember(source, drawing);
+          remember(key, drawing);
           return drawing;
         })
-        .finally(() => inFlight.delete(source));
-      inFlight.set(source, pending);
+        .finally(() => inFlight.delete(key));
+      inFlight.set(key, pending);
     }
     return pending;
   };
@@ -230,40 +260,92 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
         else slot.setAttribute("aria-busy", "true");
       };
 
-      // first, before the browser paints: every new block drawn before, or
-      // showing what the one it replaced showed while it draws anew
+      // every diagram in order: a slot the view kept, or a new one for a new
+      // block, which takes over what the n-th showed when that one left the
+      // page with this render, unless a diagram was added or removed: then
+      // the n-th is another diagram. A render without a diagram leaves
+      // nothing to take over
       const slots: HTMLElement[] = [];
-      const todo: HTMLElement[] = [];
+      const added = new Set<HTMLElement>();
       found.forEach((el, index) => {
-        let slot = el;
-        let block = blocks.get(el);
-        if (!block) {
-          if (!el.matches(`pre.${MERMAID_BLOCK_CLASS}`)) return;
-          slot = doc.createElement("div");
-          slot.className = SLOT_CLASS;
-          el.replaceWith(slot);
-          // the n-th diagram takes over what the n-th showed when that one
-          // left the page with this render, unless a diagram was added or
-          // removed: then the n-th is another diagram. A render without a
-          // diagram leaves nothing to take over
-          const replaced = found.length === before.length ? before[index] : undefined;
-          const settled = replaced && !replaced.isConnected ? blocks.get(replaced)?.settled : undefined;
-          block = { source: el.textContent ?? "", code: el, settled: settled ?? {}, done: false };
-          blocks.set(slot, block);
-          const known = recall(block.source);
-          show(slot, block, known);
-          if (!known) todo.push(slot);
-        } else if (!block.done) {
-          // kept while it was drawn, or the renderer did not load: draw it now
-          const known = recall(block.source);
-          if (known) show(slot, block, known);
-          else {
-            slot.setAttribute("aria-busy", "true");
-            todo.push(slot);
-          }
+        if (blocks.has(el)) {
+          slots.push(el);
+          return;
         }
+        if (!el.matches(`pre.${MERMAID_BLOCK_CLASS}`)) return;
+        const slot = doc.createElement("div");
+        slot.className = SLOT_CLASS;
+        el.replaceWith(slot);
+        const replaced = found.length === before.length ? before[index] : undefined;
+        const settled = replaced && !replaced.isConnected ? blocks.get(replaced)?.settled : undefined;
+        blocks.set(slot, { source: el.textContent ?? "", code: el, settled: settled ?? {}, done: false, repeat: 0 });
+        added.add(slot);
         slots.push(slot);
       });
+
+      // which of its source's drawings a block takes: the one it shows
+      // already, else the first no other block takes
+      const taken = new Map<string, Set<number>>();
+      const takenOf = (source: string): Set<number> => {
+        let repeats = taken.get(source);
+        if (!repeats) taken.set(source, (repeats = new Set()));
+        return repeats;
+      };
+      const shownAlready = slots.map((slot) => {
+        const { source, settled } = blocks.get(slot)!;
+        const origin = settled.drawing && origins.get(settled.drawing);
+        if (!origin || origin.source !== source || takenOf(source).has(origin.repeat)) return undefined;
+        takenOf(source).add(origin.repeat);
+        return origin.repeat;
+      });
+      // the blocks to show anew: the new ones, and a kept one still drawing
+      // (kept while it was drawn, or the renderer did not load)
+      const known = new Map<HTMLElement, Drawing | undefined>();
+      slots.forEach((slot, index) => {
+        const block = blocks.get(slot)!;
+        let repeat = shownAlready[index];
+        if (repeat === undefined) {
+          for (repeat = 0; takenOf(block.source).has(repeat); repeat++);
+          takenOf(block.source).add(repeat);
+        }
+        block.repeat = repeat;
+        if (added.has(slot) || !block.done) known.set(slot, recall(drawingKey(block.source, repeat)));
+      });
+
+      // a block without a drawing of its own keeps its last one, unless
+      // another block shows that one now; a kept block that shows its own
+      // stays as it is
+      const placed = new Set<Element>();
+      for (const drawing of known.values()) if (drawing && "svg" in drawing) placed.add(drawing.svg);
+      const bared = new Set<HTMLElement>();
+      const keepLast = (slot: HTMLElement): void => {
+        const block = blocks.get(slot)!;
+        const last = block.settled.drawing;
+        if (!last) return;
+        if (!placed.has(last)) placed.add(last);
+        else {
+          block.settled = { error: block.settled.error };
+          bared.add(slot);
+        }
+      };
+      for (const slot of slots) if (!known.has(slot)) keepLast(slot);
+      for (const [slot, drawing] of known) if (!drawing || !("svg" in drawing)) keepLast(slot);
+
+      // first, before the browser paints: every block drawn before, or
+      // showing what it showed, or what the one it replaced showed, while
+      // it draws anew
+      const todo: HTMLElement[] = [];
+      for (const slot of slots) {
+        const block = blocks.get(slot)!;
+        if (!known.has(slot)) {
+          if (bared.has(slot)) present(doc, slot, block.code, block.settled);
+          continue;
+        }
+        const drawing = known.get(slot);
+        if (drawing || added.has(slot) || bared.has(slot)) show(slot, block, drawing);
+        else slot.setAttribute("aria-busy", "true");
+        if (!drawing) todo.push(slot);
+      }
       if (slots.length > 0) slotsByView.set(root, slots);
       else slotsByView.delete(root);
       if (todo.length === 0) return;
@@ -282,7 +364,7 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
           let drawing: Drawing;
           let done = true;
           try {
-            drawing = await draw(render, block.source, win, slot);
+            drawing = await draw(render, block.source, block.repeat, win, slot);
           } catch (e) {
             drawing = { error: loadFailed(e) };
             done = false;

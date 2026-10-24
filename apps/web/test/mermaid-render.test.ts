@@ -8,13 +8,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
+import { ALIASES, CD, FONT_SANS, parseColor } from "@designiq/ui-kit/lib/tokens";
 
 import {
   describeMermaidError,
   diagramImageRefusal,
   MERMAID_CONFIG,
   MERMAID_LABEL_SANITIZER,
+  MERMAID_THEME_CSS,
   MERMAID_THEME_VARIABLES,
   mermaidRenderId,
   SHAPE_IMAGE_FROM_ADDRESS,
@@ -22,6 +23,17 @@ import {
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const ALIAS_VALUES = new Set<string>(Object.values(ALIASES));
+
+/** WCAG 2 contrast of two opaque colours */
+function contrast(a: string, b: string): number {
+  const luminance = (colour: string): number => {
+    const [r, g, bl] = parseColor(colour).map((v) => v / 255);
+    const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * lin(r!) + 0.7152 * lin(g!) + 0.0722 * lin(bl!);
+  };
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+  return (hi + 0.05) / (lo + 0.05);
+}
 
 test("the mermaid config: strict, never auto-started, its own errors drawn by the caller", () => {
   assert.equal(MERMAID_CONFIG.securityLevel, "strict");
@@ -51,17 +63,76 @@ test("the mermaid theme: Geist and literal colours from the CI tokens, nothing e
   assert.equal(MERMAID_CONFIG.fontFamily, FONT_SANS);
   assert.equal(MERMAID_THEME_VARIABLES.fontFamily, FONT_SANS);
   assert.equal(MERMAID_THEME_VARIABLES.darkMode, false);
-  const colours = Object.entries(MERMAID_THEME_VARIABLES).filter(([key]) => key !== "fontFamily" && key !== "darkMode");
+  // one diagram type's variables sit in an object of their own, a palette is a list
+  const colours = Object.entries(MERMAID_THEME_VARIABLES)
+    .filter(([key]) => key !== "fontFamily" && key !== "darkMode")
+    .flatMap(([key, value]): [string, unknown][] =>
+      typeof value === "object" ? Object.entries(value).map(([inner, v]) => [`${key}.${inner}`, v]) : [[key, value]],
+    )
+    .flatMap(([key, value]) =>
+      String(value)
+        .split(",")
+        .map((colour): [string, string] => [key, colour]),
+    );
   assert.ok(colours.length > 10);
   for (const [key, value] of colours) {
     // mermaid parses these to derive its shades: a var(--…) would not parse
-    assert.match(String(value), HEX, key);
-    assert.ok(ALIAS_VALUES.has(String(value)), `${key} is not a token alias`);
+    assert.match(value, HEX, key);
+    assert.ok(ALIAS_VALUES.has(value), `${key} is not a token alias`);
   }
   // the nodes are the canvas set every diagram engine of the app draws with
   assert.equal(MERMAID_THEME_VARIABLES.primaryColor, ALIASES["canvas-shape"]);
   assert.equal(MERMAID_THEME_VARIABLES.primaryBorderColor, ALIASES["canvas-stroke"]);
   assert.equal(MERMAID_THEME_VARIABLES.primaryTextColor, ALIASES["canvas-label"]);
+  // and the app's own CSS for diagram types that recolour a section names token colours too
+  const cssColours = MERMAID_THEME_CSS.match(/#[0-9a-f]{3,8}\b/gi) ?? [];
+  assert.ok(cssColours.length > 0);
+  for (const colour of cssColours) assert.ok(ALIAS_VALUES.has(colour), `${colour} in MERMAID_THEME_CSS`);
+  assert.equal(MERMAID_CONFIG.themeCSS, MERMAID_THEME_CSS);
+});
+
+test("the section palettes: two CI greys in turn, each with a label that reads on it, the root black (#294)", () => {
+  const theme: Readonly<Record<string, unknown>> = MERMAID_THEME_VARIABLES;
+  const kontur = { fill: CD.kontur, label: CD.schwarz };
+  const leise = { fill: CD.textLeise, label: CD.weiss };
+  // mermaid counts a mindmap's first branch, a pie's first slice and a git
+  // graph's first branch after main as 1: the odd ones take kontur
+  const grey = (n: number) => (n % 2 ? kontur : leise);
+  for (let n = 0; n < 12; n++) {
+    assert.equal(theme[`cScale${n}`], grey(n).fill, `cScale${n}`);
+    assert.equal(theme[`cScaleLabel${n}`], grey(n).label, `cScaleLabel${n}`);
+    // mermaid would derive a section's border and the line under its nodes from a darker shade
+    assert.equal(theme[`cScalePeer${n}`], grey(n).fill, `cScalePeer${n}`);
+    assert.equal(theme[`cScaleInv${n}`], grey(n).fill, `cScaleInv${n}`);
+  }
+  for (let n = 1; n <= 12; n++) assert.equal(theme[`pie${n}`], grey(n).fill, `pie${n}`);
+  for (let n = 1; n <= 8; n++) assert.equal(theme[`venn${n}`], grey(n).fill, `venn${n}`);
+  // an xy chart counts its bars and lines from 0 and cycles through the list: its first one takes kontur
+  assert.deepEqual(MERMAID_THEME_VARIABLES.xyChart.plotColorPalette.split(","), [kontur.fill, leise.fill]);
+  assert.equal(theme.git0, CD.schwarz, "a mindmap's root and a git graph's main branch");
+  assert.equal(theme.gitBranchLabel0, CD.weiss);
+  for (let n = 1; n < 8; n++) {
+    assert.equal(theme[`git${n}`], grey(n).fill, `git${n}`);
+    assert.equal(theme[`gitBranchLabel${n}`], grey(n).label, `gitBranchLabel${n}`);
+  }
+  // a highlighted commit's frame: a CI neutral, as the blue accent on the canvas means selected
+  for (let n = 0; n < 8; n++) assert.equal(theme[`gitInv${n}`], ALIASES["canvas-stroke"], `gitInv${n}`);
+  // a user journey's sections, under black labels: white and the calm grey, as its first two
+  for (let n = 0; n < 8; n++) {
+    assert.equal(theme[`fillType${n}`], n % 2 ? ALIASES.secondary : ALIASES["canvas-shape"], `fillType${n}`);
+    assert.ok(contrast(ALIASES["canvas-label"], String(theme[`fillType${n}`])) >= 4.5, `fillType${n}`);
+  }
+
+  const white = ALIASES["canvas-background"];
+  for (const { fill, label } of [kontur, leise, { fill: CD.schwarz, label: CD.weiss }]) {
+    assert.ok(contrast(label, fill) >= 4.5, `${label} on ${fill}: ${contrast(label, fill).toFixed(2)}:1`);
+    // a mindmap's branches and a git graph's lines are drawn in these on white
+    assert.ok(contrast(fill, white) >= 3, `${fill} on white: ${contrast(fill, white).toFixed(2)}:1`);
+  }
+  assert.ok(contrast(ALIASES["canvas-stroke"], white) >= 3, "a highlighted commit's frame");
+  // mermaid derives a quadrant chart's points by darkening its white without an amount, which gives no colour
+  assert.equal(theme.quadrantPointFill, ALIASES["canvas-stroke"]);
+  assert.equal(MERMAID_THEME_VARIABLES.radar.graticuleColor, ALIASES.border);
 });
 
 test("mermaidRenderId: a fresh CSS id per render, named after its surface", () => {
