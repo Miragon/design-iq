@@ -118,6 +118,19 @@ test("GitHub's raw HTML subset renders as bare tags: br, details, summary, sub, 
   assert.doesNotMatch(details + inline, /ontoggle|onclick|class=|title=/);
 });
 
+test("an HTML block keeps its paragraph unless it opens or closes a collapsible section", () => {
+  // a README header: its line break passes, the rest is escaped text in one paragraph
+  assert.equal(
+    render('<p align="center">\n<img src="logo.png"><br>\n<b>Name</b>\n</p>\n\nNext paragraph.'),
+    "<p>&lt;p align=&quot;center&quot;&gt;\n&lt;img src=&quot;logo.png&quot;&gt;<br>\n&lt;b&gt;Name&lt;/b&gt;\n" +
+      "&lt;/p&gt;</p>\n<p>Next paragraph.</p>\n",
+  );
+  assert.equal(render("<pre>\na<br>b\n</pre>"), "<p>&lt;pre&gt;\na<br>b\n&lt;/pre&gt;</p>\n");
+  assert.equal(render("<sub>\nnote\n</sub>"), "<p><sub>\nnote\n</sub></p>\n");
+  assert.equal(render("<details>\n<summary>More</summary>"), "<details>\n<summary>More</summary>\n");
+  assert.equal(render("</details>"), "</details>\n");
+});
+
 test("HTML comments stay hidden, as on GitHub, and their lines are not Markdown", () => {
   const html = render(
     "# ADR <!-- number -->\n\nIntro\n\n<!--\nHow to use this template:\n- delete this note\n-->\n\n" +

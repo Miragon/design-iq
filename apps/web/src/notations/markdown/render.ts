@@ -408,22 +408,29 @@ const htmlText = (text: string): string =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-// an HTML block with a passed tag (a <details> and its <summary>) is that
-// markup, without a paragraph around it; any other block shows as the text it
-// is, in a paragraph of its own
+/** the passed tags that open or close a collapsible section, a block of its own */
+const SECTION_TAG = /^<\/?(?:details|summary)\b/;
+
+// an HTML block with a <details> or <summary> is that markup, without a
+// paragraph around it: the section holds the Markdown after it. Any other
+// block shows as the text it is, in a paragraph of its own, with its line
+// breaks, sub- and superscripts and keys passed
 md.renderer.rules.html_block = (tokens, idx) => {
   const text = tokens[idx]!.content.replace(HTML_COMMENT, "").trim();
   if (text === "") return "";
   let html = "";
   let passed = false;
+  let section = false;
   let at = 0;
   for (const match of text.matchAll(TAGS)) {
     const tag = passedTag(match[0]);
     passed ||= tag !== undefined;
+    section ||= tag !== undefined && SECTION_TAG.test(tag);
     html += htmlText(text.slice(at, match.index)) + (tag ?? escapeHtml(match[0]));
     at = match.index + match[0].length;
   }
-  return passed ? `${html}${htmlText(text.slice(at))}\n` : `<p>${escapeHtml(text)}</p>\n`;
+  html += htmlText(text.slice(at));
+  return section ? `${html}\n` : `<p>${passed ? html : escapeHtml(text)}</p>\n`;
 };
 md.renderer.rules.html_inline = (tokens, idx) => {
   const raw = tokens[idx]!.content.replace(HTML_COMMENT, "");
