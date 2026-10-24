@@ -10,6 +10,7 @@
  */
 import { bindBpmn } from "@designiq/live-client/bpmn-sync";
 import BpmnModeler from "bpmn-js/lib/Modeler";
+import type Canvas from "diagram-js/lib/core/Canvas";
 
 import { BPMN_CANVAS_OPTIONS, canvasFontReady } from "@/lib/canvas-theme";
 import { attachPresenceCanvas } from "@/lib/presence-canvas";
@@ -48,6 +49,7 @@ export async function mountBpmnEditor(container: HTMLElement, ctx: EditorContext
   return {
     elements: todoCanvas,
     actions: [tbpmToggleAction(modeler as never)],
+    focus: () => modeler.get<Canvas>("canvas").focus(),
     destroy: () => {
       presenceCanvas?.destroy();
       todoCanvas.destroy();

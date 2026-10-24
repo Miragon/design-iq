@@ -122,6 +122,9 @@ export interface MountedEditor {
   /** the renderer's own Model, Export and Help entries, which the shell's ⋯
    *  menu lists (a Miragon renderer that ships menu content) */
   menu?: ModelerMenu;
+  /** hand the keyboard focus to the canvas, so its keys act at once
+   *  (lib/canvas-focus.ts); absent = no canvas keys (the Markdown view) */
+  focus?(): void;
   destroy(): void;
 }
 

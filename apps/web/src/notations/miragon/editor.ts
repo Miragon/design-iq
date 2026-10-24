@@ -158,6 +158,7 @@ export function mountMiragonEditor(
   return {
     elements: todos,
     ...(menu ? { menu: menu.groups } : {}),
+    focus: () => view.focus?.(),
     destroy: () => {
       menu?.destroy();
       offSidePanels?.();

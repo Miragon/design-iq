@@ -8,6 +8,7 @@
  * waits for its font before the first import.
  */
 import { bindDmn } from "@designiq/live-client/dmn-sync";
+import type Canvas from "diagram-js/lib/core/Canvas";
 import DmnModeler from "dmn-js/lib/Modeler";
 
 import { canvasFontReady, withDrdCanvasTheme } from "@/lib/canvas-theme";
@@ -30,6 +31,11 @@ export async function mountDmnEditor(container: HTMLElement, ctx: EditorContext)
     { ...ctx.sync, canvasHost: container },
   );
   return {
+    // the DRD has a canvas; a decision table or literal expression has none
+    focus: () => {
+      if (modeler.getActiveView()?.type !== "drd") return;
+      (modeler.getActiveViewer()?.get("canvas", false) as Canvas | null | undefined)?.focus();
+    },
     destroy: () => {
       unbind();
       modeler.destroy();
