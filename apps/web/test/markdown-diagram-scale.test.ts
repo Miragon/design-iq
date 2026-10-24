@@ -3,9 +3,10 @@
  * src/notations/markdown/diagram-scale.ts) under jsdom: the minimum scale
  * from the diagram's smallest text, the fence holding the SVG to it, the
  * scroll region of a diagram wider than its block and its name, and the
- * widths the fence lays a diagram out at. jsdom lays nothing out, so a stand-in
- * ResizeObserver and the figure's widths stand in for the browser;
- * wide-mermaid-chromium.ts checks the real thing.
+ * widths the fence lays a diagram out at, also once its block changes width.
+ * jsdom lays nothing out, so a stand-in ResizeObserver and the figure's
+ * widths stand in for the browser; wide-mermaid-chromium.ts checks the real
+ * thing.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -163,7 +164,8 @@ test("a scroll region's name: its place among the diagrams and its title or type
   assert.equal(scrollRegionLabel(3, svgOn(win, "<svg></svg>")), "Diagram 3, scrolls sideways");
 });
 
-/** a ResizeObserver that reports when the test says so */
+/** a ResizeObserver that reports when the test says so: every watched slot, or as a browser does, only those that
+ *  changed (a slot that left the page reports, the ones left in place do not) */
 function observeByHand(win: Win) {
   const observed = new Set<Element>();
   let report: ((entries: { target: Element }[]) => void) | undefined;
@@ -182,7 +184,10 @@ function observeByHand(win: Win) {
     }
   }
   Object.assign(win, { ResizeObserver: FakeResizeObserver });
-  return { observed, laidOut: () => report?.([...observed].map((target) => ({ target }))) };
+  return {
+    observed,
+    laidOut: (targets: Element[] = [...observed]) => report?.(targets.map((target) => ({ target }))),
+  };
 }
 
 /** the widths a laid-out figure would report */
@@ -239,7 +244,10 @@ test("a diagram wider than its block is a focusable region the keyboard scrolls;
   const view = mountMarkdownView(m.container, m.ctx, { mermaid: createMermaidFence(async () => m.render) });
   await settle();
   const [wide, narrow] = [...m.container.querySelectorAll<HTMLElement>(".md-mermaid-diagram")];
-  assert.ok(wide && narrow && observer.observed.has(wide) && observer.observed.has(narrow), "each figure is watched");
+  assert.ok(
+    wide && narrow && observer.observed.has(wide.parentElement!) && observer.observed.has(narrow.parentElement!),
+    "each diagram's slot is watched",
+  );
   sized(wide, 1462, 720);
   sized(narrow, 720, 720);
   observer.laidOut();
@@ -250,17 +258,24 @@ test("a diagram wider than its block is a focusable region the keyboard scrolls;
   assert.equal(narrow.hasAttribute("role"), false);
   assert.equal(narrow.hasAttribute("aria-label"), false);
 
-  // the column widens (a wider window, the split's divider): it fits now
+  // the column widens (a wider window, the split's divider) while the reader is in it: it fits now, and keeps its
+  // tab stop until the focus leaves, so the focus does not drop to the body and the next Tab start at the top
+  wide.focus();
   sized(wide, 1462, 1462);
   observer.laidOut();
+  assert.equal(m.win.document.activeElement, wide);
+  assert.equal(wide.tabIndex, 0);
+  assert.equal(wide.getAttribute("role"), "region");
+  wide.blur();
   assert.equal(wide.hasAttribute("tabindex"), false);
   assert.equal(wide.hasAttribute("role"), false);
   assert.equal(wide.hasAttribute("aria-label"), false);
 
-  // a figure a render took off the page is no longer watched
-  wide.remove();
-  observer.laidOut();
-  assert.equal(observer.observed.has(wide), false);
+  // a slot a render took off the page is no longer watched
+  const slot = wide.parentElement!;
+  slot.remove();
+  observer.laidOut([slot]);
+  assert.equal(observer.observed.has(slot), false);
   view.destroy();
 });
 
@@ -287,12 +302,35 @@ test("every scroll region of a document has a name of its own, by its place amon
     ],
   );
 
-  // a diagram above leaves the page: the ones below it move up a place
-  figures[0]!.remove();
-  observer.laidOut();
+  // a diagram above leaves the page and the view keeps the others' slots (#289): only the one that left reports
+  const first = figures[0]!.parentElement!;
+  first.remove();
+  observer.laidOut([first]);
   assert.deepEqual(
     figures.slice(1).map((figure) => figure.getAttribute("aria-label")),
     ["Diagram 1: Order flow, scrolls sideways", "Diagram 2 (flowchart), scrolls sideways"],
+  );
+  view.destroy();
+});
+
+test("a fence that shows its code, one mermaid cannot draw, still takes its place among the diagrams", async () => {
+  const m = mount(
+    fence("flowchart one") + "\n" + fence("flowchart two") + "\n" + fence("flowchart three"),
+    (source, id) =>
+      source.includes("one")
+        ? ""
+        : `<svg id="${id}" viewBox="0 0 900 90" width="100%" aria-roledescription="flowchart-v2"><text style="font-size: 16px">${source}</text></svg>`,
+  );
+  const observer = observeByHand(m.win);
+  const view = mountMarkdownView(m.container, m.ctx, { mermaid: createMermaidFence(async () => m.render) });
+  await settle();
+  assert.equal(m.container.querySelectorAll(".md-mermaid-block > pre").length, 1, "the first shows its code");
+  const figures = [...m.container.querySelectorAll<HTMLElement>(".md-mermaid-diagram")];
+  for (const figure of figures) sized(figure, 1462, 720);
+  observer.laidOut();
+  assert.deepEqual(
+    figures.map((figure) => figure.getAttribute("aria-label")),
+    ["Diagram 2 (flowchart), scrolls sideways", "Diagram 3 (flowchart), scrolls sideways"],
   );
   view.destroy();
 });
@@ -352,5 +390,63 @@ test("a Gantt chart is laid out once more, at its block's width over its minimum
   assert.equal(top?.getAttribute("viewBox"), "0 0 553 148", "the page shows the second layout");
   assert.equal(top?.style.minWidth, "719px", "its 10px labels at 13px: 553 × 13 / 10, within the 720px block");
   assert.equal(inQuote?.style.minWidth, "689px", "530 × 13 / 10, within the 690px block");
+  view.destroy();
+});
+
+test("a Gantt chart is laid out anew when its block changes width, and a diagram with a width of its own is not", async () => {
+  const plan = "gantt\n  title A plan\n  Design :a1, 2026-01-01, 10d";
+  const m = mount(fence(plan) + "\n" + fence("flowchart LR\n  A --> B"), (source, id, width) =>
+    source.startsWith("gantt")
+      ? ganttAt(id, width)
+      : `<svg id="${id}" viewBox="0 0 400 90" width="100%"><text style="font-size: 16px">plan</text></svg>`,
+  );
+  let blockWidth = 432;
+  Object.defineProperty(m.win.HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.classList.contains("md-mermaid-block") ? blockWidth : 1280;
+    },
+  });
+  const observer = observeByHand(m.win);
+  const view = mountMarkdownView(m.container, m.ctx, { mermaid: createMermaidFence(async () => m.render) });
+  await settle();
+  const ganttWidths = (): (number | undefined)[] =>
+    m.renders.filter(([source]) => source === plan).map(([, width]) => width);
+  const shown = (): SVGSVGElement => m.container.querySelector<SVGSVGElement>(".md-mermaid-diagram > svg")!;
+  assert.deepEqual(ganttWidths(), [432, 332], "a 432px block: 432 × 10 / 13");
+  observer.laidOut();
+  await settle();
+  assert.equal(ganttWidths().length, 2, "the block keeps its width: no new layout");
+
+  // Split to Markdown only: the block widens to the column's 720px, twice reported before the layout is done
+  blockWidth = 720;
+  observer.laidOut();
+  observer.laidOut();
+  await settle();
+  assert.deepEqual(ganttWidths(), [432, 332, 720, 553], "laid out once for the wider block");
+  assert.equal(shown().getAttribute("viewBox"), "0 0 553 148");
+  assert.equal(shown().style.minWidth, "719px", "it fills the 720px block, its labels at 13px");
+
+  // back to the narrow block and to the wide one again: the layout for 720px is kept
+  blockWidth = 432;
+  observer.laidOut();
+  await settle();
+  assert.equal(shown().getAttribute("viewBox"), "0 0 332 148");
+  blockWidth = 720;
+  observer.laidOut();
+  await settle();
+  assert.equal(shown().getAttribute("viewBox"), "0 0 553 148");
+  assert.equal(ganttWidths().length, 6, "only the narrow block's layout ran once more");
+
+  // the next render of the document puts the drawing for the block's width back
+  m.ctx.ytext.insert(0, "# Plan\n\n");
+  await settle();
+  assert.equal(shown().getAttribute("viewBox"), "0 0 553 148");
+  assert.equal(ganttWidths().length, 6);
+  assert.equal(
+    m.renders.filter(([source]) => source.startsWith("flowchart")).length,
+    1,
+    "a flowchart has a width of its own: never laid out anew",
+  );
   view.destroy();
 });

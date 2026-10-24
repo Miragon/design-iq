@@ -38,7 +38,14 @@
 import type { RenderMermaid } from "../../lib/mermaid-frame.ts";
 import type { MermaidRenderError, MermaidRenderResult } from "../../lib/mermaid-render.ts";
 import { icon } from "../../mcp-app/icons.ts";
-import { DIAGRAM_CLASS, fitDiagram, refitWidth } from "./diagram-scale.ts";
+import {
+  DIAGRAM_CLASS,
+  fitDiagramSlot,
+  followBlockWidth,
+  refitWidth,
+  type Relayout,
+  takesItsWidth,
+} from "./diagram-scale.ts";
 import { escapeText, type FenceRenderer } from "./render.ts";
 import { createDiagramSanitizer, type Sanitize } from "./sanitize.ts";
 
@@ -51,6 +58,9 @@ export const MERMAID_BLOCK_CLASS = "md-mermaid";
 const SLOT_CLASS = "md-mermaid-block";
 /** drawings kept by source: a long document's diagrams and their recent edits */
 export const DRAWING_CACHE_SIZE = 64;
+/** drawings laid out anew for another block width, kept by width and source:
+ *  the same source in a quote and outside it, a column back at a width it had */
+const RELAYOUT_CACHE_SIZE = 16;
 /** the drawn SVGs' id prefix: md- like every id of the view, and never a
  *  heading anchor (render.ts slugs are lower-case). mermaid starts a render
  *  by removing the element its id names, and scopes the diagram's styles to
@@ -139,15 +149,43 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
   };
 
   /** laid out at its block's width, and once more, narrower, when it took
-   *  that width as its own and its text would hold it wider (./diagram-scale.ts) */
+   *  that width as its own and its text would hold it wider. Such a drawing
+   *  is laid out anew whenever its block changes width (./diagram-scale.ts) */
   const layOut = async (render: RenderMermaid, source: string, win: View, block: HTMLElement): Promise<Drawing> => {
     const width = layoutWidth(block);
     const drawing = drawingOf(await render(source, ID_PREFIX, width), win);
-    const refit = width !== undefined && "svg" in drawing ? refitWidth(drawing.svg, width, block) : undefined;
-    if (refit === undefined) return drawing;
-    const refitted = drawingOf(await render(source, ID_PREFIX, refit), win);
-    return "svg" in refitted ? refitted : drawing;
+    if (width === undefined || !("svg" in drawing) || !takesItsWidth(drawing.svg, width)) return drawing;
+    const refit = refitWidth(drawing.svg, width, block);
+    const refitted = refit === undefined ? drawing : drawingOf(await render(source, ID_PREFIX, refit), win);
+    const fitted = "svg" in refitted ? refitted : drawing;
+    followBlockWidth(fitted.svg, width, relayoutOf(render, source, win));
+    return fitted;
   };
+
+  const relaidOut = new Map<string, Promise<Drawing>>(); // by width and source, least recently used first
+  /** the source laid out for its block's width now, and kept as its drawing */
+  const relayoutOf =
+    (render: RenderMermaid, source: string, win: View): Relayout =>
+    async (block) => {
+      const width = layoutWidth(block);
+      if (width === undefined) return undefined;
+      const key = `${width}\n${source}`;
+      const pending = relaidOut.get(key) ?? layOut(render, source, win, block);
+      relaidOut.delete(key);
+      relaidOut.set(key, pending);
+      if (relaidOut.size > RELAYOUT_CACHE_SIZE) relaidOut.delete(relaidOut.keys().next().value!);
+      let drawing: Drawing;
+      try {
+        drawing = await pending;
+      } catch {
+        // the engine did not load: not kept, the next change of width tries again
+        relaidOut.delete(key);
+        return undefined;
+      }
+      if (!("svg" in drawing)) return undefined;
+      remember(source, drawing);
+      return drawing.svg;
+    };
 
   /** draw one source, once: a render already under way for it is shared.
    *  Rejects only when the engine does not load (that is not cached) */
@@ -259,16 +297,15 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
 /** fill a block's slot with what it settled on */
 function present(doc: Document, slot: HTMLElement, code: HTMLElement, settled: Settled): void {
   const parts: Node[] = [];
-  let figure: HTMLElement | undefined;
   if (settled.drawing) {
-    figure = doc.createElement("div");
+    const figure = doc.createElement("div");
     figure.className = settled.error ? `${DIAGRAM_CLASS} is-stale` : DIAGRAM_CLASS;
     figure.append(doc.importNode(settled.drawing, true));
     parts.push(figure);
   } else parts.push(code);
   if (settled.error) parts.push(errorNotice(doc, settled.error, settled.drawing !== undefined));
   slot.replaceChildren(...parts);
-  if (figure && settled.drawing) fitDiagram(figure, settled.drawing);
+  fitDiagramSlot(slot, settled.drawing);
 }
 
 /** the error notice under a block, in plain DOM */

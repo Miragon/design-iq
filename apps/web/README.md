@@ -205,18 +205,21 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   flat factor: a flowchart's 16px labels may shrink to 81 %, and a C4 diagram, whose type lines
   mermaid draws at 10.5px, is drawn at 124 % or more. A diagram wider than its block scrolls
   sideways there, never the page, and while it does, the block is a region in the tab order
-  that the arrow keys scroll, with the guide's focus ring; one that fits is no tab stop. Each
-  region is named after its place among the document's diagrams and its title or type
-  ("Diagram 2 (flowchart), scrolls sideways"), so no two read alike. The Mermaid frame lays a
-  diagram out at its own block's width, which a Gantt chart takes as its own; one that does,
-  and whose smallest text would then hold it wider, is laid out once more at the block's width
-  over its minimum scale, so it fits its block at 13px. `test/markdown-diagram-scale.test.ts`
-  covers the scale, the region, its name and those widths under jsdom.
-  `test/wide-mermaid-chromium.ts` checks a wide C4 diagram, a wide flowchart, two Gantt charts
-  (one in a quote) and a diagram that only overflows a narrow window in headless Chromium:
-  every text at 13px or more, the Gantt charts within their blocks, the sideways scroll by
-  keyboard and no tab stop on a diagram that fits (run it like the hostile check above, `PORT`
-  8394 unless set).
+  that the arrow keys scroll, with the guide's focus ring; one that fits is no tab stop, except
+  while it has the focus, so the focus never drops to the top of the page. Each region is named
+  after its place among the document's mermaid fences (one that shows its code counts) and its
+  title or type ("Diagram 2 (flowchart), scrolls sideways"), so no two read alike, and renamed
+  when a fence above it comes or goes. The Mermaid frame lays a diagram out at its own block's
+  width, which a Gantt chart takes as its own; one that does, and whose smallest text would
+  then hold it wider, is laid out once more at the block's width over its minimum scale, so it
+  fits its block at 13px. It is laid out anew whenever its block changes width (Split to
+  Markdown only, the split's divider, the window). `test/markdown-diagram-scale.test.ts` covers
+  the scale, the region, its name and those widths under jsdom. `test/wide-mermaid-chromium.ts`
+  checks a wide C4 diagram, a wide flowchart, two Gantt charts (one in a quote) and a diagram
+  that only overflows a narrow window in headless Chromium: every text at 13px or more, the
+  Gantt charts within their blocks at both window widths, the sideways scroll by keyboard, no
+  tab stop on a diagram that fits, the focus kept when one fits again and the names after a
+  diagram above leaves (run it like the hostile check above, `PORT` 8394 unless set).
 - **Insert diagram** starts a diagram from the source. While the source is on screen (Split and
   Markdown), the toolbar's Insert diagram menu, and the F1 palette (`Insert diagram: Flowchart`
   and so on), insert a small, valid starter: a flowchart, a sequence, class, state, entity
