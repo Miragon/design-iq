@@ -2,9 +2,10 @@
  * Hostile Mermaid sources (issue 293), shared by the suite that runs them
  * through the pinned mermaid under jsdom (mermaid-engine-hostile.test.ts) and
  * the check that opens them in the built app in headless Chromium
- * (hostile-mermaid-chromium.ts). Every address they name is on
- * TRACKER, every handler calls `__pwn`: whatever loads or runs of them is
- * told from the app's own by that alone.
+ * (hostile-mermaid-chromium.ts). Every address they name is on TRACKER,
+ * every handler calls `__pwn`: whatever loads or runs of them is told from
+ * the app's own by that alone. With a plain label, SOURCES also gives
+ * mermaid-engine.test.ts a valid diagram of every type to recase.
  */
 
 /** the host every hostile address names */

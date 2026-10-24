@@ -193,6 +193,9 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   until it is re-read, checks every listed type against mermaid's own detection, and has
   mermaid parse broken diagrams below comment lines to check the line each notice names
   (eventmodeling and agentflow-beta parse their comment lines, every other type drops them).
+  It also spells every type in other casings: where mermaid detects one, it parses it, and the
+  validator must accept exactly the casings that parse (`Ishikawa` and `stateDiagram-V2` draw,
+  `Wardley-beta` does not).
 - `@designiq/notations/markdown` is the validator's reading of a document's fences, a
   zero-dep scanner: the `mermaid/diagram-type` check of every `mermaid` fence stands on it and
   names the document's line. `test/markdown-fences.test.ts` holds it against the markdown-it

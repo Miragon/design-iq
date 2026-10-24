@@ -7,7 +7,8 @@ the generic cross-model reference rule (every required reference — `callActivi
 notations, and a per-mediaKind parse baseline for every other registered notation (a file that
 is no JSON or XML is an ERROR; DSL notations are lenient by design; a `mermaid` fence in a
 Markdown document that does not start with a diagram type such as `flowchart` or
-`sequenceDiagram` is a WARN, `mermaid/diagram-type`, naming the document's line). Every finding
+`sequenceDiagram` is a WARN, `mermaid/diagram-type`, naming the document's line; another casing
+passes only where mermaid draws it, so `Ishikawa` passes and `Flowchart` warns). Every finding
 carries a stable `ruleId` (e.g. `bpmn/flow`, `dmn/di`, `refs/dangling`). It treats the target
 repo as pure data — it never executes content-repo code. Exit code 0 = no errors (warnings
 allowed), 1 = errors.

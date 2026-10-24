@@ -74,6 +74,10 @@ test("checkModelBaseline: every ```mermaid fence of a document names its type fi
   // so a broken body behind a valid header passes here; other fences and
   // the prose are not the check's
   assert.deepEqual(doc("```mermaid\nflowchart LR\n  A -->\n```\n\n```ts\nflowchrt\n```\nflowchrt\n"), []);
+  // a type in another casing passes where mermaid draws it, and only there (#283)
+  assert.deepEqual(doc("```mermaid\nIshikawa\n  Late delivery\n    Supplier\n```\n"), []);
+  assert.deepEqual(doc("```mermaid\nstateDiagram-V2\n  [*] --> Placed\n```\n"), []);
+  assert.match(doc("```mermaid\nWardley-beta\n```\n")[0]?.message ?? "", /^line 2: 'Wardley-beta' is not a Mermaid/);
 
   // a WARN with the DOCUMENT's line: the line of the fence's first line
   // that names no type (front matter included), the fence's own when empty

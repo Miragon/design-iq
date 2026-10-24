@@ -123,8 +123,41 @@ test("mermaidHeader: the first meaningful line names the diagram type", () => {
   }
 });
 
+test("mermaidHeader: another casing names the type only where mermaid draws it, as listed (#283)", () => {
+  for (const [text, diagramType] of [
+    // the detector and the grammar ignore case
+    ["Ishikawa", "ishikawa"],
+    ["ISHIKAWA-BETA", "ishikawa-beta"],
+    ["iShIkAwA-Beta", "ishikawa-beta"],
+    // the detector matches a shorter spelling as written, the grammar ignores case
+    ["requirementdiagram", "requirementDiagram"],
+    ["stateDiagram-V2", "stateDiagram-v2"],
+    ["xychart-BETA", "xychart-beta"],
+    ["sankey-Beta", "sankey-beta"],
+  ] as const) {
+    assert.deepEqual(mermaidHeader(`${text}\n  x`), { line: 1, text, diagramType }, text);
+  }
+  // the detector reads it, the grammar refuses it; or the detector does not read it at all
+  for (const text of [
+    "Wardley-beta",
+    "RAILROAD-BETA",
+    "railroad-EBNF-beta",
+    "classDiagram-V2",
+    "flowchart-ELK",
+    "block-BETA",
+    "Requirementdiagram",
+    "STATEDIAGRAM-V2",
+    "xyChart-beta",
+    "SEQUENCEDIAGRAM",
+  ]) {
+    assert.equal(mermaidHeader(`${text}\n  x`)?.diagramType, undefined, text);
+  }
+});
+
 test("MERMAID_DIAGRAM_TYPES: unique header keywords, the common ones present", () => {
   assert.equal(new Set(MERMAID_DIAGRAM_TYPES).size, MERMAID_DIAGRAM_TYPES.length);
+  // in any casing: a header in another casing names the one it spells
+  assert.equal(new Set(MERMAID_DIAGRAM_TYPES.map((t) => t.toLowerCase())).size, MERMAID_DIAGRAM_TYPES.length);
   for (const t of ["flowchart", "graph", "sequenceDiagram", "classDiagram", "erDiagram", "gantt", "mindmap"]) {
     assert.ok(MERMAID_DIAGRAM_TYPES.includes(t), t);
   }
