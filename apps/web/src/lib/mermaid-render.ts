@@ -116,6 +116,23 @@ const XY_LABELS_INSIDE = XY_TEXT_LEISE_BARS.flatMap((bar) => [
   `${bar} > text[dominant-baseline="hanging"]`,
   `${bar} > text[text-anchor="end"]`,
 ]);
+/** a data label outside its bar (above an upright one, after a horizontal one), and a line's point labels */
+const XY_LABELS_ON_ANY_GROUND = [
+  `[class^="bar-plot-"] > text[dominant-baseline="auto"]`,
+  `[class^="bar-plot-"] > text[text-anchor="start"]`,
+  `[class^="line-plot-"] > .labels > text`,
+];
+/** the design guide's label halo (§10.1): a stroke under the label in the colour it has to read on */
+const labelHalo = (colour: string): string =>
+  `stroke: ${colour}; stroke-width: 3px; stroke-linejoin: round; paint-order: stroke;`;
+/**
+ * A casing in the plot's white around a line, as four unblurred shadows (CSS
+ * cannot draw a second path under it). Whole pixels: Chromium rounds a half
+ * pixel offset up on one side and down on the other.
+ */
+const LINE_CASING = ["2px 0", "-2px 0", "0 2px", "0 -2px"]
+  .map((offset) => `drop-shadow(${offset} 0 ${ALIASES["canvas-background"]})`)
+  .join(" ");
 
 /**
  * Where mermaid draws a section's label on something other than the grey it
@@ -137,7 +154,12 @@ const XY_LABELS_INSIDE = XY_TEXT_LEISE_BARS.flatMap((bar) => [
  *   number (the last digit of its group's class), they turn white; point
  *   labels are black. mermaid starts a label inside the bar's end however
  *   short the bar is, so a white one lies on a halo in its bar's grey,
- *   which reads where the label runs past the bar onto white.
+ *   which reads where the label runs past the bar onto white. mermaid draws
+ *   its plots over each other in order, so a label outside a bar or a point
+ *   label of a later plot can lie on an earlier text-leise bar: these black
+ *   labels lie on a halo in the plot's white. Bars and lines share the two
+ *   greys (a line reads 1.7:1 across a bar of the other grey, 1:1 across its
+ *   own), so a line is cased in the plot's white too.
  * mermaid's own selectors for treemap and neo labels name every section,
  * hence !important.
  */
@@ -149,8 +171,9 @@ export const MERMAID_THEME_CSS = [
   `[data-look="neo"].mindmap-node text, [data-look="neo"].mindmap-node tspan, .timeline-node[data-look="neo"] text { fill: ${ALIASES["canvas-label"]} !important; }`,
   `[data-look="neo"].mindmap-node span { color: ${ALIASES["canvas-label"]} !important; }`,
   ".eventWrapper { filter: none; }",
-  `${XY_LABELS_INSIDE.join(", ")} { fill: ${ALIASES["canvas-shape"]}; stroke: ${ALIASES["muted-foreground"]}; stroke-width: 3px; stroke-linejoin: round; paint-order: stroke; }`,
-  `[class^="line-plot-"] > .labels > text { fill: ${ALIASES["canvas-label"]}; }`,
+  `${XY_LABELS_INSIDE.join(", ")} { fill: ${ALIASES["canvas-shape"]}; ${labelHalo(ALIASES["muted-foreground"])} }`,
+  `${XY_LABELS_ON_ANY_GROUND.join(", ")} { fill: ${ALIASES["canvas-label"]}; ${labelHalo(ALIASES["canvas-background"])} }`,
+  `[class^="line-plot-"] > path { filter: ${LINE_CASING}; }`,
 ].join("\n");
 
 /**
