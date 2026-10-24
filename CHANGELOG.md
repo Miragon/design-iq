@@ -1,5 +1,27 @@
 # Changelog
 
+## [5.11.0](https://github.com/Miragon/design-iq/compare/v5.10.0...v5.11.0) (2026-10-24)
+
+
+### Features
+
+* **notations:** show a Team Topology's flows, annotations and title in its model view ([#321](https://github.com/Miragon/design-iq/issues/321)) ([4ea488c](https://github.com/Miragon/design-iq/commit/4ea488cf276c8780f9bcd5ffc2b363d80df8dcf5))
+* **web,live-host:** GitHub links into the repository open in designIQ, anchors update the address ([#291](https://github.com/Miragon/design-iq/issues/291)) ([#335](https://github.com/Miragon/design-iq/issues/335)) ([88d4366](https://github.com/Miragon/design-iq/commit/88d43665c5db7a4c0dc81d11102bed4ada2239ca))
+* **web,notations:** render GFM footnotes in the Markdown view ([#291](https://github.com/Miragon/design-iq/issues/291)) ([#334](https://github.com/Miragon/design-iq/issues/334)) ([b98b5da](https://github.com/Miragon/design-iq/commit/b98b5da5bff5a8238479a4470087a1626499838a))
+* **web:** export a Context Map as Context Mapper CML ([#331](https://github.com/Miragon/design-iq/issues/331)) ([f618ed2](https://github.com/Miragon/design-iq/commit/f618ed2492ec9a3457723f5559623298329f18f2))
+* **web:** render GitHub's raw HTML subset in the Markdown view ([#291](https://github.com/Miragon/design-iq/issues/291)) ([#332](https://github.com/Miragon/design-iq/issues/332)) ([db03ae6](https://github.com/Miragon/design-iq/commit/db03ae61b84ddbe9eb8e849cc485415eca379829))
+
+
+### Bug Fixes
+
+* **live-client:** merge a canvas edit line by line with a peer's change to other lines ([#328](https://github.com/Miragon/design-iq/issues/328)) ([da9fd89](https://github.com/Miragon/design-iq/commit/da9fd893b38018390c3e7525e7870a73919afe28))
+* **live-host:** tie a peer's presence to its connection after a reconnect ([#325](https://github.com/Miragon/design-iq/issues/325)) ([144310d](https://github.com/Miragon/design-iq/commit/144310d6146da8adfb0ce97adb351895b6771d59)), closes [#310](https://github.com/Miragon/design-iq/issues/310)
+* **notations,web:** read a Mermaid diagram type in every casing mermaid draws ([#323](https://github.com/Miragon/design-iq/issues/323)) ([5159cfb](https://github.com/Miragon/design-iq/commit/5159cfb52538459956006f056fbf1f03d6b43700))
+* **web:** draw the PNG exports' labels in Geist ([#333](https://github.com/Miragon/design-iq/issues/333)) ([ac97868](https://github.com/Miragon/design-iq/commit/ac97868a057c1615a9499d7a908543fa542795fe))
+* **web:** hand the canvas the focus after a click on the view switch or the menu ([#330](https://github.com/Miragon/design-iq/issues/330)) ([8daeaef](https://github.com/Miragon/design-iq/commit/8daeaef2e11ee468fbda7e2e72d3f5759e886ff5))
+* **web:** name the repository search's / key for the US and the German keyboard ([#341](https://github.com/Miragon/design-iq/issues/341)) ([34ada75](https://github.com/Miragon/design-iq/commit/34ada75e64be56aeaa740084a102913c307901f1))
+* **web:** step the zoom buttons and keys on the design guide's fixed zoom steps ([#324](https://github.com/Miragon/design-iq/issues/324)) ([8c337c2](https://github.com/Miragon/design-iq/commit/8c337c2ee10d10324088bfa55f638872af541c3a))
+
 ## [5.10.0](https://github.com/Miragon/design-iq/compare/v5.9.0...v5.10.0) (2026-10-23)
 
 
