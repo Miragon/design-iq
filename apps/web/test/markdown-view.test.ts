@@ -407,10 +407,12 @@ test("a fence extension that adds a node to the document has the next render rep
   const fences: Record<string, FenceExtension> = {
     demo: {
       render: (content) => `<pre class="md-demo">${content.trim()}</pre>`,
+      // ahead of its block: each block from there on is one further down
+      // than the last render put it
       hydrate: (root) => {
         const note = root.ownerDocument.createElement("p");
         note.className = "md-demo-note";
-        root.append(note);
+        root.querySelector("pre.md-demo")?.before(note);
       },
     },
   };

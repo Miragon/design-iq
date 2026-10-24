@@ -248,14 +248,28 @@ test("a diagram still drawing when the next render keeps its block lands in that
   t.mock.timers.tick(RENDER_DEBOUNCE_MS);
   await settle();
   assert.equal(v.article.querySelector(".md-mermaid-block"), slot, "the view kept the block");
+  // while it still shows its code: that code block is the slot's, not a new one
+  assert.equal(v.article.querySelectorAll(".md-mermaid-block").length, 1);
+  assert.equal(v.article.querySelector(".md-mermaid-block .md-mermaid-block"), null, "no slot in a slot");
   fake.release("flowchart A\n");
   await settle();
   assert.deepEqual(v.drawn(), ["flowchart A"]);
   assert.equal(v.article.querySelectorAll(".md-mermaid-block").length, 1);
-  assert.equal(v.article.querySelector(".md-mermaid-block .md-mermaid-block"), null, "no slot in a slot");
   assert.equal(slot?.hasAttribute("aria-busy"), false);
   assert.deepEqual(fake.calls, ["flowchart A\n"], "drawn once, for both renders");
   v.view.destroy();
+});
+
+test("a hydration whose render a newer one replaced before it ran leaves the page to the newer one (#289)", async () => {
+  const fake = fakeRenderer();
+  const root = newWindow().document.createElement("article");
+  root.innerHTML = '<pre class="md-code md-mermaid"><code class="language-mermaid">flowchart A\n</code></pre>';
+  const placeholder = root.firstElementChild;
+  const older = new AbortController();
+  older.abort();
+  await createMermaidFence(fake.load).hydrate(root, older.signal);
+  assert.equal(root.firstElementChild, placeholder, "the code block is not wrapped");
+  assert.equal(fake.loads(), 0, "the renderer does not load for it");
 });
 
 test("a deleted diagram is never taken for the next new one", async (t) => {

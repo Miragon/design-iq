@@ -23,10 +23,12 @@
  *    renumber; the reader's paragraph and the selection in it stay), a
  *    diagram above changed back to one drawn before, and one changed to a
  *    diagram never drawn (it lands asynchronously, at another height) leave
- *    the block the reader looks at where it was on screen. Once with the
- *    browser's scroll anchoring, once without it (overflow-anchor: none), as
- *    in Safari before 27. A control shows that each edit moved that block
- *    down the document.
+ *    the block the reader looks at where it was on screen. So does that
+ *    diagram changed again while the top of the view cuts it: the block
+ *    below it stays when the new drawing lands. Once with the browser's
+ *    scroll anchoring, once without it (overflow-anchor: none), as in Safari
+ *    before 27. A control shows that each edit moved that block down the
+ *    document.
  *
  * Exits 1 on any failed check.
  */
@@ -72,6 +74,9 @@ const TALL = "flowchart TD\n  A[Draft] --> B[Review]\n  B --> C[Approve]\n  C --
 /** a diagram no step drew before, taller than WIDE */
 const fresh = (label: string): string =>
   `flowchart TD\n  A[Draft] --> B[Review]\n  B --> C[Shipped ${label}]\n  C --> D[Done]\n`;
+/** another one, taller than that */
+const longer = (label: string): string =>
+  `flowchart TD\n  A[Draft] --> B[Review]\n  B --> C[Tested ${label}]\n  C --> D[Merged]\n  D --> E[Shipped]\n  E --> F[Done]\n`;
 const DOCUMENT = [
   "# Reading while others write\n",
   `${COPY}\n`,
@@ -127,6 +132,7 @@ interface Marked {
   __link?: HTMLElement;
   __svg?: Element;
   __reading?: Element;
+  __below?: Element;
 }
 
 const failures: string[] = [];
@@ -166,24 +172,55 @@ const replace = (session: LiveSession, from: string, to: string) => (source: str
   session.content.insert(at, to);
 };
 
+/** a block the reader looks at: scrolling to it (false when the view cannot
+ *  show it as the step needs), and where it is, on screen and down the document */
+interface Reader {
+  readOn(page: Page): Promise<boolean>;
+  place(page: Page): Promise<{ onScreen: number; inDocument: number }>;
+}
+
 /** the paragraph the reader reads, found by its text: a render may have replaced its node */
 const READING = "Paragraph 20.";
-/** the reader scrolls that paragraph to just below the top of the view */
-const readOn = (page: Page): Promise<void> =>
-  page.evaluate((text) => {
-    const paragraphs = [...document.querySelectorAll("article.markdown-body > p")];
-    const paragraph = paragraphs.find((p) => p.textContent?.startsWith(text))!;
-    const scroller = document.querySelector(".markdown-view")!;
-    scroller.scrollTop += paragraph.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 40;
-  }, READING);
-/** where that paragraph is: on screen, and down the document */
-const place = (page: Page) =>
-  page.evaluate((text) => {
-    const paragraphs = [...document.querySelectorAll("article.markdown-body > p")];
-    const box = paragraphs.find((p) => p.textContent?.startsWith(text))!.getBoundingClientRect();
-    const article = document.querySelector("article.markdown-body")!.getBoundingClientRect();
-    return { onScreen: box.top, inDocument: box.top - article.top };
-  }, READING);
+/** that paragraph, just below the top of the view */
+const paragraph: Reader = {
+  readOn: (page) =>
+    page.evaluate((text) => {
+      const paragraphs = [...document.querySelectorAll("article.markdown-body > p")];
+      const found = paragraphs.find((p) => p.textContent?.startsWith(text))!;
+      const scroller = document.querySelector(".markdown-view")!;
+      const below = () => found.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      scroller.scrollTop += below() - 40;
+      return Math.abs(below() - 40) <= 1;
+    }, READING),
+  place: (page) =>
+    page.evaluate((text) => {
+      const paragraphs = [...document.querySelectorAll("article.markdown-body > p")];
+      const box = paragraphs.find((p) => p.textContent?.startsWith(text))!.getBoundingClientRect();
+      const article = document.querySelector("article.markdown-body")!.getBoundingClientRect();
+      return { onScreen: box.top, inDocument: box.top - article.top };
+    }, READING),
+};
+/** the block below the diagram, with the top of the view through the middle of the diagram */
+const belowCutDiagram: Reader = {
+  readOn: (page) =>
+    page.evaluate(() => {
+      const marked = window as unknown as Marked;
+      const slot = document.querySelector(".md-mermaid-block")!;
+      const scroller = document.querySelector(".markdown-view")!;
+      const box = slot.getBoundingClientRect();
+      scroller.scrollTop += box.top + box.height / 2 - scroller.getBoundingClientRect().top;
+      marked.__below = slot.nextElementSibling ?? undefined;
+      const cut = slot.getBoundingClientRect();
+      const view = scroller.getBoundingClientRect();
+      return !!marked.__below && cut.top < view.top && cut.bottom > view.top && cut.bottom <= view.bottom;
+    }, 0),
+  place: (page) =>
+    page.evaluate(() => {
+      const box = (window as unknown as Marked).__below!.getBoundingClientRect();
+      const article = document.querySelector("article.markdown-body")!.getBoundingClientRect();
+      return { onScreen: box.top, inDocument: box.top - article.top };
+    }, 0),
+};
 const diagramDrawn = (page: Page, text: string): Promise<boolean> =>
   page
     .waitForFunction(
@@ -289,12 +326,12 @@ try {
         document.querySelector<HTMLElement>(".markdown-view")!.style.overflowAnchor = "none";
       }, 0);
     }
-    /** the reader's paragraph on screen and down the document, before and after `change` shows */
-    const measure = async (what: string, change: () => Promise<boolean>): Promise<void> => {
-      await readOn(page);
-      const was = await place(page);
+    /** the reader's block on screen and down the document, before and after `change` shows */
+    const measure = async (what: string, change: () => Promise<boolean>, reader = paragraph): Promise<void> => {
+      check(scenario, `precondition: ${what}: the reader is in place`, await reader.readOn(page));
+      const was = await reader.place(page);
       const shown = await change();
-      const is = await place(page);
+      const is = await reader.place(page);
       const moved = Math.round(is.inDocument - was.inDocument);
       check(
         scenario,
@@ -366,6 +403,18 @@ try {
       await page.waitForTimeout(200);
       return drawn;
     });
+    // the reader reads below a diagram the top of the view cuts: its new
+    // drawing, taller, lands after the render and must not push that down
+    await measure(
+      "a diagram the view cuts drawn anew, after the render",
+      async () => {
+        setDiagram(longer(anchoring));
+        const drawn = await diagramDrawn(page, `Tested ${anchoring}`);
+        await page.waitForTimeout(200);
+        return drawn;
+      },
+      belowCutDiagram,
+    );
   }
 
   const toasts = await page.evaluate(
