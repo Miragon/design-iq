@@ -11,15 +11,15 @@
  *
  *   export default miragonDocs({
  *     repo: "Miragon/bpmn-cli",
- *     title: "Miragon BPMN CLI",
+ *     title: "Miragon bpmn-cli",
  *     description: "…",
  *     nav: [{ text: "Getting started", link: "/getting-started" }],
  *     sidebar: [{ text: "Start", items: [{ text: "Getting started", link: "/getting-started" }] }],
  *   })
  *
  * Fest im Kit: base aus DOCS_BASE, saubere URLs, Datum der letzten Änderung, Komet als Icon, zwei
- * theme-color, Geist vorgeladen, Shiki-Themes mit AA, Anker wie auf GitHub, Mermaid, Wortmarke hell
- * und dunkel, Gliederung H2 und H3, lokale Suche, Bearbeiten-Link, 404-Texte und die Rechtsleiste
+ * theme-color, Geist vorgeladen, Shiki-Themes mit AA, Anker wie auf GitHub, Mermaid, Komet und
+ * Produktname im Titel, Gliederung H2 und H3, lokale Suche, Bearbeiten-Link, 404-Texte und die Rechtsleiste
  * (Copyright, Impressum, Datenschutz) auf jeder Seite. Die Farben kommen aus theme/miragon.css.
  */
 import { mergeConfig, type DefaultTheme, type HeadConfig, type UserConfig } from "vitepress"
@@ -34,9 +34,9 @@ export { miragonLegal, type MiragonLegal } from "./legal"
 export interface MiragonDocsOptions {
   /** GitHub-Repo als "Miragon/<name>". Ergibt den Bearbeiten-Link und das GitHub-Icon. */
   repo: string
-  /** Produktname, etwa "Miragon BPMN CLI". Steht im Titel jeder Seite. */
+  /** Produktname, etwa "Miragon bpmn-cli". Steht im Titel jeder Seite. */
   title: string
-  /** Name neben der Wortmarke. Standard: title ohne "Miragon ". false zeigt nur die Wortmarke. */
+  /** Name neben dem Komet. Standard: title ohne "Miragon ". false zeigt nur den Komet. */
   siteTitle?: string | false
   /** Ein Satz für die Beschreibung der Seite (meta description). */
   description: string
@@ -193,23 +193,31 @@ export function miragonDocs(options: MiragonDocsOptions): UserConfig<MiragonThem
       anchor: { slugify: githubSlug },
     },
 
-    // Mermaid für den Dev-Server vorbündeln: Es importiert CommonJS-Pakete (fastdom seit 11.17),
-    // die vitepress-plugin-mermaid nicht nennt. Ohne zeigt `vitepress dev` kein Diagramm.
+    // Mermaid für den Dev-Server vorbündeln: Es importiert CommonJS-Module, die
+    // vitepress-plugin-mermaid nicht nennt, in 12 etwa elkjs und dayjs/plugin/duration. Ohne zeigt
+    // `vitepress dev` etwa Gantt- und Use-Case-Diagramme nicht.
     vite: { optimizeDeps: { include: ["mermaid"] } },
 
     // Mermaid misst mit der Markenschrift. neutral ist das graue Theme von Mermaid, die Farben der
     // CI legt theme/miragon.css über die Rollen darüber, im Dunkeln wie im Hellen.
+    // look und layout halten das Aussehen von Mermaid 11, wie die App von designIQ: Ohne zeichnet
+    // Mermaid 12 im Look neo und legt die Graphen mit ELK neu aus, jedes Diagramm sähe anders aus.
+    // dagre steht je Diagrammtyp, der es bisher hatte. Ein layout für alle nähme Mindmaps
+    // cose-bilkent und Swimlanes ihre Bahnen.
     mermaid: {
       theme: "neutral",
+      look: "classic",
+      flowchart: { layout: "dagre" },
+      class: { layout: "dagre" },
+      state: { layout: "dagre" },
+      er: { layout: "dagre" },
+      requirement: { layout: "dagre" },
       fontFamily: SCHRIFT,
       themeVariables: { fontFamily: SCHRIFT },
       sequence: { actorFontFamily: SCHRIFT, messageFontFamily: SCHRIFT, noteFontFamily: SCHRIFT },
     },
 
     themeConfig: {
-      // Die offiziellen Wortmarken: Grün auf Hell, Weiß auf Dunkel.
-      logo: { light: "/logo/miragon-logo-gruen.svg", dark: "/logo/miragon-logo-weiss.svg", alt: "Miragon" },
-      // Produkte zeigen die Wortmarke und schreiben ihren Namen in Geist daneben.
       siteTitle,
       nav,
       sidebar: options.sidebar ?? [],

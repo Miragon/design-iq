@@ -73,7 +73,7 @@ jobs:
         if: env.CI_SOURCE_TOKEN != ''
         with:
           repository: Miragon/corporate-identity
-          ref: v1.10.0
+          ref: v1.24.0
           token: ${{ env.CI_SOURCE_TOKEN }}
           path: .ci-source
           sparse-checkout: plugins/miragon-brand
