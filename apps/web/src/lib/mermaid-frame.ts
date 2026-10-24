@@ -35,7 +35,9 @@ export interface MermaidFrameApi {
   render(source: string, idPrefix: string): Promise<MermaidRenderResult>;
 }
 
-export type RenderMermaid = MermaidFrameApi["render"];
+/** the renderer the page calls: the frame's, laid out `width` CSS pixels
+ *  wide, the page's body when it names none */
+export type RenderMermaid = (source: string, idPrefix: string, width?: number) => Promise<MermaidRenderResult>;
 
 /** a frame that has started: its element in the page and its renderer */
 export interface MermaidFrame {
@@ -54,7 +56,7 @@ export async function fetchFrameHtml(): Promise<string> {
 
 /**
  * Start a frame in `doc`: hidden, out of the tab order and of the
- * accessibility tree, and as wide as the page's body, because a Gantt chart
+ * accessibility tree. Each render sets its width, because a Gantt chart
  * takes its width from the element it is drawn in. No sandbox attribute: the
  * frame needs scripts and the page's origin, and a frame allowed both can
  * lift its own sandbox, so the policy in its document is the guard.
@@ -112,14 +114,14 @@ export function createMermaidFrameRenderer(options: MermaidFrameOptions = {}): R
     }
     return frame;
   };
-  return async (source, idPrefix) => {
+  return async (source, idPrefix, width) => {
     const doc = options.doc ?? document;
     let current = await started(doc);
     if (!current.element.isConnected) {
       frame = undefined;
       current = await started(doc);
     }
-    current.element.style.width = `${doc.body.clientWidth}px`;
+    current.element.style.width = `${width ?? doc.body.clientWidth}px`;
     return current.api.render(source, idPrefix);
   };
 }

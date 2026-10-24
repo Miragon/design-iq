@@ -176,6 +176,16 @@ test("createMermaidFrameRenderer: ONE frame for concurrent renders, as wide as t
   assert.equal(doc.querySelector("iframe")!.style.width, "1234px");
 });
 
+test("createMermaidFrameRenderer: a render that names a width is laid out at it (#292)", async () => {
+  const doc = newWindow().document;
+  Object.defineProperty(doc.body, "clientWidth", { value: 1234 });
+  const render = createMermaidFrameRenderer({ doc, open: async (d) => fakeFrame(d, []) });
+  await render("gantt", "md-Mermaid", 720);
+  assert.equal(doc.querySelector("iframe")!.style.width, "720px", "the reading column's width, not the page's");
+  await render("gantt", "md-Mermaid");
+  assert.equal(doc.querySelector("iframe")!.style.width, "1234px");
+});
+
 test("createMermaidFrameRenderer: a frame that does not start rejects, the next render starts another", async () => {
   const doc = newWindow().document;
   const log: string[] = [];

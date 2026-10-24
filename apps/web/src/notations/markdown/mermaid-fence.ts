@@ -4,7 +4,9 @@
  * renderer (lib/mermaid-render.ts: strict security level, the CI theme,
  * Geist), which lays every diagram out in a frame of its own
  * (lib/mermaid-frame.ts); the page only gets the SVG, sanitized here once
- * more (createDiagramSanitizer).
+ * more (createDiagramSanitizer). A drawn diagram shrinks to its block only
+ * as far as its smallest text stays readable, and scrolls sideways beyond
+ * that (./diagram-scale.ts).
  *
  * - `render` (the HTML pass) keeps the fence a code block, marked
  *   `md-mermaid`, with its source as text: what a reader sees until the
@@ -36,6 +38,7 @@
 import type { RenderMermaid } from "../../lib/mermaid-frame.ts";
 import type { MermaidRenderError } from "../../lib/mermaid-render.ts";
 import { icon } from "../../mcp-app/icons.ts";
+import { fitDiagram } from "./diagram-scale.ts";
 import { escapeText, type FenceRenderer } from "./render.ts";
 import { createDiagramSanitizer, type Sanitize } from "./sanitize.ts";
 
@@ -94,6 +97,16 @@ export interface MermaidFence {
   hydrate(root: HTMLElement, signal: AbortSignal): Promise<void>;
 }
 
+/** the width mermaid lays a diagram out at: the widest diagram block, the
+ *  reading column. A Gantt chart takes it as its own width; at the page's
+ *  width, its minimum scale (./diagram-scale.ts) would make it scroll by
+ *  more than a whole column */
+const layoutWidth = (doc: Document): number | undefined => {
+  const widths = [...doc.querySelectorAll<HTMLElement>(".md-mermaid-block")].map((slot) => slot.clientWidth);
+  const widest = Math.max(0, ...widths);
+  return widest > 0 ? widest : undefined;
+};
+
 const loadRenderer = async (): Promise<RenderMermaid> =>
   (await import("../../lib/mermaid-frame.ts")).renderMermaidInFrame;
 
@@ -126,7 +139,7 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
   const draw = (render: RenderMermaid, source: string, win: View): Promise<Drawing> => {
     let pending = inFlight.get(source);
     if (!pending) {
-      pending = render(source, ID_PREFIX)
+      pending = render(source, ID_PREFIX, layoutWidth(win.document))
         .then((result): Drawing => {
           let drawing: Drawing;
           if ("svg" in result) {
@@ -238,14 +251,16 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
 /** fill a block's slot with what it settled on */
 function present(doc: Document, slot: HTMLElement, code: HTMLElement, settled: Settled): void {
   const parts: Node[] = [];
+  let figure: HTMLElement | undefined;
   if (settled.drawing) {
-    const figure = doc.createElement("div");
+    figure = doc.createElement("div");
     figure.className = settled.error ? "md-mermaid-diagram is-stale" : "md-mermaid-diagram";
     figure.append(doc.importNode(settled.drawing, true));
     parts.push(figure);
   } else parts.push(code);
   if (settled.error) parts.push(errorNotice(doc, settled.error, settled.drawing !== undefined));
   slot.replaceChildren(...parts);
+  if (figure && settled.drawing) fitDiagram(figure, settled.drawing);
 }
 
 /** the error notice under a block, in plain DOM */

@@ -272,8 +272,10 @@
 
 /* a mermaid fence drawn as its diagram (./mermaid-fence.ts): centred, as
    wide as the measure up to its natural size (mermaid caps the SVG with a
-   max-width), a wider one scrolls on its own. Dimmed while a newer source
-   of it cannot be drawn */
+   max-width), but never so narrow that its smallest text reads under 13px
+   (./diagram-scale.ts sets the SVG's min-width). A wider one scrolls on its
+   own, a focusable region then, with the focus ring of §8. Dimmed while a
+   newer source of it cannot be drawn */
 .markdown-body .md-mermaid-block {
   margin: 0 0 var(--cd-space-3);
 }
@@ -283,6 +285,10 @@
 .markdown-body .md-mermaid-diagram {
   overflow-x: auto;
   transition: opacity var(--cd-motion-fast) var(--cd-ease);
+}
+.markdown-body .md-mermaid-diagram:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 .markdown-body .md-mermaid-diagram > svg {
   display: block;
