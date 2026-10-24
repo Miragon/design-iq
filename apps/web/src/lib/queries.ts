@@ -1,7 +1,7 @@
 import { queryDefaults } from "@designiq/api-client";
 import { anchorModel } from "@designiq/contracts/todo-anchor";
 import { QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
 import {
@@ -54,6 +54,7 @@ import {
   type TodoWire,
   writeFavorite,
 } from "@/lib/api";
+import { defaultBranchLookup } from "@/lib/default-branch";
 import { PersonalOverlay } from "@/lib/personal";
 import {
   clearRepoSnapshot,
@@ -97,6 +98,17 @@ export async function loadRepos(refresh: boolean): Promise<RepoInfo[]> {
   return list;
 }
 
+/** the ["repos"] query as each of its readers starts it: from the list of the
+ *  last visit (#212), dated 0 */
+function reposQuery(login: string | undefined) {
+  return {
+    queryKey: ["repos"],
+    queryFn: () => loadRepos(false),
+    initialData: () => (login ? readRepoSnapshot(login)?.repos : undefined),
+    initialDataUpdatedAt: 0,
+  };
+}
+
 /** connected repositories (a forced registry re-sync is a view-level action).
  *  Starts from the list of the last visit (#212): rendered at once, and always
  *  stale (dated 0), so every page load revalidates in the background — even a
@@ -110,13 +122,16 @@ export function useRepos() {
   // a new function per overlay change — TanStack re-runs select exactly then
   // eslint-disable-next-line react-hooks/exhaustive-deps -- version IS the dependency
   const select = useCallback((list: RepoInfo[]) => personal.apply(list), [version]);
-  return useQuery({
-    queryKey: ["repos"],
-    queryFn: () => loadRepos(false),
-    initialData: () => (login ? readRepoSnapshot(login)?.repos : undefined),
-    initialDataUpdatedAt: 0,
-    select,
-  });
+  return useQuery({ ...reposQuery(login), select });
+}
+
+/** the repository's default branch, for an editor that reads links to it on
+ *  GitHub (`enabled`): from the repository list at hand, which it loads only
+ *  when there is none (lib/default-branch.ts) */
+export function useDefaultBranch(repo: string, enabled: boolean): string | undefined {
+  const login = useMe().data?.user.login;
+  const lookup = useMemo(() => defaultBranchLookup(repo), [repo]);
+  return useQuery({ ...reposQuery(login), ...lookup, enabled }).data;
 }
 
 /** the favorite toggle (#213): optimistic, written per repository in order,

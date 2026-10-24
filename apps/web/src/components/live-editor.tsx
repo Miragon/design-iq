@@ -66,9 +66,9 @@ import type { PresenceSurface, RemotePresence } from "@/lib/presence-canvas";
 import {
   invalidateModelLists,
   useConfig,
+  useDefaultBranch,
   useFileHistory,
   useModels,
-  useRepos,
   useTodos,
   useTodoTypes,
 } from "@/lib/queries";
@@ -356,13 +356,15 @@ export function LiveEditor({
                 return () => modelListenersRef.current.delete(cb);
               },
             },
-            repoWeb: {
-              get: () => repoWebRef.current,
-              onChange: (cb) => {
-                repoWebListenersRef.current.add(cb);
-                return () => repoWebListenersRef.current.delete(cb);
-              },
-            },
+            repoWeb: plugin.githubLinks
+              ? {
+                  get: () => repoWebRef.current,
+                  onChange: (cb) => {
+                    repoWebListenersRef.current.add(cb);
+                    return () => repoWebListenersRef.current.delete(cb);
+                  },
+                }
+              : undefined,
             visibility: {
               visible: () => canvasShownRef.current,
               onChange: (cb) => {
@@ -524,9 +526,10 @@ export function LiveEditor({
     modelPathsRef.current = knownModels ? new Set(knownModels.map((m) => m.path)) : undefined;
     for (const cb of modelListenersRef.current) cb();
   }, [knownModels]);
+  // only an editor that reads links to the repository on GitHub looks its
+  // default branch up: the repository list is the overview's costly read model
   const githubBase = useConfig().data?.githubBaseUrl;
-  const repos = useRepos();
-  const defaultBranch = repos.data?.find((r) => r.fullName.toLowerCase() === repo.toLowerCase())?.defaultBranch;
+  const defaultBranch = useDefaultBranch(repo, plugin?.githubLinks === true);
   useEffect(() => {
     repoWebRef.current = githubBase && defaultBranch ? { base: githubBase, defaultBranch } : undefined;
     for (const cb of repoWebListenersRef.current) cb();

@@ -242,7 +242,7 @@ test("a model link opens through the shell, an anchor scrolls, any other click i
   v.view.destroy();
 });
 
-test("an anchor click puts its section in the address, replacing it and keeping the router's state", () => {
+test("an anchor click puts its section in the address, replacing it, the router's state kept and its hash scroll off", () => {
   const v = mount("# Intro\n\n## Scope\n\n[scope](#scope) [self](./guide.md#intro) [top](./guide.md)", {
     url: `${DOC_URL}?view=split`,
   });
@@ -255,7 +255,8 @@ test("an anchor click puts its section in the address, replacing it and keeping 
   // the document itself, no section: the top, and an address without one
   assert.equal(v.click(v.article.querySelector('a[href="#"]')), false);
   assert.equal(v.win.location.href, `${DOC_URL}?view=split`);
-  assert.deepEqual(v.win.history.state, { __TSR_key: "k1", __TSR_index: 3 });
+  // the router scrolls to the bare fragment, which names no anchor of the view
+  assert.deepEqual(v.win.history.state, { __TSR_key: "k1", __TSR_index: 3, __hashScrollIntoViewOptions: false });
   assert.equal(v.win.history.length, entries, "no history entry per click");
   assert.deepEqual(v.scrolled, ["md-scope", "md-intro", "top"]);
   v.view.destroy();

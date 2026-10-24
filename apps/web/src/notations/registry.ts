@@ -30,10 +30,10 @@ import { bpmnPlugin } from "./bpmn";
 import { dmnPlugin } from "./dmn";
 import { markdownPlugin } from "./markdown/plugin";
 import type { RepoWeb } from "./markdown/render";
-
-export type { RepoWeb };
 import { MIRAGON_RENDERERS } from "./miragon";
 import { miragonPlugin } from "./miragon/plugin";
+
+export type { RepoWeb };
 
 /** what the shell hands a mounting editor engine */
 export interface EditorContext {
@@ -66,7 +66,8 @@ export interface EditorContext {
    *  as one to a model */
   models?: ModelDirectory;
   /** where the repository lives on GitHub, for links to its models there (a
-   *  document view). Optional: without it a GitHub address is a web link */
+   *  document view), for a plugin with `githubLinks`. Optional: without it a
+   *  GitHub address is a web link */
   repoWeb?: RepoWebSource;
   /** whether the editor's layer is on screen (the shell's view switch shows
    *  it, the Monaco source, or both side by side): a read-only view skips
@@ -253,6 +254,11 @@ export interface WebNotationPlugin {
    *  the canvas or the source, one at a time; BPMN and DMN never opt in
    *  (their panels dock over the canvas edge) */
   splitView?: boolean;
+  /** the editor reads links to the repository on GitHub (the Markdown view):
+   *  the shell looks up GitHub's address and the repository's default branch
+   *  and hands them in as EditorContext.repoWeb. Absent = no lookup (one
+   *  may load the host's whole repository list) */
+  githubLinks?: boolean;
   /** mount the visual editor — the engine chunk loads HERE, not before;
    *  absent = collaborative Monaco (a plugin may contribute only panels/diff) */
   mountEditor?(container: HTMLElement, ctx: EditorContext): Promise<MountedEditor>;

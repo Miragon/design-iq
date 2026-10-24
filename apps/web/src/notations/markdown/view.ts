@@ -188,10 +188,13 @@ export function mountMarkdownView(
       e.preventDefault();
       scrollToFragment(href.slice(1));
       // the address names the section, so it can be shared, as on GitHub;
-      // replaced, not pushed, and with the router's state kept: no history
-      // entry per click, no hashchange
+      // replaced, not pushed: no history entry per click, no hashchange.
+      // TanStack Router's history wraps replaceState, so the router hears of
+      // the new address and renders the route again, its state kept. Its own
+      // scroll to the bare fragment stays off: it would find an element of
+      // the app, never the view's md- prefixed anchor
       const at = href === "#" ? win.location.pathname + win.location.search : href;
-      win.history.replaceState(win.history.state, "", at);
+      win.history.replaceState({ ...win.history.state, __hashScrollIntoViewOptions: false }, "", at);
     }
   };
   article.addEventListener("click", onClick);

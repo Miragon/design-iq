@@ -20,6 +20,7 @@ export const markdownPlugin: WebNotationPlugin = {
   canvasClassName: "markdown-canvas",
   canvasView: { label: "Preview", buttonTitle: "Show the formatted document", icon: Eye },
   splitView: true,
+  githubLinks: true,
   mountEditor: async (container, ctx) => {
     const { mountMarkdownView } = await import("./markdown-view");
     return mountMarkdownView(container, ctx);
