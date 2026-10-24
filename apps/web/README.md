@@ -176,6 +176,19 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   with the error and its line (counted within the diagram) under its code, or under its last
   good drawing, dimmed. `test/markdown-mermaid.test.ts` covers it under jsdom with a fake
   renderer. A Mermaid diagram is no model of its own: it lives as such a fence in a document.
+- A wide diagram stays readable (#292). mermaid shrinks a diagram to the reading column, so
+  the view holds it to the width at which its smallest text still reads at the guide's `klein`
+  size, 13px (`diagram-scale.ts`). That minimum follows the text the drawn SVG shows, not a
+  flat factor: a flowchart's 16px labels may shrink to 81 %, and a C4 diagram, whose type lines
+  mermaid draws at 10.5px, is drawn at 124 % or more. A diagram wider than its block scrolls
+  sideways there, never the page, and while it does, the block is a region in the tab order
+  ("Diagram, scroll sideways") that the arrow keys scroll, with the guide's focus ring; one
+  that fits is no tab stop. The Mermaid frame lays a diagram out at the reading column's width,
+  which a Gantt chart takes as its own. `test/markdown-diagram-scale.test.ts` covers the scale,
+  the region and that width under jsdom. `test/wide-mermaid-chromium.ts` checks a wide C4
+  diagram, a wide flowchart, a Gantt chart and a diagram that only overflows a narrow window in
+  headless Chromium: every text at 13px or more, the sideways scroll by keyboard and no tab
+  stop on a diagram that fits (run it like the hostile check above, `PORT` 8394 unless set).
 - **Insert diagram** starts a diagram from the source. While the source is on screen (Split and
   Markdown), the toolbar's Insert diagram menu, and the F1 palette (`Insert diagram: Flowchart`
   and so on), insert a small, valid starter: a flowchart, a sequence, class, state, entity
