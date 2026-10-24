@@ -382,6 +382,24 @@ sized by `miragon-styles.css`) and removes it with the engine.
 A renderer without the `@miragon/modeler-api` factories (or a non-Miragon
 engine) gets a bespoke engine adapter + entry, the bpmn/dmn way.
 
+The Miragon renderers take `diagram-js`, `didi` and `tiny-svg` (most of them
+`zod` too) as peers, so a renderer draws with the copy apps/web brings:
+apps/web declares each peer of its Miragon packages as an exact dependency
+instead of leaving it to pnpm's `autoInstallPeers`, didi and tiny-svg at the
+versions diagram-js itself depends on. A second copy in the bundle only fails
+at runtime (a second didi breaks diagram-js's injector).
+`test/shared-runtimes.test.ts` reads the lockfile and fails on a peer apps/web
+does not pin, and on a second copy of a peer or of `@miragon/modeler-api` in
+anything apps/web ships. didi and tiny-svg are checked where the renderers and
+the diagram-js they draw with reach them: a library outside that may bring its
+own copy, as dmn-js 18 does with an injector of its own on didi 12. So what
+shares one of these moves in one PR: diagram-js with the bpmn-js and dmn-js
+releases on it, didi and tiny-svg with diagram-js, and a contract move with
+every renderer (#300). Dependabot takes the minors of diagram-js, didi and
+tiny-svg in its weekly group next to bpmn-js and dmn-js, their majors in one
+PR of their own, and holds didi 12 back until the ignore entry is dropped for
+a diagram-js release on didi 12.
+
 ### Mixed deployments
 
 The widgets and the Live Host ship in one image. A web dist newer than a
