@@ -366,12 +366,13 @@ and an SVG drawn as an image cannot reach the page's fonts. So before it is draw
 their files inline: the subsets whose `unicode-range` holds a character of the diagram's text
 (the SPA has latin, latin-ext, cyrillic, cyrillic-ext and vietnamese; the widget only latin and
 latin-ext, so other scripts stay in the system sans there, as on its canvas). Each face also
-gets a hidden text of its own: Chromium calls an SVG image loaded only once the faces that are
-some text's first font have loaded, and a subset that only a later character needs would
-still be loading when the PNG is drawn. The image loads as a data: URL, which an MCP host's
-CSP allows where it refuses blob: (the reason Wardley no longer uses its package's own
-`svgToPng`), and the data: fonts inside it load although the host's `font-src` blocks the
-widget's own. A page without Geist still exports, in the system sans, with a console warning.
+gets a hidden text up front, set in a character that only this face draws: without it,
+Chromium calls the SVG image loaded while a subset that only a later character of a label
+needs is still loading, and that text comes out in the system sans. The image loads as a
+data: URL, which an MCP host's CSP allows where it refuses blob: (the reason Wardley no
+longer uses its package's own `svgToPng`), and the data: fonts inside it load although the
+host's `font-src` blocks the widget's own (checked in Chromium and WebKit). A page without
+Geist still exports, in the system sans, with a console warning.
 The SVG download embeds no font: it shows Geist where the font is installed (guide §4).
 `test/png-export-font-chromium.ts` checks it in the built app, from the SPA's menu and from
 each widget under the MCP Apps default CSP: the PNG's label must be as wide as in Geist (the

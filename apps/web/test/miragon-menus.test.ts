@@ -444,7 +444,7 @@ test("exports: the PNG is drawn from the SVG with Geist inside, through a data: 
       const { svg, background } = drawn[0]!;
       assert.match(
         svg,
-        /^<svg[^>]*><defs><style>@font-face\{font-family:'Geist Variable';[^}]*src:url\("data:font\/woff2;base64,R2Vpc3QgbGF0aW4="\);\}@font-face\{[^}]*\}<\/style><\/defs><g visibility="hidden"><text [^>]*>x<\/text><\/g>/,
+        /^<svg[^>]*><defs><style>@font-face\{font-family:'Geist Variable';[^}]*src:url\("data:font\/woff2;base64,R2Vpc3QgbGF0aW4="\);\}<\/style><\/defs><g visibility="hidden"><text font-family="'Geist Variable'">\S<\/text><\/g>/,
         `${id}: the face goes in ahead of the drawing, with its hidden text`,
       );
       assert.match(svg, /<text[^>]*font-family[^>]*Geist Variable/, `${id}: and its text asks for it`);

@@ -15,11 +15,11 @@
  * weight axis survive the rescue. In a plain browser both paths load; same
  * family, no visible difference.
  *
- * Geist also goes in under the family name "Geist" (FONT_ALIASES): the
- * event-storming and wardley renderers set their canvas text in 'Geist', the
- * CI's spelling, not fontsource's "Geist Variable". An alias face is built from
- * the same decoded bytes — no second data: rule in geist.css, so the bundle
- * still carries them once.
+ * Geist also goes in under the family name "Geist" (FONT_ALIASES), the CI's
+ * spelling, for a renderer that names 'Geist' alone (an older or another one):
+ * the pinned Miragon renderers name fontsource's "Geist Variable" first and
+ * 'Geist' after it. An alias face is built from the same decoded bytes — no
+ * second data: rule in geist.css, so the bundle still carries them once.
  */
 import { fontFaceRules, unquote } from "../lib/font-face-rules.ts";
 

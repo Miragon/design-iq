@@ -16,7 +16,7 @@ const MAX_SIDE = 16_384;
 const MAX_AREA = 16_384 * 16_384;
 
 export interface PngOptions {
-  /** what shows under a transparent SVG: the plot's white unless the renderer paints its own paper */
+  /** what lies under the SVG: white unless the notation names its own paper colour */
   background?: string;
 }
 

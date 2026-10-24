@@ -5,11 +5,12 @@
 @import "@fontsource-variable/geist/wght.css";
 @import "@fontsource-variable/geist-mono/wght.css";
 
-/* The same Geist files once more under the family name "Geist": fontsource
-   registers only "Geist Variable", but the event-storming and wardley renderers
-   ask for 'Geist' (the CI's spelling) in their CSS and in every SVG text's
-   font-family — without these rules their canvas text falls back to the system
-   sans. Same url()s as wght.css, so each file still downloads once. Mirrors
+/* The same Geist files once more under the family name "Geist" (the CI's
+   spelling): fontsource registers only "Geist Variable". The pinned Miragon
+   renderers name "Geist Variable" first and 'Geist' after it; these rules are
+   for a renderer that asks for 'Geist' alone (an older or another one), whose
+   canvas text would otherwise fall back to the system sans. Same url()s as
+   wght.css, so each file still downloads once. Mirrors
    wght.css' rules (subsets, weight axis, unicode-range) — keep them in step on
    a fontsource bump. */
 @font-face {

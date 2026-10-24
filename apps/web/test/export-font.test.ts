@@ -4,13 +4,13 @@
  * subsets the diagram's text uses), how their files get inline (a data: src
  * as it is, a URL fetched once and resolved against its sheet), and where
  * the faces land in the SVG, each with the hidden text that makes it load
- * before the image counts as loaded. jsdom keeps no src or unicode-range in a
+ * before the image counts as loaded: a character that face alone draws. jsdom keeps no src or unicode-range in a
  * parsed @font-face, so the rules here are the CSSOM's shape, written out.
  */
 import assert from "node:assert/strict";
 import { after, afterEach, test } from "node:test";
 
-import { covers, embedGeist, type FontFaceSource, geistFontFaces, PRELOAD_FONT } from "../src/lib/export-font.ts";
+import { covers, embedGeist, type FontFaceSource, geistFontFaces } from "../src/lib/export-font.ts";
 import { closeDom } from "./renderer-dom.ts";
 
 after(closeDom);
@@ -119,6 +119,26 @@ test("geistFontFaces: only the 'Geist Variable' subsets the text uses, each src 
   assert.equal(fetched.length, 2, "a file is fetched once per page");
 });
 
+test("geistFontFaces: each face's sample is a character it draws, not white space and not one a face declared after it draws", async () => {
+  serveFonts();
+  const samples = async (text: string, rules: Iterable<FontFaceSource>) =>
+    (await geistFontFaces(text, rules)).map((face) => face.sample);
+  assert.deepEqual(await samples("Tee: Чай, Łódź", SPA_RULES), ["Ч", "Ł", "T"], "cyrillic, latin-ext, latin");
+  assert.deepEqual(
+    await samples("Чай чай", SPA_RULES),
+    ["Ч", undefined],
+    "latin is in only for the space: no character to set",
+  );
+  // fontsource declares vietnamese before latin-ext, and both hold Ă: latin-ext draws it
+  const vietnamese = rule({
+    "font-family": "Geist Variable",
+    "unicode-range": "U+102-103, U+1EA0-1EF9",
+    src: `url("${LATIN_DATA}")`,
+  });
+  const latinExt = rule({ "font-family": "Geist Variable", "unicode-range": LATIN_EXT, src: `url("${LATIN_DATA}")` });
+  assert.deepEqual(await samples("Ăn ạ", [vietnamese, latinExt]), ["ạ", "Ă"]);
+});
+
 test("geistFontFaces: no Geist on the page is an error; a failed fetch is one too, and the next export fetches again", async () => {
   await assert.rejects(geistFontFaceCss("Tea", SPA_RULES.slice(3)), /the page has no Geist Variable/);
   const vietnamese = rule(
@@ -145,20 +165,19 @@ test("embedGeist: the faces go into a <style> ahead of the drawing, each loaded 
   assert.equal(defs?.localName, "defs");
   assert.equal(defs.firstElementChild?.localName, "style");
   const latinExt = `data:font/woff2;base64,${base64("bytes of http://localhost/assets/geist-latin-ext-wght-normal.woff2")}`;
-  assert.equal(
-    defs.textContent?.replace(/@font-face\{font-family:'Geist Variable';[^}]*\}/g, "<face>"),
-    `<face><face>@font-face{font-family:'${PRELOAD_FONT}-0';src:url("${latinExt}");}` +
-      `@font-face{font-family:'${PRELOAD_FONT}-1';src:url("${LATIN_DATA}");}`,
-    "latin-ext and latin, in the page's order, then each once more under a family of its own",
-  );
+  const faces = defs.textContent?.match(/@font-face\{[^}]*\}/g) ?? [];
+  assert.equal(faces.length, 2, "latin-ext and latin, each once: no second copy of a file");
+  assert.ok(faces[0]!.startsWith("@font-face{font-family:'Geist Variable';") && faces[0]!.includes(latinExt));
+  assert.ok(faces[1]!.startsWith("@font-face{font-family:'Geist Variable';") && faces[1]!.includes(LATIN_DATA));
   assert.equal(preload?.localName, "g");
   assert.equal(preload.getAttribute("visibility"), "hidden");
   assert.deepEqual(
     [...preload.children].map((text) => [text.localName, text.getAttribute("font-family"), text.textContent]),
     [
-      ["text", `'${PRELOAD_FONT}-0'`, "x"],
-      ["text", `'${PRELOAD_FONT}-1'`, "x"],
+      ["text", "'Geist Variable'", "Ł"],
+      ["text", "'Geist Variable'", "C"],
     ],
+    "a character of the diagram per face, in the faces' order",
   );
   assert.equal(drawing?.localName, "rect", "the drawing as it was, after them");
   assert.equal(embedded.querySelector("svg > text")?.textContent, "Cup of Tea from Łódź");

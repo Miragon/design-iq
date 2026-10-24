@@ -23,9 +23,6 @@ import { fontFaceRules, unquote } from "./font-face-rules.ts";
 /** the family every renderer names first in its text's font-family */
 export const EXPORT_FONT = "Geist Variable";
 
-/** each embedded face once more under a family of its own, the one font of a hidden text */
-export const PRELOAD_FONT = "designiq-export-preload";
-
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** what a face keeps of its rule: the family is fixed, src goes in inline */
@@ -41,8 +38,8 @@ export interface FontFaceSource {
 export interface EmbeddedFace {
   /** its @font-face rule, the file inline */
   readonly rule: string;
-  /** that file as a data: URL */
-  readonly src: string;
+  /** a character of the text that this face draws; none when it draws only white space */
+  readonly sample: string | undefined;
 }
 
 /** each fetched font file as a data: URL, once per page; a failed read is tried again next time */
@@ -60,20 +57,19 @@ export async function embedGeist(svg: string, rules: Iterable<FontFaceSource> = 
   if (faces.length === 0) return svg;
   const defs = parsed.createElementNS(SVG_NS, "defs");
   const style = parsed.createElementNS(SVG_NS, "style");
-  style.textContent =
-    faces.map((face) => face.rule).join("") +
-    faces.map((face, index) => `@font-face{font-family:'${PRELOAD_FONT}-${index}';src:url("${face.src}");}`).join("");
+  style.textContent = faces.map((face) => face.rule).join("");
   defs.append(style);
-  // Chromium calls an SVG image loaded once the faces that are some text's
-  // first font have loaded; a subset that only a later glyph asks for (Ł
-  // after latin) is still loading when the PNG is drawn, and under it no
-  // label shows. A hidden text per face makes every one a first font.
+  // Chromium calls an SVG image loaded before a subset that only a later
+  // character of a label asks for (Ł after latin) has loaded, and the PNG
+  // shows that text in the system sans. A hidden text up front, one per face
+  // and set in a character only that face draws, has every subset load first.
   const preload = parsed.createElementNS(SVG_NS, "g");
   preload.setAttribute("visibility", "hidden");
-  for (const index of faces.keys()) {
+  for (const { sample } of faces) {
+    if (sample === undefined) continue;
     const text = parsed.createElementNS(SVG_NS, "text");
-    text.setAttribute("font-family", `'${PRELOAD_FONT}-${index}'`);
-    text.textContent = "x";
+    text.setAttribute("font-family", `'${EXPORT_FONT}'`);
+    text.textContent = sample;
     preload.append(text);
   }
   root.insertBefore(preload, root.firstChild);
@@ -87,8 +83,20 @@ export async function geistFontFaces(text: string, rules: Iterable<FontFaceSourc
   if (faces.length === 0) throw new Error(`the page has no ${EXPORT_FONT}`);
   const codePoints = [...new Set(Array.from(text, (char) => char.codePointAt(0)!))];
   const used = faces.filter((rule) => covers(rule.style.getPropertyValue("unicode-range"), codePoints));
+  const ranges = used.map((rule) => rule.style.getPropertyValue("unicode-range"));
+  // of a family's faces whose ranges overlap, the last one declared draws
+  // the character (CSS Fonts 4, unicode-range)
+  const sampleOf = (index: number): string | undefined => {
+    const drawn = codePoints.find(
+      (point) =>
+        !/\s/u.test(String.fromCodePoint(point)) &&
+        covers(ranges[index]!, [point]) &&
+        !ranges.slice(index + 1).some((later) => covers(later, [point])),
+    );
+    return drawn === undefined ? undefined : String.fromCodePoint(drawn);
+  };
   return Promise.all(
-    used.map(async (rule) => {
+    used.map(async (rule, index) => {
       const descriptors = DESCRIPTORS.map((name) => [name, rule.style.getPropertyValue(name).trim()] as const)
         .filter(([, value]) => value)
         .map(([name, value]) => `${name}:${value};`)
@@ -98,7 +106,7 @@ export async function geistFontFaces(text: string, rules: Iterable<FontFaceSourc
       // labels show in the system sans, where block would leave them out
       return {
         rule: `@font-face{font-family:'${EXPORT_FONT}';${descriptors}font-display:swap;src:url("${src}");}`,
-        src,
+        sample: sampleOf(index),
       };
     }),
   );
