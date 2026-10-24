@@ -199,6 +199,70 @@ test("a link to a file designIQ does not open is marked text, not a dead link", 
   assert.match(html, /title="This link points outside the repository">escape</);
 });
 
+test("a GitHub link to a model of this repository on its default branch opens in designIQ; any other stays a web link", () => {
+  const repoWeb = { base: "https://github.com", defaultBranch: "main" };
+  const models = new Set(["docs/use-cases/bike-leasing/process/executable-process.md", "processes/order.bpmn"]);
+  const at = "https://github.com/acme/models/blob";
+  const html = renderMarkdown(
+    `[process](${at}/main/docs/use-cases/bike-leasing/process/executable-process.md#Gateway-rules) ` +
+      `[cased](https://github.com/Acme/Models/blob/main/processes/order.bpmn) ` +
+      `[self](${at}/main/${DOC}#scope) ${at}/main/processes/order.bpmn ` +
+      `[branch](${at}/feature/x/processes/order.bpmn) [commit](${at}/4f2c1e9/processes/order.bpmn) ` +
+      `[other repo](https://github.com/acme/other/blob/main/processes/order.bpmn) ` +
+      `[folder](https://github.com/acme/models/tree/main/processes) [source](${at}/main/src/app.ts) ` +
+      `[unlisted](${at}/main/processes/old.bpmn) [enterprise](https://ghe.example.com/acme/models/blob/main/processes/order.bpmn)`,
+    { repo: REPO, docPath: DOC, models, repoWeb },
+  );
+  assert.match(
+    html,
+    /<a href="\/r\/acme\/models\/f\/docs\/use-cases\/bike-leasing\/process\/executable-process.md#Gateway-rules" data-model-path="docs\/use-cases\/bike-leasing\/process\/executable-process.md">process<\/a>/,
+  );
+  assert.match(
+    html,
+    /<a href="\/r\/acme\/models\/f\/processes\/order.bpmn" data-model-path="processes\/order.bpmn">cased<\/a>/,
+  );
+  assert.match(html, /<a href="#scope">self<\/a>/);
+  // a bare address too: autolinked, it is a link like any other
+  assert.match(
+    html,
+    /<a href="\/r\/acme\/models\/f\/processes\/order.bpmn" data-model-path="processes\/order.bpmn">https:/,
+  );
+  // another branch or a commit is another version than designIQ shows; a
+  // folder, a file that is no model and another host are not designIQ's to
+  // open: GitHub shows them, never inert text
+  for (const name of ["branch", "commit", "other repo", "folder", "source", "unlisted", "enterprise"]) {
+    assert.match(
+      html,
+      new RegExp(`<a href="https://[^"]+" target="_blank" rel="noopener noreferrer">${name}</a>`),
+      name,
+    );
+  }
+  assert.doesNotMatch(html, /md-link-unavailable/);
+
+  // GitHub Enterprise: its own address, a branch with a "/" in its name
+  const enterprise = { base: "https://ghe.example.com/", defaultBranch: "release/2026" };
+  const web = { repo: REPO, ...enterprise };
+  assert.deepEqual(
+    classifyHref("https://ghe.example.com/acme/models/blob/release/2026/processes/order.bpmn#Ship", DOC, models, web),
+    {
+      kind: "model",
+      path: "processes/order.bpmn",
+      fragment: "Ship",
+    },
+  );
+  assert.deepEqual(
+    classifyHref("https://ghe.example.com/acme/models/blob/release/processes/order.bpmn", DOC, models, web),
+    {
+      kind: "external",
+    },
+  );
+  // without the repository's GitHub address (still loading), GitHub is a web link
+  assert.match(
+    render(`[process](${at}/main/processes/order.bpmn)`),
+    /<a href="https:\/\/github.com\/acme\/models\/blob\/main\/processes\/order.bpmn" target="_blank"/,
+  );
+});
+
 test("with the model list, only a model of the repository is a link", () => {
   const models = new Set(["docs/use-cases/bike-leasing/process/executable-process.md"]);
   const html = renderMarkdown(

@@ -24,7 +24,10 @@
  * the repository has a model at becomes its in-app route; any other
  * repository file (a folder, an image, source code, a document outside the
  * models folder) is not something designIQ opens, so it renders as plain,
- * marked text instead of a link that would lead nowhere.
+ * marked text instead of a link that would lead nowhere. A link to a file of
+ * the repository on GitHub (RenderOptions.repoWeb) opens in designIQ when it
+ * names the default branch, the one designIQ shows, and a model or this
+ * document; any other GitHub address stays a web link.
  *
  * Images: an image of the repository (a relative path) loads from the Live
  * Host, like the document itself. An image from another site loads only once
@@ -56,6 +59,9 @@ export interface RenderOptions {
   repo: string;
   /** repo-relative path of the rendered document: relative links resolve against its folder */
   docPath: string;
+  /** the repository on GitHub: a link to a model of it there opens in
+   *  designIQ. Absent (still unknown) = every GitHub address is a web link */
+  repoWeb?: RepoWeb;
   /** fence renderers by language (lower-case); a language without one renders as code */
   fences?: Readonly<Record<string, FenceRenderer>>;
   /** the repo-relative paths of the repository's models; absent (the list
@@ -66,6 +72,14 @@ export interface RenderOptions {
   externalImages?: ReadonlySet<string>;
   /** the routes of the repository images that did not load: placeholders */
   brokenImages?: ReadonlySet<string>;
+}
+
+/** where the repository lives on GitHub (RenderOptions.repoWeb) */
+export interface RepoWeb {
+  /** GitHub's web address: https://github.com, or a GitHub Enterprise server's */
+  base: string;
+  /** the branch designIQ shows the repository at */
+  defaultBranch: string;
 }
 
 /** what a link in the document points at */
@@ -151,13 +165,60 @@ export function resolveRepoPath(href: string, docPath: string): string | undefin
   return out.join("/") + (href.endsWith("/") && out.length > 0 ? "/" : "");
 }
 
+/** whether the repository has a model at `path`; without the model list,
+ *  whether the path has a notation extension */
+const isModelPath = (path: string, models: ReadonlySet<string> | undefined): boolean =>
+  models ? models.has(path) : !path.endsWith("/") && byExtension(path) !== undefined;
+
+/**
+ * The repository path and section a GitHub address names when it is a file
+ * of `web.repo` on its default branch, owner and name in any case:
+ * `<base>/<owner>/<name>/blob/<branch>/<path>#<section>`. Undefined for any
+ * other address: another repository, branch or commit, a folder (`/tree/`).
+ */
+export function repoFileOnWeb(
+  href: string,
+  web: RepoWeb & { repo: string },
+): { path: string; fragment: string } | undefined {
+  let url: URL;
+  let base: URL;
+  try {
+    url = new URL(href.startsWith("//") ? `https:${href}` : href);
+    base = new URL(web.base);
+  } catch {
+    return undefined;
+  }
+  const root = base.pathname.replace(/\/+$/, "");
+  if (url.origin !== base.origin || !url.pathname.startsWith(`${root}/`)) return undefined;
+  const [owner = "", name = "", kind, ...rest] = url.pathname.slice(root.length + 1).split("/");
+  if (kind !== "blob" || `${safeDecode(owner)}/${safeDecode(name)}`.toLowerCase() !== web.repo.toLowerCase()) {
+    return undefined;
+  }
+  // a branch name may hold a "/": it takes as many segments
+  const branch = web.defaultBranch.split("/");
+  if (rest.length <= branch.length || branch.some((segment, i) => safeDecode(rest[i]!) !== segment)) return undefined;
+  const path = resolveRepoPath(`/${rest.slice(branch.length).join("/")}`, "");
+  return path ? { path, fragment: safeDecode(url.hash.slice(1)) } : undefined;
+}
+
 /**
  * Where a link of the document at `docPath` points. `models` are the
  * repository's model paths; without them a target with a notation extension
- * counts as a model (the shell checks again when the link is clicked).
+ * counts as a model (the shell checks again when the link is clicked). With
+ * `web`, a GitHub address of a model of the repository, or of this document,
+ * at its default branch counts as a relative link to it would.
  */
-export function classifyHref(href: string, docPath: string, models?: ReadonlySet<string>): LinkTarget {
-  if (href.startsWith("//") || /^https?:/i.test(href)) return { kind: "external" };
+export function classifyHref(
+  href: string,
+  docPath: string,
+  models?: ReadonlySet<string>,
+  web?: RepoWeb & { repo: string },
+): LinkTarget {
+  if (href.startsWith("//") || /^https?:/i.test(href)) {
+    const file = web && repoFileOnWeb(href, web);
+    if (file?.path === docPath) return { kind: "anchor", fragment: file.fragment };
+    return file && isModelPath(file.path, models) ? { kind: "model", ...file } : { kind: "external" };
+  }
   if (/^(mailto|tel):/i.test(href)) return { kind: "contact" };
   const scheme = SCHEME.exec(href)?.[0];
   if (scheme) return { kind: "scheme", scheme: scheme.toLowerCase() };
@@ -168,8 +229,7 @@ export function classifyHref(href: string, docPath: string, models?: ReadonlySet
   const path = resolveRepoPath(pathPart, docPath);
   if (path === undefined) return { kind: "file", path: undefined };
   if (path === docPath) return { kind: "anchor", fragment };
-  const isModel = models ? models.has(path) : !path.endsWith("/") && byExtension(path) !== undefined;
-  return isModel ? { kind: "model", path, fragment } : { kind: "file", path };
+  return isModelPath(path, models) ? { kind: "model", path, fragment } : { kind: "file", path };
 }
 
 /**
@@ -199,6 +259,7 @@ export function classifyImage(src: string, docPath: string): ImageSource {
 interface RenderEnv extends Env {
   repo: string;
   docPath: string;
+  repoWeb?: RepoWeb;
   fences: Readonly<Record<string, FenceRenderer>>;
   models: ReadonlySet<string> | undefined;
   externalImages: ReadonlySet<string> | undefined;
@@ -303,7 +364,8 @@ function unavailable(token: Token, title: string): void {
 
 function rewriteLink(token: Token, env: RenderEnv): void {
   const href = String(token.attrGet("href") ?? "");
-  const target = classifyHref(href, env.docPath, env.models);
+  const web = env.repoWeb && { repo: env.repo, ...env.repoWeb };
+  const target = classifyHref(href, env.docPath, env.models, web);
   switch (target.kind) {
     case "external":
       token.attrSet("target", "_blank");
@@ -509,6 +571,7 @@ export function renderMarkdown(source: string, options: RenderOptions): string {
   const env: RenderEnv = {
     repo: options.repo,
     docPath: options.docPath,
+    repoWeb: options.repoWeb,
     fences: options.fences ?? {},
     models: options.models,
     externalImages: options.externalImages,

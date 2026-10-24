@@ -97,7 +97,17 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
 - A relative link to a model of the repository (the shell's model list) is that model's
   in-app route (`/r/<owner>/<repo>/f/<path>#<section>`); a link to any other repository file,
   a document outside the models folder included, is marked, inert text. So is a link with a
-  scheme other than `http(s):`, `mailto:` and `tel:`.
+  scheme other than `http(s):`, `mailto:` and `tel:`. A link to the repository on GitHub
+  (`.../<owner>/<repo>/blob/<branch>/<path>`, the host's `GITHUB_BASE_URL` in
+  `AppConfig.githubBaseUrl`) counts as a relative one when it names the default branch, the one
+  designIQ shows, and a model or this document. Any other GitHub address (another branch or a
+  commit, a folder, a file that is no model) stays a link to GitHub. The default branch comes
+  from the repository list (`lib/default-branch.ts`), and only for a plugin that asks
+  (`WebNotationPlugin.githubLinks`): the editor reads the list at hand, the last visit's
+  included, and loads one only when there is none, since `/api/repos` costs the host git calls
+  per repository. A click on an in-page `#anchor` scrolls the view and puts the section in the
+  address, replacing it (no history entry per click), so the address shares the section. The
+  router hears of it and renders the route again, with its own scroll to the bare fragment off.
 - Images (#290): a relative image is a file of the repository and loads from the Live Host
   (`GET /api/repos/<owner>/<repo>/image?path=`, the content API's authorization, image types
   only, 10 MiB at most); one that does not load turns into a placeholder with its alt text. An

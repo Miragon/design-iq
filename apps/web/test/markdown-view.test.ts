@@ -41,6 +41,27 @@ function modelList(initial?: string[]) {
   return { directory, listeners, set };
 }
 
+type RepoWebSource = NonNullable<EditorContext["repoWeb"]>;
+type RepoWeb = NonNullable<ReturnType<RepoWebSource["get"]>>;
+
+/** the repository's GitHub address the test hands over, maybe later */
+function repoWebOf(initial?: RepoWeb) {
+  let web = initial;
+  const listeners = new Set<() => void>();
+  const source: RepoWebSource = {
+    get: () => web,
+    onChange: (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+  };
+  const set = (next: RepoWeb): void => {
+    web = next;
+    for (const cb of listeners) cb();
+  };
+  return { source, listeners, set };
+}
+
 /** the shell's view switch, as the test drives it */
 function layer(shown = true) {
   const listeners = new Set<() => void>();
@@ -63,6 +84,7 @@ function mount(
   opts: {
     url?: string;
     models?: ModelDirectory;
+    repoWeb?: RepoWebSource;
     visibility?: LayerVisibility;
     fences?: Record<string, FenceExtension>;
   } = {},
@@ -73,6 +95,9 @@ function mount(
   win.Element.prototype.scrollIntoView = function (this: Element) {
     scrolled.push(this.id);
   };
+  win.Element.prototype.scrollTo = function (this: Element) {
+    scrolled.push("top");
+  } as Element["scrollTo"];
   const ydoc = new Y.Doc();
   const ytext = ydoc.getText("content");
   ytext.insert(0, source);
@@ -89,6 +114,7 @@ function mount(
     onSelectionChanged: () => undefined,
     onOpenModel: (path, fragment) => opened.push([path, fragment]),
     models: opts.models,
+    repoWeb: opts.repoWeb,
     visibility: opts.visibility,
   };
   const container = win.document.createElement("div");
@@ -224,6 +250,42 @@ test("a model link opens through the shell, an anchor scrolls, any other click i
   assert.deepEqual(v.scrolled, ["md-intro"]);
   assert.equal(v.click(v.article.querySelector('a[target="_blank"]')), true);
   v.view.destroy();
+});
+
+test("an anchor click puts its section in the address, replacing it, the router's state kept and its hash scroll off", () => {
+  const v = mount("# Intro\n\n## Scope\n\n[scope](#scope) [self](./guide.md#intro) [top](./guide.md)", {
+    url: `${DOC_URL}?view=split`,
+  });
+  v.win.history.replaceState({ __TSR_key: "k1", __TSR_index: 3 }, "");
+  const entries = v.win.history.length;
+  assert.equal(v.click(v.article.querySelector('a[href="#scope"]')), false);
+  assert.equal(v.win.location.hash, "#scope");
+  assert.equal(v.click(v.article.querySelector('a[href="#intro"]')), false);
+  assert.equal(v.win.location.href, `${DOC_URL}?view=split#intro`);
+  // the document itself, no section: the top, and an address without one
+  assert.equal(v.click(v.article.querySelector('a[href="#"]')), false);
+  assert.equal(v.win.location.href, `${DOC_URL}?view=split`);
+  // the router scrolls to the bare fragment, which names no anchor of the view
+  assert.deepEqual(v.win.history.state, { __TSR_key: "k1", __TSR_index: 3, __hashScrollIntoViewOptions: false });
+  assert.equal(v.win.history.length, entries, "no history entry per click");
+  assert.deepEqual(v.scrolled, ["md-scope", "md-intro", "top"]);
+  v.view.destroy();
+});
+
+test("a GitHub link to a model of the repository opens through the shell once its address is known", () => {
+  const web = repoWebOf();
+  const v = mount("[order](https://github.com/acme/models/blob/main/processes/order.bpmn#Ship)", {
+    repoWeb: web.source,
+  });
+  // the host's configuration or the repository list still loading: GitHub's link
+  assert.equal(v.article.querySelector("a")?.getAttribute("target"), "_blank");
+  web.set({ base: "https://github.com", defaultBranch: "main" });
+  const link = v.article.querySelector("a")!;
+  assert.equal(link.getAttribute("href"), "/r/acme/models/f/processes/order.bpmn#Ship");
+  assert.equal(v.click(link), false);
+  assert.deepEqual(v.opened, [["processes/order.bpmn", "Ship"]]);
+  v.view.destroy();
+  assert.equal(web.listeners.size, 0, "destroy unsubscribes");
 });
 
 test("an image from another site loads only once the reader asks, for as long as the view lives (#290)", (t) => {

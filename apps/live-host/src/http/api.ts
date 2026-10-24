@@ -178,6 +178,9 @@ const MIME: Record<string, string> = {
 export interface ApiOptions {
   webDist: string;
   publicUrl: string;
+  /** GitHub's web address (GITHUB_BASE_URL), served as AppConfig.githubBaseUrl:
+   *  absent = the web client keeps every GitHub address a web link */
+  githubBaseUrl?: string;
   /** the release backend: push URL + PR creation on installation tokens */
   github: GitProvider;
   sessions: SessionStore;
@@ -638,6 +641,7 @@ export function startApi(port: number, opts: ApiOptions): Server {
           // (an AI client on another machine), and behind a proxy the Host
           // header is the internal address
           mcpUrl: `${opts.publicUrl}/mcp`,
+          githubBaseUrl: opts.githubBaseUrl,
         } satisfies AppConfig);
       }
       if (url.pathname === "/api/me") {

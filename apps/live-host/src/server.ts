@@ -413,6 +413,7 @@ const server = new Server({
 const httpServer = startApi(PORT, {
   webDist: WEB_DIST,
   publicUrl: PUBLIC_URL,
+  githubBaseUrl: GH_BASE,
   wsTickets,
   loginCodes,
   // agent presence: MCP calls show up in the rooms they touch, for co-editors

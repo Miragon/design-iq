@@ -97,10 +97,10 @@ and vice versa.
 
 ## GitHub Enterprise
 
-| Variable          | Default                  | Meaning                                          |
-| ----------------- | ------------------------ | ------------------------------------------------ |
-| `GITHUB_BASE_URL` | `https://github.com`     | Web base: login, install picker, git clone URLs. |
-| `GITHUB_API_URL`  | `https://api.github.com` | REST API base.                                   |
+| Variable          | Default                  | Meaning                                                                                                                  |
+| ----------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `GITHUB_BASE_URL` | `https://github.com`     | Web base: login, install picker, git clone URLs, and a document's links to its models on GitHub, which open in designIQ. |
+| `GITHUB_API_URL`  | `https://api.github.com` | REST API base.                                                                                                           |
 
 ## Security & limits
 
