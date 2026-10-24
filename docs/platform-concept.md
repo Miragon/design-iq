@@ -198,7 +198,8 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
    version) — moddle-xml serialization is deterministic per version, so after
    canonicalization, exports of unchanged elements are byte-stable and text diffs stay local
    to the actual edit. Pin one bpmn-js/moddle version across web app and VS Code webview.
-2. **Minimal diffs into Y.Text, never replace-all** (diff-match-patch in one transaction) —
+2. **Minimal diffs into Y.Text, never replace-all** (the changed middle in one transaction,
+   `packages/live-client/src/text-diff.ts`) —
    replace-all destroys merge granularity and clobbers concurrent edits. A canvas edit is
    diffed against the canvas's last export, never against the live text, which may hold a
    peer's change the canvas has not imported yet. That edit is placed into the current text

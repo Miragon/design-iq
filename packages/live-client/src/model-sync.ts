@@ -5,8 +5,9 @@
  *  1. one pinned modeler version across all clients (package.json)
  *  2. minimal diffs into Y.Text, never replace-all (common prefix/suffix trim,
  *     the line breaks that close the text apart); a canvas edit made while a
- *     peer's change arrived merges with it where the two changed different
- *     lines (#309), and gives way where they changed the same lines
+ *     peer's change arrived merges with it where the two edited different
+ *     places of the text (placed by context, else by lines, #309), and gives
+ *     way where they edited the same place or the merge fails the gate (rule 4)
  *  3. debounced re-import of remote changes with view-state restore and echo
  *     suppression (Yjs transaction origin + last-export equality), held back
  *     while a local gesture runs on the canvas, for 10 s at most (#295)
@@ -34,7 +35,7 @@ import { applyHunks, closingBreaksAt, diffHunks, diffRegion, type Hunk, mergeLin
 /** Shared origin marker: transactions tagged with it are our own canvas edits. */
 export const CANVAS_ORIGIN = "bpm-canvas";
 
-/** the two changed the same lines of the text, or their merge would not render: a peer's typing or save is never broken */
+/** the two changed the same place in the text, or their merge fails the notation's gate (looksRenderable): a text a peer typed or saved into gets no repair */
 const CONFLICT_MESSAGE =
   "Your last action crossed a colleague's change and could not be merged with it. The model now shows their change.";
 /** a repair can undo more than the last action: every canvas edit the repairer's canvas had not taken in */
@@ -266,12 +267,28 @@ function locateLocalEdit(base: string, current: string, next: string): Hunk[] | 
   for (const width of [64, 32, 16, 8]) {
     const before = base.slice(Math.max(0, start - width), start);
     const after = base.slice(endPrev, endPrev + width);
-    const needle = before + deleted + after;
-    const at = current.indexOf(needle);
-    if (at < 0 || current.indexOf(needle, at + 1) >= 0) continue; // absent or ambiguous
+    const at = placeOf(before + deleted + after, current, start === 0, endPrev === base.length);
+    if (at < 0) continue;
     return [{ at: at + before.length, deleteCount: deleted.length, insert: inserted }];
   }
   return mergeLines(base, current, next);
+}
+
+/**
+ * Where `needle` stands in `text`, -1 where it is absent or ambiguous. A
+ * needle that runs to the start or the end of its own text has no context on
+ * that side, so it must stand at that end of `text` too: a peer's suffix to
+ * the last line matches it as well, and would end up behind the local edit,
+ * on the line a create appends.
+ */
+function placeOf(needle: string, text: string, atStart: boolean, atEnd: boolean): number {
+  if (atStart || atEnd) {
+    const at = atStart ? 0 : text.length - needle.length;
+    const fits = at >= 0 && text.startsWith(needle, at) && (!atStart || !atEnd || text.length === needle.length);
+    return fits ? at : -1;
+  }
+  const at = text.indexOf(needle);
+  return at >= 0 && text.indexOf(needle, at + 1) < 0 ? at : -1;
 }
 
 export function bindModelSync(
@@ -698,9 +715,10 @@ export function bindModelSync(
    * in the current text by its surrounding context, and where that fails the
    * edit merges line by line (mergeLines, #309): edits of different lines
    * merge, an edit of the same lines keeps the remote edit and reports the
-   * conflict. So does a merge that would leave a text that renders unrenderable:
-   * a remote edit typed or saved into it bars the repair that heals a break
-   * (planRepair), and the text would stay broken for everyone.
+   * conflict. So does a merge that fails the gate (looksRenderable) where the
+   * current text passes it: a remote edit typed or saved into the text bars
+   * the repair that heals a break (planRepair), and the text would stay
+   * broken for everyone.
    */
   function applyLocalEdit(next: string): void {
     const base = lastExport;
@@ -740,7 +758,7 @@ export function bindModelSync(
       return;
     }
 
-    // edits of the same lines, or a merge that breaks the text: the remote
+    // edits of the same lines, or a merge that fails the gate: the remote
     // change wins, the local canvas op is undone — explicitly, not silently
     // (rule 4 fallback semantics)
     onConflict?.(CONFLICT_MESSAGE);

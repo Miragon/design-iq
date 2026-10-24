@@ -124,6 +124,15 @@ test("mergeLines: two moves of one shape conflict, also when both made it alike;
   assert.deepEqual(mergeLines("A 1\nB 1", "A 2\nB 1", "A 1\nB 1"), []);
 });
 
+test("mergeLines: two changes that both start at the first line conflict, also in an empty text, rather than join two lines", () => {
+  assert.equal(merged("", "L6\nL2", "L5\nL5\nL2"), undefined, "not L6, L2L5, L5, L2");
+  assert.equal(merged("", "", "L5\nL2"), "L5\nL2", "an empty text nobody else changed takes the edit");
+  // a text that starts with a blank line: its first line is led by a break, the lines placed before it are not
+  assert.equal(merged("\nB 1\nC 1", "P 1\nB 1\nC 1", "M 1\nB 1\nC 1"), undefined, "not P 1M 1");
+  assert.equal(merged("\nB 1\nC 1", "Q 1\nC 1", "M 1\nB 1\nC 1"), undefined, "not M 1Q 1");
+  assert.equal(merged("A 1\nB 1\nC 1", "A 1\nB 1\nC 2", "A 2\nB 1\nC 1"), "A 2\nB 1\nC 2", "apart from a peer's");
+});
+
 test("mergeLines: CRLF lines merge like LF lines; the hunks touch only the local edit's lines", () => {
   const base = "A 1\r\nB 1\r\nC 1";
   assert.equal(merged(base, "A 1\r\nB 1\r\nC 2", "A 9\r\nB 1\r\nC 1\r\nD 1"), "A 9\r\nB 1\r\nC 2\r\nD 1");

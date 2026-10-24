@@ -324,8 +324,9 @@ armed palette tool (hand, space, lasso) holds nothing back. The drop then merges
 held change line by line (sync rule 2, #309), also where bpmn-js writes a moved or new
 shape's DI last, across the DI a peer moved, and where Wardley and Event Storming list a
 new element right after the one a peer moved. A drop that changes the same lines (two
-moves of one element), or whose merge would not render, gives way to the peer's change,
-with the conflict toast.
+moves of one element), or whose merge would fail the notation's gate (well-formed XML for
+BPMN and DMN, a text that is not blank for the Miragon notations), gives way to the peer's
+change, with the conflict toast.
 `test/live-gesture.test.ts` covers every mount under jsdom, with diagram-js's dragging run
 without a pointer. Pointer drags in a browser are checked by hand, as CI has no browser:
 `test/live-gesture-chromium.ts` starts a Live Host of its own and drags, creates and arms

@@ -7,7 +7,9 @@
  * resets to its own fit (L5) and rejections that leave no trace (L7). The
  * cases pin what the adapter adds on top: nothing written on open, the edit
  * exported as a minimal diff, the view kept across a peer's re-import, the
- * rejection's own reason reported, and the bind-time contract check.
+ * rejection's own reason reported, and the bind-time contract check. A
+ * canvas edit at an end of a line notation's text merges with a peer's
+ * change there, or gives way, but never joins two lines (#309).
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -326,6 +328,62 @@ test("the next edit after such a merge drops the doubled closing line break agai
   await wait(20);
   assert.equal(peer!.ytext.toString(), `${OLDER_FILE.replace("400", "410")}\n`);
   peer!.unbind();
+});
+
+/** an OWM board in the fake's canonical (sorted) order */
+const BOARD = "component Cup [0.79, 0.61]\ncomponent Kettle [0.43, 0.35]\n";
+
+function bindBoard(text: string) {
+  const { doc, ytext, remote } = session(text);
+  const modeler = fakeModeler();
+  const conflicts: string[] = [];
+  const reported: string[] = [];
+  const unbind = bindMiragon(
+    modeler,
+    "wardley",
+    ytext,
+    doc,
+    (m) => conflicts.push(m),
+    (m) => reported.push(m),
+  );
+  return { ytext, remote, modeler, conflicts, reported, unbind };
+}
+
+test("a create after the last line merges with a peer's suffix to that line, which stays on its own line", async () => {
+  const { ytext, remote, modeler, conflicts, unbind } = bindBoard(BOARD);
+  await wait(50);
+  const labelled = BOARD.replace("[0.43, 0.35]", "[0.43, 0.35] label [-20, 10]");
+  remote(labelled);
+  modeler.edit("component Water [0.82, 0.78]");
+  await wait(20);
+  assert.equal(ytext.toString(), `${labelled}component Water [0.82, 0.78]\n`, "not on Water's line");
+  assert.deepEqual(conflicts, []);
+  unbind();
+});
+
+test("a create before the first line gives way to a peer's comment on that line, rather than comment out the create", async () => {
+  const { ytext, remote, modeler, conflicts, unbind } = bindBoard(BOARD);
+  await wait(50);
+  const commented = `// ${BOARD}`;
+  remote(commented);
+  modeler.edit("anchor Tea [0.95, 0.63]");
+  await wait(20);
+  assert.equal(ytext.toString(), commented);
+  assert.equal(conflicts.length, 1);
+  unbind();
+});
+
+test("a canvas edit on a blank document gives way to a peer's first text, rather than join their lines", async () => {
+  const { ytext, remote, modeler, conflicts, reported, unbind } = bindBoard("");
+  await wait(50);
+  assert.deepEqual(reported, ["the document is empty"], "the canvas is open on a blank text, as the SPA mounts it");
+  const theirs = "title Peer\ncomponent Tea [0.5, 0.5]\n";
+  remote(theirs);
+  modeler.edit("component Cup [0.7, 0.8]");
+  await wait(20);
+  assert.equal(ytext.toString(), theirs);
+  assert.equal(conflicts.length, 1);
+  unbind();
 });
 
 test("the contract check: another notation or another major fails at bind time, a newer minor binds", () => {

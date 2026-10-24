@@ -129,38 +129,36 @@ function lineHunks(from: readonly number[], to: readonly number[], toLines: read
   const a = from.slice(head, from.length - tail);
   const b = to.slice(head, to.length - tail);
   const limit = Math.min(a.length + b.length, MAX_LINE_EDITS);
-  // furthest x reached on each diagonal k = x - y, -1 where none is
-  const furthest = new Int32Array(2 * limit + 3).fill(-1);
+  const furthestXOnDiagonal = new Int32Array(2 * limit + 3).fill(-1);
   const center = limit + 1;
-  furthest[center + 1] = 0;
-  /** what each round d read: the diagonals -d-1 to d+1 as round d - 1 left them */
-  const rounds: Int32Array[] = [];
-  /** where a round extends diagonal k from: k + 1 (+1, a line of `to` inserted), k - 1 (-1, a line of `from` deleted), or off the grid (0) */
-  const stepOnto = (reached: (k: number) => number, k: number): number => {
-    const down = reached(k + 1);
-    const right = reached(k - 1);
-    const downOk = down >= 0 && down - k <= b.length;
-    const rightOk = right >= 0 && right + 1 <= a.length;
-    if (downOk && (!rightOk || down >= right + 1)) return 1;
-    return rightOk ? -1 : 0;
+  furthestXOnDiagonal[center + 1] = 0;
+  // a round overwrites the diagonals it reads, and the backtrack needs them as that round found them
+  const diagonalsBeforeRound: Int32Array[] = [];
+  const predecessorOffset = (furthestX: (k: number) => number, k: number): 1 | -1 | 0 => {
+    const insertingFrom = furthestX(k + 1);
+    const deletingFrom = furthestX(k - 1);
+    const insertionFits = insertingFrom >= 0 && insertingFrom - k <= b.length;
+    const deletionFits = deletingFrom >= 0 && deletingFrom + 1 <= a.length;
+    if (insertionFits && (!deletionFits || insertingFrom >= deletingFrom + 1)) return 1;
+    return deletionFits ? -1 : 0;
   };
   let edits = -1;
   for (let d = 0; d <= limit && edits < 0; d++) {
-    rounds.push(furthest.slice(center - d - 1, center + d + 2));
-    const reached = (k: number): number => furthest[center + k]!;
+    diagonalsBeforeRound.push(furthestXOnDiagonal.slice(center - d - 1, center + d + 2));
+    const furthestX = (k: number): number => furthestXOnDiagonal[center + k]!;
     for (let k = -d; k <= d; k += 2) {
-      const step = stepOnto(reached, k);
-      if (step === 0) {
-        furthest[center + k] = -1;
+      const offset = predecessorOffset(furthestX, k);
+      if (offset === 0) {
+        furthestXOnDiagonal[center + k] = -1;
         continue;
       }
-      let x = step === 1 ? reached(k + 1) : reached(k - 1) + 1;
+      let x = offset === 1 ? furthestX(k + 1) : furthestX(k - 1) + 1;
       let y = x - k;
       while (x < a.length && y < b.length && a[x] === b[y]) {
         x++;
         y++;
       }
-      furthest[center + k] = x;
+      furthestXOnDiagonal[center + k] = x;
       if (x === a.length && y === b.length) {
         edits = d;
         break;
@@ -169,29 +167,28 @@ function lineHunks(from: readonly number[], to: readonly number[], toLines: read
   }
   if (edits < 0) return undefined;
 
-  // walk back from the end, keeping the lines both texts share
-  const shared: Array<[number, number]> = [];
+  const sharedLines: Array<[number, number]> = [];
   let x = a.length;
   let y = b.length;
   for (let d = edits; d > 0; d--) {
-    const round = rounds[d]!;
-    const reached = (k: number): number => round[k + d + 1]!;
+    const round = diagonalsBeforeRound[d]!;
+    const furthestX = (k: number): number => round[k + d + 1]!;
     const k = x - y;
-    const step = stepOnto(reached, k);
-    const fromX = reached(k + step);
-    const fromY = fromX - (k + step);
-    const afterX = step === 1 ? fromX : fromX + 1;
-    for (; x > afterX; x--, y--) shared.push([x - 1, y - 1]);
+    const offset = predecessorOffset(furthestX, k);
+    const fromX = furthestX(k + offset);
+    const fromY = fromX - (k + offset);
+    const snakeStartX = offset === 1 ? fromX : fromX + 1;
+    for (; x > snakeStartX; x--, y--) sharedLines.push([x - 1, y - 1]);
     x = fromX;
     y = fromY;
   }
-  for (; x > 0; x--, y--) shared.push([x - 1, y - 1]);
-  shared.reverse().push([a.length, b.length]);
+  for (; x > 0; x--, y--) sharedLines.push([x - 1, y - 1]);
+  sharedLines.reverse().push([a.length, b.length]);
 
   const hunks: LineHunk[] = [];
   let lastA = -1;
   let lastB = -1;
-  for (const [atA, atB] of shared) {
+  for (const [atA, atB] of sharedLines) {
     if (atA > lastA + 1 || atB > lastB + 1) {
       hunks.push({ start: head + lastA + 1, end: head + atA, lines: toLines.slice(head + lastB + 1, head + atB) });
     }
@@ -209,11 +206,13 @@ function lineHunks(from: readonly number[], to: readonly number[], toLines: read
  * conflict (undefined); an insertion at its edge merges, and insertions at
  * the same point both go in, the arrived one first. A change both made alike
  * conflicts too: two moves of one shape delete the same line, and each
- * inserts its own. The local edit merges whole or not at all: half of a
- * canvas operation (a moved shape deleted where it was, not inserted where it
- * goes) is a model nobody made. Lines are compared with the break before
- * them, so `base`, `current` and `next` are texts without their closing line
- * breaks.
+ * inserts its own. So do two changes that both start at the first line, an
+ * empty text's included: no line break leads that line, so the change placed
+ * second would run into the last line of the first. The local edit merges
+ * whole or not at all: half of a canvas operation (a moved shape deleted
+ * where it was, not inserted where it goes) is a model nobody made. Lines are
+ * compared with the break before them, so `base`, `current` and `next` are
+ * texts without their closing line breaks.
  */
 export function mergeLines(base: string, current: string, next: string): Hunk[] | undefined {
   const ids = new Map<string, number>();
@@ -235,8 +234,10 @@ export function mergeLines(base: string, current: string, next: string): Hunk[] 
   const hunks: Hunk[] = [];
   let before = 0;
   let shift = 0;
+  const clash = (hunk: LineHunk, other: LineHunk): boolean =>
+    (hunk.start < other.end && other.start < hunk.end) || (hunk.start === 0 && other.start === 0);
   for (const hunk of local) {
-    if (arrived.some((other) => hunk.start < other.end && other.start < hunk.end)) return undefined;
+    if (arrived.some((other) => clash(hunk, other))) return undefined;
     for (; before < arrived.length && arrived[before]!.end <= hunk.start; before++) {
       const other = arrived[before]!;
       shift += other.lines.length - (other.end - other.start);
