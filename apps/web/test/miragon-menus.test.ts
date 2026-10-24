@@ -9,7 +9,7 @@
  * SPA's editors on a real canvas.
  */
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
+import { after, mock, test } from "node:test";
 
 import type { CmBaseViewer } from "@miragon/context-maps-renderer";
 import { fitViewbox } from "@miragon/modeler-shell/core";
@@ -363,6 +363,103 @@ test("Context Maps: a map the CML export cannot read ends in the host's failure 
   assert.deepEqual(files, []);
   assert.deepEqual(failures, ["the map could not be read"]);
   engine.destroy();
+});
+
+/** the page's Geist as the widget's stylesheet holds it (geist.css: data: URIs);
+ *  jsdom keeps no src in a parsed @font-face, so the sheet is written out */
+function geistOnThePage(): () => void {
+  const latin = "data:font/woff2;base64,R2Vpc3QgbGF0aW4=";
+  const face = Object.create(CSSFontFaceRule.prototype, {
+    style: {
+      value: {
+        getPropertyValue: (name: string) =>
+          ({
+            "font-family": '"Geist Variable"',
+            "font-weight": "100 900",
+            "unicode-range": "U+0-FF, U+131, U+152-153",
+            src: `url("${latin}") format("woff2-variations")`,
+          })[name] ?? "",
+      },
+    },
+    parentStyleSheet: { value: null },
+  }) as CSSFontFaceRule;
+  Object.defineProperty(document, "styleSheets", { configurable: true, value: [{ href: null, cssRules: [face] }] });
+  return () => void delete (document as { styleSheets?: unknown }).styleSheets;
+}
+
+/** Export as PNG on a mounted widget. jsdom draws no image, so the
+ *  rasterizer's image and canvas record what they are given — only while the
+ *  export runs: the renderers measure their labels on a canvas of their own */
+async function exportPng(id: string) {
+  const { engine, files, failures } = await widgetOf(id);
+  const drawn: { svg: string; background: unknown }[] = [];
+  const image = HTMLImageElement.prototype as HTMLImageElement & { decode?: () => Promise<void> };
+  const canvas = HTMLCanvasElement.prototype;
+  const serializer = XMLSerializer.prototype;
+  const real = {
+    decode: image.decode,
+    getContext: canvas.getContext,
+    toBlob: canvas.toBlob,
+    serializeToString: serializer.serializeToString,
+  };
+  // the renderers' saveSVG sets xmlns as an attribute: a browser writes it
+  // once, jsdom a second time, and the SVG would not parse
+  serializer.serializeToString = function (this: XMLSerializer, node: Node) {
+    return real.serializeToString.call(this, node).replace(/^(<svg xmlns="[^"]*"[^>]*?) xmlns="[^"]*"/, "$1");
+  };
+  image.decode = async function (this: HTMLImageElement) {
+    const [, data = ""] = /^data:image\/svg\+xml;charset=utf-8,(.*)$/.exec(this.src) ?? [];
+    drawn.push({ svg: decodeURIComponent(data), background: undefined });
+  };
+  canvas.getContext = function () {
+    const context = {
+      fillStyle: "" as unknown,
+      fillRect: () => void (drawn.at(-1)!.background = context.fillStyle),
+      drawImage: () => {},
+    };
+    return context;
+  } as unknown as typeof canvas.getContext;
+  canvas.toBlob = (done: BlobCallback) => done(new Blob(["png"], { type: "image/png" }));
+  try {
+    runModelerItem(engine.menu!, "modeler:export-png");
+    for (let waited = 0; files.length + failures.length === 0 && waited < 2000; waited += 10) await wait(10);
+  } finally {
+    Object.assign(image, { decode: real.decode });
+    Object.assign(canvas, { getContext: real.getContext, toBlob: real.toBlob });
+    serializer.serializeToString = real.serializeToString;
+    engine.destroy();
+  }
+  return { files, failures, drawn };
+}
+
+test("exports: the PNG is drawn from the SVG with Geist inside, through a data: URL, on each renderer's own paper", async () => {
+  const removeGeist = geistOnThePage();
+  const paper: Record<string, string> = { wardley: "#F9F7F7", "event-storming": "#FFFFFF", "context-map": "#FFFFFF" };
+  try {
+    for (const id of Object.keys(EXPECTED)) {
+      const { files, failures, drawn } = await exportPng(id);
+      assert.deepEqual(failures, [], `${id}: the export fails`);
+      assert.deepEqual([files[0]!.name, files[0]!.mimeType], ["tea-shop.png", "image/png"]);
+      assert.equal(drawn.length, 1, `${id}: drawn once`);
+      const { svg, background } = drawn[0]!;
+      assert.match(
+        svg,
+        /^<svg[^>]*><defs><style>@font-face\{font-family:'Geist Variable';[^}]*src:url\("data:font\/woff2;base64,R2Vpc3QgbGF0aW4="\);\}@font-face\{[^}]*\}<\/style><\/defs><g visibility="hidden"><text [^>]*>x<\/text><\/g>/,
+        `${id}: the face goes in ahead of the drawing, with its hidden text`,
+      );
+      assert.match(svg, /<text[^>]*font-family[^>]*Geist Variable/, `${id}: and its text asks for it`);
+      assert.equal(background, paper[id], `${id}: the paper under the drawing`);
+    }
+  } finally {
+    removeGeist();
+  }
+  // a page without Geist still gets its PNG, in the system sans
+  const warned = mock.method(console, "warn", () => {});
+  const { files, drawn } = await exportPng("event-storming");
+  warned.mock.restore();
+  assert.equal(files[0]?.name, "tea-shop.png");
+  assert.doesNotMatch(drawn[0]?.svg ?? "", /@font-face/);
+  assert.equal(warned.mock.callCount(), 1, "the fallback is no secret");
 });
 
 test("displayName: every renderer's document title", async () => {

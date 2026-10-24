@@ -14,9 +14,10 @@ Desktop, ChatGPT).
 | `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and what it makes of hostile sources, the Mermaid frame and the Miragon renderers themselves (`test/renderer-dom.ts`). |
 | `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                                                                                |
 
-Four checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`
-(under the Markdown view below), `test/live-gesture-chromium.ts` and `test/canvas-focus-chromium.ts`
-(both under the MCP-App widgets below) and `test/live-repair-chromium.ts`, the live merge repair and its
+Five checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`
+(under the Markdown view below), `test/live-gesture-chromium.ts`, `test/canvas-focus-chromium.ts`
+and `test/png-export-font-chromium.ts` (all three under the MCP-App widgets below) and
+`test/live-repair-chromium.ts`, the live merge repair and its
 notice with real peers (issue 296): two tabs dropping moves at once, the first-ranked writer
 closing its tab, a link that drops and comes back, a half-typed tag seen from the canvas tabs, a
 reload during it, and the BPMN widget live in a minimal MCP-Apps host. From the repository root:
@@ -358,6 +359,29 @@ through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
 `mcp-app-<id>.html`. The dev server resolves that alias to
 `widget-spec.dev.ts`: `/mcp-app-miragon.html?notation=<id>` previews any of them.
 
+**PNG exports in Geist.** Export as PNG draws the renderer's standalone SVG as an image
+(`lib/export-image.ts`, the same for every Miragon renderer, in the SPA and in the widget),
+and an SVG drawn as an image cannot reach the page's fonts. So before it is drawn,
+`lib/export-font.ts` puts the page's own `'Geist Variable'` faces into the SVG's `<style>`,
+their files inline: the subsets whose `unicode-range` holds a character of the diagram's text
+(the SPA has latin, latin-ext, cyrillic, cyrillic-ext and vietnamese; the widget only latin and
+latin-ext, so other scripts stay in the system sans there, as on its canvas). Each face also
+gets a hidden text of its own: Chromium calls an SVG image loaded only once the faces that are
+some text's first font have loaded, and a subset that only a later character needs would
+still be loading when the PNG is drawn. The image loads as a data: URL, which an MCP host's
+CSP allows where it refuses blob: (the reason Wardley no longer uses its package's own
+`svgToPng`), and the data: fonts inside it load although the host's `font-src` blocks the
+widget's own. A page without Geist still exports, in the system sans, with a console warning.
+The SVG download embeds no font: it shows Geist where the font is installed (guide §4).
+`test/png-export-font-chromium.ts` checks it in the built app, from the SPA's menu and from
+each widget under the MCP Apps default CSP: the PNG's label must be as wide as in Geist (the
+labels hold figures, where Geist and the system sans differ most) and the whole PNG must be
+the check's own drawing in Geist, a latin-ext text included. After a renderer, fontsource or
+browser update, from the repository root: `pnpm build`, then
+`npx -y -p playwright@1.56.1 -c "node apps/web/test/png-export-font-chromium.ts"` (`PORT` sets
+the Live Host's port, 8393 unless set; `BROWSER=webkit` runs it in WebKit, after
+`npx -y playwright@1.56.1 install webkit`).
+
 **A gesture holds the live re-imports back.** Every live binding, the SPA's editors and
 the widget engines alike, passes live-client the element it mounts the canvas in: while a
 pointer is held on it or a diagram-js drag that carries elements runs in it, a peer's
@@ -410,7 +434,8 @@ sized by `miragon-styles.css`) and removes it with the engine.
    Optional: `title` (the document's title, the menu header's display name),
    `menu` (the package's own menu content, its dialogs built with the
    helpers in `menu-content.ts` inside the mount's host, its exports with
-   `imageExports` and `textExport` there) and, with
+   `imageExports` and `textExport` there, its PNG drawn by
+   `lib/export-image.ts`, not a rasterizer of the package's own) and, with
    `hasLegend`, `legend` (the rows of the Legend panel both hosts show).
    Then its line in
    `src/notations/miragon/index.ts` — the SPA editor plugin, the widget engine,

@@ -7,7 +7,8 @@
  *  fit to that box in place. Its menu content (`mapMenu`) brings Map
  *  title…, Map size… and X-axis labels… (one undoable step each), the PNG
  *  and SVG exports and the shortcuts dialog; the map file itself is no
- *  export, it is the model. */
+ *  export, it is the model. Its PNG goes through designIQ's rasterizer
+ *  (lib/export-image.ts, Geist inside) on the renderer's paper. */
 import type { Modeler } from "@miragon/wardley-renderer";
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
@@ -20,6 +21,7 @@ export const spec: MiragonRendererSpec = {
   async load(): Promise<LoadedMiragonRenderer> {
     const [
       {
+        COLORS,
         createAxisLabelsPopover,
         createCollaborativeModeler,
         createCollaborativeViewer,
@@ -27,14 +29,15 @@ export const spec: MiragonRendererSpec = {
         createShortcutsDialog,
         createTitleDialog,
         mapMenu,
-        svgToPng,
       },
       ,
       { dialogChrome, imageExports, lazily, ownTitle },
+      { svgToPng },
     ] = await Promise.all([
       import("@miragon/wardley-renderer"),
       import("@miragon/wardley-renderer/assets/wardley.css"),
       import("./menu-content.ts"),
+      import("../../lib/export-image.ts"),
     ]);
     // the viewer is a NavigatedViewer: it reads the map like the Modeler, and
     // the entries that would write it stay disabled on a read-only canvas
@@ -58,7 +61,7 @@ export const spec: MiragonRendererSpec = {
           exports: imageExports(
             host,
             async () => (await map.saveSVG()).svg,
-            (svg) => svgToPng(svg),
+            (svg) => svgToPng(svg, { background: COLORS.paper }),
           ),
           showKeyboardShortcuts: () => shortcuts.get().open(),
         });
