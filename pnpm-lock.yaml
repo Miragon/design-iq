@@ -193,6 +193,9 @@ importers:
       '@fontsource-variable/geist-mono':
         specifier: 5.3.0
         version: 5.3.0
+      '@miragon/context-maps-cml':
+        specifier: 0.1.5
+        version: 0.1.5(zod@4.6.7)
       '@miragon/context-maps-renderer':
         specifier: 0.5.0
         version: 0.5.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
@@ -1426,6 +1429,9 @@ packages:
     engines: {node: '>=22'}
     peerDependencies:
       bpmnlint: '>=11.14.0'
+
+  '@miragon/context-maps-cml@0.1.5':
+    resolution: {integrity: sha512-SGThXzGYlLhjdRcfbXUO4iVbv3bZaE0R1vShsWus6CEzgORHh26s3bg+W724ztLStfe4z8+9l/JnX0X1IPwnJA==}
 
   '@miragon/context-maps-renderer@0.5.0':
     resolution: {integrity: sha512-KHCOhfYrgs82j5XMl049Ble5W828SM2PmvH6tD0K3Z8LMBD0zvKuDNXDJGi5XMEkFKPMOMjijnbN4Rvl230BdA==}
@@ -5605,6 +5611,12 @@ snapshots:
       zeebe-bpmn-moddle: 2.0.0(moddle@8.2.1)
     transitivePeerDependencies:
       - moddle
+
+  '@miragon/context-maps-cml@0.1.5(zod@4.6.7)':
+    dependencies:
+      '@miragon/context-maps-schema-model': 0.4.0(zod@4.6.7)
+    transitivePeerDependencies:
+      - zod
 
   '@miragon/context-maps-renderer@0.5.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:

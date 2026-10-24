@@ -4,15 +4,16 @@
  *  host's since 0.3.0: designIQ draws `renderLegend` into a panel of its
  *  own in both hosts, which the widget's fit leaves room for, instead of the
  *  renderer's card over the diagram. Its menu content (`contextMapMenu`)
- *  brings Map title… (one undoable step), the PNG and SVG exports and the
- *  shortcuts dialog. */
+ *  brings Map title… (one undoable step), the PNG and SVG exports, the CML
+ *  export (Context Mapper's text, `@miragon/context-maps-cml`, loaded with
+ *  the renderer) and the shortcuts dialog. */
 import type { CmBaseViewer, CmModeling, MapExport } from "@miragon/context-maps-renderer";
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
 
-/** the export entries designIQ leaves out: the JSON is the model's own file
- *  in the repository, and no package ships a CML serializer */
-const NOT_OFFERED = new Set(["export-json", "export-cml"]);
+/** the export entry designIQ leaves out: the JSON is the model's own file
+ *  in the repository */
+const NOT_OFFERED = new Set(["export-json"]);
 const NO_EXPORT: MapExport = { onSelect: () => {} };
 
 /** a legend row's meaning: a tooltip on hover, and part of the row's text
@@ -47,13 +48,15 @@ export const spec: MiragonRendererSpec = {
         renderLegend,
       },
       ,
-      { dialogChrome, imageExports, lazily },
+      { dialogChrome, imageExports, lazily, textExport },
       { svgToPng },
+      { serializeCml },
     ] = await Promise.all([
       import("@miragon/context-maps-renderer"),
       import("@miragon/context-maps-renderer/assets/context-maps.css"),
       import("./menu-content.ts"),
       import("../../lib/export-image.ts"),
+      import("@miragon/context-maps-cml"),
     ]);
     const mapOf = (modeler: { diagram: unknown }): CmBaseViewer => modeler.diagram as CmBaseViewer;
     return {
@@ -76,7 +79,7 @@ export const spec: MiragonRendererSpec = {
           exports: {
             ...imageExports(host, async () => map.saveSVG().svg, svgToPng),
             json: NO_EXPORT,
-            cml: NO_EXPORT,
+            cml: textExport(host, "cml", () => serializeCml(map.exportDocument())),
           },
           showKeyboardShortcuts: () => shortcuts.get().open(),
         });

@@ -3,8 +3,9 @@
  * that ship it (Wardley, Event Storming, Context Maps): the chrome their
  * dialogs and popovers take — a modeler-shell handle's shape, filled from
  * the shell's own messages so the shortcut tables name the zoom keys as the
- * modelers do —, dialogs built on first use and removed with the mount, and
- * the image exports. Loaded with the renderer (behind each spec's `load()`).
+ * modelers do —, dialogs built on first use and removed with the mount, the
+ * image exports and the text ones. Loaded with the renderer (behind each
+ * spec's `load()`).
  */
 import { defaultMessages, detectPlatform } from "@miragon/modeler-shell/core";
 
@@ -55,19 +56,28 @@ export function lazily<T extends { destroy(): void }>(make: () => T): Lazy<T> {
   };
 }
 
+/** an export, named after the model's file */
+function exportFile(host: MiragonMenuHost, extension: string, mimeType: string, data: Blob | string): ExportFile {
+  return { name: `${host.fileStem()}.${extension}`, mimeType, data };
+}
+
 /** the Export group's PNG and SVG of a diagram, named after the model's file */
 export function imageExports(
   host: MiragonMenuHost,
   svg: () => Promise<string>,
   png: (svg: string) => Promise<Blob>,
 ): { png: { onSelect(): void }; svg: { onSelect(): void } } {
-  const file = (extension: string, mimeType: string, data: Blob | string): ExportFile => ({
-    name: `${host.fileStem()}.${extension}`,
-    mimeType,
-    data,
-  });
   return {
-    png: { onSelect: () => void host.download(async () => file("png", "image/png", await png(await svg()))) },
-    svg: { onSelect: () => void host.download(async () => file("svg", "image/svg+xml", await svg())) },
+    png: {
+      onSelect: () => void host.download(async () => exportFile(host, "png", "image/png", await png(await svg()))),
+    },
+    svg: { onSelect: () => void host.download(async () => exportFile(host, "svg", "image/svg+xml", await svg())) },
   };
+}
+
+/** the model in another text format (Context Mapper's CML), named after the
+ *  model's file; written inside the download, so a model it cannot write
+ *  reaches the host's failure report instead of throwing from the menu */
+export function textExport(host: MiragonMenuHost, extension: string, write: () => string): { onSelect(): void } {
+  return { onSelect: () => void host.download(async () => exportFile(host, extension, "text/plain", write())) };
 }
