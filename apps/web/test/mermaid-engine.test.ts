@@ -16,6 +16,7 @@ import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
 import type { Mermaid } from "mermaid";
 
 import { describeMermaidError, MERMAID_LABEL_SANITIZER, renderMermaid } from "../src/lib/mermaid-render.ts";
+import { otherCasings } from "./mermaid-casings.ts";
 import { loadMermaidUnderJsdom } from "./mermaid-dom.ts";
 import { SOURCES } from "./mermaid-hostile-sources.ts";
 
@@ -281,23 +282,6 @@ test("every diagram type the validator knows is one mermaid detects", () => {
   }
 });
 
-/** a keyword in its other casings: each of its words (split at "-" and
- *  where a camelCase word starts) as written, lower, upper or capitalised */
-function otherCasings(keyword: string): string[] {
-  let spellings = [""];
-  for (const word of keyword.match(/[A-Z]?[a-z]+|[A-Z\d]+(?![a-z])|-/g) ?? []) {
-    const forms = new Set([
-      word,
-      word.toLowerCase(),
-      word.toUpperCase(),
-      word[0]!.toUpperCase() + word.slice(1).toLowerCase(),
-    ]);
-    spellings = spellings.flatMap((start) => [...forms].map((form) => start + form));
-  }
-  assert.ok(spellings.includes(keyword), keyword);
-  return spellings.filter((spelling) => spelling !== keyword);
-}
-
 function detects(source: string): boolean {
   try {
     mermaid.detectType(source);
@@ -313,27 +297,31 @@ const parses = (source: string): Promise<boolean> =>
     () => false,
   );
 
-test("the validator reads a type in another casing exactly where mermaid draws it (#283)", async () => {
+test("the validator reads a type in another casing exactly where mermaid parses it (#283)", async () => {
   // a few detectors ignore case or match a shorter spelling, and many
-  // grammars ignore case: a casing draws only where both read it
-  const drawn: string[] = [];
+  // grammars ignore case: a casing parses only where both read it
+  const parsed: string[] = [];
   for (const type of MERMAID_DIAGRAM_TYPES) {
     const listed = SOURCES[type]!("Orders");
     assert.ok(listed.startsWith(type), type);
     const body = listed.slice(type.length);
-    const detected = otherCasings(type).filter((spelling) => detects(spelling + body));
+    const casings = otherCasings(type);
+    const detected = casings.filter((spelling) => detects(spelling + body));
     if (detected.length > 0) assert.ok(await parses(listed), `${type} parses as listed: a refusal is the casing's`);
-    for (const spelling of otherCasings(type)) {
-      const draws = detected.includes(spelling) && (await parses(spelling + body));
-      if (draws) drawn.push(spelling);
-      assert.equal(mermaidHeader(spelling + body)?.diagramType, draws ? type : undefined, spelling);
+    for (const spelling of casings) {
+      const reads = detected.includes(spelling) && (await parses(spelling + body));
+      if (reads) parsed.push(spelling);
+      assert.equal(mermaidHeader(spelling + body)?.diagramType, reads ? type : undefined, spelling);
     }
   }
   // what mermaid MERMAID_VERSION does, so the loop is known to meet both outcomes
   for (const spelling of ["Ishikawa", "ISHIKAWA-BETA", "requirementdiagram", "stateDiagram-V2", "xychart-BETA"]) {
-    assert.ok(drawn.includes(spelling), `${spelling} draws`);
+    assert.ok(parsed.includes(spelling), `${spelling} parses`);
   }
   for (const spelling of ["Wardley-beta", "RAILROAD-BETA", "classDiagram-V2", "flowchart-ELK"]) {
-    assert.ok(detects(`${spelling}\n`) && !drawn.includes(spelling), `${spelling} is detected, its grammar refuses it`);
+    assert.ok(
+      detects(`${spelling}\n`) && !parsed.includes(spelling),
+      `${spelling} is detected, its grammar refuses it`,
+    );
   }
 });

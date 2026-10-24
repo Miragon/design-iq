@@ -186,7 +186,10 @@ opens (ADR 0006). `pnpm arch` holds every other module to `import()` (rule
   language before Monaco makes a model, its grammar (`src/lib/mermaid-monarch.ts`) loads with
   the first fence. Only a fence of three backticks: Monaco's Markdown grammar embeds no other,
   so a `~~~` or a longer fence gets no Mermaid highlighting, though it draws and is checked as
-  a diagram. `test/mermaid-monarch.test.ts` runs it through Monaco's own Monarch lexer.
+  a diagram. The grammar reads the header with the validator's pattern (`mermaidKeywordPattern`
+  of `@designiq/notations/mermaid`): a casing mermaid draws, such as `Ishikawa`, is a keyword,
+  and a word the validator warns on shows as invalid. `test/mermaid-monarch.test.ts` runs it
+  through Monaco's own Monarch lexer.
 - `@designiq/notations/mermaid` holds the reading of a diagram's text the validator and the
   renderer share (the diagram types, the code mermaid's parser sees, the error lines). It
   mirrors mermaid `MERMAID_VERSION`; `test/mermaid-engine.test.ts` fails on a mermaid bump

@@ -15,6 +15,9 @@
  *                        agentflow raises itself count them as well
  *   - mermaidHeader      the first line, the one that names the diagram type,
  *                        in a casing mermaid draws (ANY_CASE_AFTER)
+ *   - mermaidKeywordPattern
+ *                        a type's header keyword in those casings, for a
+ *                        reader that matches it itself (the source editor)
  *
  * Syntax knowledge, not a checker: the validator turns an unknown header
  * into a finding, the web renderer (apps/web/src/lib/mermaid-render.ts) words
@@ -22,7 +25,7 @@
  * package index (the SPA imports it). A mermaid bump fails apps/web's
  * test/mermaid-engine.test.ts until MERMAID_VERSION follows it: re-read
  * mermaid's src/preprocess.ts and its detectors against this file first, and
- * the casings its grammars read a header keyword in. The same test draws
+ * the casings its grammars read a header keyword in. The same test parses
  * every type in other casings and fails where this file reads one otherwise.
  */
 
@@ -137,14 +140,21 @@ const anyCase = (text: string): string =>
     )
     .join("");
 
+/**
+ * The header keyword `type` (a MERMAID_DIAGRAM_TYPES entry) in every casing
+ * MERMAID_VERSION draws it in, as the source of a regular expression without
+ * flags or anchors. mermaidHeader reads a header with it, and so does the web
+ * app's source editor (apps/web/src/lib/mermaid-monarch.ts): the two never
+ * disagree about a header.
+ */
+export function mermaidKeywordPattern(type: string): string {
+  const asWritten = ANY_CASE_AFTER.get(type) ?? type;
+  return escapeRegExp(asWritten) + anyCase(type.slice(asWritten.length));
+}
+
 /** a header keyword in a casing mermaid draws, followed by the end of the
  *  line, a space, ":" or ";" */
-const HEADER = new RegExp(
-  `^(?:${MERMAID_DIAGRAM_TYPES.map((type) => {
-    const asWritten = ANY_CASE_AFTER.get(type) ?? type;
-    return escapeRegExp(asWritten) + anyCase(type.slice(asWritten.length));
-  }).join("|")})(?=$|[\\s:;])`,
-);
+const HEADER = new RegExp(`^(?:${MERMAID_DIAGRAM_TYPES.map(mermaidKeywordPattern).join("|")})(?=$|[\\s:;])`);
 
 /** the listed keyword of a header keyword HEADER read in another casing */
 const LISTED_BY_LOWER_CASE = new Map(MERMAID_DIAGRAM_TYPES.map((type) => [type.toLowerCase(), type]));
