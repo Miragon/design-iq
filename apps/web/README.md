@@ -14,13 +14,13 @@ Desktop, ChatGPT).
 | `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and what it makes of hostile sources, the Mermaid frame and the Miragon renderers themselves (`test/renderer-dom.ts`). |
 | `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                                                                                |
 
-Five checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`
-(under the Markdown view below), `test/live-gesture-chromium.ts`, `test/canvas-focus-chromium.ts`
-and `test/png-export-font-chromium.ts` (all three under the MCP-App widgets below) and
-`test/live-repair-chromium.ts`, the live merge repair and its
-notice with real peers (issue 296): two tabs dropping moves at once, the first-ranked writer
-closing its tab, a link that drops and comes back, a half-typed tag seen from the canvas tabs, a
-reload during it, and the BPMN widget live in a minimal MCP-Apps host. From the repository root:
+Six checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`
+and `test/markdown-view-chromium.ts` (under the Markdown view below), `test/live-gesture-chromium.ts`,
+`test/canvas-focus-chromium.ts` and `test/png-export-font-chromium.ts` (all three under the MCP-App
+widgets below) and `test/live-repair-chromium.ts`, the live merge repair and its notice with real
+peers (issue 296): two tabs dropping moves at once, the first-ranked writer closing its tab, a link
+that drops and comes back, a half-typed tag seen from the canvas tabs, a reload during it, and the
+BPMN widget live in a minimal MCP-Apps host. From the repository root:
 `pnpm build`, once `npx -y playwright@1.56.1 install --only-shell chromium`, then
 `npx -y -p playwright@1.56.1 -c "node apps/web/test/live-repair-chromium.ts"` (`PORT` sets the
 Live Host's port, 8392 unless set; `ONLY` and `SHOTS` are in its header).
@@ -87,7 +87,14 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   changes keep coming, scrolls in-page `#anchors` and hands a link to another model to the
   shell, which opens it on its own route. While the shell shows only the Markdown source
   (`EditorContext.visibility`), it does not render and catches up when it shows again.
-  `test/markdown-view.test.ts` covers the sanitizer and the view under jsdom.
+  A render replaces only the top-level blocks whose HTML changed (#289): every other block
+  stays on the page as it is, so a reader's selection, the keyboard focus and a drawn diagram
+  in it survive a co-editor's pause. The focus in a replaced block moves to the view. The
+  first block on screen that stays is scrolled back to where it was, as Safari only has CSS
+  scroll anchoring from 27 on. `test/markdown-view.test.ts` covers the sanitizer and the view
+  under jsdom; `test/markdown-view-chromium.ts` checks the selection, the focus and the scroll
+  position in headless Chromium while a guest session edits the document, with the browser's
+  scroll anchoring and without it (run like the hostile check below, `PORT` 8393 unless set).
 - The split view is the shell's, for a plugin that opts in (`WebNotationPlugin.splitView`, so
   far only Markdown). It narrows the same two layers the single views stack, so neither engine
   remounts, and puts the divider between them (`src/components/split-divider.tsx`): drag it,
@@ -175,9 +182,11 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   `npx -y playwright@1.56.1 install --only-shell chromium`, then
   `npx -y -p playwright@1.56.1 -c "node apps/web/test/hostile-mermaid-chromium.ts"` (`PORT`
   sets the Live Host's port, 8391 unless set).
-- The drawn SVG is cached by source: a re-render for an
-  edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram
-  keeps its drawing until the new one is drawn. A diagram mermaid cannot read shows a notice
+- A diagram in a block the render keeps stays on the page as drawn. The drawn SVG is also
+  cached by source: a new block with a diagram drawn before gets it back before the browser
+  paints, and a changed diagram keeps its drawing until the new one is drawn; a diagram that
+  is still drawing when the next render keeps its block lands there. `fences.ts` states what
+  that asks of a fence extension. A diagram mermaid cannot read shows a notice
   with the error and its line (counted within the diagram) under its code, or under its last
   good drawing, dimmed. `test/markdown-mermaid.test.ts` covers it under jsdom with a fake
   renderer. A Mermaid diagram is no model of its own: it lives as such a fence in a document.

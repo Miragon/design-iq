@@ -22,9 +22,16 @@
  * own document and window. The stylesheet comes with the lazy entry,
  * ./markdown-view.ts.
  *
- * Every render replaces the whole article. Simple and correct, but a reader's
- * text selection and keyboard focus inside the view reset whenever a
- * co-editor pauses typing: patching only the changed blocks is a follow-up.
+ * A render patches the article per top-level block (#289): a block whose
+ * rendered HTML did not change stays on the page as it is, with the reader's
+ * text selection, the keyboard focus and a drawn diagram in it, and only the
+ * blocks a change touched are replaced (matchBlocks). The focus in a replaced
+ * block moves to the view itself, so the keyboard stays in it. The reader's
+ * place stays too: the first block on screen the render keeps is scrolled
+ * back to where it was, once the fences have put their cached output back.
+ * A browser's CSS scroll anchoring often did that already, and then nothing
+ * is left to move; Safari has it only from 27 on, so the view does not rely
+ * on it.
  * While the shell shows only the source (ctx.visibility), the view does not
  * render at all, not even a document that opens that way, and catches up
  * when it shows again: an author typing in Monaco never pays for a hidden
@@ -43,6 +50,63 @@ export const RENDER_DEBOUNCE_MS = 200;
 export const RENDER_MAX_WAIT_MS = 1000;
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/** what a top-level node of the article rendered as: an element's markup
+ *  before any fence hydrated it, any other node's text */
+const blockKey = (node: Node): string =>
+  node.nodeType === node.ELEMENT_NODE ? (node as Element).outerHTML : `#${node.nodeName} ${node.textContent ?? ""}`;
+const isElementKey = (key: string): boolean => key.startsWith("<");
+
+/**
+ * Which blocks of the last render the next one keeps: for each new block, the
+ * index of the old block it is (the same key, in the same order), or -1 for
+ * one to insert. The common start and end match first. In between, a block
+ * matches the next equal one ahead, so the blocks between two edits stay; a
+ * text node (the line breaks between blocks) only where it stands, so it
+ * never pulls the match past a block that could stay.
+ */
+export function matchBlocks(before: readonly string[], after: readonly string[]): number[] {
+  const kept = after.map(() => -1);
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) {
+    kept[start] = start;
+    start++;
+  }
+  let end = 0;
+  while (
+    end < before.length - start &&
+    end < after.length - start &&
+    before[before.length - 1 - end] === after[after.length - 1 - end]
+  ) {
+    kept[after.length - 1 - end] = before.length - 1 - end;
+    end++;
+  }
+  const middleEnd = before.length - end;
+  /** the old blocks in between by key, the next one last */
+  const ahead = new Map<string, number[]>();
+  for (let at = middleEnd - 1; at >= start; at--) {
+    const key = before[at]!;
+    if (!isElementKey(key)) continue;
+    const list = ahead.get(key);
+    if (list) list.push(at);
+    else ahead.set(key, [at]);
+  }
+  let cursor = start;
+  for (let i = start; i < after.length - end; i++) {
+    const key = after[i]!;
+    if (!isElementKey(key)) {
+      if (cursor < middleEnd && before[cursor] === key) kept[i] = cursor++;
+      continue;
+    }
+    const list = ahead.get(key);
+    while (list?.length && list[list.length - 1]! < cursor) list.pop();
+    const at = list?.pop();
+    if (at === undefined) continue;
+    kept[i] = at;
+    cursor = at + 1;
+  }
+  return kept;
+}
 
 export function mountMarkdownView(
   container: HTMLElement,
@@ -80,6 +144,62 @@ export function mountMarkdownView(
   let hydration: AbortController | undefined;
   /** the fence languages the last render hydrated */
   let hydrated = new Set<string>();
+  /** the keys of the article's top-level nodes as the last render put them
+   *  there; undefined while it shows no rendered document */
+  let blockKeys: string[] | undefined;
+  /** where the reader was before the latest render, until it is scrolled back there */
+  let place: { block: Element; top: number } | undefined;
+
+  /** the first of these blocks on screen, and where it is. None at the top
+   *  of the document: a reader there stays at the top */
+  const readingPlace = (blocks: readonly ChildNode[]): typeof place => {
+    if (scroller.scrollTop <= 0) return undefined;
+    const top = scroller.getBoundingClientRect().top;
+    for (const block of blocks) {
+      if (!(block instanceof win.Element)) continue;
+      const box = block.getBoundingClientRect();
+      if (box.bottom > top) return { block, top: box.top };
+    }
+    return undefined;
+  };
+
+  /** scroll the reader's place back to where it was; scroll anchoring may
+   *  have done it already, then there is nothing left to move */
+  const keepPlace = (): void => {
+    const kept = place;
+    place = undefined;
+    if (!kept?.block.isConnected) return;
+    const shift = kept.block.getBoundingClientRect().top - kept.top;
+    if (shift !== 0) scroller.scrollTop += shift;
+  };
+
+  /** show a rendered document: the blocks the last render showed as they
+   *  are, the others new */
+  const patch = (fragment: DocumentFragment): void => {
+    const next = [...fragment.childNodes];
+    const nextKeys = next.map(blockKey);
+    const current = [...article.childNodes];
+    // the article's blocks are not the last render's (the empty document, or
+    // a fence extension that added or removed one): start over
+    if (blockKeys?.length !== current.length) {
+      article.replaceChildren(fragment);
+      blockKeys = nextKeys;
+      return;
+    }
+    const kept = matchBlocks(blockKeys, nextKeys);
+    const keep = new Set(kept.filter((at) => at >= 0));
+    place ??= readingPlace([...keep].map((at) => current[at]!));
+    current.forEach((node, at) => {
+      if (!keep.has(at)) node.remove();
+    });
+    let before: ChildNode | null = null;
+    for (let i = next.length - 1; i >= 0; i--) {
+      const at = kept[i]!;
+      if (at >= 0) before = current[at]!;
+      else before = article.insertBefore(next[i]!, before);
+    }
+    blockKeys = nextKeys;
+  };
 
   const render = (): void => {
     const source = ctx.ytext.toString();
@@ -121,23 +241,26 @@ export function mountMarkdownView(
     lastImagesLoaded = imagesLoaded;
     rendered = true;
     hydration?.abort();
-    hydration = undefined;
+    hydration = new AbortController();
+    const signal = hydration.signal;
+    const focused = doc.activeElement;
+    const focusInside = focused !== null && article.contains(focused);
     if (source.trim() === "") {
       const empty = doc.createElement("p");
       empty.className = "md-empty";
       // true beside the source (the split view) as much as one click from it
       empty.textContent = "This document is empty. Write it in the Markdown source.";
       article.replaceChildren(empty);
+      blockKeys = undefined;
     } else {
-      article.replaceChildren(sanitize(html));
+      patch(sanitize(html));
     }
+    // the focus was in a block that went: keep the keyboard in the view
+    if (focusInside && !article.contains(focused)) scroller.focus({ preventScroll: true });
     // this document's fence languages, and once more the ones the last
     // render had: with no block left, their extension forgets this document
     const languages = new Set([...seen, ...hydrated]);
     hydrated = seen;
-    if (languages.size === 0) return;
-    hydration = new AbortController();
-    const signal = hydration.signal;
     for (const lang of languages) {
       Promise.resolve()
         .then(() => fences[lang]?.hydrate?.(article, signal))
@@ -145,6 +268,11 @@ export function mountMarkdownView(
           if (!signal.aborted) ctx.onSyncError(`A ${lang} block could not be rendered: ${errorText(e)}`);
         });
     }
+    // queued after the hydrations: their synchronous part, the cached output,
+    // is back by then
+    void Promise.resolve().then(() => {
+      if (!signal.aborted) keepPlace();
+    });
   };
 
   /** scroll to a heading by its URL fragment (bare slug, maybe percent-encoded) */
@@ -157,16 +285,14 @@ export function mountMarkdownView(
     }
   };
 
-  /** the reader asked for an image from another site */
+  /** the reader asked for an image from another site; its block re-renders
+   *  with the image, and a focus on its button moves to the view */
   const loadImage = (button: HTMLButtonElement): void => {
     const url = button.dataset.imageSrc ?? "";
     if (!/^https:\/\//i.test(url)) return;
-    // the button goes with the re-render: keep the keyboard in the view
-    const hadFocus = doc.activeElement === button;
     externalImages.add(url);
     imagesLoaded++;
     update();
-    if (hadFocus) scroller.focus({ preventScroll: true });
   };
 
   // plain left clicks only: a modified or middle click opens the link's real

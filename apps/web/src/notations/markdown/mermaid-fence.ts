@@ -9,19 +9,25 @@
  * - `render` (the HTML pass) keeps the fence a code block, marked
  *   `md-mermaid`, with its source as text: what a reader sees until the
  *   diagram is drawn, and what stays when it cannot be.
- * - `hydrate` (the DOM) draws every such block. The renderer, and mermaid
- *   behind it, load here, so only a document with a mermaid fence fetches
- *   them (ADR 0006).
- * - Drawings are cached by source: a re-render for an edit elsewhere puts the
- *   same diagrams back before the browser paints, and only a changed diagram
- *   is drawn again. Until it is, its block keeps what it showed (the n-th
- *   diagram keeps the n-th one's drawing while no diagram is added or
+ * - `hydrate` (the DOM) puts every such block into a slot of its own
+ *   (`md-mermaid-block`) and draws it there, once. The view keeps a block a
+ *   render did not change, slot and drawing included (./fences.ts): a slot
+ *   that shows its source's drawing stays as it is, and only new blocks and
+ *   a slot an aborted hydration left drawing are drawn. The renderer, and
+ *   mermaid behind it, load here, so only a document with a mermaid fence
+ *   fetches them (ADR 0006).
+ * - Drawings are cached by source: a new block with a diagram drawn before
+ *   (an edit elsewhere in its list or quote, an undo) gets it back before
+ *   the browser paints, and only a changed diagram is drawn again. Until it
+ *   is, the new block shows what the one it replaced showed (the n-th
+ *   diagram takes over the n-th one's drawing while no diagram is added or
  *   removed), so a live edit never flashes a diagram back to code.
  * - A source mermaid cannot read gets a notice (the error and its line)
  *   under the block's last good drawing, dimmed, or under its code when it
  *   never drew.
  * - A newer render aborts the older hydration: its late results are cached,
- *   never written into the page.
+ *   never written into the page by it. The newer one picks up a slot the
+ *   view kept and draws into it.
  *
  * Node-loadable like the rest of the view (test/markdown-mermaid.test.ts
  * runs it under jsdom with a fake renderer): relative `.ts` imports, every
@@ -38,6 +44,8 @@ export type { RenderMermaid };
 
 /** the class of a mermaid fence's code block, the placeholder hydrate draws */
 export const MERMAID_BLOCK_CLASS = "md-mermaid";
+/** the class of the slot hydrate puts that block in, where it draws */
+const SLOT_CLASS = "md-mermaid-block";
 /** drawings kept by source: a long document's diagrams and their recent edits */
 export const DRAWING_CACHE_SIZE = 64;
 /** the drawn SVGs' id prefix: md- like every id of the view, and never a
@@ -64,6 +72,17 @@ interface Settled {
   error?: MermaidRenderError;
 }
 
+/** a diagram block on the page, by its slot */
+interface Block {
+  source: string;
+  /** the fence's code block: what the slot shows while it has no drawing */
+  code: HTMLElement;
+  settled: Settled;
+  /** the slot shows what its source draws as; not while that is drawn, nor
+   *  after the renderer did not load (the next hydration tries again) */
+  done: boolean;
+}
+
 /** the window of the view's document */
 type View = NonNullable<Document["defaultView"]>;
 
@@ -82,7 +101,10 @@ const loadRenderer = async (): Promise<RenderMermaid> =>
 export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRenderer): MermaidFence {
   const drawings = new Map<string, Drawing>(); // by source, least recently used first
   const inFlight = new Map<string, Promise<Drawing>>();
-  const settledByView = new WeakMap<HTMLElement, Settled[]>();
+  /** what each slot on a page shows, and for which source */
+  const blocks = new WeakMap<HTMLElement, Block>();
+  /** a document's slots in order, as its last hydration left them */
+  const slotsByView = new WeakMap<HTMLElement, HTMLElement[]>();
   const sanitizers = new WeakMap<View, Sanitize>();
 
   const recall = (source: string): Drawing | undefined => {
@@ -127,51 +149,86 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
       `<pre class="md-code ${MERMAID_BLOCK_CLASS}"><code class="language-mermaid">${escapeText(content)}</code></pre>\n`,
 
     async hydrate(root, signal) {
+      // a newer render came first: its own hydration sees this one's blocks
+      if (signal.aborted) return;
       const doc = root.ownerDocument;
       const win = doc.defaultView;
       if (!win) return;
-      const blocks = [...root.querySelectorAll<HTMLElement>(`pre.${MERMAID_BLOCK_CLASS}`)];
-      // the n-th block takes over what the n-th showed, unless a diagram was
-      // added or removed: then the n-th is another diagram. A render without
-      // a block (the view hydrates once more then) leaves nothing to take over
-      const before = settledByView.get(root);
-      const settled: Settled[] = blocks.map((_, i) => (before?.length === blocks.length ? before[i]! : {}));
-      settledByView.set(root, settled);
+      // every diagram of the document in order: the slot of a block the view
+      // kept, or the code block of a new one (a slot without a drawing shows
+      // its code: that one is the slot's)
+      const found = [...root.querySelectorAll<HTMLElement>(`.${SLOT_CLASS}, pre.${MERMAID_BLOCK_CLASS}`)].filter(
+        (el) => !el.parentElement?.closest(`.${SLOT_CLASS}`),
+      );
+      const before = slotsByView.get(root) ?? [];
 
-      const show = (slot: HTMLElement, code: HTMLElement, index: number, drawing?: Drawing): void => {
-        if (drawing && "svg" in drawing) settled[index] = { drawing: drawing.svg };
-        else if (drawing) settled[index] = { drawing: settled[index]!.drawing, error: drawing.error };
-        present(doc, slot, code, settled[index]!);
+      const show = (slot: HTMLElement, block: Block, drawing?: Drawing, done = drawing !== undefined): void => {
+        if (drawing && "svg" in drawing) block.settled = { drawing: drawing.svg };
+        else if (drawing) block.settled = { drawing: block.settled.drawing, error: drawing.error };
+        block.done = done;
+        present(doc, slot, block.code, block.settled);
         if (drawing) slot.removeAttribute("aria-busy");
         else slot.setAttribute("aria-busy", "true");
       };
 
-      // first, before the browser paints: every block drawn before, or kept
-      // as it was while it draws anew
-      const todo: Array<{ slot: HTMLElement; code: HTMLElement; index: number; source: string }> = [];
-      blocks.forEach((code, index) => {
-        const source = code.textContent ?? "";
-        const slot = doc.createElement("div");
-        slot.className = "md-mermaid-block";
-        code.replaceWith(slot);
-        const known = recall(source);
-        show(slot, code, index, known);
-        if (!known) todo.push({ slot, code, index, source });
+      // first, before the browser paints: every new block drawn before, or
+      // showing what the one it replaced showed while it draws anew
+      const slots: HTMLElement[] = [];
+      const todo: HTMLElement[] = [];
+      found.forEach((el, index) => {
+        let slot = el;
+        let block = blocks.get(el);
+        if (!block) {
+          if (!el.matches(`pre.${MERMAID_BLOCK_CLASS}`)) return;
+          slot = doc.createElement("div");
+          slot.className = SLOT_CLASS;
+          el.replaceWith(slot);
+          // the n-th diagram takes over what the n-th showed when that one
+          // left the page with this render, unless a diagram was added or
+          // removed: then the n-th is another diagram. A render without a
+          // diagram leaves nothing to take over
+          const replaced = found.length === before.length ? before[index] : undefined;
+          const settled = replaced && !replaced.isConnected ? blocks.get(replaced)?.settled : undefined;
+          block = { source: el.textContent ?? "", code: el, settled: settled ?? {}, done: false };
+          blocks.set(slot, block);
+          const known = recall(block.source);
+          show(slot, block, known);
+          if (!known) todo.push(slot);
+        } else if (!block.done) {
+          // kept while it was drawn, or the renderer did not load: draw it now
+          const known = recall(block.source);
+          if (known) show(slot, block, known);
+          else {
+            slot.setAttribute("aria-busy", "true");
+            todo.push(slot);
+          }
+        }
+        slots.push(slot);
       });
+      if (slots.length > 0) slotsByView.set(root, slots);
+      else slotsByView.delete(root);
       if (todo.length === 0) return;
 
       let render: RenderMermaid;
       try {
         render = await load();
       } catch (e) {
-        if (!signal.aborted) for (const t of todo) show(t.slot, t.code, t.index, { error: loadFailed(e) });
+        if (!signal.aborted) for (const slot of todo) show(slot, blocks.get(slot)!, { error: loadFailed(e) }, false);
         return;
       }
       if (signal.aborted) return;
       await Promise.all(
-        todo.map(async (t) => {
-          const drawing = await draw(render, t.source, win).catch((e: unknown) => ({ error: loadFailed(e) }));
-          if (!signal.aborted) show(t.slot, t.code, t.index, drawing);
+        todo.map(async (slot) => {
+          const block = blocks.get(slot)!;
+          let drawing: Drawing;
+          let done = true;
+          try {
+            drawing = await draw(render, block.source, win);
+          } catch (e) {
+            drawing = { error: loadFailed(e) };
+            done = false;
+          }
+          if (!signal.aborted) show(slot, block, drawing, done);
         }),
       );
     },
