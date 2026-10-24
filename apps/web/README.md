@@ -127,7 +127,29 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   on.
 - Mermaid diagrams: a `mermaid` fence (`mermaid-fence.ts`) draws through the app's one
   Mermaid renderer, `src/lib/mermaid-render.ts` (strict security level, the CI theme,
-  Geist). The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
+  Geist). Diagram types that colour by section (mindmap, timeline, kanban, treemap, radar, git
+  graph, pie, venn) take two CI greys in turn instead of the rose and off-CI shades mermaid
+  derives, and so do an xy chart's bars and lines instead of mermaid's peach palette:
+  `--cd-kontur` with black labels, `--cd-text-leise` with white ones; a mindmap's root and a git
+  graph's main branch are black with a white label, a highlighted commit is framed in black, a
+  user journey's sections take white and the calm grey in turn, a radar's grid takes
+  `--cd-linie` and a quadrant chart's points black (#294). Two series of the same parity (pie
+  slices 1 and 3, radar curves 0 and 2, git branches 1 and 3, venn sets 1 and 3, xy plots 0
+  and 2) share a grey, so a legend cannot tell them apart, and a git graph's ninth branch
+  (main counts as the first) takes main's black again (mermaid cycles through eight branch
+  colours).
+  mermaid lightens a kanban column's grey, fades a treemap's, brightens a timeline's events,
+  writes an xy chart's labels in one colour whatever they sit on, draws its plots over each
+  other and fills mindmap and timeline nodes white in the neo look, so a kanban column takes
+  the grey of every other group, a timeline event its section's grey, a data label inside a
+  `--cd-text-leise` bar is white on a halo of that grey (it still reads where it runs past a
+  bar too short for it), a data label outside a bar and a point label are black on a white
+  halo (a later plot's label can lie on an earlier plot's bar), and a kanban column's title,
+  a treemap's labels and the labels of neo nodes stay black (`MERMAID_THEME_CSS`). An xy
+  chart's bars and lines share the two greys, so the page lays a second path in the plot's
+  white under every line, 2 px wider on each side (`src/lib/mermaid-line-casing.ts`): the line
+  holds 3:1 across a bar of either grey. A CSS filter cannot draw that casing, as WebKit
+  applies none to an element inside an SVG. The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
   theme, palette, CSS or font (`MERMAID_SECURE_KEYS`, checked against mermaid itself in
   `test/mermaid-engine.test.ts`); layout options stay the author's. What mermaid is known to
   load from an address a diagram names is kept from another site (#290). mermaid's label
@@ -140,7 +162,12 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   the page), and for CSS that fetches (`url()`, `src()`, `image-set()`, `@import`, escaped or
   not) anywhere in the source or in the diagram's own configuration. The page-side sanitizer
   then drops every address but the diagram's own `#…` references and inline data, and every
-  style sheet or attribute whose CSS could name one. These checks follow mermaid's syntax; a way
+  style sheet or attribute whose CSS could name one. It also starts every id of a diagram with
+  the SVG's own and keeps each id once, its references following, as mermaid leaves some ids
+  unscoped and writes a mindmap node's id twice: no two diagrams, and no diagram and the app,
+  share an id (#294). A reference to an id the diagram does not hold takes the prefix too (a
+  vertical timeline points its lines at an arrowhead mermaid never draws), so no reference
+  reaches an element outside its diagram; a link keeps its `#…`, where a reader goes. These checks follow mermaid's syntax; a way
   to load that a later mermaid adds is held by the Mermaid frame's policy instead (below) until
   it is added here. A diagram keeps the look and the layout it had before mermaid 12 unless its front matter picks otherwise (`look: neo`,
   `layout: elk`): the classic look, and dagre for flowchart, class, state, ER and requirement
@@ -177,7 +204,10 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   sets the Live Host's port, 8391 unless set).
 - The drawn SVG is cached by source: a re-render for an
   edit elsewhere puts the same diagrams back before the browser paints, and a changed diagram
-  keeps its drawing until the new one is drawn. A diagram mermaid cannot read shows a notice
+  keeps its drawing until the new one is drawn. One drawing is never in two places, so its
+  ids are not on the page twice: a source a document shows twice is drawn twice, each block of
+  it keeps its own drawing while another is edited, and a block whose last drawing another
+  block now shows waits for its new one with its code. A diagram mermaid cannot read shows a notice
   with the error and its line (counted within the diagram) under its code, or under its last
   good drawing, dimmed. `test/markdown-mermaid.test.ts` covers it under jsdom with a fake
   renderer. A Mermaid diagram is no model of its own: it lives as such a fence in a document.
