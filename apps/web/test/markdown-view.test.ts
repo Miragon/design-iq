@@ -2,9 +2,11 @@
  * The DOM half of the Markdown view under jsdom: the sanitizer
  * (src/notations/markdown/sanitize.ts), the second line of defence against
  * untrusted content, and the mounted view (src/notations/markdown/view.ts):
- * live re-rendering with its debounce, link clicks, the model list, the fence
- * hydration slot and a clean destroy. The pure renderer has its own suite,
- * markdown-render.test.ts.
+ * live re-rendering with its debounce, the blocks a render keeps (and the
+ * reader's selection and focus in them), link clicks, the model list, the
+ * fence hydration slot and a clean destroy. The pure renderer has its own
+ * suite, markdown-render.test.ts; what jsdom cannot show (layout, the scroll
+ * position) is checked in headless Chromium, markdown-view-chromium.ts.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -14,7 +16,12 @@ import * as Y from "yjs";
 
 import type { FenceExtension } from "../src/notations/markdown/fences.ts";
 import { createSanitizer } from "../src/notations/markdown/sanitize.ts";
-import { mountMarkdownView, RENDER_DEBOUNCE_MS, RENDER_MAX_WAIT_MS } from "../src/notations/markdown/view.ts";
+import {
+  matchBlocks,
+  mountMarkdownView,
+  RENDER_DEBOUNCE_MS,
+  RENDER_MAX_WAIT_MS,
+} from "../src/notations/markdown/view.ts";
 import type { EditorContext, LayerVisibility, ModelDirectory } from "../src/notations/registry.ts";
 
 const DOC_URL = "https://designiq.test/r/acme/models/f/docs/guide.md";
@@ -233,6 +240,104 @@ test("the view renders the live text, after a pause and at least once a second",
   t.mock.timers.tick(RENDER_DEBOUNCE_MS);
   assert.equal(v.article.textContent, "This document is empty. Write it in the Markdown source.");
   assert.deepEqual(v.errors, []);
+  v.view.destroy();
+});
+
+test("a co-editor's edit keeps the reader's selection and focus in every block it did not touch (#289)", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const v = mount("Copy this passage.\n\nRead [the next part](#next) on.\n\nThird block.");
+  const [first, second, third] = [...v.article.querySelectorAll("p")];
+  const link = second!.querySelector("a")!;
+  const selection = v.win.getSelection()!;
+  // in this order: jsdom collapses the selection when an element takes the focus
+  link.focus();
+  selection.selectAllChildren(first!);
+  assert.equal(v.win.document.activeElement, link, "precondition: the link has the focus");
+  assert.equal(selection.toString(), "Copy this passage.", "precondition: the first block is selected");
+
+  v.append(" More."); // the third block
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  const now = [...v.article.querySelectorAll("p")];
+  assert.equal(now[2]?.textContent, "Third block. More.");
+  assert.notEqual(now[2], third, "the edited block is new");
+  assert.equal(now[0], first, "the block with the selection stays on the page");
+  assert.equal(now[1], second, "and so does the one with the focus");
+  assert.equal(selection.toString(), "Copy this passage.");
+  assert.equal(selection.anchorNode, first);
+  assert.equal(v.win.document.activeElement, link);
+
+  // the co-editor changes the block with the focus: the keyboard stays in the view
+  v.ytext.insert(v.ytext.toString().indexOf("Read"), "Now ");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  assert.equal(v.article.querySelectorAll("p")[1]?.textContent, "Now Read the next part on.");
+  assert.equal(v.win.document.activeElement, v.container.querySelector(".markdown-view"));
+  assert.equal(v.article.querySelector("p"), first);
+  assert.deepEqual(v.errors, []);
+  v.view.destroy();
+});
+
+test("one render with edits in two places keeps every block before, between and after them (#289)", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const v = mount("# Title\n\nAlpha.\n\nBeta.\n\nGamma.\n\nDelta.");
+  const before = [...v.article.children];
+  v.ytext.insert(v.ytext.toString().indexOf("Gamma.") + 5, " two");
+  v.ytext.insert(v.ytext.toString().indexOf("Alpha.") + 5, " one");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  const after = [...v.article.children];
+  assert.deepEqual(
+    after.map((el) => el.textContent),
+    ["Title", "Alpha one.", "Beta.", "Gamma two.", "Delta."],
+  );
+  assert.deepEqual(
+    after.map((el, i) => el === before[i]),
+    [true, false, true, false, true],
+  );
+  const fresh = mount(v.ytext.toString());
+  assert.equal(v.article.innerHTML, fresh.article.innerHTML, "the page a fresh render shows");
+  fresh.view.destroy();
+  v.view.destroy();
+});
+
+test("matchBlocks keeps the unchanged blocks in order, and never matches a line break past a block", () => {
+  const br = "#text \n";
+  const [h, a, b, c, d, x] = ["<h1>T</h1>", "<p>a</p>", "<p>b</p>", "<p>c</p>", "<p>d</p>", "<p>x</p>"];
+  // a block inserted: the blocks around it stay
+  assert.deepEqual(matchBlocks([h, br, a, br, b, br], [h, br, x, br, a, br, b, br]), [0, 1, -1, -1, 2, 3, 4, 5]);
+  // two blocks edited: the one between them stays, and so does the line break after it
+  assert.deepEqual(
+    matchBlocks([h, br, a, br, b, br, c, br, d], [h, br, x, br, b, br, x, br, d]),
+    [0, 1, -1, -1, 4, 5, -1, 7, 8],
+  );
+  // a line break pulls no match past a block that can stay
+  assert.deepEqual(matchBlocks([x, a, br, b], [br, a, c]), [-1, 1, -1]);
+  // two blocks swapped: one of them stays, nothing moves
+  assert.deepEqual(matchBlocks([a, br, b], [b, br, a]), [2, -1, -1]);
+  assert.deepEqual(matchBlocks([], [a, br]), [-1, -1]);
+  assert.deepEqual(matchBlocks([a, br], []), []);
+});
+
+test("a fence extension that adds a node to the document has the next render replace it whole", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const fences: Record<string, FenceExtension> = {
+    demo: {
+      render: (content) => `<pre class="md-demo">${content.trim()}</pre>`,
+      hydrate: (root) => {
+        const note = root.ownerDocument.createElement("p");
+        note.className = "md-demo-note";
+        root.append(note);
+      },
+    },
+  };
+  const v = mount("Intro.\n\n```demo\nA\n```\n", { fences });
+  await settle();
+  assert.equal(v.article.querySelectorAll(".md-demo-note").length, 1);
+  v.append("\nOutro.");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  assert.deepEqual(
+    [...v.article.children].map((el) => el.textContent),
+    ["Intro.", "A", "Outro."],
+    "every block in its place, the extension's node gone",
+  );
   v.view.destroy();
 });
 
