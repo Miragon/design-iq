@@ -24,7 +24,12 @@
  *    fits, an arrow key scrolls the focused one, which shows the focus ring
  *    of §8, at full strength also while its drawing is dimmed;
  *  - the medium flowchart fits a wide window and turns into a scroll region
- *    in a narrow one.
+ *    in a narrow one; the Gantt charts are laid out anew for their narrower
+ *    blocks there, and again once the window is wide;
+ *  - a scroll region that fits again while it has the focus keeps it, and
+ *    gives up its tab stop once the focus moves on;
+ *  - a diagram's slot leaving the page while the others stay (as #289's
+ *    patching does) moves the region below it up a place.
  *
  * A control shows that without the minimum width the wide flowchart's
  * labels would read under 13px. Exits 1 on any failed check.
@@ -224,6 +229,17 @@ const check = (ok: boolean, what: string): void => {
 };
 const px = (n: number): string => `${Math.round(n * 10) / 10}px`;
 
+/** runs in the page: whether every Gantt chart is laid out for its block as it is now */
+function ganttsFollowTheirBlocks(indexes: number[]): boolean {
+  const figures = [...document.querySelectorAll<HTMLElement>(".md-mermaid-diagram")];
+  return indexes.every((index) => {
+    const figure = figures[index]!;
+    const natural = figure.querySelector("svg")!.viewBox.baseVal.width;
+    const block = figure.parentElement!.clientWidth;
+    return natural < block && natural > block * 0.7 && figure.scrollWidth <= figure.clientWidth;
+  });
+}
+
 const playwright = loadPlaywright();
 for (const file of ["index.html", "mermaid-frame.html"]) {
   if (!existsSync(join(DIST, file))) throw new Error(`apps/web/dist/${file} is missing: run pnpm build first.`);
@@ -374,16 +390,98 @@ try {
   check(!narrow.pageScrolls, "the page itself still does not scroll sideways");
   const small = narrow.diagrams[NAMES.indexOf("small flowchart")]!;
   check(small.tabIndex === null, "small flowchart: still fits, no tab stop");
+  const ganttIndexes = GANTT.map((name) => NAMES.indexOf(name));
+  const ganttsFollow = async (): Promise<boolean> =>
+    page.waitForFunction(ganttsFollowTheirBlocks, ganttIndexes, { timeout: 15_000, polling: 100 }).then(
+      () => true,
+      () => false,
+    );
+  const narrowGantts = (await ganttsFollow()) ? await page.evaluate(measure, undefined) : narrow;
+  for (const name of GANTT) {
+    const shown = narrowGantts.diagrams[NAMES.indexOf(name)]!;
+    check(
+      shown.natural < shown.block &&
+        shown.drawn <= shown.block + 0.5 &&
+        shown.scrollWidth <= shown.clientWidth &&
+        shown.tabIndex === null &&
+        shown.smallestText >= SMALLEST_TEXT_PX - 0.01,
+      `${name}: in the narrow window laid out anew at ${shown.natural}px, drawn at ${px(shown.drawn)} within its ${shown.block}px block, text at ${px(shown.smallestText)}`,
+    );
+  }
+
+  // the reader is in the medium flowchart when the window gets wide again: it fits, and keeps the focus
+  const mediumIndex = NAMES.indexOf("medium flowchart");
+  await page.evaluate(
+    (index) => document.querySelectorAll<HTMLElement>(".md-mermaid-diagram")[index]!.focus(),
+    mediumIndex,
+  );
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.waitForTimeout(500);
+  const kept = await page.evaluate((index) => {
+    const figure = document.querySelectorAll<HTMLElement>(".md-mermaid-diagram")[index]!;
+    return {
+      focused: document.activeElement === figure,
+      fits: figure.scrollWidth <= figure.clientWidth,
+      tabIndex: figure.getAttribute("tabindex"),
+    };
+  }, mediumIndex);
+  check(
+    kept.fits && kept.focused && kept.tabIndex === "0",
+    `medium flowchart: fits the wide window again and keeps the focus (focused ${kept.focused}, tabindex ${kept.tabIndex})`,
+  );
+  await page.keyboard.press("Shift+Tab");
+  const left = await page.evaluate((index) => {
+    const figures = [...document.querySelectorAll<HTMLElement>(".md-mermaid-diagram")];
+    const figure = figures[index]!;
+    return {
+      active: figures.indexOf(document.activeElement as HTMLElement),
+      attributes: ["tabindex", "role", "aria-label"].filter((name) => figure.hasAttribute(name)),
+    };
+  }, mediumIndex);
+  check(
+    left.active === NAMES.indexOf("wide flowchart") && left.attributes.length === 0,
+    `Shift+Tab goes on to the wide flowchart (diagram ${left.active}), and the medium one is no tab stop then (${left.attributes.join(", ") || "no tab stop"})`,
+  );
+
+  // and the Gantt charts are laid out for their wide blocks again
+  const wideGantts = (await ganttsFollow()) ? await page.evaluate(measure, undefined) : wide;
+  for (const name of GANTT) {
+    const shown = wideGantts.diagrams[NAMES.indexOf(name)]!;
+    check(
+      shown.natural < shown.block && shown.drawn >= shown.block - 2 && shown.drawn <= shown.block + 0.5,
+      `${name}: back in the wide window laid out at ${shown.natural}px, drawn at ${px(shown.drawn)} across its ${shown.block}px block`,
+    );
+  }
 
   // control: without its minimum width, the wide flowchart would shrink to unreadable labels
-  await page.setViewportSize({ width: 1280, height: 900 });
   await page.evaluate(() => {
-    for (const svg of document.querySelectorAll<SVGSVGElement>(".md-mermaid-diagram > svg")) svg.style.minWidth = "";
+    for (const svg of document.querySelectorAll<SVGSVGElement>(".md-mermaid-diagram > svg")) {
+      svg.dataset.minWidth = svg.style.minWidth;
+      svg.style.minWidth = "";
+    }
   }, undefined);
   const control = (await page.evaluate(measure, undefined)).diagrams[NAMES.indexOf("wide flowchart")]!;
   check(
     control.smallestText < SMALLEST_TEXT_PX,
     `control: without the minimum width the wide flowchart's labels read at ${px(control.smallestText)}`,
+  );
+  await page.evaluate(() => {
+    for (const svg of document.querySelectorAll<SVGSVGElement>(".md-mermaid-diagram > svg")) {
+      svg.style.minWidth = svg.dataset.minWidth ?? "";
+    }
+  }, undefined);
+
+  // the first diagram's slot leaves the page and the others stay, as #289's patching keeps them: the browser
+  // reports only the slot that left, and the wide flowchart below it moves up a place
+  await page.evaluate(() => document.querySelector(".md-mermaid-block")!.remove(), undefined);
+  await page.waitForTimeout(500);
+  const renamed = await page.evaluate(
+    () => [...document.querySelectorAll(".md-mermaid-diagram[role='region']")].map((f) => f.getAttribute("aria-label")),
+    undefined,
+  );
+  check(
+    renamed.length === 1 && renamed[0] === "Diagram 1: Order flow, scrolls sideways",
+    `a diagram above leaves the page: the wide flowchart is now "${renamed.join('", "')}"`,
   );
 } finally {
   await browser.close();

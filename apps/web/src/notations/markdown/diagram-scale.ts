@@ -8,7 +8,7 @@
  * wider than its block scrolls sideways there, and the block becomes a
  * region the keyboard reaches and scrolls. A diagram that takes the width it
  * is laid out at as its own (a Gantt chart) is laid out narrower instead, so
- * that it fits its block at 13px.
+ * that it fits its block at 13px, and anew whenever its block changes width.
  *
  * The minimum follows the diagram's own smallest text, measured on the
  * page as the reader gets it, not a flat factor: a flowchart's 16px labels
@@ -26,6 +26,9 @@ export const SMALLEST_TEXT_PX = 13;
 export const MAX_MINIMUM_SCALE = 4;
 /** the class of the block a drawn diagram sits in, the one that scrolls (./mermaid-fence.ts) */
 export const DIAGRAM_CLASS = "md-mermaid-diagram";
+/** the slot ./mermaid-fence.ts puts each fence in: the diagram's block once
+ *  it is drawn, the fence's code while it draws or when it cannot be */
+const SLOT_CLASS = "md-mermaid-block";
 
 /** a drawn text's font size in the diagram's own units, undefined for text the diagram does not show */
 export type FontSizeOf = (element: Element) => number | undefined;
@@ -80,6 +83,13 @@ export function minimumWidth(svg: Element, fontSizeOf?: FontSizeOf): number | un
   return width === undefined || fontSize === undefined ? undefined : Math.ceil(width * minimumScale(fontSize));
 }
 
+/** whether a drawing took the width it was laid out at as its own (a Gantt
+ *  chart), rather than a width of its own (C4, a flowchart) */
+export function takesItsWidth(drawing: Element, laidOutAt: number): boolean {
+  const width = viewBoxWidth(drawing);
+  return width !== undefined && Math.abs(width - laidOutAt) <= 1;
+}
+
 /**
  * The width to lay a diagram out at once more. A Gantt chart takes the width
  * it is laid out at as its own, and its 10px axis labels would then hold it
@@ -96,8 +106,7 @@ export function refitWidth(
   block: HTMLElement,
   fontSizeOf?: FontSizeOf,
 ): number | undefined {
-  const width = viewBoxWidth(drawing);
-  if (width === undefined || Math.abs(width - laidOutAt) > 1) return undefined;
+  if (!takesItsWidth(drawing, laidOutAt)) return undefined;
   const doc = block.ownerDocument;
   const copy = doc.importNode(drawing, true);
   const probe = doc.createElement("div");
@@ -114,20 +123,39 @@ export function refitWidth(
   }
 }
 
+/** the drawing a source lays out to for its block's width now; undefined when it cannot be drawn */
+export type Relayout = (block: HTMLElement) => Promise<Element | undefined>;
+
 /** measured once per drawing: the view shows the same sanitized drawing again on every render */
 const minimumWidths = new WeakMap<Element, number>();
-/** one per window: figures come and go with every render */
+/** the drawings that take the width they are laid out at as their own: the block width each was laid out for */
+const followers = new WeakMap<Element, { width: number; relayout: Relayout }>();
+/** the drawing each figure shows a copy of */
+const shownDrawings = new WeakMap<Element, Element>();
+/** figures whose drawing is being laid out anew: one layout at a time, the next for the width the block has then */
+const relayingOut = new WeakSet<Element>();
+/** one per window: slots come and go with every render */
 const observers = new WeakMap<Window, ResizeObserver>();
 
 /**
- * Hold a drawn diagram to its minimum width and make its figure a scroll
- * region while it is wider than its block. `drawing` is the sanitized
+ * Lay `drawing` out anew whenever its block changes width (Split to Markdown
+ * only, the split's divider, the window). It takes the width it is laid out
+ * at as its own (`takesItsWidth`), so it would otherwise stay as wide as the
+ * block it was first drawn in. `laidOutFor` is that block's width.
+ */
+export function followBlockWidth(drawing: Element, laidOutFor: number, relayout: Relayout): void {
+  followers.set(drawing, { width: laidOutFor, relayout });
+}
+
+/**
+ * Hold a drawn diagram to its minimum width. `drawing` is the sanitized
  * original the figure shows a copy of; call it once the figure is on the
  * page, so the copy's text can be measured.
  */
 export function fitDiagram(figure: HTMLElement, drawing: Element, fontSizeOf?: FontSizeOf): void {
   const svg = figure.querySelector("svg");
   if (!svg) return;
+  shownDrawings.set(figure, drawing);
   let width = minimumWidths.get(drawing);
   if (width === undefined) {
     width = minimumWidth(svg, fontSizeOf);
@@ -138,7 +166,23 @@ export function fitDiagram(figure: HTMLElement, drawing: Element, fontSizeOf?: F
     // a fixed height (mermaid's useMaxWidth off, a journey) would keep a wider SVG's drawing at its old scale
     if (svg.hasAttribute("height")) svg.style.height = "auto";
   }
-  watchOverflow(figure);
+}
+
+/**
+ * A fence's slot once its content changed, drawn or not: its diagram held to
+ * its minimum width, and the slot watched. While the diagram is wider than
+ * the slot, it is a named scroll region; a slot that comes or goes renames
+ * every region below it. Call it once the slot is on the page.
+ */
+export function fitDiagramSlot(slot: HTMLElement, drawing: Element | undefined): void {
+  const figure = figureIn(slot);
+  if (figure && drawing) fitDiagram(figure, drawing);
+  watch(slot);
+}
+
+/** a slot's drawn diagram, the block that scrolls */
+function figureIn(slot: Element): HTMLElement | undefined {
+  return [...slot.children].find((child) => child.classList.contains(DIAGRAM_CLASS)) as HTMLElement | undefined;
 }
 
 /** a diagram type as mermaid names it on the SVG, in words: flowchart-v2 is a flowchart, classDiagram a class diagram */
@@ -165,11 +209,17 @@ export function scrollRegionLabel(position: number, svg: Element | null): string
   return `${name}, scrolls sideways`;
 }
 
+/** a figure that fits has kept its tab stop while it had the focus: it gives it up once the focus moves on */
+const unmarkOnBlur = (event: Event): void => markScrollRegion(event.currentTarget as HTMLElement);
+
 /** a figure wider than its block is a focusable region, so the keyboard scrolls it; one that fits is no tab stop */
 export function markScrollRegion(figure: HTMLElement): void {
   if (figure.scrollWidth > figure.clientWidth) {
     figure.tabIndex = 0;
     figure.setAttribute("role", "region");
+  } else if (figure === figure.ownerDocument.activeElement) {
+    // without its tab stop the focus would drop to the body, and the reader's next Tab start over at the top
+    figure.addEventListener("blur", unmarkOnBlur, { once: true });
   } else {
     figure.removeAttribute("tabindex");
     figure.removeAttribute("role");
@@ -177,32 +227,60 @@ export function markScrollRegion(figure: HTMLElement): void {
   }
 }
 
-/** every region of a document named anew: a diagram added or removed above one changes its place */
+/** every region of a document named anew, numbered among all mermaid fences: one that shows its code still takes its place */
 export function nameScrollRegions(doc: Document): void {
-  doc.querySelectorAll<HTMLElement>(`.${DIAGRAM_CLASS}`).forEach((figure, index) => {
-    if (figure.getAttribute("role") === "region") {
+  doc.querySelectorAll(`.${SLOT_CLASS}`).forEach((slot, index) => {
+    const figure = figureIn(slot);
+    if (figure?.getAttribute("role") === "region") {
       figure.setAttribute("aria-label", scrollRegionLabel(index + 1, figure.querySelector("svg")));
     }
   });
 }
 
-/** overflow needs layout: checked once it is laid out and whenever the column changes width (the window, the split) */
-function watchOverflow(figure: HTMLElement): void {
-  const win = figure.ownerDocument.defaultView;
+/** a drawing that takes its width as its own, laid out anew for its slot's width once that changed */
+function followWidth(slot: HTMLElement, figure: HTMLElement): void {
+  const drawing = shownDrawings.get(figure);
+  const follower = drawing && followers.get(drawing);
+  const width = slot.clientWidth;
+  if (!follower || relayingOut.has(figure) || width <= 0 || Math.abs(width - follower.width) <= 1) return;
+  relayingOut.add(figure);
+  void follower
+    .relayout(slot)
+    .then(
+      (next) => {
+        if (!next || !figure.isConnected || shownDrawings.get(figure) !== drawing) return;
+        figure.replaceChildren(figure.ownerDocument.importNode(next, true));
+        fitDiagramSlot(slot, next);
+      },
+      () => undefined,
+    )
+    .finally(() => relayingOut.delete(figure));
+}
+
+/** overflow needs layout: checked once a slot is laid out, whenever its content changes and whenever the column
+ *  changes width (the window, the split) */
+function watch(slot: HTMLElement): void {
+  const win = slot.ownerDocument.defaultView;
   if (!win?.ResizeObserver) return;
   let observer = observers.get(win);
   if (!observer) {
     const created: ResizeObserver = new win.ResizeObserver((entries) => {
-      let marked = false;
       for (const { target } of entries) {
-        if (target.isConnected) {
-          markScrollRegion(target as HTMLElement);
-          marked = true;
-        } else created.unobserve(target);
+        if (!target.isConnected) {
+          created.unobserve(target);
+          continue;
+        }
+        const figure = figureIn(target);
+        if (!figure) continue;
+        markScrollRegion(figure);
+        followWidth(target as HTMLElement, figure);
       }
-      if (marked) nameScrollRegions(win.document);
+      // a slot that left the page, too: the ones below it moved up a place
+      nameScrollRegions(win.document);
     });
     observers.set(win, (observer = created));
   }
-  observer.observe(figure);
+  // observed afresh, so the observer reports new content at the slot's old size too
+  observer.unobserve(slot);
+  observer.observe(slot);
 }
