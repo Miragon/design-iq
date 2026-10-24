@@ -424,7 +424,7 @@ function extractWardley(raw: string): ModelGraph {
   return { notation: "wardley", nodes, edges };
 }
 
-// ── the .tt document (Miragon team-topologies-modeler) ───────────────────────
+// ── the .tt document (Miragon/modeler-suite, modelers/team-topologies) ───────
 // `{ version, title, nodes, interactions, flows, annotations }`
 // (@miragon/team-topologies-schema-model TtDocument). A team is a node; an
 // interaction is a shape of its own, placed between the teams it connects,
@@ -454,7 +454,7 @@ function extractTeamTopology(raw: string): ModelGraph {
   return { notation: "team-topology", nodes: [...teams, ...interactions], edges: [] };
 }
 
-// ── the .storm DSL (Miragon event-storming-modeler) ──────────────────────────
+// ── the .storm DSL (Miragon/modeler-suite, modelers/event-storming) ──────────
 // One statement per line: `title …` / `style …` / `level …` config lines,
 // `<kind> <Label> [x, y] (suffixes)` stickies (kinds: event command actor
 // aggregate policy readmodel external hotspot), `note <Text> [x, y]`,
@@ -610,7 +610,7 @@ function extractEventStorming(raw: string): ModelGraph {
   return { notation: "event-storming", nodes, edges, meta: { title, level } };
 }
 
-// ── the .cm.json document (Miragon context-maps-modeler) ─────────────────────
+// ── the .cm.json document (Miragon/modeler-suite, modelers/context-maps) ─────
 // One JSON object: `{ version, title, contexts, relationships }`
 // (@miragon/context-maps-schema-model CmDocument). A bounded context is a
 // box (`label`, `subdomainType` core/supporting/generic, `team`, geometry);
@@ -682,7 +682,7 @@ function extractContextMap(raw: string): ModelGraph {
   return { notation: "context-map", nodes, edges, meta: { title: text(data.title) ?? null } };
 }
 
-// ── the .vc.json document (Miragon value-chain-modeler) ──────────────────────
+// ── the .vc.json document (Miragon/modeler-suite, modelers/value-chain) ──────
 // `{ schemaVersion, meta, elements, connections }`
 // (@miragon/value-chain-schema-model ValueChainDocument): a `step` or
 // `orgUnit` element is labelled by its `name`, the schema has no other label.

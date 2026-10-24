@@ -951,7 +951,7 @@ Not used: no sparkles, wand or robot (anti-slop U4); no emoji or unicode glyphs 
 - "Continue here" (superseded re-claim and reload).
 - Release → PR… via `ui/message`.
 - Touch undo/redo.
-- Miragon compact palette wrap verified per renderer, plus an upstream palette-offset option on the Miragon renderer repos.
+- Miragon compact palette wrap verified per renderer, plus an upstream palette-offset option in the Miragon renderers ([Miragon/modeler-suite](https://github.com/Miragon/modeler-suite)).
 - Content-adaptive inline height, if wanted.
 
 **Verify in real hosts before release (the harness cannot):**
