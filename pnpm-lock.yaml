@@ -305,6 +305,9 @@ importers:
       postcss-prefix-selector:
         specifier: 2.2.1
         version: 2.2.1(postcss@8.5.30)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
       vite:
         specifier: 8.3.4
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)

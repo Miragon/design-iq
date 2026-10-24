@@ -9,8 +9,9 @@
  * selection; Enter on it keeps the focus on the switch, and Delete does
  * nothing. A click on a Model action of the ⋯ menu hands the canvas the focus
  * as the menu closes; Enter on it leaves the focus to radix (the trigger).
- * The React wiring around it (the non-modal ⋯ menu, a click on the canvas
- * while the menu is open) runs in a browser: test/canvas-focus-chromium.ts.
+ * The toolbar's React wiring (the non-modal ⋯ menu, its entries' clicks):
+ * test/toolbar-focus-dom.test.ts; the whole SPA in a browser:
+ * test/canvas-focus-chromium.ts.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -185,9 +186,10 @@ const EDITORS: Array<[name: string, mount: () => Promise<Mounted>]> = [
   ["dmn", dmnEditor],
 ];
 
-test("a click on the Diagram side or a Model action hands each canvas the focus, and Delete acts there; Enter keeps the guide's focus", async () => {
-  const { focusCanvasIn, isPointerClick, menuCloseFocus, viewSwitchFocus } = await import("../src/lib/canvas-focus.ts");
-  for (const [name, mount] of EDITORS) {
+for (const [name, mount] of EDITORS) {
+  test(`${name}: a click on the Diagram side or a Model action hands the canvas the focus, and Delete acts there; Enter keeps the guide's focus`, async () => {
+    const { focusCanvasIn, isPointerClick, menuCloseFocus, viewSwitchFocus } =
+      await import("../src/lib/canvas-focus.ts");
     const { editor, container, diagram } = await mount();
     const svg = container.querySelector(".djs-container > svg");
     assert.ok(svg, `${name}: the canvas`);
@@ -204,7 +206,7 @@ test("a click on the Diagram side or a Model action hands each canvas the focus,
 
     // the shell's canvas (live-editor.tsx): the layer shows or the source does
     let shown = true;
-    const canvas = { shown: () => shown, focus: () => focusCanvasIn(container, editor.focus) };
+    const canvas = { shown: () => shown, focus: () => focusCanvasIn(container, editor) };
     const views = viewSwitchFocus(canvas);
     const diagramSide = document.createElement("button");
     const trigger = document.createElement("button");
@@ -245,10 +247,11 @@ test("a click on the Diagram side or a Model action hands each canvas the focus,
     const menu = menuCloseFocus();
     select();
     trigger.focus();
-    menu.actedOnCanvas(false);
+    menu.actedOnCanvas({ detail: 0 });
     assert.equal(menu.closing(canvas), false, `${name}: Enter on a Model action leaves the focus to radix`);
     assert.equal(document.activeElement, trigger);
-    menu.actedOnCanvas(true);
+    menu.pointerReleased();
+    menu.actedOnCanvas({ detail: 1 });
     assert.equal(menu.closing(canvas), true, `${name}: a click on a Model action settles the focus`);
     assert.equal(document.activeElement, svg, `${name}: on the canvas`);
     pressDelete();
@@ -258,5 +261,5 @@ test("a click on the Diagram side or a Model action hands each canvas the focus,
     diagramSide.remove();
     trigger.remove();
     container.remove();
-  }
-});
+  });
+}

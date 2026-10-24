@@ -42,13 +42,13 @@ export interface FocusableCanvas {
 
 /**
  * Hands the focus to the canvas mounted in `host` through the editor's
- * `focus` (MountedEditor.focus); true when it landed in the host. An editor
+ * `focus()` (MountedEditor.focus); true when it landed in the host. An editor
  * without one (the Markdown view), one not mounted yet and a hidden host
  * (inert) take none.
  */
-export function focusCanvasIn(host: Element | null, focus: (() => void) | undefined): boolean {
-  if (!host || !focus) return false;
-  focus();
+export function focusCanvasIn(host: Element | null, editor: { focus?(): void } | undefined): boolean {
+  if (!host || !editor?.focus) return false;
+  editor.focus();
   return host.contains(host.ownerDocument.activeElement);
 }
 
@@ -83,8 +83,11 @@ export function viewSwitchFocus(canvas: FocusableCanvas): ViewSwitchFocus {
 export interface MenuCloseFocus {
   /** an entry that opens a dialog was chosen: the dialog takes the focus */
   openingDialog(): void;
-  /** an action entry of the Model group that opens no dialog was chosen, by a click (`pointer`) or by key */
-  actedOnCanvas(pointer: boolean): void;
+  /** a pointer was released on an action entry of the Model group */
+  pointerReleased(): void;
+  /** an action entry of the Model group that opens no dialog was clicked,
+   *  with a pointer or by Enter or Space */
+  actedOnCanvas(click: Pick<MouseEvent, "detail">): void;
   /** the menu closes: true when the focus is settled here, so radix must
    *  leave it alone (preventDefault); false leaves it to radix */
   closing(canvas: FocusableCanvas | undefined): boolean;
@@ -92,16 +95,24 @@ export interface MenuCloseFocus {
 
 export function menuCloseFocus(): MenuCloseFocus {
   let chosen: "dialog" | "canvas" | undefined;
+  // radix clicks an entry itself, with no detail, on Enter and Space and also
+  // when a press on the trigger is dragged onto the entry and released there
+  let released = false;
   return {
     openingDialog() {
       chosen = "dialog";
     },
-    actedOnCanvas(pointer) {
-      chosen = pointer ? "canvas" : undefined;
+    pointerReleased() {
+      released = true;
+    },
+    actedOnCanvas(click) {
+      chosen = released || isPointerClick(click) ? "canvas" : undefined;
+      released = false;
     },
     closing(canvas) {
       const last = chosen;
       chosen = undefined;
+      released = false;
       if (last === "dialog") return true;
       return last === "canvas" && canvas !== undefined && canvas.shown() && canvas.focus();
     },

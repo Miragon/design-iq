@@ -300,17 +300,22 @@ turns every slide, spinner and animated re-fit off. The chrome modules' focus
 rules (a keyboard user never lands on `<body>`) are tested on a small fake DOM
 (`test/fake-dom.ts`, `test/widget-chrome-dom.test.ts`).
 
-**A click on the SPA's chrome hands the canvas the focus.** Every SPA editor with a canvas
-(bpmn-js, the DMN DRD, the Miragon renderers) hears its keys only while the canvas has the
-focus, so the SPA hands it back after a click, as the widget does after a zoom click (guide §5.8,
-`src/lib/canvas-focus.ts`): a click on the view switch's Diagram side focuses the canvas once it
-shows, and so does a click on a Model action of the ⋯ menu that opens no dialog (no renderer
-ships one yet). Enter and Space keep the focus on the switch; on a menu entry they, like Escape,
-give it to the menu's trigger (§5.4). The ⋯ menu is not modal: a click on the canvas closes it
-and acts there, so after a toggle that keeps the menu open (Type captions, Legend) that one click
-gives the canvas the focus. `test/canvas-focus.test.ts` holds the rules,
-`test/canvas-focus-dom.test.ts` runs them on each real canvas, and `test/canvas-focus-chromium.ts`
-runs the built SPA by hand (its header says how).
+**A click on the SPA's chrome hands the canvas the focus.** bpmn-js and the DMN DRD hear their
+keys only while their canvas has the focus, the Miragon renderers only while their canvas or the
+page has it. A toolbar control that kept the focus after a click took Delete, the arrows and ⌘Z
+away from the canvas, so the SPA hands the canvas the focus back after a click, as the widget does
+after a zoom click (guide §5.8, `src/lib/canvas-focus.ts`): a click on the view switch's Diagram
+side focuses the canvas once it shows, and so does a click on a Model action of the ⋯ menu that
+opens no dialog (no renderer ships one yet). Enter and Space keep the focus on the switch; on a
+menu entry they, like Escape, give it to the menu's trigger (§5.4). The ⋯ menu is not modal: a
+click on the canvas closes it and acts there, so after a toggle that keeps the menu open (Type
+captions, Legend) that one click gives the canvas the focus. `test/canvas-focus.test.ts` holds the
+rules, `test/canvas-focus-dom.test.ts` runs them on each real canvas, and
+`test/toolbar-focus-dom.test.ts` renders the toolbar with React under jsdom
+(`test/component-dom.ts` loads its `.tsx`): the menu stays non-modal, and its entries and the view
+switch tell a click from Enter. `test/canvas-focus-chromium.ts` runs the built SPA by hand (its
+header says how); the live editor's few lines that pass the view switch's choice to the canvas run
+only there.
 
 **One spec per Miragon renderer.** The four Miragon widgets are not four
 entries: `src/notations/miragon/<id>.ts` holds ONE `MiragonRendererSpec` per

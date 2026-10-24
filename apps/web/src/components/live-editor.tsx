@@ -199,7 +199,7 @@ export function LiveEditor({
   const mountedRef = useRef<MountedEditor | undefined>(undefined);
   const [canvasFocus] = useState<FocusableCanvas>(() => ({
     shown: () => canvasShownRef.current,
-    focus: () => focusCanvasIn(canvasRef.current, mountedRef.current?.focus),
+    focus: () => focusCanvasIn(canvasRef.current, mountedRef.current),
   }));
   const [viewFocus] = useState(() => viewSwitchFocus(canvasFocus));
 

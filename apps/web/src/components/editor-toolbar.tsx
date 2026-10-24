@@ -471,15 +471,15 @@ function ModelerEntries({
       );
     }
     const Icon = entry.icon ? MODELER_ICONS[entry.icon] : undefined;
+    const handsBack = closeFocus && entry.kind === "action" ? closeFocus : undefined;
     return (
       <DropdownMenuItem
         key={entry.id}
         inset
         aria-haspopup={entry.kind === "dialog" ? "dialog" : undefined}
-        // radix runs onSelect after this handler; its Enter and Space click with detail 0
-        onClick={
-          closeFocus && entry.kind === "action" ? (event) => closeFocus.actedOnCanvas(isPointerClick(event)) : undefined
-        }
+        // radix runs its own pointer-up and click handling, and then onSelect, after these
+        onPointerUp={handsBack && (() => handsBack.pointerReleased())}
+        onClick={handsBack && ((event) => handsBack.actedOnCanvas(event))}
         onSelect={entry.kind === "dialog" ? openDialog(() => entry.onSelect()) : () => entry.onSelect()}
       >
         {Icon ? <Icon /> : <IconGap />}

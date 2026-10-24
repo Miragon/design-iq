@@ -88,20 +88,49 @@ test("view switch: a choice before the commit replaces the pending hand-back; a 
   assert.equal(state.focused, 0, "the hand-back belonged to the first commit");
 });
 
+const CLICK = { detail: 1 };
+/** Enter and Space: radix clicks the entry itself, with no detail */
+const KEY = { detail: 0 };
+
 test("⋯ menu: a click on a Model action hands the canvas the focus as the menu closes, and radix leaves it there", () => {
   const { canvas, state } = fakeCanvas(true);
   const menu = menuCloseFocus();
-  menu.actedOnCanvas(true);
+  menu.pointerReleased();
+  menu.actedOnCanvas(CLICK);
   assert.equal(menu.closing(canvas), true, "settled here: radix must not move it to the trigger");
   assert.equal(state.focused, 1);
   assert.equal(menu.closing(canvas), false, "the next close is radix's again");
   assert.equal(state.focused, 1);
 });
 
+test("⋯ menu: a press on the trigger dragged onto a Model action and released there counts as a click", () => {
+  const { canvas, state } = fakeCanvas(true);
+  const menu = menuCloseFocus();
+  menu.pointerReleased();
+  menu.actedOnCanvas(KEY); // radix clicks the entry itself
+  assert.equal(menu.closing(canvas), true);
+  assert.equal(state.focused, 1);
+});
+
+test("⋯ menu: a released pointer counts for the click that follows it only", () => {
+  const { canvas, state } = fakeCanvas(true);
+  const menu = menuCloseFocus();
+  menu.pointerReleased();
+  menu.actedOnCanvas(CLICK);
+  assert.equal(menu.closing(canvas), true);
+  menu.actedOnCanvas(KEY);
+  assert.equal(menu.closing(canvas), false, "Enter on an entry the next time the menu opens");
+  menu.pointerReleased();
+  assert.equal(menu.closing(canvas), false, "the menu closed without the entry's click");
+  menu.actedOnCanvas(KEY);
+  assert.equal(menu.closing(canvas), false, "Enter the time after");
+  assert.equal(state.focused, 1);
+});
+
 test("⋯ menu: Enter or Space on a Model action, Escape and a click outside leave the focus to radix", () => {
   const { canvas, state } = fakeCanvas(true);
   const menu = menuCloseFocus();
-  menu.actedOnCanvas(false);
+  menu.actedOnCanvas(KEY);
   assert.equal(menu.closing(canvas), false, "Enter or Space: radix gives the trigger the focus");
   assert.equal(menu.closing(canvas), false, "Escape, a click outside, a checkbox toggled before");
   assert.equal(state.focused, 0);
@@ -113,7 +142,7 @@ test("⋯ menu: a dialog entry leaves the focus to its dialog, whatever chose it
   menu.openingDialog();
   assert.equal(menu.closing(canvas), true, "radix must not steal the dialog field's focus");
   assert.equal(state.focused, 0);
-  menu.actedOnCanvas(true);
+  menu.actedOnCanvas(CLICK);
   menu.openingDialog();
   assert.equal(menu.closing(canvas), true, "the last choice counts");
   assert.equal(state.focused, 0);
@@ -122,16 +151,16 @@ test("⋯ menu: a dialog entry leaves the focus to its dialog, whatever chose it
 test("⋯ menu: the trigger takes the focus where the canvas cannot: behind the source, no editor, none at all", () => {
   const hidden = fakeCanvas(false);
   const menu = menuCloseFocus();
-  menu.actedOnCanvas(true);
+  menu.actedOnCanvas(CLICK);
   assert.equal(menu.closing(hidden.canvas), false);
   assert.equal(hidden.state.focused, 0, "a hidden canvas is not asked");
 
   const refusing = fakeCanvas(true, false);
-  menu.actedOnCanvas(true);
+  menu.actedOnCanvas(CLICK);
   assert.equal(menu.closing(refusing.canvas), false, "the editor took no focus");
   assert.equal(refusing.state.focused, 1);
 
-  menu.actedOnCanvas(true);
+  menu.actedOnCanvas(CLICK);
   assert.equal(menu.closing(undefined), false);
 });
 
@@ -143,19 +172,17 @@ test("focusCanvasIn: true only when the editor's focus landed in the canvas host
     ownerDocument: document,
     contains: (node: unknown) => node === inside,
   } as unknown as Element;
-  assert.equal(
-    focusCanvasIn(host, () => (document.activeElement = inside)),
-    true,
-  );
+  /** an editor whose focus() uses its own object, as a class's method would */
+  const editor = {
+    target: inside,
+    focus(this: { target: unknown }) {
+      document.activeElement = this.target;
+    },
+  };
+  assert.equal(focusCanvasIn(host, editor), true, "called on the editor");
   document.activeElement = outside;
-  assert.equal(
-    focusCanvasIn(host, () => {}),
-    false,
-    "an inert host keeps the focus where it was",
-  );
-  assert.equal(focusCanvasIn(host, undefined), false, "an editor without canvas keys (the Markdown view)");
-  assert.equal(
-    focusCanvasIn(null, () => assert.fail("no host: nothing to focus")),
-    false,
-  );
+  assert.equal(focusCanvasIn(host, { focus() {} }), false, "an inert host keeps the focus where it was");
+  assert.equal(focusCanvasIn(host, {}), false, "an editor without canvas keys (the Markdown view)");
+  assert.equal(focusCanvasIn(host, undefined), false, "no editor mounted yet");
+  assert.equal(focusCanvasIn(null, { focus: () => assert.fail("no host: nothing to focus") }), false);
 });
