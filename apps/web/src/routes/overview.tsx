@@ -270,8 +270,10 @@ export function Overview() {
   );
 }
 
-/** "Find a repository…" + Show + Sort. `/` focuses the box, Esc clears it. */
-function RepoToolbar({
+/** "Find a repository…" + Show + Sort. `/` focuses the box, Esc clears it.
+ *  A German keyboard types `/` with ⇧7, so the box names the keys of both
+ *  layouts to assistive tech, US first (guide §5.6). */
+export function RepoToolbar({
   query,
   show,
   sort,
@@ -334,7 +336,7 @@ function RepoToolbar({
           }}
           placeholder="Find a repository…"
           aria-label="Find a repository"
-          aria-keyshortcuts="/"
+          aria-keyshortcuts="/ Shift+7"
           autoComplete="off"
           spellCheck={false}
           className="pr-9 pl-8"
