@@ -24,14 +24,18 @@
  *
  * A render patches the article per top-level block (#289): a block whose
  * rendered HTML did not change stays on the page as it is, with the reader's
- * text selection, the keyboard focus and a drawn diagram in it, and only the
- * blocks a change touched are replaced (matchBlocks). The focus in a replaced
- * block moves to the view itself, so the keyboard stays in it. The reader's
- * place stays too: the first block on screen the render keeps is scrolled
- * back to where it was, once the fences have put their cached output back.
- * A browser's CSS scroll anchoring often did that already, and then nothing
- * is left to move; Safari has it only from 27 on, so the view does not rely
- * on it.
+ * text selection, the keyboard focus and a drawn diagram in it, and the
+ * others are replaced. matchBlocks aligns the blocks of the two renders, so a
+ * block that repeats (a heading's text, a rule) never costs an unchanged
+ * block its place. A block that moved past others counts as changed, and so
+ * does a heading whose id a new heading with the same text renumbered. The
+ * focus in a replaced block moves to the view itself, so the keyboard stays
+ * in it. The reader's place stays too: the first block on screen stays where
+ * it is on screen, across a render (once the fences have put their cached
+ * output back) and after it, when a diagram drawn or an image loaded above it
+ * changes the article's height. A browser's CSS scroll anchoring often did
+ * that already, and then nothing is left to move; Safari has it only from 27
+ * on, so the view does not rely on it.
  * While the shell shows only the source (ctx.visibility), the view does not
  * render at all, not even a document that opens that way, and catches up
  * when it shows again: an author typing in Monaco never pays for a hidden
@@ -57,55 +61,117 @@ const blockKey = (node: Node): string =>
   node.nodeType === node.ELEMENT_NODE ? (node as Element).outerHTML : `#${node.nodeName} ${node.textContent ?? ""}`;
 const isElementKey = (key: string): boolean => key.startsWith("<");
 
+/** a stretch of the old blocks, [oldStart, oldEnd), and of the new ones, [newStart, newEnd) */
+interface Stretch {
+  oldStart: number;
+  oldEnd: number;
+  newStart: number;
+  newEnd: number;
+}
+
+/** the largest stretch (old blocks times new ones) aligned block by block
+ *  when no block in it is unique; a larger one is replaced */
+const MAX_ALIGNED_CELLS = 1 << 18;
+
 /**
  * Which blocks of the last render the next one keeps: for each new block, the
  * index of the old block it is (the same key, in the same order), or -1 for
- * one to insert. The common start and end match first. In between, a block
- * matches the next equal one ahead, so the blocks between two edits stay; a
- * text node (the line breaks between blocks) only where it stands, so it
- * never pulls the match past a block that could stay.
+ * one to insert. A patience alignment: the common start and end match first.
+ * In between, the blocks whose key occurs once on each side anchor the match,
+ * as many of them as keep their order, and each stretch between two anchors
+ * is matched the same way. So a key that repeats (a heading's text, a rule,
+ * the line breaks between blocks) never pulls the match past a block that
+ * could stay. A stretch without such a block is aligned block by block (the
+ * longest common subsequence, a block outweighing every line break).
  */
 export function matchBlocks(before: readonly string[], after: readonly string[]): number[] {
   const kept = after.map(() => -1);
-  let start = 0;
-  while (start < before.length && start < after.length && before[start] === after[start]) {
-    kept[start] = start;
-    start++;
-  }
-  let end = 0;
-  while (
-    end < before.length - start &&
-    end < after.length - start &&
-    before[before.length - 1 - end] === after[after.length - 1 - end]
-  ) {
-    kept[after.length - 1 - end] = before.length - 1 - end;
-    end++;
-  }
-  const middleEnd = before.length - end;
-  /** the old blocks in between by key, the next one last */
-  const ahead = new Map<string, number[]>();
-  for (let at = middleEnd - 1; at >= start; at--) {
-    const key = before[at]!;
-    if (!isElementKey(key)) continue;
-    const list = ahead.get(key);
-    if (list) list.push(at);
-    else ahead.set(key, [at]);
-  }
-  let cursor = start;
-  for (let i = start; i < after.length - end; i++) {
-    const key = after[i]!;
-    if (!isElementKey(key)) {
-      if (cursor < middleEnd && before[cursor] === key) kept[i] = cursor++;
+  const stretches: Stretch[] = [{ oldStart: 0, oldEnd: before.length, newStart: 0, newEnd: after.length }];
+  for (let stretch = stretches.pop(); stretch; stretch = stretches.pop()) {
+    let { oldStart, oldEnd, newStart, newEnd } = stretch;
+    while (oldStart < oldEnd && newStart < newEnd && before[oldStart] === after[newStart])
+      kept[newStart++] = oldStart++;
+    while (oldStart < oldEnd && newStart < newEnd && before[oldEnd - 1] === after[newEnd - 1])
+      kept[--newEnd] = --oldEnd;
+    if (oldStart === oldEnd || newStart === newEnd) continue;
+    const anchors = uniqueAnchors(before, after, { oldStart, oldEnd, newStart, newEnd });
+    if (anchors.length === 0) {
+      alignRepeated(before, after, { oldStart, oldEnd, newStart, newEnd }, kept);
       continue;
     }
-    const list = ahead.get(key);
-    while (list?.length && list[list.length - 1]! < cursor) list.pop();
-    const at = list?.pop();
-    if (at === undefined) continue;
-    kept[i] = at;
-    cursor = at + 1;
+    for (const [oldAt, newAt] of anchors) {
+      kept[newAt] = oldAt;
+      stretches.push({ oldStart, oldEnd: oldAt, newStart, newEnd: newAt });
+      oldStart = oldAt + 1;
+      newStart = newAt + 1;
+    }
+    stretches.push({ oldStart, oldEnd, newStart, newEnd });
   }
   return kept;
+}
+
+/** the blocks (elements) whose key occurs once in the stretch on each side,
+ *  as [old index, new index], cut down to the longest run in the same order */
+function uniqueAnchors(before: readonly string[], after: readonly string[], stretch: Stretch): Array<[number, number]> {
+  const once = (keys: readonly string[], start: number, end: number): Map<string, number> => {
+    const index = new Map<string, number>();
+    for (let at = start; at < end; at++) {
+      const key = keys[at]!;
+      if (isElementKey(key)) index.set(key, index.has(key) ? -1 : at);
+    }
+    return index;
+  };
+  const oldOnce = once(before, stretch.oldStart, stretch.oldEnd);
+  const pairs: Array<[number, number]> = [];
+  for (const [key, newAt] of once(after, stretch.newStart, stretch.newEnd)) {
+    const oldAt = oldOnce.get(key) ?? -1;
+    if (newAt >= 0 && oldAt >= 0) pairs.push([oldAt, newAt]);
+  }
+  // patience sorting: tails[n] is the pair that ends the lowest run of n + 1
+  const tails: number[] = [];
+  const previous: number[] = [];
+  pairs.forEach(([oldAt], pair) => {
+    let low = 0;
+    let high = tails.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (pairs[tails[middle]!]![0] < oldAt) low = middle + 1;
+      else high = middle;
+    }
+    previous[pair] = low > 0 ? tails[low - 1]! : -1;
+    tails[low] = pair;
+  });
+  const run: Array<[number, number]> = [];
+  for (let pair = tails.at(-1) ?? -1; pair >= 0; pair = previous[pair]!) run.push(pairs[pair]!);
+  return run.reverse();
+}
+
+/** match a stretch in which no block is unique by the longest common
+ *  subsequence of its keys, a block weighing more than all its line breaks */
+function alignRepeated(before: readonly string[], after: readonly string[], stretch: Stretch, kept: number[]): void {
+  const rows = stretch.oldEnd - stretch.oldStart;
+  const columns = stretch.newEnd - stretch.newStart;
+  if (rows * columns > MAX_ALIGNED_CELLS) return;
+  const weight = (key: string): number => (isElementKey(key) ? rows + columns + 1 : 1);
+  const same = (row: number, column: number): boolean =>
+    before[stretch.oldStart + row] === after[stretch.newStart + column];
+  const width = columns + 1;
+  /** best[row * width + column]: the most weight the rest of the stretch from there matches */
+  const best = new Int32Array((rows + 1) * width);
+  for (let row = rows - 1; row >= 0; row--) {
+    for (let column = columns - 1; column >= 0; column--) {
+      const cell = row * width + column;
+      const match = same(row, column) ? best[cell + width + 1]! + weight(before[stretch.oldStart + row]!) : 0;
+      best[cell] = Math.max(best[cell + width]!, best[cell + 1]!, match);
+    }
+  }
+  for (let row = 0, column = 0; row < rows && column < columns;) {
+    const cell = row * width + column;
+    if (same(row, column) && best[cell] === best[cell + width + 1]! + weight(before[stretch.oldStart + row]!)) {
+      kept[stretch.newStart + column++] = stretch.oldStart + row++;
+    } else if (best[cell] === best[cell + width]) row++;
+    else column++;
+  }
 }
 
 export function mountMarkdownView(
@@ -147,31 +213,46 @@ export function mountMarkdownView(
   /** the keys of the article's top-level nodes as the last render put them
    *  there; undefined while it shows no rendered document */
   let blockKeys: string[] | undefined;
-  /** where the reader was before the latest render, until it is scrolled back there */
-  let place: { block: Element; top: number } | undefined;
+  /** where the reader is: the first block on screen, where it was on screen,
+   *  and the scroll offset then */
+  let place: { block: Element; top: number; scrollTop: number } | undefined;
 
   /** the first of these blocks on screen, and where it is. None at the top
    *  of the document: a reader there stays at the top */
-  const readingPlace = (blocks: readonly ChildNode[]): typeof place => {
-    if (scroller.scrollTop <= 0) return undefined;
+  const readingPlace = (blocks: ArrayLike<Element>): typeof place => {
+    const scrollTop = scroller.scrollTop;
+    if (scrollTop <= 0) return undefined;
     const top = scroller.getBoundingClientRect().top;
-    for (const block of blocks) {
-      if (!(block instanceof win.Element)) continue;
-      const box = block.getBoundingClientRect();
-      if (box.bottom > top) return { block, top: box.top };
+    // the blocks stack down the page: the first one that ends below the top
+    let low = 0;
+    let high = blocks.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (blocks[middle]!.getBoundingClientRect().bottom > top) high = middle;
+      else low = middle + 1;
     }
-    return undefined;
+    const block = blocks[low];
+    return block && { block, top: block.getBoundingClientRect().top, scrollTop };
   };
 
-  /** scroll the reader's place back to where it was; scroll anchoring may
-   *  have done it already, then there is nothing left to move */
+  /** scroll the reader's place back to where it was, and take it anew. Not
+   *  when the reader scrolled since, nor the browser: its CSS scroll
+   *  anchoring did it then */
   const keepPlace = (): void => {
-    const kept = place;
-    place = undefined;
-    if (!kept?.block.isConnected) return;
-    const shift = kept.block.getBoundingClientRect().top - kept.top;
-    if (shift !== 0) scroller.scrollTop += shift;
+    if (place?.block.isConnected && scroller.scrollTop === place.scrollTop) {
+      const shift = place.block.getBoundingClientRect().top - place.top;
+      if (shift !== 0) scroller.scrollTop += shift;
+    }
+    place = readingPlace(article.children);
   };
+  const onScroll = (): void => {
+    if (scroller.scrollTop !== place?.scrollTop) place = readingPlace(article.children);
+  };
+  scroller.addEventListener("scroll", onScroll, { passive: true });
+  // what lands after a render, a diagram drawn or an image loaded above the
+  // reader, changes the article's height: the reader stays where they were
+  const resizes = "ResizeObserver" in win ? new win.ResizeObserver(() => keepPlace()) : undefined;
+  resizes?.observe(article);
 
   /** show a rendered document: the blocks the last render showed as they
    *  are, the others new */
@@ -188,7 +269,12 @@ export function mountMarkdownView(
     }
     const kept = matchBlocks(blockKeys, nextKeys);
     const keep = new Set(kept.filter((at) => at >= 0));
-    place ??= readingPlace([...keep].map((at) => current[at]!));
+    // settle what moved since the last frame; the reader's block may be one
+    // this render replaces, then the first block on screen that stays holds
+    // the place
+    keepPlace();
+    const staying = [...keep].map((at) => current[at]!).filter((node) => node instanceof win.Element);
+    if (place && !staying.includes(place.block)) place = readingPlace(staying);
     current.forEach((node, at) => {
       if (!keep.has(at)) node.remove();
     });
@@ -403,6 +489,8 @@ export function mountMarkdownView(
       offWeb?.();
       offVisibility?.();
       hydration?.abort();
+      resizes?.disconnect();
+      scroller.removeEventListener("scroll", onScroll);
       article.removeEventListener("click", onClick);
       article.removeEventListener("error", onImageError, true);
       scroller.remove();

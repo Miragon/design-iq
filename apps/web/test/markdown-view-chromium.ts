@@ -18,12 +18,15 @@
  *    a link and the drawn diagram, each the very node it was.
  *  - focus: an edit of the link's block moves the focus to the view; the
  *    selection elsewhere stays.
- *  - scroll: blocks inserted above the reader, a block above growing, and a
- *    diagram above changed back to one drawn before leave the block the
- *    reader looks at where it was on screen. Once with the browser's scroll
- *    anchoring, once without it (overflow-anchor: none), as in Safari
- *    before 27. A control shows that each edit moved that block down the
- *    document.
+ *  - scroll: blocks inserted above the reader, a block above growing, a
+ *    heading with the text every section has inserted above (their ids
+ *    renumber; the reader's paragraph and the selection in it stay), a
+ *    diagram above changed back to one drawn before, and one changed to a
+ *    diagram never drawn (it lands asynchronously, at another height) leave
+ *    the block the reader looks at where it was on screen. Once with the
+ *    browser's scroll anchoring, once without it (overflow-anchor: none), as
+ *    in Safari before 27. A control shows that each edit moved that block
+ *    down the document.
  *
  * Exits 1 on any failed check.
  */
@@ -66,13 +69,19 @@ const LINKED = "A paragraph with [a link to the diagram](#the-diagram) to focus.
 /** two diagrams of different heights: changing one into the other moves what is below */
 const WIDE = "flowchart LR\n  A[Draft] --> B[Review] --> C[Release]\n";
 const TALL = "flowchart TD\n  A[Draft] --> B[Review]\n  B --> C[Approve]\n  C --> D[Merge]\n  D --> E[Release]\n";
+/** a diagram no step drew before, taller than WIDE */
+const fresh = (label: string): string =>
+  `flowchart TD\n  A[Draft] --> B[Review]\n  B --> C[Shipped ${label}]\n  C --> D[Done]\n`;
 const DOCUMENT = [
   "# Reading while others write\n",
   `${COPY}\n`,
   `${LINKED}\n`,
   "## The diagram\n",
   "```mermaid\n" + WIDE + "```\n",
-  ...Array.from({ length: 30 }, (_, i) => `## Section ${i + 1}\n\nParagraph ${i + 1}. ${SENTENCE} ${SENTENCE}\n`),
+  ...Array.from(
+    { length: 30 },
+    (_, i) => `## Section ${i + 1}\n\n### Example\n\nParagraph ${i + 1}. ${SENTENCE} ${SENTENCE}\n`,
+  ),
 ].join("\n");
 
 /** the one npx puts on PATH */
@@ -117,6 +126,7 @@ interface Marked {
   __copy?: Element;
   __link?: HTMLElement;
   __svg?: Element;
+  __reading?: Element;
 }
 
 const failures: string[] = [];
@@ -267,6 +277,11 @@ try {
   check("focus", "the selection elsewhere stays", focus.selection === COPY, focus.selection);
 
   // scroll: edits above the reader, with the browser's scroll anchoring and without it
+  let diagram = WIDE;
+  const setDiagram = (to: string): void => {
+    replace(session, diagram, to)(session.content.toString());
+    diagram = to;
+  };
   for (const anchoring of ["browser", "none"] as const) {
     const scenario = `scroll (anchoring: ${anchoring})`;
     if (anchoring === "none") {
@@ -274,58 +289,83 @@ try {
         document.querySelector<HTMLElement>(".markdown-view")!.style.overflowAnchor = "none";
       }, 0);
     }
-    const steady = async (what: string, change: (source: string) => void, shows: string): Promise<void> => {
+    /** the reader's paragraph on screen and down the document, before and after `change` shows */
+    const measure = async (what: string, change: () => Promise<boolean>): Promise<void> => {
       await readOn(page);
       const was = await place(page);
-      const shown = await edit(page, session, change, shows);
+      const shown = await change();
       const is = await place(page);
       const moved = Math.round(is.inDocument - was.inDocument);
       check(
         scenario,
-        `control: ${what} moved the reader's block down the document`,
-        shown && moved > 20,
+        `control: ${what} moved the reader's block in the document`,
+        shown && Math.abs(moved) > 20,
         `${moved} px`,
       );
       const shift = Math.round((is.onScreen - was.onScreen) * 10) / 10;
       check(scenario, `${what}: the reader's block stays on screen`, Math.abs(shift) <= 1, `${shift} px`);
     };
+    const steady = (what: string, change: (source: string) => void, shows: string): Promise<void> =>
+      measure(what, () => edit(page, session, change, shows));
+
     const inserted = Array.from({ length: 5 }, (_, i) => `\n\nInserted (${anchoring}) ${i + 1}. ${SENTENCE}`).join("");
     await steady("blocks inserted above", insertAfter(session, COPY, inserted), `Inserted (${anchoring}) 5.`);
     const grown = ` Grown (${anchoring}). ${SENTENCE} ${SENTENCE} ${SENTENCE}`;
     await steady("a block above grows", insertAfter(session, "Paragraph 3.", grown), `Grown (${anchoring}).`);
-    // the tall diagram drawn (and cached) first, the wide one back from the cache then
-    const source = session.content.toString();
-    if (source.includes(WIDE)) {
-      replace(session, WIDE, TALL)(source);
-      check(scenario, "precondition: the tall diagram is drawn", await diagramDrawn(page, "Approve"));
-    }
-    await readOn(page);
-    const was = await place(page);
-    replace(session, TALL, WIDE)(session.content.toString());
-    const back = await page
-      .waitForFunction(
-        () => {
-          const svg = document.querySelector(".md-mermaid-block:not([aria-busy]) svg");
-          return !!svg && !svg.textContent?.includes("Approve");
-        },
-        0,
-        { timeout: 15_000, polling: 50 },
-      )
-      .then(
-        () => true,
-        () => false,
-      );
-    await page.waitForTimeout(200);
-    const is = await place(page);
-    const moved = Math.round(is.inDocument - was.inDocument);
-    check(scenario, "control: the diagram above changed its height", back && Math.abs(moved) > 20, `${moved} px`);
-    const shift = Math.round((is.onScreen - was.onScreen) * 10) / 10;
-    check(
-      scenario,
-      "a diagram above back from the cache: the reader's block stays on screen",
-      Math.abs(shift) <= 1,
-      `${shift} px`,
+
+    // every section has an "Example" heading: one more above renumbers their ids
+    await page.evaluate((text) => {
+      const marked = window as unknown as Marked;
+      const paragraphs = [...document.querySelectorAll("article.markdown-body > p")];
+      marked.__reading = paragraphs.find((p) => p.textContent?.startsWith(text));
+      getSelection()!.selectAllChildren(marked.__reading!);
+    }, READING);
+    const zero = `Zero (${anchoring}).`;
+    await steady(
+      "a heading like the sections' inserted above",
+      insertAfter(session, COPY, `\n\n### Example\n\n${zero}`),
+      zero,
     );
+    const reading = await page.evaluate((text) => {
+      const marked = window as unknown as Marked;
+      const selection = getSelection()!;
+      return {
+        kept: marked.__reading!.isConnected,
+        selected: selection.anchorNode === marked.__reading && selection.toString().startsWith(text),
+      };
+    }, READING);
+    check(scenario, "a heading like the sections' inserted above: the reader's paragraph stays", reading.kept);
+    check(scenario, "a heading like the sections' inserted above: the selection in it stays", reading.selected);
+
+    // the tall diagram drawn (and cached) first, the wide one back from the cache then
+    setDiagram(TALL);
+    check(scenario, "precondition: the tall diagram is drawn", await diagramDrawn(page, "Approve"));
+    await measure("a diagram above back from the cache", async () => {
+      setDiagram(WIDE);
+      const back = await page
+        .waitForFunction(
+          () => {
+            const svg = document.querySelector(".md-mermaid-block:not([aria-busy]) svg");
+            return !!svg && !svg.textContent?.includes("Approve");
+          },
+          0,
+          { timeout: 15_000, polling: 50 },
+        )
+        .then(
+          () => true,
+          () => false,
+        );
+      await page.waitForTimeout(200);
+      return back;
+    });
+    // a diagram never drawn: the render keeps the old drawing's height, the
+    // new one lands later
+    await measure("a diagram above drawn anew, after the render", async () => {
+      setDiagram(fresh(anchoring));
+      const drawn = await diagramDrawn(page, `Shipped ${anchoring}`);
+      await page.waitForTimeout(200);
+      return drawn;
+    });
   }
 
   const toasts = await page.evaluate(
