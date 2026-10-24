@@ -16,6 +16,7 @@ import { MERMAID_DIAGRAM_TYPES, MERMAID_VERSION, mermaidHeader } from "@designiq
 import { ALIASES, CD, FONT_SANS, formatColor, mix, parseColor } from "@designiq/ui-kit/lib/tokens";
 import type { Mermaid } from "mermaid";
 
+import { caseXyChartLines, LINE_CASING_CLASS } from "../src/lib/mermaid-line-casing.ts";
 import {
   describeMermaidError,
   MERMAID_LABEL_SANITIZER,
@@ -273,10 +274,12 @@ test("a diagram keeps the look and layout of mermaid 11 until it asks otherwise:
   );
 });
 
-/** a source drawn as the page shows it: mermaid's SVG, sanitized and taken into the page's document */
+/** a source drawn as the page shows it (notations/markdown/mermaid-fence.ts): mermaid's SVG, sanitized, its xy chart lines cased and taken into the page's document */
 async function onPage(source: string): Promise<Element> {
   const { svg } = await mermaid.render(`page-${++drawings}`, source);
-  return window.document.importNode(sanitize(svg).firstElementChild!, true);
+  const drawn = sanitize(svg).firstElementChild!;
+  caseXyChartLines(drawn);
+  return window.document.importNode(drawn, true);
 }
 
 /** a colour as #rrggbb, however the style sheet wrote it */
@@ -482,7 +485,7 @@ test("an xy chart's bars and lines take the same greys, its labels read on what 
         what,
       );
       assert.deepEqual(
-        [2, 3].map((n) => paint(chart.querySelector(`.line-plot-${n} > path`), "stroke")),
+        [2, 3].map((n) => paint(chart.querySelector(`.line-plot-${n} > path:not(.${LINE_CASING_CLASS})`), "stroke")),
         [KONTUR.fill, LEISE.fill],
         what,
       );
@@ -529,40 +532,50 @@ test("an xy chart's labels outside its bars and its point labels read where a la
   }
 });
 
-test("an xy chart's lines are cased in the plot's white, so they hold 3:1 across bars of either grey (#294)", async () => {
-  const chart = await onPage(
-    "xychart\n  x-axis [a, b, c, d]\n  y-axis 0 --> 10\n  bar [6, 9, 3, 8]\n  bar [4, 2, 7, 5]\n" +
-      "  line [1, 8, 2, 9]\n  line [5, 1, 8, 7]\n",
-  );
-  for (const n of [2, 3]) {
-    const path = chart.querySelector(`.line-plot-${n} > path`)!;
-    const line = paint(path, "stroke");
-    // the line's points lie on bars of both greys, where it alone would read below 3:1
-    const grounds = new Set(
-      [...path.getAttribute("d")!.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) =>
-        groundUnder(chart, path, [Number(m[1]), Number(m[2])]),
-      ),
-    );
-    assert.ok(grounds.has(KONTUR.fill) && grounds.has(LEISE.fill), `line ${n} crosses bars of both greys`);
-    for (const ground of grounds) {
-      if (ground !== WHITE) assert.ok(contrast(line, ground) < 3, `line ${n}: ${line} on ${ground} needs its casing`);
+test("an xy chart's lines lie on a casing in the plot's white, a path of its own, so they hold 3:1 across bars of either grey (#294)", async () => {
+  const plots = "  x-axis [a, b, c, d]\n  y-axis 0 --> 10\n  bar [6, 9, 3, 8]\n  bar [4, 2, 7, 5]\n";
+  for (const orientation of ["", " horizontal"]) {
+    const chart = await onPage(`xychart${orientation}\n${plots}  line [1, 8, 2, 9]\n  line [5, 1, 8, 7]\n`);
+    for (const n of [2, 3]) {
+      const what = `xychart${orientation}, line ${n}`;
+      const path = chart.querySelector(`.line-plot-${n} > path:not(.${LINE_CASING_CLASS})`)!;
+      const line = paint(path, "stroke");
+      // the line's points lie on bars of both greys, where it alone would read below 3:1
+      const grounds = new Set(
+        [...path.getAttribute("d")!.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) =>
+          groundUnder(chart, path, [Number(m[1]), Number(m[2])]),
+        ),
+      );
+      assert.ok(grounds.has(KONTUR.fill) && grounds.has(LEISE.fill), `${what} crosses bars of both greys`);
+      for (const ground of grounds) {
+        if (ground !== WHITE) assert.ok(contrast(line, ground) < 3, `${what}: ${line} on ${ground} needs its casing`);
+      }
+      // WebKit draws no CSS filter on an element inside an SVG: a casing of shadows would not show there
+      assert.equal(drawnStyle(path, "filter") ?? "none", "none", `${what} is drawn through no filter`);
+      const casings = chart.querySelectorAll(`.line-plot-${n} > .${LINE_CASING_CLASS}`);
+      assert.equal(casings.length, 1, `${what}: one casing`);
+      const casing = casings[0]!;
+      assert.equal(path.previousElementSibling, casing, `${what}: the casing lies right under the line`);
+      assert.equal(casing.getAttribute("d"), path.getAttribute("d"), `${what}: the casing follows the line`);
+      assert.equal(casing.id, "", `${what}: the casing adds no id`);
+      assert.equal(paint(casing, "stroke"), WHITE, `${what}: the casing is the plot's white`);
+      assert.equal(drawnStyle(casing, "fill"), "none", `${what}: the casing fills nothing`);
+      const [lineWidth, casingWidth] = [path, casing].map((element) =>
+        parseFloat(drawnStyle(element, "stroke-width")!),
+      ) as [number, number];
+      // 2 px on each side: 1 px leaves anti-aliased greys below 3:1 next to the line
+      assert.ok(casingWidth - lineWidth >= 4, `${what}: casing ${casingWidth}px under a ${lineWidth}px line`);
+      // a round line stays inside a round casing at every turn, where a miter tip would reach past it
+      for (const element of [path, casing]) assert.equal(drawnStyle(element, "stroke-linejoin"), "round", what);
+      assert.equal(drawnStyle(casing, "stroke-linecap"), "round", what);
+      for (const rect of chart.querySelectorAll('[class^="bar-plot-"] > rect')) {
+        assert.ok(
+          rect.compareDocumentPosition(casing) & window.Node.DOCUMENT_POSITION_FOLLOWING,
+          `${what}: the casing lies over every bar`,
+        );
+      }
+      assert.ok(contrast(line, WHITE) >= 3, `${what}: ${line} on its casing`);
     }
-    const shadows = [
-      ...(drawnStyle(path, "filter") ?? "").matchAll(
-        /drop-shadow\(\s*(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?\s+(#[\da-f]+|rgba?\([^)]*\))\s*\)/gi,
-      ),
-    ].map(([, x, y, blur, colour]) => ({ x: Number(x), y: Number(y), blur: Number(blur), colour: hex(colour) }));
-    assert.equal(shadows.length, 4, `line ${n}: ${drawnStyle(path, "filter")}`);
-    const reach = Math.abs(shadows[0]!.x || shadows[0]!.y);
-    // whole pixels: Chromium rounds a half pixel up on one side and down on the other
-    assert.ok(Number.isInteger(reach) && reach >= 1, `line ${n}: casing of ${reach}px`);
-    assert.deepEqual(
-      shadows.map(({ x, y }) => `${x},${y}`).sort(),
-      [`${reach},0`, `-${reach},0`, `0,${reach}`, `0,-${reach}`].sort(),
-      `line ${n}: a casing on every side`,
-    );
-    for (const shadow of shadows) assert.deepEqual([shadow.blur, shadow.colour], [0, WHITE], `line ${n}`);
-    assert.ok(contrast(line, WHITE) >= 3, `line ${n}: ${line} on its casing`);
   }
 });
 

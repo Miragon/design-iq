@@ -4,7 +4,8 @@
  * renderer (lib/mermaid-render.ts: strict security level, the CI theme,
  * Geist), which lays every diagram out in a frame of its own
  * (lib/mermaid-frame.ts); the page only gets the SVG, sanitized here once
- * more (createDiagramSanitizer).
+ * more (createDiagramSanitizer), and lays a white casing under an xy
+ * chart's lines (lib/mermaid-line-casing.ts).
  *
  * - `render` (the HTML pass) keeps the fence a code block, marked
  *   `md-mermaid`, with its source as text: what a reader sees until the
@@ -33,6 +34,7 @@
  * DOM access through the root's own document.
  */
 import type { RenderMermaid } from "../../lib/mermaid-frame.ts";
+import { caseXyChartLines } from "../../lib/mermaid-line-casing.ts";
 import type { MermaidRenderError } from "../../lib/mermaid-render.ts";
 import { icon } from "../../mcp-app/icons.ts";
 import { escapeText, type FenceRenderer } from "./render.ts";
@@ -123,7 +125,10 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
             let sanitize = sanitizers.get(win);
             if (!sanitize) sanitizers.set(win, (sanitize = createDiagramSanitizer(win)));
             const svg = sanitize(result.svg).firstElementChild;
-            if (svg) origins.set(svg, { source, repeat });
+            if (svg) {
+              caseXyChartLines(svg);
+              origins.set(svg, { source, repeat });
+            }
             drawing = svg ? { svg } : { error: { message: "The diagram could not be drawn." } };
           } else drawing = { error: result.error };
           remember(key, drawing);

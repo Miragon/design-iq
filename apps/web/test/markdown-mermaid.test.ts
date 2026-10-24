@@ -9,9 +9,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { ALIASES } from "@designiq/ui-kit/lib/tokens";
 import { JSDOM, VirtualConsole } from "jsdom";
 import * as Y from "yjs";
 
+import { LINE_CASING_CLASS } from "../src/lib/mermaid-line-casing.ts";
 import { diagramImageRefusal, type MermaidRenderResult } from "../src/lib/mermaid-render.ts";
 import { FENCE_EXTENSIONS } from "../src/notations/markdown/fences.ts";
 import { createMermaidFence, type RenderMermaid } from "../src/notations/markdown/mermaid-fence.ts";
@@ -424,6 +426,38 @@ test("the drawn SVG is sanitized again: no script, no handler, links leave in a 
   const web = svg.querySelector('a[href="https://example.com"]');
   assert.equal(web?.getAttribute("target"), "_blank");
   assert.equal(web?.getAttribute("rel"), "noopener noreferrer");
+  v.view.destroy();
+});
+
+test("an xy chart's lines lie on a white casing on the page, once, also when its cached drawing is put back (#294)", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  // as mermaid draws an xy chart: every plot in a group of its own, a line's point labels beside its path
+  const fake = fakeRenderer(
+    (source, id) =>
+      `<svg id="${id}"><g class="main"><g class="plot">` +
+      `<g class="bar-plot-0"><rect x="0" y="0" width="10" height="10" fill="#8F8A8A"></rect></g>` +
+      `<g class="line-plot-1"><path d="M5,2L15,8" fill="none" stroke="#6B6666" stroke-width="2"></path>` +
+      `<g class="labels"><text>low</text></g></g></g></g><text>${source.split("\n")[0]}</text></svg>`,
+  );
+  const v = mount(fence("xychart"), fake);
+  await settle();
+  const assertCased = (): void => {
+    const paths = [...v.article.querySelectorAll(".md-mermaid-diagram svg .line-plot-1 > path")];
+    assert.equal(paths.length, 2, "the line and one casing");
+    const [casing, line] = paths as [Element, Element];
+    assert.equal(casing.getAttribute("class"), LINE_CASING_CLASS, "the casing lies under the line");
+    assert.equal(casing.getAttribute("d"), "M5,2L15,8");
+    assert.equal(casing.getAttribute("stroke"), ALIASES["canvas-background"]);
+    assert.equal(casing.getAttribute("stroke-width"), "6");
+    assert.equal(line.getAttribute("stroke"), "#6B6666", "the line keeps its grey");
+  };
+  assertCased();
+
+  v.setText(fence("xychart") + "\nMore.");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await Promise.resolve();
+  assert.equal(fake.calls.length, 1, "the cached drawing is put back");
+  assertCased();
   v.view.destroy();
 });
 
