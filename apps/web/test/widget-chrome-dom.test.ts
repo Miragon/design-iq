@@ -480,7 +480,7 @@ test("zoom group: a click hands the focus back to the canvas, Enter or Space lea
   const view = {
     hasViewport: () => true,
     level: () => 1,
-    zoomBy: (step: number) => void did.push(`zoomBy ${step}`),
+    stepZoom: (direction: 1 | -1) => void did.push(`stepZoom ${direction}`),
     zoomTo: (level: number) => void did.push(`zoomTo ${level}`),
     onChange: () => () => {},
     focus: () => void did.push("focus canvas"),
@@ -504,9 +504,9 @@ test("zoom group: a click hands the focus back to the canvas, Enter or Space lea
   press(els.zoomPct, 2);
   press(els.zoomFit, 1);
   assert.deepEqual(did, [
-    "zoomBy 0.2",
+    "stepZoom 1",
     "focus canvas",
-    "zoomBy -0.2",
+    "stepZoom -1",
     "focus canvas",
     "zoomTo 1",
     "focus canvas",
@@ -518,7 +518,7 @@ test("zoom group: a click hands the focus back to the canvas, Enter or Space lea
   for (const el of [els.zoomIn, els.zoomOut, els.zoomPct, els.zoomFit]) press(el, 0);
   assert.deepEqual(
     did,
-    ["zoomBy 0.2", "zoomBy -0.2", "zoomTo 1", "fit"],
+    ["stepZoom 1", "stepZoom -1", "zoomTo 1", "fit"],
     "a keyboard press keeps the focus where it is",
   );
 });

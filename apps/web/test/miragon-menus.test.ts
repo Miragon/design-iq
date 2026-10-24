@@ -404,7 +404,7 @@ test("the SPA's Miragon editors: the zoom keys and ⇧1 drive the canvas, a text
   assert.equal(press("0", "Digit0", { ctrlKey: true }).defaultPrevented, true, "the page does not zoom");
   assert.equal(scale(), 1, "Ctrl+0: 100 %");
   press("=", "Equal", { ctrlKey: true });
-  assert.equal(scale(), Math.round(2 ** 0.2 * 1000) / 1000, "Ctrl+= one step in, as the widget's +");
+  assert.equal(scale(), 1.349, "Ctrl+= one step in, to the guide's 135 %, as the widget's +");
   press("-", "Minus", { metaKey: true });
   assert.equal(scale(), 1, "⌘- one step out");
   const field = document.createElement("input");

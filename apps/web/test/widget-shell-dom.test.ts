@@ -96,7 +96,7 @@ async function chromeOf(kind: keyof typeof ENTRIES) {
   const view: ViewControls = {
     hasViewport: () => true,
     fit: () => void zoomed.push("fit"),
-    zoomBy: (step) => void zoomed.push(step > 0 ? "in" : "out"),
+    stepZoom: (direction) => void zoomed.push(direction > 0 ? "in" : "out"),
     zoomTo: (level) => void zoomed.push(`to ${level}`),
     level: () => 1,
     isTouched: () => false,

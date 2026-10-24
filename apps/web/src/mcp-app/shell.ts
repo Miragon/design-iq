@@ -45,7 +45,6 @@ import { sheetFolds, type WidgetKind } from "./core/layout.ts";
 import { type DocLabel, LoadError, type ModelInput, type SyncState, type ToastSpec } from "./core/lifecycle.ts";
 import { docName, type MenuContext, type MenuItemId, panelOfItem, runModelerItem } from "./core/menu-model.ts";
 import type { PopoverActionId } from "./core/sync-view.ts";
-import { ZOOM_STEP } from "./engines/fit.ts";
 import { icon, mountIcons } from "./icons.ts";
 
 export const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -191,7 +190,7 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
     run(key: ChromeKey) {
       if (key === "fit") layout.refit(true);
       else if (key === "zoomToActual") view?.zoomTo(1);
-      else view?.zoomBy(key === "zoomIn" ? ZOOM_STEP : -ZOOM_STEP);
+      else view?.stepZoom(key === "zoomIn" ? 1 : -1);
     },
   });
   const zoom = mountZoom({

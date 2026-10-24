@@ -238,7 +238,7 @@ export const mountDmnEngine: EngineFactory<DmnEngine> = (container, readonly, op
   const view: ViewControls = {
     hasViewport: () => drdView() !== undefined,
     fit: (insets, animate) => drdView()?.fit(insets, animate),
-    zoomBy: (step) => drdView()?.zoomBy(step),
+    stepZoom: (direction) => drdView()?.stepZoom(direction),
     zoomTo: (level) => drdView()?.zoomTo(level),
     level: () => drdView()?.level() ?? 1,
     isTouched: () => drdView()?.isTouched() ?? false,

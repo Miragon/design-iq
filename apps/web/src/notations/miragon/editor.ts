@@ -23,7 +23,6 @@ import { handleChromeKey } from "@/lib/chrome-keys";
 import { attachPresenceCanvas } from "@/lib/presence-canvas";
 import { attachSurfaceTodoCanvas } from "@/lib/todo-surface-canvas";
 import type { ExportFile, Insets } from "@/mcp-app/core/engine";
-import { ZOOM_STEP } from "@/mcp-app/engines/fit";
 import { miragonView } from "@/mcp-app/engines/miragon";
 
 import type { EditorContext, MountedEditor } from "../registry";
@@ -130,7 +129,7 @@ export function mountMiragonEditor(
       run: (key) => {
         if (key === "fit") view.fit(fitInsets(), !reducedMotion());
         else if (key === "zoomToActual") view.zoomTo(1);
-        else view.zoomBy(key === "zoomIn" ? ZOOM_STEP : -ZOOM_STEP);
+        else view.stepZoom(key === "zoomIn" ? 1 : -1);
       },
     });
   };

@@ -25,7 +25,7 @@ import {
 } from "@miragon/modeler-shell/core";
 
 import type { Insets, PaletteControls, ViewControls } from "../core/engine.ts";
-import { type Box, steppedLevel, zoomAround } from "./fit.ts";
+import { type Box, zoomAround, zoomStepLevel } from "./fit.ts";
 export interface DiagramLike {
   /** didi's strict lookup — the Miragon viewers forward only the name, so a
    *  missing service THROWS (never pass a strict flag; guard by mount instead) */
@@ -284,12 +284,14 @@ export function diagramView(
   return {
     hasViewport: () => opts.hasViewport?.() ?? true,
     fit,
-    zoomBy(step) {
+    // the raster of zoomScroll.stepZoom, not the service itself: zoomTo
+    // reads the frame fresh and stops a running re-fit
+    stepZoom(direction) {
       const level = canvas().viewbox().scale;
       // a fit may sit below 20 %: the clamp would turn a step out into a zoom
       // in (guide §5.8), so the step goes only the way it points
-      if (step < 0 ? !canZoomOut(level) : !canZoomIn(level)) return;
-      zoomTo(steppedLevel(level, step, ZOOM_MIN, ZOOM_MAX));
+      if (direction < 0 ? !canZoomOut(level) : !canZoomIn(level)) return;
+      zoomTo(zoomStepLevel(level, direction));
     },
     zoomTo,
     level: () => canvas().viewbox().scale,
