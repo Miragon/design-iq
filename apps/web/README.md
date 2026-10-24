@@ -136,7 +136,8 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   `--cd-linie` and a quadrant chart's points black (#294). Two series of the same parity (pie
   slices 1 and 3, radar curves 0 and 2, git branches 1 and 3, venn sets 1 and 3, xy plots 0
   and 2) share a grey, so a legend cannot tell them apart, and a git graph's ninth branch
-  after main takes main's black again (mermaid cycles through eight branch colours).
+  (main counts as the first) takes main's black again (mermaid cycles through eight branch
+  colours).
   mermaid lightens a kanban column's grey, fades a treemap's, brightens a timeline's events,
   writes an xy chart's labels in one colour whatever they sit on, draws its plots over each
   other and fills mindmap and timeline nodes white in the neo look, so a kanban column takes
