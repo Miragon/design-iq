@@ -255,6 +255,105 @@ test("a render id is never a heading anchor: mermaid removes the element it name
   v.view.destroy();
 });
 
+test("two fences of one source draw apart, so every id is on the page once (#294)", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  // as mermaid draws a mindmap: ids scoped to the render, a node's id on its
+  // shape twice, and an id of a sequence actor's that mermaid does not scope
+  const fake = fakeRenderer(
+    (source, id) =>
+      `<svg id="${id}"><defs><marker id="${id}-arrow"></marker></defs>` +
+      `<g id="${id}-node_0"><path id="${id}-node_0"></path></g><g id="actor0"></g>` +
+      `<line marker-end="url(#${id}-arrow)"></line><rect fill="url(#actor0)"></rect><text>${source.split("\n")[0]}</text></svg>`,
+  );
+  const v = mount(fence("mindmap A") + "\n" + fence("mindmap A") + "\n" + fence("mindmap B"), fake);
+  await settle();
+  assert.deepEqual(v.drawn(), ["mindmap A", "mindmap A", "mindmap B"]);
+  assert.deepEqual(fake.calls, ["mindmap A\n", "mindmap A\n", "mindmap B\n"], "each fence draws its own");
+  const onPage = (): void => {
+    const ids = [...v.article.querySelectorAll("[id]")].map((element) => element.id);
+    assert.equal(new Set(ids).size, ids.length, `every id on the page once: ${ids.join(" ")}`);
+    for (const svg of v.article.querySelectorAll(".md-mermaid-diagram svg")) {
+      const marker = /^url\(#(.+)\)$/.exec(svg.querySelector("line")!.getAttribute("marker-end")!)![1]!;
+      assert.equal(svg.querySelector(`marker[id="${marker}"]`)?.closest("svg"), svg, "its arrow is its own");
+      assert.equal(svg.querySelector("rect")!.getAttribute("fill"), `url(#${svg.id}-actor0)`);
+      assert.ok(svg.querySelector(`[id="${svg.id}-actor0"]`));
+    }
+  };
+  onPage();
+
+  // an edit elsewhere puts both drawings back from the cache, still apart
+  v.setText(fence("mindmap A") + "\n" + fence("mindmap A") + "\n" + fence("mindmap B") + "\nMore.");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await Promise.resolve();
+  assert.deepEqual(v.drawn(), ["mindmap A", "mindmap A", "mindmap B"]);
+  assert.equal(fake.calls.length, 3, "nothing is drawn again");
+  onPage();
+  v.view.destroy();
+});
+
+test("a block that waits for its new drawing never keeps one another block shows now (#294)", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const fake = fakeRenderer(
+    (source, id) => `<svg id="${id}"><g id="${id}-node_0"></g><text>${source.split("\n")[0]}</text></svg>`,
+  );
+  const v = mount(fence("mindmap A") + "\n" + fence("mindmap A"), fake);
+  await settle();
+  /** each block's drawing by its id, or its code */
+  const shown = (): string[] =>
+    [...v.article.querySelectorAll(".md-mermaid-block")].map(
+      (block) =>
+        block.querySelector(".md-mermaid-diagram svg")?.id ?? `code ${block.querySelector("pre")?.textContent}`,
+    );
+  const onceEach = (): void => {
+    const ids = [...v.article.querySelectorAll("[id]")].map((element) => element.id);
+    assert.equal(new Set(ids).size, ids.length, `every id on the page once: ${ids.join(" ")}`);
+  };
+  /** an edit as it is shown before the browser paints, while what it draws anew still draws */
+  const edit = async (...sources: string[]): Promise<void> => {
+    fake.state.hold = true;
+    v.setText(sources.map(fence).join("\n"));
+    t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+    await settle();
+    onceEach();
+  };
+  const release = async (source: string): Promise<void> => {
+    fake.release(`${source}\n`);
+    await settle();
+    onceEach();
+  };
+  assert.deepEqual(shown(), ["md-Mermaid-1", "md-Mermaid-2"]);
+
+  // the first of two fences of one source, edited: each keeps its own drawing
+  await edit("mindmap A broken", "mindmap A");
+  assert.deepEqual(shown(), ["md-Mermaid-1", "md-Mermaid-2"]);
+  await release("mindmap A broken");
+  assert.deepEqual(shown(), ["md-Mermaid-1", "md-Mermaid-2"]);
+  assert.ok(v.article.querySelectorAll(".md-mermaid-block")[0]!.querySelector(".md-mermaid-diagram.is-stale"));
+  await edit("mindmap A", "mindmap A");
+  assert.deepEqual(shown(), ["md-Mermaid-1", "md-Mermaid-2"], "both from the cache, each its own");
+
+  // a source taken over from the other fence: the other keeps its drawing,
+  // this one its last drawing while its own draws
+  await edit("mindmap A", "mindmap B");
+  await release("mindmap B");
+  assert.deepEqual(shown(), ["md-Mermaid-1", "md-Mermaid-3"]);
+  await edit("mindmap B", "mindmap B");
+  assert.deepEqual(shown(), ["md-Mermaid-1", "md-Mermaid-3"]);
+  await release("mindmap B");
+  assert.deepEqual(shown(), ["md-Mermaid-4", "md-Mermaid-3"]);
+
+  // a block whose last drawing the other block now shows waits with its code
+  await edit("mindmap C", "mindmap B");
+  await release("mindmap C");
+  assert.deepEqual(shown(), ["md-Mermaid-5", "md-Mermaid-3"]);
+  await edit("mindmap D", "mindmap C");
+  assert.deepEqual(shown(), ["code mindmap D\n", "md-Mermaid-5"]);
+  assert.equal(v.article.querySelectorAll(".md-mermaid-block")[0]!.getAttribute("aria-busy"), "true");
+  await release("mindmap D");
+  assert.deepEqual(shown(), ["md-Mermaid-6", "md-Mermaid-5"]);
+  v.view.destroy();
+});
+
 test("a source mermaid cannot read: its code, or its last drawing dimmed, under a notice", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   const fake = fakeRenderer();
@@ -390,8 +489,9 @@ test("a drawn diagram loads nothing from another site on the page (#290)", async
   const markup = v.article.querySelector(".md-mermaid-diagram svg")!.outerHTML;
   assert.doesNotMatch(markup, /tracker\.example|image-set|\\75rl/);
   assert.match(markup, /<image href="data:image\/png;base64,AAAA"/, "inline data stays");
-  assert.match(markup, /<image href="#g"/, "a reference within the diagram stays");
-  assert.match(markup, /<rect style="fill:url\(#g\)"/);
+  // a reference within the diagram stays, scoped to it with the element it names (#294)
+  assert.match(markup, /<image href="#md-Mermaid-1-g"/);
+  assert.match(markup, /<rect style="fill:url\(#md-Mermaid-1-g\)"/);
   assert.match(markup, /<a href="https:\/\/example.com" target="_blank" rel="noopener noreferrer">/, "links stay");
   v.view.destroy();
 });
@@ -416,8 +516,8 @@ test("a drawn diagram's style sheets and presentation attributes fetch nothing e
     ["#md-Mermaid-1 .node{fill:red}"],
     "the diagram's own style sheet stays",
   );
-  assert.equal(svg.querySelector("line")?.getAttribute("marker-end"), "url(#arrow)");
-  assert.equal(svg.querySelector("rect")?.getAttribute("fill"), "url(#g)");
+  assert.equal(svg.querySelector("line")?.getAttribute("marker-end"), "url(#md-Mermaid-1-arrow)");
+  assert.equal(svg.querySelector("rect")?.getAttribute("fill"), "url(#md-Mermaid-1-g)");
   v.view.destroy();
 });
 

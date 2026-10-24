@@ -16,11 +16,60 @@
  * mermaid itself needs a DOM to measure text.
  */
 import { mermaidCode, mermaidFrontMatterLines, mermaidHeader, mermaidSourceLine } from "@designiq/notations/mermaid";
-import { ALIASES, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
+import { ALIASES, CD, FONT_SANS } from "@designiq/ui-kit/lib/tokens";
 import type { Mermaid, MermaidConfig } from "mermaid";
 
 import { canvasFontReady } from "./canvas-theme.ts";
 import { CSS_RESOURCE } from "./css-resource.ts";
+
+/**
+ * The two CI greys mermaid's section palettes alternate between, each with
+ * the label colour that holds 4.5:1 on it. Both hold 3:1 as a line on white
+ * (a mindmap's branches, a git graph's). mermaid numbers a mindmap's first
+ * branch (its section 0 takes cScale1), a pie's first slice, a git graph's
+ * first branch after main and a venn diagram's first set 1: odd numbers take
+ * kontur, even ones text-leise.
+ */
+const SECTION_GREYS = [
+  { fill: CD.textLeise, label: CD.weiss },
+  { fill: CD.kontur, label: CD.schwarz },
+] as const;
+const sectionGrey = (n: number) => SECTION_GREYS[n % 2]!;
+
+/** the theme variables `<name><from>` to `<name><to>`, each set to what its number gives */
+const numbered = (name: string, from: number, to: number, value: (n: number) => string): Record<string, string> =>
+  Object.fromEntries(Array.from({ length: to - from + 1 }, (_, i) => [`${name}${from + i}`, value(from + i)]));
+
+/**
+ * The palettes mermaid would otherwise derive from the theme's base colours
+ * by shifting their hue and darkening them: the white and the warm grey turn
+ * rose (sections of mindmaps, timelines, kanban boards, treemaps and radar
+ * charts, a git graph's branches, pie slices, venn sets), the rest into greys
+ * off the CI. mermaid derives a section's label, border (peer) and the line
+ * under a node (inv) from the darkened colour too, so they are set as well.
+ * A mindmap's root and a git graph's main branch take git0: black with a
+ * white label. A highlighted commit is framed in black, a CI neutral: blue on
+ * the canvas means selected. A user journey's sections take white and the
+ * calm grey in turn, as its first two would, under black labels. An xy
+ * chart's bars and lines would take mermaid's own peach palette, its first
+ * bar #FFF4DD on white (1.1:1): they take the two greys too, the first one
+ * (mermaid counts it 0) kontur.
+ */
+const SECTION_PALETTES = {
+  ...numbered("cScale", 0, 11, (n) => sectionGrey(n).fill),
+  ...numbered("cScaleLabel", 0, 11, (n) => sectionGrey(n).label),
+  ...numbered("cScalePeer", 0, 11, (n) => sectionGrey(n).fill),
+  ...numbered("cScaleInv", 0, 11, (n) => sectionGrey(n).fill),
+  git0: ALIASES["canvas-stroke"],
+  gitBranchLabel0: ALIASES["canvas-shape"],
+  ...numbered("git", 1, 7, (n) => sectionGrey(n).fill),
+  ...numbered("gitBranchLabel", 1, 7, (n) => sectionGrey(n).label),
+  ...numbered("gitInv", 0, 7, () => ALIASES["canvas-stroke"]),
+  ...numbered("pie", 1, 12, (n) => sectionGrey(n).fill),
+  ...numbered("venn", 1, 8, (n) => sectionGrey(n).fill),
+  ...numbered("fillType", 0, 7, (n) => (n % 2 ? ALIASES.secondary : ALIASES["canvas-shape"])),
+  xyChart: { plotColorPalette: [1, 2].map((n) => sectionGrey(n).fill).join(",") },
+};
 
 /**
  * The Miragon CI as Mermaid's "base" theme. Literal colours from the tokens
@@ -28,9 +77,8 @@ import { CSS_RESOURCE } from "./css-resource.ts";
  * values) and writes them into the SVG's own style block. The nodes take the
  * canvas set every diagram engine of the app draws with (white shapes, dark
  * strokes and labels, as in bpmn-js); groups, notes and activations sit on
- * the calm grey with a border that holds 3:1. Diagram types with a palette of
- * their own (pie, mindmap, git graph) derive it from these, in greys, as in
- * the docs site's Mermaid.
+ * the calm grey with a border that holds 3:1. Diagram types that colour by
+ * section take two CI greys instead of what mermaid derives (SECTION_PALETTES).
  */
 export const MERMAID_THEME_VARIABLES = {
   darkMode: false,
@@ -54,7 +102,56 @@ export const MERMAID_THEME_VARIABLES = {
   noteBkgColor: ALIASES.secondary,
   noteBorderColor: ALIASES.input,
   noteTextColor: ALIASES["secondary-foreground"],
+  // mermaid darkens the first quadrant's white without an amount: hsl(0, 0%, NaN%)
+  quadrantPointFill: ALIASES["canvas-stroke"],
+  // a radar chart's grid, in mermaid's own light grey otherwise
+  radar: { graticuleColor: ALIASES.border },
+  ...SECTION_PALETTES,
 } as const;
+
+/** an xy chart's bar groups of an odd number, drawn in text-leise */
+const XY_TEXT_LEISE_BARS = ["1", "3", "5", "7", "9"].map((digit) => `[class^="bar-plot-"][class$="${digit}"]`);
+/** a data label inside its bar: an upright bar's hangs from the bar's top, a horizontal one's ends at its end */
+const XY_LABELS_INSIDE = XY_TEXT_LEISE_BARS.flatMap((bar) => [
+  `${bar} > text[dominant-baseline="hanging"]`,
+  `${bar} > text[text-anchor="end"]`,
+]);
+
+/**
+ * Where mermaid draws a section's label on something other than the grey it
+ * was paired with, the label loses its contrast:
+ * - A kanban board lightens a column's grey by 10 % (its HTML titles stay
+ *   black, 4.3:1 on the darker grey; its SVG titles turn white, 3.9:1). A
+ *   column takes the calm grey and the border of every other group instead,
+ *   its title black.
+ * - A treemap lays its sections over each other at 60 % opacity and colours
+ *   a label by the label's own number, not by the section under it: its
+ *   sections are drawn lighter and every label in black.
+ * - The neo look (a diagram may pick it) fills mindmap and timeline nodes
+ *   white and keeps the section's label colour: their labels stay black.
+ * - A timeline brightens its events by 20 % (a white label then reads 4.2:1,
+ *   and both greys leave the CI): an event keeps its section's grey.
+ * - An xy chart writes the data labels of every bar in one colour, black
+ *   (3.0:1 on text-leise), and a line's point labels in the line's grey
+ *   (kontur reads 3.4:1 on white): inside a text-leise bar, one with an odd
+ *   number (the last digit of its group's class), they turn white; point
+ *   labels are black. mermaid starts a label inside the bar's end however
+ *   short the bar is, so a white one lies on a halo in its bar's grey,
+ *   which reads where the label runs past the bar onto white.
+ * mermaid's own selectors for treemap and neo labels name every section,
+ * hence !important.
+ */
+export const MERMAID_THEME_CSS = [
+  `.cluster[class*="section-"] rect { fill: ${ALIASES.secondary}; stroke: ${ALIASES.input}; }`,
+  `.cluster[class*="section-"] text { fill: ${ALIASES["canvas-label"]}; }`,
+  "rect.treemapSection { fill-opacity: 0.3; }",
+  `.treemapSectionLabel, .treemapSectionValue, .treemapLabel, .treemapValue { fill: ${ALIASES["canvas-label"]} !important; }`,
+  `[data-look="neo"].mindmap-node text, [data-look="neo"].mindmap-node tspan, .timeline-node[data-look="neo"] text { fill: ${ALIASES["canvas-label"]} !important; }`,
+  `[data-look="neo"].mindmap-node span { color: ${ALIASES["canvas-label"]} !important; }`,
+  ".eventWrapper { filter: none; }",
+  `${XY_LABELS_INSIDE.join(", ")} { fill: ${ALIASES["canvas-shape"]}; stroke: ${ALIASES["muted-foreground"]}; stroke-width: 3px; stroke-linejoin: round; paint-order: stroke; }`,
+  `[class^="line-plot-"] > .labels > text { fill: ${ALIASES["canvas-label"]}; }`,
+].join("\n");
 
 /**
  * What mermaid's sanitizer keeps out of a label's HTML (`dompurifyConfig`):
@@ -140,6 +237,7 @@ export const MERMAID_CONFIG = {
   securityLevel: "strict",
   theme: "base",
   themeVariables: MERMAID_THEME_VARIABLES,
+  themeCSS: MERMAID_THEME_CSS,
   fontFamily: FONT_SANS,
   htmlLabels: true,
   look: "classic",
