@@ -176,6 +176,45 @@ test("createMermaidFrameRenderer: ONE frame for concurrent renders, as wide as t
   assert.equal(doc.querySelector("iframe")!.style.width, "1234px");
 });
 
+test("createMermaidFrameRenderer: a render that names a width is laid out at it (#292)", async () => {
+  const doc = newWindow().document;
+  Object.defineProperty(doc.body, "clientWidth", { value: 1234 });
+  const render = createMermaidFrameRenderer({ doc, open: async (d) => fakeFrame(d, []) });
+  await render("gantt", "md-Mermaid", 720);
+  assert.equal(doc.querySelector("iframe")!.style.width, "720px", "the reading column's width, not the page's");
+  await render("gantt", "md-Mermaid");
+  assert.equal(doc.querySelector("iframe")!.style.width, "1234px");
+});
+
+test("createMermaidFrameRenderer: one render at a time, each laid out at its own width (#292)", async () => {
+  const doc = newWindow().document;
+  Object.defineProperty(doc.body, "clientWidth", { value: 1234 });
+  const laidOutAt: string[] = [];
+  const render = createMermaidFrameRenderer({
+    doc,
+    open: async (d) => {
+      const frame = fakeFrame(d, []);
+      return {
+        element: frame.element,
+        api: {
+          // mermaid reads the frame's width only once it lays the diagram out, after awaits of its own
+          render: async (source) => {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            laidOutAt.push(`${source}@${frame.element.style.width}`);
+            return { svg: `<svg><text>${source}</text></svg>` };
+          },
+        },
+      };
+    },
+  });
+  await Promise.all([
+    render("gantt", "md-Mermaid", 720),
+    render("quoted gantt", "md-Mermaid", 690),
+    render("flowchart", "md-Mermaid"),
+  ]);
+  assert.deepEqual(laidOutAt, ["gantt@720px", "quoted gantt@690px", "flowchart@1234px"]);
+});
+
 test("createMermaidFrameRenderer: a frame that does not start rejects, the next render starts another", async () => {
   const doc = newWindow().document;
   const log: string[] = [];
