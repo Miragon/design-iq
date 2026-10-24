@@ -199,7 +199,23 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
    canonicalization, exports of unchanged elements are byte-stable and text diffs stay local
    to the actual edit. Pin one bpmn-js/moddle version across web app and VS Code webview.
 2. **Minimal diffs into Y.Text, never replace-all** (diff-match-patch in one transaction) —
-   replace-all destroys merge granularity and clobbers concurrent edits.
+   replace-all destroys merge granularity and clobbers concurrent edits. A canvas edit is
+   diffed against the canvas's last export, never against the live text, which may hold a
+   peer's change the canvas has not imported yet. That edit is placed into the current text
+   by its context, or else **merged line by line** (#309): a three-way merge of the last
+   export, the current text and the export. Edits of different lines merge, also where one
+   edit's changed region spans the other's, as where bpmn-js writes a moved or new shape's
+   DI last, across the DI a peer just moved, or where a new element goes right after the one
+   a peer moved (Wardley and Event Storming list it last). An insertion at the edge of the
+   peer's change goes next to it, and two at the same point both go in, the peer's first.
+   The canvas edit gives way to the peer's change, with the conflict toast, where both
+   changed the same lines (two moves of one element, a create inside the lines the peer
+   rewrote), and where the merge would make a text that passes the notation's gate (rule 4)
+   fail it: a text with typing or a save in it gets no repair, so a merge must not break it.
+   The gate of BPMN and DMN is well-formed XML; that of the Miragon notations asks only for
+   a text that is not blank, and their parser stays the judge. The edit merges whole or not
+   at all: half of a move is a model nobody made. A diff of more than 1000 changed lines
+   gives way rather than hold up the drop.
 3. **Debounce remote re-imports** (~300–500 ms) with an import-suppression flag and
    string-equality guard (echo prevention via Yjs transaction origins). **Hold them back
    while a local gesture runs** (#295). A drag, resize, connection, lasso or palette create
@@ -213,11 +229,9 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
    no gesture: a palette tool that waits for its next press (hand, space, lasso, global
    connect) keeps it set, and is neither waited for nor cancelled. The import runs once the
    gesture ends, after the drop's own edit, which merges like any local edit (rule 2):
-   where the drop and the held change are apart in the text, the canvas takes in both;
-   where they touch, the drop gives way to the peer's change, with the conflict toast.
-   Edits of different elements touch where bpmn-js writes a moved or new shape's DI last,
-   and where a new element goes right after the one a peer moved (Wardley and Event
-   Storming list it last). A gesture that outlasts 10 s gives way: it is cancelled the way
+   where the drop and the held change changed different lines, the canvas takes in both;
+   where they changed the same lines, the drop gives way to the peer's change, with the
+   conflict toast. A gesture that outlasts 10 s gives way: it is cancelled the way
    Escape cancels it, then the import runs. Gates and repairs (rule 4) do not wait for a
    gesture. The notice of a text that stays unrenderable goes only once a text renders: a
    fix that arrives during a gesture lifts it when the held import runs.

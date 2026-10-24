@@ -2,13 +2,15 @@
  * diffRegion edge cases + updateText's minimal-diff guarantee: the write must
  * touch ONLY the changed middle (delete/insert on the diff region), never
  * replace the whole text — asserted by inspecting the Y.Text event delta.
+ * mergeLines: a local edit merged line by line into a text a peer changed
+ * meanwhile (#309), conflicting only where both changed the same lines.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import * as Y from "yjs";
 
-import { diffHunks, diffRegion, updateText } from "../src/text-diff.ts";
+import { diffHunks, diffRegion, mergeLines, patchText, updateText } from "../src/text-diff.ts";
 
 /* ── diffRegion ─────────────────────────────────────────────────────────── */
 
@@ -62,6 +64,83 @@ test("diffHunks: a closing line break added or dropped is a hunk of its own at t
   ]);
   assert.deepEqual(diffHunks("abc", "abc\r\n"), [{ at: 3, deleteCount: 0, insert: "\r\n" }]);
   assert.deepEqual(diffHunks("", "\n"), [{ at: 0, deleteCount: 0, insert: "\n" }]);
+});
+
+/* ── mergeLines ─────────────────────────────────────────────────────────── */
+
+/** `current` with the local edit `base` → `next` merged in, or undefined for a conflict */
+function merged(base: string, current: string, next: string): string | undefined {
+  const hunks = mergeLines(base, current, next);
+  return hunks && patchText(current, hunks);
+}
+
+/** a DI in the order bpmn-js writes it: a moved shape goes last */
+const shape = (id: string, x: number): string => `  <shape id="${id}" x="${x}" />`;
+const plane = (...shapes: string[]): string => ["<plane>", ...shapes, "</plane>"].join("\n");
+const BASE_DI = plane(shape("a", 100), shape("b", 250), shape("c", 400));
+
+test("mergeLines: a move whose shape is written last merges with a peer's move of the shape that was last", () => {
+  const peerMovedC = plane(shape("a", 100), shape("b", 250), shape("c", 480));
+  const localMovedA = plane(shape("b", 250), shape("c", 400), shape("a", 130));
+  assert.equal(merged(BASE_DI, peerMovedC, localMovedA), plane(shape("b", 250), shape("c", 480), shape("a", 130)));
+});
+
+test("mergeLines: two moves that both write their shape last keep both, the peer's first", () => {
+  const peerMovedB = plane(shape("a", 100), shape("c", 400), shape("b", 270));
+  const localMovedA = plane(shape("b", 250), shape("c", 400), shape("a", 130));
+  assert.equal(merged(BASE_DI, peerMovedB, localMovedA), plane(shape("c", 400), shape("b", 270), shape("a", 130)));
+});
+
+test("mergeLines: a new element after the one a peer moved merges, also after the text's last line", () => {
+  const board = "title Tea\ncomponent Cup [0.79, 0.61]\ncomponent Kettle [0.43, 0.35]\nCup->Kettle";
+  assert.equal(
+    merged(
+      board,
+      board.replace("Kettle [0.43, 0.35]", "Kettle [0.50, 0.35]"),
+      board.replace("Kettle [0.43, 0.35]", "Kettle [0.43, 0.35]\ncomponent Water [0.82, 0.78]"),
+    ),
+    "title Tea\ncomponent Cup [0.79, 0.61]\ncomponent Kettle [0.50, 0.35]\ncomponent Water [0.82, 0.78]\nCup->Kettle",
+  );
+  // a text without its closing line break ends on a line boundary: the append is no change of the last line
+  assert.equal(merged("A 1\nB 1", "A 1\nB 2", "A 1\nB 1\nC 1"), "A 1\nB 2\nC 1");
+});
+
+test("mergeLines: edits of the same line conflict, and so does an insertion strictly inside the peer's changed lines", () => {
+  assert.equal(merged("A 1\nB 1\nC 1", "A 1\nB 2\nC 1", "A 1\nB 3\nC 1"), undefined);
+  assert.equal(merged("A\nB\nC\nD", "A\nX\nD", "A\nB\nnew\nC\nD"), undefined, "inside the peer's B, C → X");
+  assert.equal(merged("A\nB\nC\nD", "A\nX\nD", "A\nnew\nB\nC\nD"), "A\nnew\nX\nD", "at its start: before it");
+  assert.equal(merged("A\nB\nC\nD", "A\nX\nD", "A\nB\nC\nnew\nD"), "A\nX\nnew\nD", "at its end: after it");
+});
+
+test("mergeLines: a local edit merges whole or not at all", () => {
+  // the move deletes A's line where it was and inserts it last; the peer changed the line it deletes
+  assert.equal(merged("A 1\nB 1\nC 1", "A 2\nB 1\nC 1", "B 1\nC 1\nA 5"), undefined);
+});
+
+test("mergeLines: two moves of one shape conflict, also when both made it alike; no change merges as no hunk", () => {
+  const movedA = (x: number): string => plane(shape("b", 250), shape("c", 400), shape("a", x));
+  assert.equal(merged(BASE_DI, movedA(160), movedA(130)), undefined, "not two shapes for a, one from each");
+  assert.equal(merged(BASE_DI, movedA(130), movedA(130)), undefined);
+  assert.deepEqual(mergeLines("A 1\nB 1", "A 2\nB 1", "A 1\nB 1"), []);
+});
+
+test("mergeLines: CRLF lines merge like LF lines; the hunks touch only the local edit's lines", () => {
+  const base = "A 1\r\nB 1\r\nC 1";
+  assert.equal(merged(base, "A 1\r\nB 1\r\nC 2", "A 9\r\nB 1\r\nC 1\r\nD 1"), "A 9\r\nB 1\r\nC 2\r\nD 1");
+  assert.deepEqual(mergeLines(base, "A 1\r\nB 1\r\nC 2", "A 9\r\nB 1\r\nC 1\r\nD 1"), [
+    { at: 13, deleteCount: 0, insert: "\r\nD 1" },
+    { at: 0, deleteCount: 3, insert: "A 9" },
+  ]);
+});
+
+test("mergeLines: a diff of more than 1000 changed lines gives way rather than stall the drop", () => {
+  const base = Array.from({ length: 1200 }, (_, index) => `line ${index}`).join("\n");
+  // apart from the peer's appended line, so only the size makes it give way
+  assert.equal(merged(base, `${base}\nappended`, base.replaceAll("line", "row")), undefined);
+  assert.equal(
+    merged(base, base.replace("line 0\n", "line zero\n"), base.replace("line 600\n", "line 600 moved\n")),
+    base.replace("line 0\n", "line zero\n").replace("line 600\n", "line 600 moved\n"),
+  );
 });
 
 /* ── updateText ─────────────────────────────────────────────────────────── */

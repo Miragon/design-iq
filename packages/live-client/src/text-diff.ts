@@ -72,6 +72,182 @@ export function applyHunks(ytext: Y.Text, hunks: readonly Hunk[]): void {
   }
 }
 
+/** `text` with hunks (as diffHunks orders them) applied, as applyHunks writes them */
+export function patchText(text: string, hunks: readonly Hunk[]): string {
+  let patched = text;
+  for (const { at, deleteCount, insert } of hunks) {
+    patched = patched.slice(0, at) + insert + patched.slice(at + deleteCount);
+  }
+  return patched;
+}
+
+/** the most lines a merge's diffs may change: a larger edit gives way rather than stall the canvas that drops it */
+const MAX_LINE_EDITS = 1000;
+
+/**
+ * The text cut into lines, each led by the line break before it (CRLF or
+ * LF). Without its closing line breaks (closingBreaksAt), the text then ends
+ * on a line boundary: a line appended after the last one is an insertion,
+ * not a change of that line.
+ */
+function linesOf(text: string): string[] {
+  const lines: string[] = [];
+  let from = 0;
+  for (let at = text.indexOf("\n"); at >= 0; at = text.indexOf("\n", at + 1)) {
+    const lineBreak = text[at - 1] === "\r" ? at - 1 : at;
+    if (lineBreak === 0) continue;
+    lines.push(text.slice(from, lineBreak));
+    from = lineBreak;
+  }
+  if (from < text.length) lines.push(text.slice(from));
+  return lines;
+}
+
+/** a changed run of a base text's lines, `start` up to `end` (equal: an insertion), and the lines in its place */
+interface LineHunk {
+  start: number;
+  end: number;
+  lines: readonly string[];
+}
+
+/**
+ * Myers' O(ND) diff of two texts' lines (as ids), the common lines at both
+ * ends trimmed first: the changed runs of `from`, in order, each with the
+ * lines of `to` in its place. Undefined past MAX_LINE_EDITS changed lines.
+ */
+function lineHunks(from: readonly number[], to: readonly number[], toLines: readonly string[]): LineHunk[] | undefined {
+  let head = 0;
+  while (head < from.length && head < to.length && from[head] === to[head]) head++;
+  let tail = 0;
+  while (
+    tail < from.length - head &&
+    tail < to.length - head &&
+    from[from.length - 1 - tail] === to[to.length - 1 - tail]
+  ) {
+    tail++;
+  }
+  const a = from.slice(head, from.length - tail);
+  const b = to.slice(head, to.length - tail);
+  const limit = Math.min(a.length + b.length, MAX_LINE_EDITS);
+  // furthest x reached on each diagonal k = x - y, -1 where none is
+  const furthest = new Int32Array(2 * limit + 3).fill(-1);
+  const center = limit + 1;
+  furthest[center + 1] = 0;
+  /** what each round d read: the diagonals -d-1 to d+1 as round d - 1 left them */
+  const rounds: Int32Array[] = [];
+  /** where a round extends diagonal k from: k + 1 (+1, a line of `to` inserted), k - 1 (-1, a line of `from` deleted), or off the grid (0) */
+  const stepOnto = (reached: (k: number) => number, k: number): number => {
+    const down = reached(k + 1);
+    const right = reached(k - 1);
+    const downOk = down >= 0 && down - k <= b.length;
+    const rightOk = right >= 0 && right + 1 <= a.length;
+    if (downOk && (!rightOk || down >= right + 1)) return 1;
+    return rightOk ? -1 : 0;
+  };
+  let edits = -1;
+  for (let d = 0; d <= limit && edits < 0; d++) {
+    rounds.push(furthest.slice(center - d - 1, center + d + 2));
+    const reached = (k: number): number => furthest[center + k]!;
+    for (let k = -d; k <= d; k += 2) {
+      const step = stepOnto(reached, k);
+      if (step === 0) {
+        furthest[center + k] = -1;
+        continue;
+      }
+      let x = step === 1 ? reached(k + 1) : reached(k - 1) + 1;
+      let y = x - k;
+      while (x < a.length && y < b.length && a[x] === b[y]) {
+        x++;
+        y++;
+      }
+      furthest[center + k] = x;
+      if (x === a.length && y === b.length) {
+        edits = d;
+        break;
+      }
+    }
+  }
+  if (edits < 0) return undefined;
+
+  // walk back from the end, keeping the lines both texts share
+  const shared: Array<[number, number]> = [];
+  let x = a.length;
+  let y = b.length;
+  for (let d = edits; d > 0; d--) {
+    const round = rounds[d]!;
+    const reached = (k: number): number => round[k + d + 1]!;
+    const k = x - y;
+    const step = stepOnto(reached, k);
+    const fromX = reached(k + step);
+    const fromY = fromX - (k + step);
+    const afterX = step === 1 ? fromX : fromX + 1;
+    for (; x > afterX; x--, y--) shared.push([x - 1, y - 1]);
+    x = fromX;
+    y = fromY;
+  }
+  for (; x > 0; x--, y--) shared.push([x - 1, y - 1]);
+  shared.reverse().push([a.length, b.length]);
+
+  const hunks: LineHunk[] = [];
+  let lastA = -1;
+  let lastB = -1;
+  for (const [atA, atB] of shared) {
+    if (atA > lastA + 1 || atB > lastB + 1) {
+      hunks.push({ start: head + lastA + 1, end: head + atA, lines: toLines.slice(head + lastB + 1, head + atB) });
+    }
+    lastA = atA;
+    lastB = atB;
+  }
+  return hunks;
+}
+
+/**
+ * A three-way merge by lines: the changes `base` → `next` (a local edit)
+ * placed into `current` (`base` with the changes that arrived meanwhile), as
+ * hunks against `current`, last first (applyHunks). A change of the same
+ * lines as one that arrived, or an insertion strictly inside one, is a
+ * conflict (undefined); an insertion at its edge merges, and insertions at
+ * the same point both go in, the arrived one first. A change both made alike
+ * conflicts too: two moves of one shape delete the same line, and each
+ * inserts its own. The local edit merges whole or not at all: half of a
+ * canvas operation (a moved shape deleted where it was, not inserted where it
+ * goes) is a model nobody made. Lines are compared with the break before
+ * them, so `base`, `current` and `next` are texts without their closing line
+ * breaks.
+ */
+export function mergeLines(base: string, current: string, next: string): Hunk[] | undefined {
+  const ids = new Map<string, number>();
+  const idsOf = (lines: readonly string[]): number[] =>
+    lines.map((line) => {
+      let id = ids.get(line);
+      if (id === undefined) ids.set(line, (id = ids.size));
+      return id;
+    });
+  const currentLines = linesOf(current);
+  const nextLines = linesOf(next);
+  const baseIds = idsOf(linesOf(base));
+  const arrived = lineHunks(baseIds, idsOf(currentLines), currentLines);
+  const local = lineHunks(baseIds, idsOf(nextLines), nextLines);
+  if (!arrived || !local) return undefined;
+
+  const lineAt = [0];
+  for (const line of currentLines) lineAt.push(lineAt.at(-1)! + line.length);
+  const hunks: Hunk[] = [];
+  let before = 0;
+  let shift = 0;
+  for (const hunk of local) {
+    if (arrived.some((other) => hunk.start < other.end && other.start < hunk.end)) return undefined;
+    for (; before < arrived.length && arrived[before]!.end <= hunk.start; before++) {
+      const other = arrived[before]!;
+      shift += other.lines.length - (other.end - other.start);
+    }
+    const from = hunk.start + shift;
+    const at = lineAt[from]!;
+    hunks.push({ at, deleteCount: lineAt[from + hunk.end - hunk.start]! - at, insert: hunk.lines.join("") });
+  }
+  return hunks.reverse();
+}
+
 /**
  * Write `next` into `ytext` as a minimal diff (one transaction deleting and
  * inserting only the changed middle, and the closing line breaks apart from
