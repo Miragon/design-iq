@@ -15,7 +15,9 @@
  *   view       what you are looking at — a segmented Diagram | Source switch
  *              that states the CURRENT view (the old lone "XML" button did not);
  *              a plugin may name its canvas layer (Markdown: Preview) and add
- *              Split between the two, the source beside the canvas
+ *              Split between the two, the source beside the canvas. A click
+ *              on the canvas side hands the canvas the focus, so its keys
+ *              work at once (lib/canvas-focus.ts)
  *   panels     what is docked beside the canvas — ONE cluster of toggles that
  *              show their open state. A notation plugin joins the cluster; it
  *              no longer grows the bar by another labelled button.
@@ -25,7 +27,9 @@
  *              check), the model's own Rename… / Duplicate… and Release → PR,
  *              and a Miragon renderer's own Model, Export and Help entries
  *              (Map size…, Level, Export as PNG, Keyboard shortcuts…) in the
- *              guide's group order around them
+ *              guide's group order around them. Not modal: a click outside
+ *              closes it and acts on its target, a click on the canvas
+ *              gives the canvas the focus
  *
  * The model name itself is the rename handle (#208): a quiet button that
  * shows a pencil on hover/focus and opens the Rename dialog on click. Not a
@@ -75,6 +79,7 @@ import {
 } from "lucide-react";
 import { type ComponentType, type ReactNode, type Ref, useEffect, useReducer, useRef, useState } from "react";
 
+import { type FocusableCanvas, isPointerClick, type MenuCloseFocus, menuCloseFocus } from "@/lib/canvas-focus";
 import type { EditorView } from "@/lib/editor-view";
 import { safeAvatarUrl, safePresenceColor } from "@/lib/presence-format";
 import { addTodoTitle } from "@/lib/todo-view";
@@ -123,6 +128,7 @@ export function EditorToolbar({
   onDuplicate,
   modelerMenu,
   menuTriggerRef,
+  canvas,
 }: {
   /** repository full name, "owner/name" */
   repo: string;
@@ -161,13 +167,15 @@ export function EditorToolbar({
   modelerMenu?: ModelerMenu;
   /** the ⋯ trigger, where the renderer's dialogs give the focus back */
   menuTriggerRef?: Ref<HTMLButtonElement>;
+  /** the canvas a click on a Model action of the ⋯ menu hands the focus to */
+  canvas?: FocusableCanvas;
 }) {
   const [owner = "", name = ""] = repo.split("/");
+  const [closeFocus] = useState(menuCloseFocus);
   // a menu item that opens a DIALOG must not have radix hand the focus back
   // to the ⋯ trigger — it would steal the dialog field's autoFocus
-  const openingDialog = useRef(false);
   const openDialog = (open: () => void) => () => {
-    openingDialog.current = true;
+    closeFocus.openingDialog();
     setTimeout(open, 0);
   };
   const modelPanels = panels.filter((p) => p.modelMenu);
@@ -309,7 +317,11 @@ export function EditorToolbar({
         )}
 
         <Divider />
-        <DropdownMenu>
+        {/* not modal: a modal menu swallowed the click on the canvas that
+            closed it and gave the trigger the focus, so the canvas keys
+            waited for a second click (guide §5.4: a click outside acts on
+            its target too) */}
+        <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <Button ref={menuTriggerRef} variant="ghost" size="icon" className="size-8" aria-label="More" title="More">
               <Ellipsis />
@@ -318,9 +330,7 @@ export function EditorToolbar({
           <DropdownMenuContent
             align="end"
             onCloseAutoFocus={(e) => {
-              if (!openingDialog.current) return;
-              openingDialog.current = false;
-              e.preventDefault();
+              if (closeFocus.closing(canvas)) e.preventDefault();
             }}
           >
             {menuPanels.map((p) => (
@@ -338,7 +348,9 @@ export function EditorToolbar({
             <DropdownMenuSeparator />
             {((modelerMenu?.model.length ?? 0) > 0 || modelPanels.length > 0) && (
               <>
-                {modelerMenu && <ModelerEntries entries={modelerMenu.model} openDialog={openDialog} />}
+                {modelerMenu && (
+                  <ModelerEntries entries={modelerMenu.model} openDialog={openDialog} closeFocus={closeFocus} />
+                )}
                 {/* the guide's Model checkbox (§5.4, §5.10); it stays open on a
                     toggle like the renderer's own checkboxes */}
                 {modelPanels.map((p) => (
@@ -404,13 +416,17 @@ const MODELER_ICONS: Record<ModelerMenuIcon, LucideIcon> = {
 /** A renderer's menu entries in the ⋯ menu. Rendered inside the open menu,
  *  so a checkbox or a radio group reads the canvas's state as the menu
  *  opens; both stay open on a toggle (guide §5.4) and re-read it. A dialog
- *  entry opens a tick after radix let go of the focus, as Rename… does. */
+ *  entry opens a tick after radix let go of the focus, as Rename… does. An
+ *  action entry of the Model group (`closeFocus`) tells how it was chosen:
+ *  after a click the canvas takes the focus (guide §5.8). */
 function ModelerEntries({
   entries,
   openDialog,
+  closeFocus,
 }: {
   entries: readonly ModelerMenuEntry[];
   openDialog: (open: () => void) => () => void;
+  closeFocus?: MenuCloseFocus;
 }) {
   const [, reread] = useReducer((n: number) => n + 1, 0);
   const keepOpen = (event: Event) => event.preventDefault();
@@ -460,6 +476,10 @@ function ModelerEntries({
         key={entry.id}
         inset
         aria-haspopup={entry.kind === "dialog" ? "dialog" : undefined}
+        // radix runs onSelect after this handler; its Enter and Space click with detail 0
+        onClick={
+          closeFocus && entry.kind === "action" ? (event) => closeFocus.actedOnCanvas(isPointerClick(event)) : undefined
+        }
         onSelect={entry.kind === "dialog" ? openDialog(() => entry.onSelect()) : () => entry.onSelect()}
       >
         {Icon ? <Icon /> : <IconGap />}
@@ -616,7 +636,8 @@ interface ViewSwitchProps {
    *  has room for it. Without the room it leaves the switch, the preview
    *  shows, and a chosen Split comes back with the room */
   split?: boolean;
-  onChange(view: EditorView): void;
+  /** `pointer`: chosen with a click, not Enter or Space */
+  onChange(view: EditorView, pointer: boolean): void;
 }
 
 interface ViewOption {
@@ -656,7 +677,7 @@ function ViewSwitch({ canvas = DIAGRAM_VIEW, sourceLabel, shown, split, onChange
             aria-pressed={active}
             aria-label={o.label}
             title={o.title}
-            onClick={() => onChange(o.view)}
+            onClick={(event) => onChange(o.view, isPointerClick(event))}
             className={cn(
               "flex h-7 cursor-pointer items-center gap-1.5 rounded-sm px-2 text-xs font-medium transition-colors",
               focusRing,

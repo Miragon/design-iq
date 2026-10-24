@@ -14,9 +14,9 @@ Desktop, ChatGPT).
 | `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and what it makes of hostile sources, the Mermaid frame and the Miragon renderers themselves (`test/renderer-dom.ts`). |
 | `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                                                                                |
 
-Three checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`
-(under the Markdown view below), `test/live-gesture-chromium.ts` (under the MCP-App widgets below)
-and `test/live-repair-chromium.ts`, the live merge repair and its
+Four checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`
+(under the Markdown view below), `test/live-gesture-chromium.ts` and `test/canvas-focus-chromium.ts`
+(both under the MCP-App widgets below) and `test/live-repair-chromium.ts`, the live merge repair and its
 notice with real peers (issue 296): two tabs dropping moves at once, the first-ranked writer
 closing its tab, a link that drops and comes back, a half-typed tag seen from the canvas tabs, a
 reload during it, and the BPMN widget live in a minimal MCP-Apps host. From the repository root:
@@ -299,6 +299,18 @@ the verdict chip and the Checks sections), the icons from `icons.ts`, and `prefe
 turns every slide, spinner and animated re-fit off. The chrome modules' focus
 rules (a keyboard user never lands on `<body>`) are tested on a small fake DOM
 (`test/fake-dom.ts`, `test/widget-chrome-dom.test.ts`).
+
+**A click on the SPA's chrome hands the canvas the focus.** Every SPA editor with a canvas
+(bpmn-js, the DMN DRD, the Miragon renderers) hears its keys only while the canvas has the
+focus, so the SPA hands it back after a click, as the widget does after a zoom click (guide §5.8,
+`src/lib/canvas-focus.ts`): a click on the view switch's Diagram side focuses the canvas once it
+shows, and so does a click on a Model action of the ⋯ menu that opens no dialog (no renderer
+ships one yet). Enter and Space keep the focus on the switch; on a menu entry they, like Escape,
+give it to the menu's trigger (§5.4). The ⋯ menu is not modal: a click on the canvas closes it
+and acts there, so after a toggle that keeps the menu open (Type captions, Legend) that one click
+gives the canvas the focus. `test/canvas-focus.test.ts` holds the rules,
+`test/canvas-focus-dom.test.ts` runs them on each real canvas, and `test/canvas-focus-chromium.ts`
+runs the built SPA by hand (its header says how).
 
 **One spec per Miragon renderer.** The four Miragon widgets are not four
 entries: `src/notations/miragon/<id>.ts` holds ONE `MiragonRendererSpec` per

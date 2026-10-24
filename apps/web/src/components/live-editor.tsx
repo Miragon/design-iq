@@ -49,6 +49,7 @@ import {
   type TodoModelRef,
   type TodoWire,
 } from "@/lib/api";
+import { type FocusableCanvas, focusCanvasIn, viewSwitchFocus } from "@/lib/canvas-focus";
 import { keepKeysFromCanvas } from "@/lib/canvas-keys";
 import {
   editorLayers,
@@ -194,6 +195,13 @@ export function LiveEditor({
   // while only the source layer shows (not in the split view)
   const canvasShownRef = useRef(true);
   const canvasShownListenersRef = useRef(new Set<() => void>());
+  // the canvas a click on the chrome hands the focus back to (lib/canvas-focus)
+  const mountedRef = useRef<MountedEditor | undefined>(undefined);
+  const [canvasFocus] = useState<FocusableCanvas>(() => ({
+    shown: () => canvasShownRef.current,
+    focus: () => focusCanvasIn(canvasRef.current, mountedRef.current?.focus),
+  }));
+  const [viewFocus] = useState(() => viewSwitchFocus(canvasFocus));
 
   // the ONE open side panel — the panels are mutually exclusive, and the rule
   // lives here instead of being hand-written into every toggle (one of the
@@ -374,6 +382,7 @@ export function LiveEditor({
           return;
         }
         mounted = editor;
+        mountedRef.current = editor;
         setEditorActions(editor?.actions ?? []);
         setEditorMenu(editor?.menu);
         if (editor?.elements) {
@@ -454,6 +463,7 @@ export function LiveEditor({
       caretStyles.destroy();
       contentRef.current = null;
       todoCanvasRef.current = null;
+      mountedRef.current = undefined;
       setEditorActions([]);
       setEditorMenu(undefined);
       setSourceMenus([]);
@@ -599,11 +609,13 @@ export function LiveEditor({
   const bounds = ratioBounds(room.width, room.rem);
   const shownRatio = clampRatio(ratio, bounds);
   const ActivePanel = activePanelSpec?.component;
-  // the mounted editor follows the view switch (see canvasShownRef)
+  // the mounted editor follows the view switch (see canvasShownRef), and a
+  // click on the canvas view hands it the focus once it shows
   useEffect(() => {
     canvasShownRef.current = canvasShown;
     for (const cb of canvasShownListenersRef.current) cb();
-  }, [canvasShown]);
+    viewFocus.shown();
+  }, [canvasShown, viewFocus]);
   // a shared text that stays unrenderable leaves the canvas on an older
   // state than the document, so whoever sees the canvas alone is told, and
   // offered the source, where the text shows as it is (#296)
@@ -676,7 +688,10 @@ export function LiveEditor({
                 sourceLabel,
                 shown,
                 split: splitAvailable,
-                onChange: views.choose,
+                onChange: (next, pointer) => {
+                  views.choose(next);
+                  viewFocus.chose(next, pointer);
+                },
               }
             : undefined
         }
@@ -702,6 +717,7 @@ export function LiveEditor({
         onDuplicate={() => setDuplicateOpen(true)}
         modelerMenu={editorMenu}
         menuTriggerRef={menuTriggerRef}
+        canvas={canvasFocus}
       />
       {error && <div className="bg-destructive-soft text-destructive border-b px-4 py-2 text-sm">{error}</div>}
       <div
