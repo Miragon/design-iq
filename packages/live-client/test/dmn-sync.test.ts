@@ -9,7 +9,8 @@
  *    exactly once and heals when valid content arrives
  *
  * The merge/conflict discipline itself is engine behavior, covered by
- * sync-merge.test.ts through the bpmn adapter.
+ * sync-merge.test.ts through the bpmn adapter; the DRD cases below pin that
+ * dmn-js edits take the same line-by-line merge (#309).
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -17,6 +18,7 @@ import { test } from "node:test";
 import * as Y from "yjs";
 
 import { bindDmn } from "../src/dmn-sync.ts";
+import { updateText } from "../src/text-diff.ts";
 
 // importFromY's validity gate uses DOMParser; the stub flags a marker string
 // as non-well-formed so the gate itself is testable
@@ -318,5 +320,64 @@ test("malformed document: import error reported once, heals when valid content a
   assert.equal(modeler.xml(), BASE);
   assert.equal(modeler.getActiveView()?.type, "drd");
   assert.equal(errors.length, 1);
+  unbind();
+});
+
+/** a DRD as dmn-js writes it, each decision's shape at its x: a new decision and its shape go last, a moved shape changes its bounds in place */
+function drd(decisions: Record<string, number>): string {
+  return [
+    '<definitions id="Definitions_credit" name="Credit">',
+    ...Object.keys(decisions).map((id) => `  <decision id="${id}" name="Decide ${id}" />`),
+    "  <dmnDI>",
+    '    <diagram id="Diagram_1">',
+    ...Object.entries(decisions).map(
+      ([id, x]) => `      <shape dmnElementRef="${id}"><bounds x="${x}" y="80" width="180" height="80" /></shape>`,
+    ),
+    "    </diagram>",
+    "  </dmnDI>",
+    "</definitions>",
+    "",
+  ].join("\n");
+}
+
+/** a peer's canvas write reaching the shared text */
+function peerWrites(doc: Y.Doc, ytext: Y.Text, text: string): void {
+  doc.transact(() => updateText(ytext, text), "remote-user");
+}
+
+test("a DRD create next to a peer's move of another decision merges line by line: both stay, nobody is told", async () => {
+  const conflicts: string[] = [];
+  const { doc, ytext, modeler } = setup(drd({ A: 100, B: 350 }));
+  const unbind = bindDmn(modeler as never, ytext, doc, (m) => conflicts.push(m));
+  await wait(100);
+
+  peerWrites(doc, ytext, drd({ A: 160, B: 350 }));
+  // the new decision and its shape go last: the change runs from one to the other, across the peer's line
+  modeler.setXml(drd({ A: 100, B: 350, C: 600 }));
+  modeler.viewer("drd").fire("commandStack.changed");
+  await wait(100);
+
+  assert.equal(ytext.toString(), drd({ A: 160, B: 350, C: 600 }));
+  assert.deepEqual(conflicts, []);
+  await wait(1100);
+  assert.equal(modeler.xml(), ytext.toString(), "the canvas takes in the peer's move");
+  unbind();
+});
+
+test("a DRD move of the decision a peer moved too gives way: the peer's move stays, the canvas is told once", async () => {
+  const conflicts: string[] = [];
+  const { doc, ytext, modeler } = setup(drd({ A: 100, B: 350 }));
+  const unbind = bindDmn(modeler as never, ytext, doc, (m) => conflicts.push(m));
+  await wait(100);
+
+  const peer = drd({ A: 160, B: 350 });
+  peerWrites(doc, ytext, peer);
+  modeler.setXml(drd({ A: 130, B: 350 }));
+  modeler.viewer("drd").fire("commandStack.changed");
+  await wait(600);
+
+  assert.equal(ytext.toString(), peer);
+  assert.equal(conflicts.length, 1);
+  assert.equal(modeler.xml(), peer, "the canvas shows the peer's move");
   unbind();
 });

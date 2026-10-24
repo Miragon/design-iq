@@ -326,16 +326,20 @@ through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
 the widget engines alike, passes live-client the element it mounts the canvas in: while a
 pointer is held on it or a diagram-js drag that carries elements runs in it, a peer's
 change waits, for 10 s at most (sync rule 3 in `docs/platform-concept.md`, #295). An
-armed palette tool (hand, space, lasso) holds nothing back. A drop that touches the held
-change in the text gives way to it, with the conflict toast: bpmn-js writes a moved or
-new shape's DI last, and Wardley and Event Storming list a new element right after the
-one a peer may have moved. `test/live-gesture.test.ts` covers every mount under jsdom, with
-diagram-js's dragging run without a pointer. Pointer drags in a browser are checked by
-hand, as CI has no browser: `test/live-gesture-chromium.ts` starts a Live Host of its own
-and drags, creates and arms palette tools in two SPA pages per notation (bpmn-js and every
-Miragon renderer) while the other page drops a move, and reports which edits that touch in
-the text kept both. After a renderer, diagram-js or live-client change, from the
-repository root: `pnpm build`, then
+armed palette tool (hand, space, lasso) holds nothing back. The drop then merges with the
+held change line by line (sync rule 2, #309), also where bpmn-js writes a moved or new
+shape's DI last, across the DI a peer moved, and where Wardley and Event Storming list a
+new element right after the one a peer moved. A drop that changes the same lines (two
+moves of one element), or whose merge would fail the notation's gate (well-formed XML for
+BPMN and DMN, a text that is not blank for the Miragon notations), gives way to the peer's
+change, with the conflict toast.
+`test/live-gesture.test.ts` covers every mount under jsdom, with diagram-js's dragging run
+without a pointer. Pointer drags in a browser are checked by hand, as CI has no browser:
+`test/live-gesture-chromium.ts` starts a Live Host of its own and drags, creates and arms
+palette tools in two SPA pages per notation (bpmn-js, the DMN DRD and every Miragon
+renderer) while the other page drops a move, and requires both edits kept also where their
+changes in the text run into each other. After a renderer, diagram-js or live-client
+change, from the repository root: `pnpm build`, then
 `npx -y -p playwright@1.56.1 -c "node apps/web/test/live-gesture-chromium.ts"` (`PORT` sets
 the Live Host's port, 8392 unless set).
 

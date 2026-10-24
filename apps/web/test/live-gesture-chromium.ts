@@ -1,10 +1,11 @@
 /**
  * A drag that spans a peer's change (issue 295) in the built SPA, in headless
- * Chromium, with the real modelers: bpmn-js and every Miragon renderer. A
- * check run by hand, not by `pnpm test`, because CI has no browser; the jsdom
- * suites cannot drag with a pointer (test/live-gesture.test.ts runs
- * diagram-js's dragging without one). Run it after a renderer, diagram-js or
- * live-client change, from the repository root:
+ * Chromium, with the real modelers: bpmn-js, dmn-js's DRD and every Miragon
+ * renderer. A check run by hand, not by `pnpm test`, because CI has no
+ * browser; the jsdom suites cannot drag with a pointer
+ * (test/live-gesture.test.ts runs diagram-js's dragging without one). Run it
+ * after a renderer, diagram-js or live-client change, from the repository
+ * root:
  *
  *   pnpm build
  *   npx -y playwright@1.56.1 install --only-shell chromium     # once
@@ -33,22 +34,23 @@
  *
  * Then on fresh pages A and B:
  *
- *  4. A arms a palette tool that waits for the next press (bpmn-js: the hand
- *     tool after one pan, which re-arms it; a Miragon renderer: the lasso):
- *     diagram-js sets its drag marker and draws no preview. B's move must
- *     reach A within the import debounce, with no Escape sent to A's page,
- *     no error and no toast.
+ *  4. A arms a palette tool that waits for the next press (bpmn-js and the
+ *     DRD: the hand tool after one pan, which re-arms it; a Miragon renderer:
+ *     the lasso): diagram-js sets its drag marker and draws no preview. B's
+ *     move must reach A within the import debounce, with no Escape sent to
+ *     A's page, no error and no toast.
  *  5. A clicks a palette entry and leaves the pointer on the palette, so the
  *     new element has no preview on the canvas yet, while the headless
  *     session edits the title back. A's canvas must wait all the same; then
  *     A places the element. Both must end up in the shared text, with no
  *     error and no toast.
- *  6. Edits that touch in the text: A creates from the palette while B moves
- *     the element listed last (a new element goes after it), and in bpmn-js
- *     A drags the task whose DI is not last while B moves the other (bpmn-js
- *     writes a moved shape's DI last). B's edit must stay, nothing may throw,
- *     and A's edit must either end up in the shared text with no toast, or
- *     give way with exactly one toast on A. The run reports which.
+ *  6. Edits of different elements whose changes in the text run into each
+ *     other (issue 309): A creates from the palette while B moves the element
+ *     listed last (a new element goes after it), and in bpmn-js A drags the
+ *     task whose DI is not last while B moves the other (bpmn-js writes a
+ *     moved shape's DI last). They change different lines, so both edits
+ *     must end up in the shared text and on A and B, with no toast and no
+ *     error.
  *
  * Exits 1 on any failure.
  */
@@ -147,6 +149,19 @@ const BPMN = `<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>
 `;
 
+const DMN = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" id="Definitions_credit" name="Credit check" namespace="http://designiq.dev/dmn/credit">
+  <decision id="Decision_limit" name="Credit limit" />
+  <decision id="Decision_risk" name="Risk class" />
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_1">
+      <dmndi:DMNShape id="DMNShape_limit" dmnElementRef="Decision_limit"><dc:Bounds x="160" y="200" width="180" height="80" /></dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_risk" dmnElementRef="Decision_risk"><dc:Bounds x="520" y="200" width="180" height="80" /></dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>
+`;
+
 const MODELS: Model[] = [
   // bpmn-js writes a moved shape's DI last: A warms up and drags the same
   // task, so its drop rewrites one line, which merges with B's
@@ -159,6 +174,18 @@ const MODELS: Model[] = [
     create: "create.task",
     retitle: ['<bpmn:process id="Process_1"', '<bpmn:process id="Process_1" name="Orders"'],
     tool: "hand-tool",
+  },
+  // dmn-js moves a shape's bounds in place and writes a new decision and its shape last
+  {
+    notation: "dmn",
+    fileName: "credit.dmn",
+    text: DMN,
+    a: "Decision_limit",
+    b: "Decision_risk",
+    create: "create.decision",
+    retitle: ["Credit check", "Credit review"],
+    tool: "hand-tool",
+    listedLast: "Decision_risk",
   },
   {
     notation: "wardley",
@@ -452,7 +479,7 @@ for (const model of MODELS) {
 const host = await startLiveHost(join(work, "content"), join(work, "data"));
 const browser = await playwright.chromium.launch({ headless: true });
 const summary: Array<Record<string, string | number>> = [];
-const touching: Array<Record<string, string>> = [];
+const touching: Array<Record<string, string | number>> = [];
 
 const picked = process.env.NOTATIONS?.split(",");
 try {
@@ -737,10 +764,9 @@ try {
           check(moved(bStart, bOnFresh), `${model.notation} ${what}: B's move stays in the shared text`);
           const kept = await aEditKept(fresh6);
           const shownA = await toasts(a6);
-          const gaveWay = shownA.length === 1 && shownA[0]!.includes("could not be merged");
           check(
-            kept ? shownA.length === 0 : gaveWay,
-            `${model.notation} ${what}: ${kept ? "both edits kept, no toast" : "A's edit gave way, with one toast"} ${shownA.join(" | ")}`,
+            kept && shownA.length === 0,
+            `${model.notation} ${what}: ${kept ? "both edits kept" : "A's edit gave way"}, ${shownA.length} toast(s) on A ${shownA.join(" | ")}`,
           );
           const shownB = await toasts(b6);
           check(shownB.length === 0, `${model.notation} ${what}: no toast on B ${shownB.join(" | ")}`);
@@ -761,7 +787,8 @@ try {
           touching.push({
             notation: model.notation,
             case: what,
-            outcome: kept ? "both kept" : "A's edit gave way (toast)",
+            outcome: kept ? "both kept" : "A's edit gave way",
+            "toasts on A": shownA.length,
           });
           await fresh6.page.close();
         };
@@ -829,5 +856,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  "\nEvery gesture that spanned a peer's change threw nothing and kept the peer's edit; its own edit stayed, or gave way with the toast where the two touch in the text.",
+  "\nEvery gesture that spanned a peer's change threw nothing and kept both edits, also where their changes in the text run into each other.",
 );

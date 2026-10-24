@@ -11,15 +11,18 @@
  * palette tool (bpmn-js's hand tool, a Miragon renderer's lasso) sets the
  * marker and draws no preview: it holds nothing back, and the binding sends
  * it no Escape (bpmn-js's hand tool stays armed through the import). A
- * bpmn-js drop that touches the held move in the text gives way to it, with
- * the conflict toast and no exception. A drag that outlasts 10 s is cancelled
- * the way Escape cancels it, then the import runs. jsdom has no layout, so
+ * bpmn-js drop or create that bpmn-js writes into the text across the held
+ * move's DI merges with it line by line (#309), and so does a dmn-js DRD
+ * create; a drop that moves the task the held move moved gives way to it,
+ * with the conflict toast and no exception. A drag that outlasts 10 s is
+ * cancelled the way Escape cancels it, then the import runs. jsdom has no layout, so
  * the drags here run diagram-js's dragging without a pointer; pointer drags
  * in a browser: test/live-gesture-chromium.ts.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { after, test } from "node:test";
+import { isDeepStrictEqual } from "node:util";
 
 import * as Y from "yjs";
 
@@ -87,9 +90,23 @@ interface PointerPosition {
   target?: Element;
 }
 
+/** a diagram-js element as these tests read it */
+interface Shape extends Point {
+  id: string;
+  type: string;
+}
+
 interface Diagram {
-  get(name: "elementRegistry"): { get(id: string): Point | undefined; getGraphics(id: string): Element };
-  get(name: "modeling"): { moveElements(elements: unknown[], delta: Point): void };
+  get(name: "elementRegistry"): {
+    get(id: string): Point | undefined;
+    getGraphics(id: string): Element;
+    filter(match: (element: Shape) => boolean): Shape[];
+  };
+  get(name: "modeling"): {
+    moveElements(elements: unknown[], delta: Point): void;
+    createShape(shape: { type: string }, position: Point, parent: unknown): unknown;
+  };
+  get(name: "canvas"): { getRootElement(): unknown };
   get(name: "dragging"): Dragging;
   get(name: "move"): { start(event: PointerPosition, element: unknown, activate: boolean): unknown };
   get(name: "handTool"): { activateHand(event: PointerPosition, autoActivate: boolean): void };
@@ -609,29 +626,81 @@ test("an armed palette tool holds nothing back and is not cancelled: bpmn-js's h
   }
 });
 
-test("bpmn-js: a drop that touches the held move in the text gives way to it, with the conflict toast and no exception", async () => {
+/** where a modeler draws its elements, each shape's id and position, sorted: two canvases that show one text agree */
+function layoutOf(diagram: Diagram): string[] {
+  return diagram
+    .get("elementRegistry")
+    .filter((element) => element.type !== "label" && element.x !== undefined)
+    .map((element) => `${element.id} ${element.x},${element.y}`)
+    .sort();
+}
+
+/**
+ * The peer moves Task_ship, whose DI is last, while the local pointer is
+ * down; then the local edit, which bpmn-js writes into the text from its own
+ * element down past the DI the peer moved. Different lines: both stay,
+ * nobody is told. `localEdit` returns whether the shared text holds it.
+ */
+async function bpmnEditsMerge(what: string, localEdit: (diagram: Diagram) => (text: string) => boolean): Promise<void> {
   const docs = room(await canonicalBpmn());
   const [local, peer] = (await bpmnEngines(docs)) as [Engine, Engine];
   const page = watchPage();
-  const start = { check: positionOf(local.diagram, "Task_check"), ship: positionOf(local.diagram, "Task_ship") };
+  const ship = positionOf(local.diagram, "Task_ship");
 
   local.canvasHost.querySelector("svg")!.dispatchEvent(pointer("pointerdown"));
-  // Task_ship's DI is last: the peer's move rewrites that one line
   moveElement(peer.diagram, "Task_ship", MOVE_IN_WIDGET);
   await wait(QUIET);
-  assert.deepEqual(positionOf(local.diagram, "Task_ship"), start.ship, "held while the pointer is down");
+  assert.deepEqual(positionOf(local.diagram, "Task_ship"), ship, `${what}: held while the pointer is down`);
   window.dispatchEvent(pointer("pointerup"));
-  // bpmn-js writes a moved shape's DI last: this drop rewrites the text down through Task_ship's line
+  const kept = localEdit(local.diagram);
+  await wait(SETTLED);
+
+  const text = docs[0].getText("content").toString();
+  assert.equal(docs[1].getText("content").toString(), text, `${what}: the peers converge`);
+  assert.deepEqual(boundsIn(text, "Task_ship"), shifted(ship, MOVE_IN_WIDGET), `${what}: the peer's move stays`);
+  assert.ok(kept(text), `${what}: and so does the local edit`);
+  assert.deepEqual(layoutOf(local.diagram), layoutOf(peer.diagram), `${what}: both canvases show the shared text`);
+  assert.deepEqual([local.conflicts, peer.conflicts], [[], []], `${what}: nobody lost an edit`);
+  assert.deepEqual(page.seen.errors, [], `${what}: nothing thrown`);
+  page.stop();
+  for (const engine of [local, peer]) engine.destroy();
+}
+
+test("bpmn-js: a drop or a create whose DI goes last, across the held move's DI, merges with it: no toast, no exception", async () => {
+  // bpmn-js writes a moved shape's DI last
+  await bpmnEditsMerge("move", (diagram) => {
+    const start = positionOf(diagram, "Task_check");
+    moveElement(diagram, "Task_check", MOVE_IN_SPA);
+    return (text) => isDeepStrictEqual(boundsIn(text, "Task_check"), shifted(start, MOVE_IN_SPA));
+  });
+  // and a new task after the last one, its DI after the last DI
+  await bpmnEditsMerge("create", (diagram) => {
+    const root = diagram.get("canvas").getRootElement();
+    diagram.get("modeling").createShape({ type: "bpmn:Task" }, { x: 400, y: 400 }, root);
+    return (text) => text.match(/<bpmn:task /g)?.length === 3;
+  });
+});
+
+test("bpmn-js: a drop that moves the task the held move moved gives way to it, with the conflict toast and no exception", async () => {
+  const docs = room(await canonicalBpmn());
+  const [local, peer] = (await bpmnEngines(docs)) as [Engine, Engine];
+  const page = watchPage();
+  const start = positionOf(local.diagram, "Task_check");
+
+  local.canvasHost.querySelector("svg")!.dispatchEvent(pointer("pointerdown"));
+  moveElement(peer.diagram, "Task_check", MOVE_IN_WIDGET);
+  await wait(QUIET);
+  window.dispatchEvent(pointer("pointerup"));
+  // both moves delete Task_check's DI where it was and write it last: the same lines
   moveElement(local.diagram, "Task_check", MOVE_IN_SPA);
   await wait(SETTLED);
 
   const text = docs[0].getText("content").toString();
   assert.equal(docs[1].getText("content").toString(), text, "the peers converge");
-  assert.deepEqual(boundsIn(text, "Task_ship"), shifted(start.ship, MOVE_IN_WIDGET), "the peer's move stays");
-  assert.deepEqual(boundsIn(text, "Task_check"), start.check, "the drop gave way to it");
+  assert.deepEqual(boundsIn(text, "Task_check"), shifted(start, MOVE_IN_WIDGET), "the peer's move stays");
+  assert.equal(text.match(/bpmnElement="Task_check"/g)?.length, 1, "one DI for the task, not one from each move");
   for (const engine of [local, peer]) {
-    assert.deepEqual(positionOf(engine.diagram, "Task_check"), start.check, "each canvas shows the shared text");
-    assert.deepEqual(positionOf(engine.diagram, "Task_ship"), shifted(start.ship, MOVE_IN_WIDGET));
+    assert.deepEqual(positionOf(engine.diagram, "Task_check"), shifted(start, MOVE_IN_WIDGET), "each canvas shows it");
   }
   assert.equal(local.conflicts.length, 1, "the canvas whose drop gave way is told, once");
   assert.match(local.conflicts[0]!, /could not be merged/);
@@ -639,4 +708,67 @@ test("bpmn-js: a drop that touches the held move in the text gives way to it, wi
   assert.deepEqual(page.seen.errors, [], "nothing thrown");
   page.stop();
   for (const engine of [local, peer]) engine.destroy();
+});
+
+test("dmn-js: a DRD create next to the held move of another decision merges with it: no toast, no exception", async () => {
+  const { default: DmnModeler } = await import("dmn-js/lib/Modeler");
+  const { mountDmnEditor } = await import("../src/notations/dmn-editor.ts");
+  type Modeler = InstanceType<typeof DmnModeler>;
+  // the SPA editor keeps its dmn-js instance to itself; its first import names it
+  const modelers: Modeler[] = [];
+  const importXML = DmnModeler.prototype.importXML;
+  DmnModeler.prototype.importXML = function (this: Modeler, xml: string) {
+    if (!modelers.includes(this)) modelers.push(this);
+    return importXML.call(this, xml);
+  };
+  const drdOf = (modeler: Modeler | undefined): Diagram => modeler!.getActiveViewer() as unknown as Diagram;
+  try {
+    const xml = readFileSync(
+      new URL("../../../process-documentation/processes/credit-limit-check.dmn", import.meta.url),
+      "utf8",
+    );
+    const docs = room(xml);
+    const conflicts: [string[], string[]] = [[], []];
+    const hosts = [host("dmn-canvas"), host("dmn-canvas")] as const;
+    const editors = [await mountDmnEditor(hosts[0], editorContext(docs[0], conflicts[0]))];
+    await wait(300);
+    const decision = drdOf(modelers[0])
+      .get("elementRegistry")
+      .filter((element) => element.type === "dmn:Decision")[0];
+    assert.ok(decision, "a decision on the DRD");
+    // the first edit of a file dmn-js did not write rewrites all of it: both canvases start from its export
+    moveElement(drdOf(modelers[0]), decision.id, { x: 10, y: 0 });
+    await wait(SETTLED);
+    editors.push(await mountDmnEditor(hosts[1], editorContext(docs[1], conflicts[1])));
+    await wait(300);
+    const [local, peer] = [drdOf(modelers[0]), drdOf(modelers[1])];
+    const page = watchPage();
+    const start = positionOf(local, decision.id);
+
+    hosts[0].dispatchEvent(pointer("pointerdown"));
+    moveElement(peer, decision.id, MOVE_IN_WIDGET);
+    await wait(QUIET);
+    assert.deepEqual(positionOf(local, decision.id), start, "held while the pointer is down");
+    window.dispatchEvent(pointer("pointerup"));
+    // a new decision goes after the last one and its shape after the last shape, past the peer's moved bounds
+    local
+      .get("modeling")
+      .createShape({ type: "dmn:Decision" }, { x: 600, y: 500 }, local.get("canvas").getRootElement());
+    await wait(SETTLED);
+
+    const text = docs[0].getText("content").toString();
+    assert.equal(docs[1].getText("content").toString(), text, "the peers converge");
+    const decisions = (dmn: string): number => dmn.match(/<decision /g)?.length ?? 0;
+    assert.equal(decisions(text), decisions(xml) + 1, "the create stays");
+    for (const diagram of [local, peer]) {
+      assert.deepEqual(positionOf(diagram, decision.id), shifted(start, MOVE_IN_WIDGET), "the peer's move stays");
+    }
+    assert.deepEqual(layoutOf(local), layoutOf(peer), "both canvases show the shared text");
+    assert.deepEqual(conflicts, [[], []], "nobody lost an edit");
+    assert.deepEqual(page.seen.errors, [], "nothing thrown");
+    page.stop();
+    for (const editor of editors) editor.destroy();
+  } finally {
+    DmnModeler.prototype.importXML = importXML;
+  }
 });

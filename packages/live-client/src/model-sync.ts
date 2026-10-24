@@ -4,7 +4,10 @@
  *
  *  1. one pinned modeler version across all clients (package.json)
  *  2. minimal diffs into Y.Text, never replace-all (common prefix/suffix trim,
- *     the line breaks that close the text apart)
+ *     the line breaks that close the text apart); a canvas edit made while a
+ *     peer's change arrived merges with it where the two edited different
+ *     places of the text (placed by context, else by lines, #309), and gives
+ *     way where they edited the same place or the merge fails the gate (rule 4)
  *  3. debounced re-import of remote changes with view-state restore and echo
  *     suppression (Yjs transaction origin + last-export equality), held back
  *     while a local gesture runs on the canvas, for 10 s at most (#295)
@@ -27,12 +30,12 @@
 import { CANVAS_LOSSES_KEY, CANVAS_WRITES_KEY } from "@designiq/contracts/live";
 import * as Y from "yjs";
 
-import { applyHunks, closingBreaksAt, diffHunks, diffRegion, type Hunk } from "./text-diff.ts";
+import { applyHunks, closingBreaksAt, diffHunks, diffRegion, type Hunk, mergeLines, patchText } from "./text-diff.ts";
 
 /** Shared origin marker: transactions tagged with it are our own canvas edits. */
 export const CANVAS_ORIGIN = "bpm-canvas";
 
-/** the edits need not share an element: a held gesture's drop, or a create, that lands next to a peer's change in the text conflicts too */
+/** the two changed the same place in the text, or their merge fails the notation's gate (looksRenderable): a text a peer typed or saved into gets no repair */
 const CONFLICT_MESSAGE =
   "Your last action crossed a colleague's change and could not be merged with it. The model now shows their change.";
 /** a repair can undo more than the last action: every canvas edit the repairer's canvas had not taken in */
@@ -244,6 +247,50 @@ export function keepDiagramViewbox(modeler: { get(service: string): any }): Sync
   };
 }
 
+/**
+ * A local edit `base` → `next` placed into `current`, which changed since
+ * `base` (three texts without their closing line breaks), as hunks against
+ * `current`; undefined where the two touch the same lines. The one changed
+ * region is located by its context first, wide context first (position
+ * safety), shrinking so that a nearby but disjoint remote edit inside the
+ * window does not masquerade as overlap; it merges different parts of one
+ * line, as in a text that is one line long. A region whose context a remote
+ * edit changed merges line by line (#309): bpmn-js writes a moved or new
+ * shape's DI last, across the DI a peer just moved, and the Miragon text
+ * notations list a new element right after the one a peer may have moved.
+ */
+function locateLocalEdit(base: string, current: string, next: string): Hunk[] | undefined {
+  const { start, endPrev, endNext } = diffRegion(base, next);
+  const deleted = base.slice(start, endPrev);
+  const inserted = next.slice(start, endNext);
+  if (!deleted && !inserted) return [];
+  for (const width of [64, 32, 16, 8]) {
+    const before = base.slice(Math.max(0, start - width), start);
+    const after = base.slice(endPrev, endPrev + width);
+    const at = placeOf(before + deleted + after, current, start === 0, endPrev === base.length);
+    if (at < 0) continue;
+    return [{ at: at + before.length, deleteCount: deleted.length, insert: inserted }];
+  }
+  return mergeLines(base, current, next);
+}
+
+/**
+ * Where `needle` stands in `text`, -1 where it is absent or ambiguous. A
+ * needle that runs to the start or the end of its own text has no context on
+ * that side, so it must stand at that end of `text` too: a peer's suffix to
+ * the last line matches it as well, and would end up behind the local edit,
+ * on the line a create appends.
+ */
+function placeOf(needle: string, text: string, atStart: boolean, atEnd: boolean): number {
+  if (atStart || atEnd) {
+    const at = atStart ? 0 : text.length - needle.length;
+    const fits = at >= 0 && text.startsWith(needle, at) && (!atStart || !atEnd || text.length === needle.length);
+    return fits ? at : -1;
+  }
+  const at = text.indexOf(needle);
+  return at >= 0 && text.indexOf(needle, at + 1) < 0 ? at : -1;
+}
+
 export function bindModelSync(
   adapter: SyncAdapter,
   ytext: Y.Text,
@@ -387,8 +434,8 @@ export function bindModelSync(
     if (gesture?.active()) {
       // a gesture has committed nothing yet, so no quiet period covers it; its
       // drop merges into ytext like any local edit, and the import after it
-      // takes in both edits. A drop that touches the held change in the text
-      // is a conflict there (applyLocalEdit): the peer's edit stays
+      // takes in both edits. A drop that changes the held change's lines is a
+      // conflict there (applyLocalEdit): the peer's edit stays
       const since = waitingSince ?? Date.now();
       if (Date.now() - since < GESTURE_HOLD_MS) {
         heldForGestureSince = since;
@@ -665,8 +712,13 @@ export function bindModelSync(
    * edits arrived in between, a plain ytext diff would isolate exactly the
    * colleague's change as "the differing middle" and delete it — silent data
    * loss inside the debounce window. Instead the local change region is located
-   * in the current text by its surrounding context; disjoint edits merge, a
-   * true overlap keeps the remote edit and reports the conflict.
+   * in the current text by its surrounding context, and where that fails the
+   * edit merges line by line (mergeLines, #309): edits of different lines
+   * merge, an edit of the same lines keeps the remote edit and reports the
+   * conflict. So does a merge that fails the gate (looksRenderable) where the
+   * current text passes it: a remote edit typed or saved into the text bars
+   * the repair that heals a break (planRepair), and the text would stay
+   * broken for everyone.
    */
   function applyLocalEdit(next: string): void {
     const base = lastExport;
@@ -680,7 +732,7 @@ export function bindModelSync(
       return;
     }
 
-    // remote edits landed since our last sync — merge if regions are disjoint.
+    // remote edits landed since our last sync — merge if the edits are apart.
     // The line breaks that close the text are no part of the change region
     // (diffHunks): the export adds the one an older file lacks, and peers
     // making their first edit at once would otherwise each replace the whole
@@ -694,32 +746,21 @@ export function bindModelSync(
         closing.push({ ...hunk, at: currentBody + hunk.at });
       }
     }
-    // Locate the local change region in the current text by its surrounding
-    // context; wide context first (position safety), shrinking so that a nearby
-    // -but-disjoint remote edit inside the window doesn't masquerade as overlap.
-    const { start, endPrev, endNext } = diffRegion(base.slice(0, baseBody), next.slice(0, nextBody));
-    const delText = base.slice(start, endPrev);
-    const insText = next.slice(start, endNext);
-    const merge = (body: Hunk[]): void => {
-      const hunks = [...closing, ...body];
+    const body = locateLocalEdit(base.slice(0, baseBody), current.slice(0, currentBody), next.slice(0, nextBody));
+    const hunks = body && [...closing, ...body];
+    const breaksText = (merge: readonly Hunk[]): boolean =>
+      merge.length > 0 && !adapter.looksRenderable(patchText(current, merge)) && adapter.looksRenderable(current);
+    if (hunks && !breaksText(hunks)) {
       if (hunks.length > 0) writeCanvas(hunks);
       // canvas still lacks the remote part — bring it in on the next quiet moment
       lastExport = next;
       scheduleImport();
-    };
-    if (!delText && !insText) return merge([]);
-    const currentText = current.slice(0, currentBody);
-    for (const ctx of [64, 32, 16, 8]) {
-      const ctxL = base.slice(Math.max(0, start - ctx), start);
-      const ctxR = base.slice(endPrev, Math.min(baseBody, endPrev + ctx));
-      const needle = ctxL + delText + ctxR;
-      const at = currentText.indexOf(needle);
-      if (at < 0 || currentText.indexOf(needle, at + 1) >= 0) continue; // absent or ambiguous
-      return merge([{ at: at + ctxL.length, deleteCount: delText.length, insert: insText }]);
+      return;
     }
 
-    // overlapping edits: the remote change wins, the local canvas op is undone —
-    // explicitly, not silently (rule 4 fallback semantics)
+    // edits of the same lines, or a merge that fails the gate: the remote
+    // change wins, the local canvas op is undone — explicitly, not silently
+    // (rule 4 fallback semantics)
     onConflict?.(CONFLICT_MESSAGE);
     pendingLocalExport = false;
     lastLocalEdit = 0; // bypass the quiet period: re-import now
