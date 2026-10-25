@@ -522,6 +522,11 @@ test("an xy chart's lines lie on a white casing on the page, once, also when its
     assert.equal(casing.getAttribute("d"), "M5,2L15,8");
     assert.equal(casing.getAttribute("stroke"), ALIASES["canvas-background"]);
     assert.equal(casing.getAttribute("stroke-width"), "6");
+    assert.equal(
+      casing.getAttribute("vector-effect"),
+      "non-scaling-stroke",
+      "a narrow column keeps the casing's reach",
+    );
     assert.equal(line.getAttribute("stroke"), "#6B6666", "the line keeps its grey");
   };
   assertCased();

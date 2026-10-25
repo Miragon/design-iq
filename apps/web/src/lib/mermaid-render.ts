@@ -21,6 +21,7 @@ import type { Mermaid, MermaidConfig } from "mermaid";
 
 import { canvasFontReady } from "./canvas-theme.ts";
 import { CSS_RESOURCE } from "./css-resource.ts";
+import { XY_HALO_REACH } from "./mermaid-line-casing.ts";
 
 /**
  * The two CI greys mermaid's section palettes alternate between, each with
@@ -125,8 +126,10 @@ const XY_LABELS_ON_ANY_GROUND = [
 /** the design guide's label halo (§10.1): a stroke under the label in the colour it has to read on */
 const labelHalo = (colour: string): string =>
   `stroke: ${colour}; stroke-width: 3px; stroke-linejoin: round; paint-order: stroke;`;
-/** a rim reaching 2 px past a bar (1 px leaves anti-aliased greys below 3:1), under its fill so the bar keeps its length */
-const XY_BAR_RIM = `stroke: ${ALIASES["canvas-background"]}; stroke-width: 4px; paint-order: stroke;`;
+/** a rim reaching as far past a bar as a line's casing, in screen pixels, under its fill so the bar keeps its length */
+const XY_BAR_RIM =
+  `stroke: ${ALIASES["canvas-background"]}; stroke-width: ${2 * XY_HALO_REACH}px; ` +
+  "vector-effect: non-scaling-stroke; paint-order: stroke;";
 /**
  * Where mermaid draws a section's label on something other than the grey it
  * was paired with, the label loses its contrast:

@@ -565,9 +565,13 @@ test("an xy chart's lines lie on a casing in the plot's white, a path of its own
       ) as [number, number];
       // 2 px on each side: 1 px leaves anti-aliased greys below 3:1 next to the line
       assert.ok(casingWidth - lineWidth >= 4, `${what}: casing ${casingWidth}px under a ${lineWidth}px line`);
+      // a chart shrinks to a column narrower than its natural size: the reach is kept in screen pixels
+      assert.equal(drawnStyle(casing, "vector-effect"), "non-scaling-stroke", `${what}: the casing keeps its reach`);
       // a round line stays inside a round casing at every turn, where a miter tip would reach past it
-      for (const element of [path, casing]) assert.equal(drawnStyle(element, "stroke-linejoin"), "round", what);
-      assert.equal(drawnStyle(casing, "stroke-linecap"), "round", what);
+      for (const element of [path, casing]) {
+        assert.equal(drawnStyle(element, "stroke-linejoin"), "round", what);
+        assert.equal(drawnStyle(element, "stroke-linecap"), "round", what);
+      }
       for (const rect of chart.querySelectorAll('[class^="bar-plot-"] > rect')) {
         assert.ok(
           rect.compareDocumentPosition(casing) & window.Node.DOCUMENT_POSITION_FOLLOWING,
@@ -697,6 +701,26 @@ test("an xy chart's bars lie on a rim in the plot's white, so a bar over an earl
     assert.equal(valueEdgesInSight, 5, `${what}: every other bar shows the edge its value sets`);
     // 2 px past the bar's edge: 1 px leaves anti-aliased greys below 3:1, as next to a line
     for (const { half } of bars) assert.ok(half >= 2, `${what}: a bar's rim reaches ${half}px past it`);
+    // a chart shrinks to a column narrower than its natural size: the reach is kept in screen pixels
+    for (const rect of rects) {
+      assert.equal(drawnStyle(rect, "vector-effect"), "non-scaling-stroke", `${what}: a bar's rim keeps its reach`);
+    }
+  }
+});
+
+test("a line of one point shows as a dot on its casing, not as a white disc on the bar under it (#294)", async () => {
+  for (const orientation of ["", " horizontal"]) {
+    const what = `xychart${orientation}`;
+    const chart = await onPage(`xychart${orientation}\n  x-axis [a]\n  y-axis 0 --> 10\n  bar [9]\n  line [5]\n`);
+    const path = chart.querySelector(`.line-plot-1 > path:not(.${LINE_CASING_CLASS})`)!;
+    const casing = chart.querySelector(`.line-plot-1 > .${LINE_CASING_CLASS}`)!;
+    // d3 draws one point as a subpath of no length, which a butt cap leaves undrawn and a round cap draws as a disc
+    const point = /^M(-?[\d.]+),(-?[\d.]+)Z$/.exec(path.getAttribute("d")!);
+    assert.ok(point, `${what}: the line is one point`);
+    assert.equal(groundUnder(chart, path, [Number(point[1]), Number(point[2])]), KONTUR.fill, `${what}: on the bar`);
+    assert.equal(casing.getAttribute("d"), path.getAttribute("d"), what);
+    for (const element of [casing, path]) assert.equal(drawnStyle(element, "stroke-linecap"), "round", what);
+    assert.ok(contrast(paint(path, "stroke"), WHITE) >= 3, `${what}: the dot on its casing`);
   }
 });
 

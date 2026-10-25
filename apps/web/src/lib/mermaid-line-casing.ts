@@ -21,16 +21,24 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** the class of a casing path, which a later pass over the same drawing skips */
 export const LINE_CASING_CLASS = "xy-line-casing";
-/** how far the casing reaches past each side of its line: 1 px leaves anti-aliased greys below 3:1 */
-export const LINE_CASING_REACH = 2;
+/**
+ * How far the plot's white under an xy chart's marks reaches past them, in
+ * screen pixels: the casing under a line (here) and the rim under a bar
+ * (lib/mermaid-render.ts). 1 px leaves anti-aliased greys below 3:1. Both
+ * keep it as the chart shrinks to a column narrower than its natural size
+ * (vector-effect: non-scaling-stroke); mermaid never draws it larger.
+ */
+export const XY_HALO_REACH = 2;
 
 /** an xy chart's line: mermaid draws each in a group `line-plot-<n>`, its point labels in a group beside the path */
 const XY_LINE = `[class^="line-plot-"] > path:not(.${LINE_CASING_CLASS})`;
 
 /**
  * Lay a casing in the plot's white under every line of an xy chart in `svg`.
- * Round joins on both: the line's own miter tips would reach past a round
- * casing at a sharp turn, a round line stays inside it by the full reach.
+ * Round joins and caps on both: the line's own miter tips would reach past
+ * a round casing at a sharp turn, and a line of one point (`M x,y Z`) would
+ * draw nothing on the white disc its casing leaves. A round line stays
+ * inside its casing by the full reach and shows such a point as a dot.
  */
 export function caseXyChartLines(svg: Element): void {
   for (const line of svg.querySelectorAll(XY_LINE)) {
@@ -41,10 +49,12 @@ export function caseXyChartLines(svg: Element): void {
     casing.setAttribute("d", line.getAttribute("d") ?? "");
     casing.setAttribute("fill", "none");
     casing.setAttribute("stroke", ALIASES["canvas-background"]);
-    casing.setAttribute("stroke-width", String(width + 2 * LINE_CASING_REACH));
+    casing.setAttribute("stroke-width", String(width + 2 * XY_HALO_REACH));
+    casing.setAttribute("vector-effect", "non-scaling-stroke");
     casing.setAttribute("stroke-linejoin", "round");
     casing.setAttribute("stroke-linecap", "round");
     line.setAttribute("stroke-linejoin", "round");
+    line.setAttribute("stroke-linecap", "round");
     line.before(casing);
   }
 }

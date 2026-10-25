@@ -181,7 +181,10 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   its length. Its bars and lines share the two greys, so the page lays a second path in the
   plot's white under every line, 2 px wider on each side (`src/lib/mermaid-line-casing.ts`):
   the line holds 3:1 across a bar of either grey. A CSS filter cannot draw that casing, as WebKit
-  applies none to an element inside an SVG. The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
+  applies none to an element inside an SVG. Rim and casing keep their 2 px in screen pixels
+  (`vector-effect: non-scaling-stroke`), also where the chart shrinks to a column narrower than
+  its natural size, and a line takes round caps like its casing, so a line of one point shows
+  as a dot instead of a white disc. The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
   theme, palette, CSS or font (`MERMAID_SECURE_KEYS`, checked against mermaid itself in
   `test/mermaid-engine.test.ts`); layout options stay the author's. What mermaid is known to
   load from an address a diagram names is kept from another site (#290). mermaid's label
