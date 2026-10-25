@@ -24,11 +24,23 @@
  *  - split: the Markdown document in the split view: Monaco's suggestions,
  *    opened at the source pane's right edge, stay over the preview beside it.
  *  - diff: History's Compare: the dialog's Monaco diff is over the panel.
+ *  - zoomed: the process's diagram and XML views in a window whose zoom lays
+ *    the source's host out to a fraction of a pixel, once with classic
+ *    scrollbars (Playwright hides them; a styled one takes room on every
+ *    platform) and once with hidden ones, like macOS's overlay scrollbars.
+ *    Monaco, laid out behind the diagram too, ends inside its host in every
+ *    frame, so the page has nothing to scroll; the toolbar, the bpmn.io logo
+ *    and the page hold still frame after frame, and a wheel over the toolbar
+ *    or the logo scrolls nothing. Monaco half a pixel past its host made the
+ *    page's classic scrollbar show and hide every frame, shaking both, and
+ *    let a wheel scroll the page by a pixel (#326). In the XML view, with
+ *    History open, Monaco ends at the panel's left edge: the zoom scales the
+ *    panel's bounding box, not the pixels Monaco is laid out in.
  *
  * Each check first makes sure that what it looks for is on screen (the
  * scrollbar shown, the find widget open with its controls, the menu reaching
- * into the panel), so no check passes by looking at nothing. Exits 1 on any
- * failure.
+ * into the panel, a zoom whose host rounds up to a pixel more), so no check
+ * passes by looking at nothing. Exits 1 on any failure.
  */
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -61,12 +73,13 @@ interface BrowserContext {
   newPage(): Promise<Page>;
   close(): Promise<void>;
 }
+interface Browser {
+  newContext(options: { viewport: { width: number; height: number } }): Promise<BrowserContext>;
+  close(): Promise<void>;
+}
 interface Playwright {
   chromium: {
-    launch(options: { headless: boolean }): Promise<{
-      newContext(options: { viewport: { width: number; height: number } }): Promise<BrowserContext>;
-      close(): Promise<void>;
-    }>;
+    launch(options: { headless: boolean; ignoreDefaultArgs?: string[] }): Promise<Browser>;
   };
 }
 interface Box {
@@ -173,8 +186,12 @@ const boxOf = (page: Page, selector: string): Promise<Box | null> =>
   }, selector);
 
 /** a model in a fresh context, in one of its views (the view switch's button name) */
-async function open(path: string, view: string): Promise<{ page: Page; context: BrowserContext }> {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+async function open(
+  path: string,
+  view: string,
+  { from = browser, viewport = { width: 1440, height: 900 } } = {},
+): Promise<{ page: Page; context: BrowserContext }> {
+  const context = await from.newContext({ viewport });
   const page = await context.newPage();
   page.on("pageerror", (error) => pageErrors.push(String(error)));
   await page.goto(`${BASE}/r/${REPO}/f/${path}`);
@@ -374,11 +391,192 @@ async function diff(): Promise<void> {
   await context.close();
 }
 
+/** zooms tried until one lays the source's host out to a fraction of a pixel that rounds up */
+const ZOOMS = [1.1, 1.15, 1.2, 1.3, 1.4, 1.5, 0.9, 0.8];
+
+/**
+ * A zoomed window: Monaco ends inside its host in every frame, the page has
+ * nothing to scroll, the toolbar and the bpmn.io logo hold still, and a wheel
+ * over them scrolls nothing. With classic scrollbars a Monaco past its host
+ * shows and hides the page's scrollbar every frame; with hidden ones (macOS's
+ * overlay scrollbars take no room either) a wheel scrolls the page by a pixel
+ */
+async function zoomed(view: string, scrollbars: "classic" | "hidden"): Promise<void> {
+  const scenario = `zoomed ${view.toLowerCase()}, ${scrollbars}`;
+  const from =
+    scrollbars === "classic"
+      ? await playwright.chromium.launch({ headless: true, ignoreDefaultArgs: ["--hide-scrollbars"] })
+      : browser;
+  try {
+    const { page, context } = await open(PROCESS, view, { from, viewport: { width: 1280, height: 800 } });
+    if (scrollbars === "classic") {
+      const room = await page.evaluate(() => {
+        const style = document.createElement("style");
+        style.textContent = "::-webkit-scrollbar { width: 15px; height: 15px; }";
+        document.head.append(style);
+        const probe = document.createElement("div");
+        probe.style.cssText = "position: absolute; width: 100px; height: 100px; overflow: scroll;";
+        document.body.append(probe);
+        const taken = probe.offsetWidth - probe.clientWidth;
+        probe.remove();
+        return taken;
+      }, 0);
+      check(scenario, "precondition: the page's scrollbars take room", room > 0, `${room}px`);
+    }
+
+    const zoomTo = (z: number): Promise<void> =>
+      page.evaluate((zoom) => {
+        document.documentElement.style.zoom = zoom === 1 ? "" : String(zoom);
+      }, z);
+    let roundsUp: { zoom: number; detail: string } | undefined;
+    for (const candidate of ZOOMS) {
+      await zoomTo(candidate);
+      await page.waitForTimeout(300);
+      const host = await page.evaluate((z) => {
+        const source = document.querySelector<HTMLElement>(".monaco-host")!;
+        const style = getComputedStyle(source);
+        const roundedUp = Math.max(
+          source.clientWidth - Number.parseFloat(style.width),
+          source.clientHeight - Number.parseFloat(style.height),
+        );
+        return { roundsUp: roundedUp * z > 0.5, detail: `${style.width}×${style.height} at ${Math.round(z * 100)} %` };
+      }, candidate);
+      if (host.roundsUp) {
+        roundsUp = { zoom: candidate, detail: host.detail };
+        break;
+      }
+    }
+    check(
+      scenario,
+      "precondition: a zoom lays the source's host out to a fraction that rounds up past half a pixel",
+      roundsUp !== undefined,
+      roundsUp?.detail,
+    );
+    if (roundsUp === undefined) {
+      await context.close();
+      return;
+    }
+
+    // sampled in every frame: a Monaco past its host shows only in every other one
+    const frames = await page.evaluate(async () => {
+      const at = (selector: string): string => {
+        const box = document.querySelector(selector)?.getBoundingClientRect();
+        return box ? `${box.left.toFixed(1)},${box.top.toFixed(1)}` : "none";
+      };
+      const seen = { more: new Set<string>(), logo: new Set<string>(), page: new Set<string>() };
+      const outside: string[] = [];
+      const scrollable: string[] = [];
+      for (let frame = 0; frame < 30; frame++) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const root = document.documentElement;
+        const host = document.querySelector(".monaco-host")!.getBoundingClientRect();
+        const editor = document.querySelector(".monaco-host .monaco-editor")!.getBoundingClientRect();
+        if (editor.right > host.right + 0.01 || editor.bottom > host.bottom + 0.01) {
+          outside.push(
+            `editor to ${editor.right.toFixed(2)}, ${editor.bottom.toFixed(2)}, host to ${host.right.toFixed(2)}, ${host.bottom.toFixed(2)}`,
+          );
+        }
+        if (root.scrollWidth > root.clientWidth || root.scrollHeight > root.clientHeight) {
+          scrollable.push(`${root.scrollWidth}×${root.scrollHeight} in ${root.clientWidth}×${root.clientHeight}`);
+        }
+        seen.more.add(at('button[aria-label="More"]'));
+        seen.logo.add(at(".bjs-powered-by"));
+        seen.page.add(`${root.clientWidth}×${root.clientHeight}`);
+      }
+      return { more: [...seen.more], logo: [...seen.logo], page: [...seen.page], outside, scrollable };
+    }, 0);
+    check(
+      scenario,
+      "precondition: the toolbar's More and the bpmn.io logo are laid out",
+      !frames.more.includes("none") && !frames.logo.includes("none"),
+    );
+    check(scenario, "Monaco ends inside its host in every frame", frames.outside.length === 0, frames.outside[0]);
+    check(
+      scenario,
+      "the page has nothing to scroll in any frame",
+      frames.scrollable.length === 0,
+      frames.scrollable[0],
+    );
+    check(
+      scenario,
+      "the toolbar, the logo and the page hold still frame after frame",
+      frames.more.length === 1 && frames.logo.length === 1 && frames.page.length === 1,
+      `More at ${frames.more.join(" | ")}; logo at ${frames.logo.join(" | ")}; page ${frames.page.join(" | ")}`,
+    );
+
+    const spots = await page.evaluate(() => {
+      const centre = (selector: string): { x: number; y: number } | null => {
+        const box = document.querySelector(selector)?.getBoundingClientRect();
+        return box ? { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 } : null;
+      };
+      return { toolbar: centre('[role="group"][aria-label="Editor view"]'), logo: centre(".bjs-powered-by") };
+    }, 0);
+    // under the source the canvas, and with it the logo, takes no pointer
+    const wheeled = view === "Diagram" ? [spots.toolbar, spots.logo] : [spots.toolbar];
+    for (const spot of wheeled) {
+      if (!spot) continue;
+      await page.mouse.move(spot.x, spot.y);
+      for (let tick = 0; tick < 4; tick++) await page.mouse.wheel(0, 120);
+    }
+    await page.waitForTimeout(300);
+    const scrolled = await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }), 0);
+    check(
+      scenario,
+      "a wheel over the toolbar or the logo scrolls nothing",
+      scrolled.x === 0 && scrolled.y === 0,
+      `scrolled to ${scrolled.x}, ${scrolled.y}`,
+    );
+
+    if (view === "XML") {
+      // opened at 100 %: on a toolbar that shakes, no click on More lands
+      await zoomTo(1);
+      await openHistory(page);
+      // the zoom scales the panel's bounding box, not the 320px Monaco is laid out beside
+      await zoomTo(roundsUp.zoom);
+      await page.waitForTimeout(300);
+      const beside = await page.evaluate(async () => {
+        const off: string[] = [];
+        let scrollable = 0;
+        for (let frame = 0; frame < 10; frame++) {
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          const panel = document.querySelector("aside")!.getBoundingClientRect();
+          const editor = document.querySelector(".monaco-host .monaco-editor")!.getBoundingClientRect();
+          const gap = panel.left - editor.right;
+          if (gap <= -0.01 || gap >= 1.5)
+            off.push(`editor to ${editor.right.toFixed(2)}, panel from ${panel.left.toFixed(2)}`);
+          const root = document.documentElement;
+          if (root.scrollWidth > root.clientWidth || root.scrollHeight > root.clientHeight) scrollable++;
+        }
+        return { off, scrollable };
+      }, 0);
+      check(
+        scenario,
+        "with History open, Monaco ends at the panel's left edge, neither under it nor short of it",
+        beside.off.length === 0,
+        beside.off[0],
+      );
+      check(
+        scenario,
+        "with History open, the page has nothing to scroll",
+        beside.scrollable === 0,
+        `${beside.scrollable} of 10 frames`,
+      );
+    }
+    await context.close();
+  } finally {
+    if (from !== browser) await from.close();
+  }
+}
+
 try {
   await sourceBesidePanel("markdown", MARKDOWN, "Markdown");
   await sourceBesidePanel("xml", PROCESS, "XML");
   await split();
   await diff();
+  for (const view of ["Diagram", "XML"]) {
+    await zoomed(view, "classic");
+    await zoomed(view, "hidden");
+  }
   check("all", "no page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" | "));
   console.table(results);
 } finally {

@@ -3,7 +3,10 @@
  * (src/lib/side-panel-room.ts), under jsdom with laid-out boxes: the panels
  * dock over the editor's right edge, so a Miragon editor's fit keeps their
  * width clear and the source's Monaco is laid out beside them (#288); a lazy
- * panel that joins the layers later still reports its change.
+ * panel that joins the layers later still reports its change. Monaco never
+ * reaches past a host laid out to a fraction of a pixel: the page would scroll
+ * by that pixel, and with classic scrollbars shake (#326). Under a CSS zoom
+ * the panel's width counts in the pixels the pane lays out in.
  */
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -16,6 +19,34 @@ const box = (element: Element, left: number, width: number): void => {
   element.getBoundingClientRect = () =>
     ({ left, right: left + width, width, top: 0, bottom: 640, height: 640, x: left, y: 0 }) as DOMRect;
 };
+
+interface FakeResizeObserver {
+  resized: () => void;
+  observed: Element[];
+  disconnected: boolean;
+}
+
+/** jsdom has no ResizeObserver: one whose callback the test calls; returns the restore */
+function fakeResizeObservers(observers: FakeResizeObserver[]): () => void {
+  const globals = globalThis as { ResizeObserver?: unknown };
+  const jsdomHasNone = globals.ResizeObserver;
+  globals.ResizeObserver = class {
+    private readonly record: FakeResizeObserver;
+    constructor(resized: () => void) {
+      this.record = { resized, observed: [], disconnected: false };
+      observers.push(this.record);
+    }
+    observe(target: Element): void {
+      this.record.observed.push(target);
+    }
+    disconnect(): void {
+      this.record.disconnected = true;
+    }
+  };
+  return () => {
+    globals.ResizeObserver = jsdomHasNone;
+  };
+}
 
 test("sidePanelRoom: the width an open panel covers, 0 without one, a change once a panel joins or leaves", async () => {
   const { sidePanelRoom } = await import("../src/lib/side-panel-room.ts");
@@ -55,22 +86,8 @@ test("sidePanelRoom: the width an open panel covers, 0 without one, a change onc
 
 test("layoutBesideSidePanels: Monaco over its host minus what an open panel covers, again on a resize and as a panel opens or closes", async () => {
   const { layoutBesideSidePanels, sidePanelRoom } = await import("../src/lib/side-panel-room.ts");
-  const observers: Array<{ resized: () => void; observed: Element[]; disconnected: boolean }> = [];
-  const globals = globalThis as { ResizeObserver?: unknown };
-  const jsdomHasNone = globals.ResizeObserver;
-  globals.ResizeObserver = class {
-    private readonly record: (typeof observers)[number];
-    constructor(resized: () => void) {
-      this.record = { resized, observed: [], disconnected: false };
-      observers.push(this.record);
-    }
-    observe(target: Element): void {
-      this.record.observed.push(target);
-    }
-    disconnect(): void {
-      this.record.disconnected = true;
-    }
-  };
+  const observers: FakeResizeObserver[] = [];
+  const restore = fakeResizeObservers(observers);
   try {
     const layers = host();
     const source = document.createElement("div");
@@ -111,6 +128,86 @@ test("layoutBesideSidePanels: Monaco over its host minus what an open panel cove
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(layouts.length, laidOut, "stopped: no layout after");
   } finally {
-    globals.ResizeObserver = jsdomHasNone;
+    restore();
+  }
+});
+
+test("layoutBesideSidePanels: a host laid out to a fraction of a pixel gets Monaco rounded down, never the half pixel clientWidth and clientHeight round up", async () => {
+  const { layoutBesideSidePanels, sidePanelRoom } = await import("../src/lib/side-panel-room.ts");
+  const observers: FakeResizeObserver[] = [];
+  const restore = fakeResizeObservers(observers);
+  try {
+    const layers = host();
+    const source = document.createElement("div");
+    layers.append(source);
+    // a 1280×800 window at 110 %: the browser lays the host out to 1163.64×617.5 and rounds its client size up
+    const laidOut = (width: number, height: number): void => {
+      source.style.width = `${width}px`;
+      source.style.height = `${height}px`;
+      Object.defineProperty(source, "clientWidth", { configurable: true, value: Math.round(width) });
+      Object.defineProperty(source, "clientHeight", { configurable: true, value: Math.round(height) });
+      box(source, 0, width);
+    };
+    laidOut(1163.64, 617.5);
+    const layouts: Array<{ width: number; height: number }> = [];
+    layoutBesideSidePanels(
+      { layout: (dimension) => void layouts.push(dimension) },
+      source,
+      sidePanelRoom(
+        () => layers,
+        () => source,
+      ),
+    );
+    assert.deepEqual(layouts, [{ width: 1163, height: 617 }], "inside the host, not 1164×618");
+
+    const panel = document.createElement("aside");
+    box(panel, 843.64, 320);
+    layers.append(panel);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(layouts.at(-1), { width: 843, height: 617 }, "a panel opened: left of it, not under its edge");
+
+    laidOut(1163.64, 609.75);
+    observers.at(0)?.resized();
+    assert.deepEqual(layouts.at(-1), { width: 843, height: 609 }, "resized: rounded down again");
+  } finally {
+    restore();
+  }
+});
+
+test("sidePanelRoom: under a CSS zoom on an ancestor, the width a panel covers in the pane's own CSS pixels, so Monaco ends at the panel's edge", async () => {
+  const { layoutBesideSidePanels, sidePanelRoom } = await import("../src/lib/side-panel-room.ts");
+  const observers: FakeResizeObserver[] = [];
+  const restore = fakeResizeObservers(observers);
+  try {
+    const layers = host();
+    const source = document.createElement("div");
+    layers.append(source);
+    const room = sidePanelRoom(
+      () => layers,
+      () => source,
+    );
+    const panel = document.createElement("aside");
+    layers.append(panel);
+    // a 1280px wide window: the zoom scales the bounding boxes, not the host's computed size or the 320px panel
+    const zoomed = (zoom: number): void => {
+      source.style.width = `${1280 / zoom}px`;
+      source.style.height = `${640 / zoom}px`;
+      box(source, 0, 1280);
+      box(panel, 1280 - 320 * zoom, 320 * zoom);
+    };
+
+    zoomed(0.9);
+    assert.equal(room.covered(), 320, "at 90 %: not the 288 of its box");
+    const layouts: Array<{ width: number; height: number }> = [];
+    const off = layoutBesideSidePanels({ layout: (dimension) => void layouts.push(dimension) }, source, room);
+    assert.deepEqual(layouts.at(-1), { width: 1102, height: 711 }, "at 90 %: left of the panel, not 32px under it");
+
+    zoomed(1.25);
+    observers.at(0)?.resized();
+    assert.equal(room.covered(), 320, "at 125 %: not the 400 of its box");
+    assert.deepEqual(layouts.at(-1), { width: 704, height: 512 }, "at 125 %: up to the panel, not 80px short of it");
+    off();
+  } finally {
+    restore();
   }
 });
