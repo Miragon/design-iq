@@ -42,6 +42,18 @@
   z-index: 150;
   max-height: calc(100cqh - 24px);
 }
+/* Monaco stacks its own layers over the side panels as well: its scrollbar
+   (z 11) and its find widget (z 35) would paint over an open panel and take
+   its clicks. The source is laid out beside an open panel
+   (lib/side-panel-room), so both stay left of it; isolated, the editor's
+   frame (Monaco's overflow guard) stays under a panel even where it reaches
+   under one (a panel over the whole of a narrow source). Not the host: the
+   popups outside the frame (suggestions, hovers, the context menu) stay over
+   a panel they reach into, and in the split view over the canvas beside the
+   source */
+.monaco-host .overflow-guard {
+  isolation: isolate;
+}
 /* Team Topologies drops its palette to 64px at viewports up to 760px wide,
    a row kept free for a host's top chrome; the SPA has none over its canvas,
    so the palette would float over the diagram below an empty strip */
