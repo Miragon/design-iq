@@ -461,6 +461,25 @@ test("a source mermaid cannot read: its code, or its last drawing dimmed, under 
   v.view.destroy();
 });
 
+test("a copy of a source mermaid cannot read is not drawn again: every fence of it fails alike", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const fake = fakeRenderer();
+  const broken = "flowchart broken\n  A -->";
+  const v = mount(fence(broken), fake);
+  await settle();
+  assert.equal(fake.calls.length, 1);
+
+  v.setText(fence(broken) + "\n" + fence(broken));
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await Promise.resolve();
+  const titles = [...v.article.querySelectorAll(".md-mermaid-notice-title")].map((title) => title.textContent);
+  assert.deepEqual(titles, ["Error on line 2 of the diagram", "Error on line 2 of the diagram"], "both at once");
+  assert.equal(fake.calls.length, 1, "the copy takes the cached error");
+  await settle();
+  assert.equal(fake.calls.length, 1);
+  v.view.destroy();
+});
+
 test("a renderer that does not load shows on the block, and the next render tries again", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   const fake = fakeRenderer();
