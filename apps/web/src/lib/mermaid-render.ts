@@ -125,6 +125,8 @@ const XY_LABELS_ON_ANY_GROUND = [
 /** the design guide's label halo (§10.1): a stroke under the label in the colour it has to read on */
 const labelHalo = (colour: string): string =>
   `stroke: ${colour}; stroke-width: 3px; stroke-linejoin: round; paint-order: stroke;`;
+/** a rim reaching 2 px past a bar (1 px leaves anti-aliased greys below 3:1), under its fill so the bar keeps its length */
+const XY_BAR_RIM = `stroke: ${ALIASES["canvas-background"]}; stroke-width: 4px; paint-order: stroke;`;
 /**
  * Where mermaid draws a section's label on something other than the grey it
  * was paired with, the label loses its contrast:
@@ -145,11 +147,14 @@ const labelHalo = (colour: string): string =>
  *   number (the last digit of its group's class), they turn white; point
  *   labels are black. mermaid starts a label inside the bar's end however
  *   short the bar is, so a white one lies on a halo in its bar's grey,
- *   which reads where the label runs past the bar onto white. mermaid draws
- *   its plots over each other in order, so a label outside a bar or a point
- *   label of a later plot can lie on an earlier text-leise bar: these black
- *   labels lie on a halo in the plot's white. Bars and lines share the two
- *   greys (a line reads 1.7:1 across a bar of the other grey, 1:1 across its
+ *   which outlines it where the label runs past the bar onto white. mermaid
+ *   draws its plots over each other in order, so a label outside a bar or a
+ *   point label of a later plot can lie on an earlier text-leise bar: these
+ *   black labels lie on a halo in the plot's white. Every bar plot lies at
+ *   the same place, so with two greys a bar ends on an earlier bar of its own
+ *   grey (1:1, the bar vanishes into it) or of the other (1.7:1): each bar
+ *   lies on a rim in the plot's white. Bars and lines share the two greys
+ *   too (a line reads 1.7:1 across a bar of the other grey, 1:1 across its
  *   own): the page lays a casing in the plot's white under every line
  *   (lib/mermaid-line-casing.ts), a path CSS cannot draw.
  * mermaid's own selectors for treemap and neo labels name every section,
@@ -163,6 +168,7 @@ export const MERMAID_THEME_CSS = [
   `[data-look="neo"].mindmap-node text, [data-look="neo"].mindmap-node tspan, .timeline-node[data-look="neo"] text { fill: ${ALIASES["canvas-label"]} !important; }`,
   `[data-look="neo"].mindmap-node span { color: ${ALIASES["canvas-label"]} !important; }`,
   ".eventWrapper { filter: none; }",
+  `[class^="bar-plot-"] > rect { ${XY_BAR_RIM} }`,
   `${XY_LABELS_INSIDE.join(", ")} { fill: ${ALIASES["canvas-shape"]}; ${labelHalo(ALIASES["muted-foreground"])} }`,
   `${XY_LABELS_ON_ANY_GROUND.join(", ")} { fill: ${ALIASES["canvas-label"]}; ${labelHalo(ALIASES["canvas-background"])} }`,
 ].join("\n");

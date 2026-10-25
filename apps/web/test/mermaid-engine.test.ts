@@ -579,7 +579,128 @@ test("an xy chart's lines lie on a casing in the plot's white, a path of its own
   }
 });
 
-test("a white data label that runs past a bar too short for it still reads, on a halo in its bar's grey (#294)", async () => {
+type Point = [x: number, y: number];
+type Edge = { from: Point; to: Point; inward: Point };
+/** a rect's box as its attributes give it */
+const box = (rect: Element): [x: number, y: number, width: number, height: number] =>
+  ["x", "y", "width", "height"].map((name) => Number(rect.getAttribute(name))) as [number, number, number, number];
+/** an xy chart's bars in the order mermaid draws them, each with how it is painted */
+function paintedBars(chart: Element) {
+  return [...chart.querySelectorAll('[class^="bar-plot-"] > rect')].map((rect) => {
+    const strokeWidth = parseFloat(drawnStyle(rect, "stroke-width") ?? "0");
+    return {
+      rect,
+      box: box(rect),
+      fill: paint(rect, "fill"),
+      stroke: strokeWidth > 0 && (drawnStyle(rect, "stroke") ?? "none") !== "none" ? paint(rect, "stroke") : undefined,
+      half: strokeWidth / 2,
+      strokeUnder: (drawnStyle(rect, "paint-order") ?? "normal").trim().startsWith("stroke"),
+    };
+  });
+}
+/**
+ * What shows at a point of an xy chart's plot: the bar mermaid drew there
+ * last, with its fill inside it and its stroke along its edge (centred on
+ * the edge, and under the fill with paint-order: stroke), or the plot's white.
+ */
+function shownAt(
+  bars: ReturnType<typeof paintedBars>,
+  [px, py]: Point,
+): { colour: string; by?: Element; part?: "fill" | "stroke" } {
+  let shown: ReturnType<typeof shownAt> = { colour: WHITE };
+  for (const {
+    rect,
+    box: [x, y, width, height],
+    fill,
+    stroke,
+    half,
+    strokeUnder,
+  } of bars) {
+    const within = (grow: number): boolean =>
+      px > x - grow && px < x + width + grow && py > y - grow && py < y + height + grow;
+    const onStroke = stroke !== undefined && within(half) && !within(-half);
+    if (onStroke && !(strokeUnder && within(0))) shown = { colour: stroke, by: rect, part: "stroke" };
+    else if (within(0)) shown = { colour: fill, by: rect, part: "fill" };
+  }
+  return shown;
+}
+
+test("an xy chart's bars lie on a rim in the plot's white, so a bar over an earlier one keeps its edge at 3:1 (#294)", async () => {
+  // mermaid draws every bar plot at the same place, each over the earlier ones: with two greys the third plot's
+  // first bar ends on the first plot's bar, of its own grey, and the second plot's second bar on the first's
+  const plots = "  x-axis [a, b]\n  y-axis 0 --> 10\n  bar [9, 9]\n  bar [2, 7]\n  bar [5, 5]\n";
+  for (const orientation of ["", " horizontal"]) {
+    const what = `xychart${orientation}`;
+    const chart = await onPage(`xychart${orientation}\n${plots}`);
+    const bars = paintedBars(chart);
+    const rects = bars.map(({ rect }) => rect);
+    assert.deepEqual(
+      rects.map((rect) => rect.parentElement!.getAttribute("class")),
+      ["bar-plot-0", "bar-plot-0", "bar-plot-1", "bar-plot-1", "bar-plot-2", "bar-plot-2"],
+      what,
+    );
+    /** the edge a bar's value sets, and the two that run along it (its base lies on the axis) */
+    const edgesOf = (rect: Element): Edge[] => {
+      const [x, y, width, height] = box(rect);
+      const [topLeft, topRight, bottomLeft, bottomRight]: Point[] = [
+        [x, y],
+        [x + width, y],
+        [x, y + height],
+        [x + width, y + height],
+      ];
+      return orientation
+        ? [
+            { from: topRight!, to: bottomRight!, inward: [-1, 0] },
+            { from: topLeft!, to: topRight!, inward: [0, 1] },
+            { from: bottomLeft!, to: bottomRight!, inward: [0, -1] },
+          ]
+        : [
+            { from: topLeft!, to: topRight!, inward: [0, 1] },
+            { from: topLeft!, to: bottomLeft!, inward: [1, 0] },
+            { from: topRight!, to: bottomRight!, inward: [-1, 0] },
+          ];
+    };
+    const { from, to, inward } = edgesOf(rects[4]!)[0]!;
+    const beyond: Point = [(from[0] + to[0]) / 2 - 4 * inward[0], (from[1] + to[1]) / 2 - 4 * inward[1]];
+    assert.equal(shownAt(bars, beyond).by, rects[0], `${what}: the third plot's first bar ends on the first plot's`);
+    let valueEdgesInSight = 0;
+    for (const { rect, fill } of bars) {
+      let valueEdgeShows = false;
+      for (const [index, edge] of edgesOf(rect).entries()) {
+        for (let step = 0; step < 20; step++) {
+          const t = (step + 0.5) / 20;
+          const on: Point = [
+            edge.from[0] + t * (edge.to[0] - edge.from[0]),
+            edge.from[1] + t * (edge.to[1] - edge.from[1]),
+          ];
+          const at = (distance: number): Point => [
+            on[0] + distance * edge.inward[0],
+            on[1] + distance * edge.inward[1],
+          ];
+          const inside = shownAt(bars, at(0.5));
+          // a later plot's bar covers the edge here
+          if (inside.by !== rect || inside.part !== "fill") continue;
+          if (index === 0) valueEdgeShows = true;
+          for (const distance of [-0.5, -1.5]) {
+            const next = shownAt(bars, at(distance)).colour;
+            assert.ok(
+              contrast(fill, next) >= 3,
+              `${what}: ${rect.parentElement!.getAttribute("class")}'s bar at ${on.map((v) => v.toFixed(1)).join(",")}, ` +
+                `${fill} next to ${next}, ${contrast(fill, next).toFixed(2)}:1`,
+            );
+          }
+        }
+      }
+      if (valueEdgeShows) valueEdgesInSight++;
+    }
+    // the second plot's first bar (2) lies wholly under the third plot's (5), as mermaid lays them out
+    assert.equal(valueEdgesInSight, 5, `${what}: every other bar shows the edge its value sets`);
+    // 2 px past the bar's edge: 1 px leaves anti-aliased greys below 3:1, as next to a line
+    for (const { half } of bars) assert.ok(half >= 2, `${what}: a bar's rim reaches ${half}px past it`);
+  }
+});
+
+test("a white data label that runs past a bar too short for it keeps a halo in its bar's grey, which outlines it on white (#294)", async () => {
   const plots = "  x-axis [a, b, c]\n  y-axis 0 --> 10\n  bar [3, 6, 8]\n  bar [0.2, 4, 7]\n";
   for (const orientation of ["", " horizontal"]) {
     const what = `xychart${orientation}`;

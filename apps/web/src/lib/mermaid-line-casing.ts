@@ -4,10 +4,13 @@
  * chart's bars and lines the same two greys, so a line reads 1.7:1 where it
  * crosses a bar of the other grey and vanishes across a bar of its own. A
  * casing in the plot's white under the line keeps it at 3:1 whatever it
- * crosses: a second path, as the design guide draws its Unterleger (§10.6).
- * CSS cannot draw one, and WebKit draws no CSS filter (a drop-shadow casing)
- * on an element inside an SVG. mermaid hands the page a finished SVG string,
- * so the page adds it once the diagram is sanitized (mermaid-fence.ts).
+ * crosses: the design guide's label halo in the surface behind (§10.1,
+ * --cd-ui-plot), laid under a line. Unlike the guide's Unterleger (§10.6),
+ * 2 px wider in all and seen only in dark mode, it shows in light and
+ * reaches 2 px past each side. CSS cannot draw a second path, and WebKit
+ * draws no CSS filter (a drop-shadow casing) on an element inside an SVG.
+ * mermaid hands the page a finished SVG string, so the page adds it once
+ * the diagram is sanitized (mermaid-fence.ts).
  *
  * Node-loadable like the Markdown view (test/mermaid-engine.test.ts runs it
  * on mermaid's own drawings under jsdom).

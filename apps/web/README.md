@@ -171,13 +171,16 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   writes an xy chart's labels in one colour whatever they sit on, draws its plots over each
   other and fills mindmap and timeline nodes white in the neo look, so a kanban column takes
   the grey of every other group, a timeline event its section's grey, a data label inside a
-  `--cd-text-leise` bar is white on a halo of that grey (it still reads where it runs past a
-  bar too short for it), a data label outside a bar and a point label are black on a white
-  halo (a later plot's label can lie on an earlier plot's bar), and a kanban column's title,
-  a treemap's labels and the labels of neo nodes stay black (`MERMAID_THEME_CSS`). An xy
-  chart's bars and lines share the two greys, so the page lays a second path in the plot's
-  white under every line, 2 px wider on each side (`src/lib/mermaid-line-casing.ts`): the line
-  holds 3:1 across a bar of either grey. A CSS filter cannot draw that casing, as WebKit
+  `--cd-text-leise` bar is white on a halo of that grey (where it runs past a bar too short
+  for it, the halo outlines it on white), a data label outside a bar and a point label are
+  black on a white halo (a later plot's label can lie on an earlier plot's bar), and a kanban
+  column's title, a treemap's labels and the labels of neo nodes stay black
+  (`MERMAID_THEME_CSS`). An xy chart draws every bar plot at the same place, over the earlier
+  ones, so each bar lies on a rim in the plot's white that reaches 2 px past it, under its
+  fill: a bar that ends on an earlier bar of either grey keeps its edge at 3:1, and every bar
+  its length. Its bars and lines share the two greys, so the page lays a second path in the
+  plot's white under every line, 2 px wider on each side (`src/lib/mermaid-line-casing.ts`):
+  the line holds 3:1 across a bar of either grey. A CSS filter cannot draw that casing, as WebKit
   applies none to an element inside an SVG. The look is fixed: a diagram's front matter or `%%{init}%%` cannot pick another
   theme, palette, CSS or font (`MERMAID_SECURE_KEYS`, checked against mermaid itself in
   `test/mermaid-engine.test.ts`); layout options stay the author's. What mermaid is known to
