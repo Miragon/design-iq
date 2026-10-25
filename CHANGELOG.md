@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.11.1](https://github.com/Miragon/design-iq/compare/v5.11.0...v5.11.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **web:** keep the source's Monaco inside its host at a fractional size ([#344](https://github.com/Miragon/design-iq/issues/344)) ([f0a812b](https://github.com/Miragon/design-iq/commit/f0a812bdc445f8326b4da71cf84f9a277bf38eb5))
+
 ## [5.11.0](https://github.com/Miragon/design-iq/compare/v5.10.0...v5.11.0) (2026-10-25)
 
 
