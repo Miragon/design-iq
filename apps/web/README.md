@@ -14,13 +14,14 @@ Desktop, ChatGPT).
 | `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and what it makes of hostile sources, the Mermaid frame and the Miragon renderers themselves (`test/renderer-dom.ts`). |
 | `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                                                                                |
 
-Six checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`
-and `test/markdown-view-chromium.ts` (under the Markdown view below), `test/live-gesture-chromium.ts`,
-`test/canvas-focus-chromium.ts` and `test/png-export-font-chromium.ts` (all three under the MCP-App
-widgets below) and `test/live-repair-chromium.ts`, the live merge repair and its notice with real
-peers (issue 296): two tabs dropping moves at once, the first-ranked writer closing its tab, a link
-that drops and comes back, a half-typed tag seen from the canvas tabs, a reload during it, and the
-BPMN widget live in a minimal MCP-Apps host. From the repository root:
+Seven checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`,
+`test/markdown-view-chromium.ts` and `test/wide-mermaid-chromium.ts` (all three under the Markdown view
+below), `test/live-gesture-chromium.ts`, `test/canvas-focus-chromium.ts` and
+`test/png-export-font-chromium.ts` (all three under the MCP-App widgets below) and
+`test/live-repair-chromium.ts`, the live merge repair and its notice with real peers (issue 296):
+two tabs dropping moves at once, the first-ranked writer closing its tab, a link that drops and
+comes back, a half-typed tag seen from the canvas tabs, a reload during it, and the BPMN widget
+live in a minimal MCP-Apps host. From the repository root:
 `pnpm build`, once `npx -y playwright@1.56.1 install --only-shell chromium`, then
 `npx -y -p playwright@1.56.1 -c "node apps/web/test/live-repair-chromium.ts"` (`PORT` sets the
 Live Host's port, 8392 unless set; `ONLY` and `SHOTS` are in its header).
@@ -198,6 +199,27 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   with the error and its line (counted within the diagram) under its code, or under its last
   good drawing, dimmed. `test/markdown-mermaid.test.ts` covers it under jsdom with a fake
   renderer. A Mermaid diagram is no model of its own: it lives as such a fence in a document.
+- A wide diagram stays readable (#292). mermaid shrinks a diagram to the reading column, so
+  the view holds it to the width at which its smallest text still reads at the guide's `klein`
+  size, 13px (`diagram-scale.ts`). That minimum follows the text the drawn SVG shows, not a
+  flat factor: a flowchart's 16px labels may shrink to 81 %, and a C4 diagram, whose type lines
+  mermaid draws at 10.5px, is drawn at 124 % or more. A diagram wider than its block scrolls
+  sideways there, never the page, and while it does, the block is a region in the tab order
+  that the arrow keys scroll, with the guide's focus ring; one that fits is no tab stop, except
+  while it has the focus, so the focus never drops to the top of the page. Each region is named
+  after its place among the document's mermaid fences (one that shows its code counts) and its
+  title or type ("Diagram 2 (flowchart), scrolls sideways"), so no two read alike, and renamed
+  when a fence above it comes or goes. The Mermaid frame lays a diagram out at its own block's
+  width, which a Gantt chart takes as its own; one that does, and whose smallest text would
+  then hold it wider, is laid out once more at the block's width over its minimum scale, so it
+  fits its block at 13px. It is laid out anew whenever its block changes width (Split to
+  Markdown only, the split's divider, the window). `test/markdown-diagram-scale.test.ts` covers
+  the scale, the region, its name and those widths under jsdom. `test/wide-mermaid-chromium.ts`
+  checks a wide C4 diagram, a wide flowchart, two Gantt charts (one in a quote) and a diagram
+  that only overflows a narrow window in headless Chromium: every text at 13px or more, the
+  Gantt charts within their blocks at both window widths, the sideways scroll by keyboard, no
+  tab stop on a diagram that fits, the focus kept when one fits again and the names after a
+  diagram above leaves (run it like the hostile check above, `PORT` 8394 unless set).
 - **Insert diagram** starts a diagram from the source. While the source is on screen (Split and
   Markdown), the toolbar's Insert diagram menu, and the F1 palette (`Insert diagram: Flowchart`
   and so on), insert a small, valid starter: a flowchart, a sequence, class, state, entity

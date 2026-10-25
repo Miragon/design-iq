@@ -4,7 +4,9 @@
  * renderer (lib/mermaid-render.ts: strict security level, the CI theme,
  * Geist), which lays every diagram out in a frame of its own
  * (lib/mermaid-frame.ts); the page only gets the SVG, sanitized here once
- * more (createDiagramSanitizer).
+ * more (createDiagramSanitizer). A diagram is laid out at its block's width;
+ * drawn, it shrinks to its block only as far as its smallest text stays
+ * readable, and scrolls sideways beyond that (./diagram-scale.ts).
  *
  * - `render` (the HTML pass) keeps the fence a code block, marked
  *   `md-mermaid`, with its source as text: what a reader sees until the
@@ -34,8 +36,16 @@
  * DOM access through the root's own document.
  */
 import type { RenderMermaid } from "../../lib/mermaid-frame.ts";
-import type { MermaidRenderError } from "../../lib/mermaid-render.ts";
+import type { MermaidRenderError, MermaidRenderResult } from "../../lib/mermaid-render.ts";
 import { icon } from "../../mcp-app/icons.ts";
+import {
+  DIAGRAM_CLASS,
+  fitDiagramSlot,
+  followBlockWidth,
+  refitWidth,
+  type Relayout,
+  takesItsWidth,
+} from "./diagram-scale.ts";
 import { escapeText, type FenceRenderer } from "./render.ts";
 import { createDiagramSanitizer, type Sanitize } from "./sanitize.ts";
 
@@ -48,6 +58,9 @@ export const MERMAID_BLOCK_CLASS = "md-mermaid";
 const SLOT_CLASS = "md-mermaid-block";
 /** drawings kept by source: a long document's diagrams and their recent edits */
 export const DRAWING_CACHE_SIZE = 64;
+/** drawings laid out anew for another block width, kept by width and source:
+ *  the same source in a quote and outside it, a column back at a width it had */
+const RELAYOUT_CACHE_SIZE = 16;
 /** the drawn SVGs' id prefix: md- like every id of the view, and never a
  *  heading anchor (render.ts slugs are lower-case). mermaid starts a render
  *  by removing the element its id names, and scopes the diagram's styles to
@@ -94,6 +107,12 @@ export interface MermaidFence {
   hydrate(root: HTMLElement, signal: AbortSignal): Promise<void>;
 }
 
+/** the width mermaid lays a diagram out at: its own block's, which a Gantt
+ *  chart takes as its own width. A block in a list or a quote is narrower
+ *  than the column. Undefined while the view is not laid out (the frame
+ *  takes the page's width then) */
+const layoutWidth = (block: HTMLElement): number | undefined => (block.clientWidth > 0 ? block.clientWidth : undefined);
+
 const loadRenderer = async (): Promise<RenderMermaid> =>
   (await import("../../lib/mermaid-frame.ts")).renderMermaidInFrame;
 
@@ -121,20 +140,60 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
     if (drawings.size > DRAWING_CACHE_SIZE) drawings.delete(drawings.keys().next().value!);
   };
 
+  const drawingOf = (result: MermaidRenderResult, win: View): Drawing => {
+    if (!("svg" in result)) return { error: result.error };
+    let sanitize = sanitizers.get(win);
+    if (!sanitize) sanitizers.set(win, (sanitize = createDiagramSanitizer(win)));
+    const svg = sanitize(result.svg).firstElementChild;
+    return svg ? { svg } : { error: { message: "The diagram could not be drawn." } };
+  };
+
+  /** laid out at its block's width, and once more, narrower, when it took
+   *  that width as its own and its text would hold it wider. Such a drawing
+   *  is laid out anew whenever its block changes width (./diagram-scale.ts) */
+  const layOut = async (render: RenderMermaid, source: string, win: View, block: HTMLElement): Promise<Drawing> => {
+    const width = layoutWidth(block);
+    const drawing = drawingOf(await render(source, ID_PREFIX, width), win);
+    if (width === undefined || !("svg" in drawing) || !takesItsWidth(drawing.svg, width)) return drawing;
+    const refit = refitWidth(drawing.svg, width, block);
+    const refitted = refit === undefined ? drawing : drawingOf(await render(source, ID_PREFIX, refit), win);
+    const fitted = "svg" in refitted ? refitted : drawing;
+    followBlockWidth(fitted.svg, width, relayoutOf(render, source, win));
+    return fitted;
+  };
+
+  const relaidOut = new Map<string, Promise<Drawing>>(); // by width and source, least recently used first
+  /** the source laid out for its block's width now, and kept as its drawing */
+  const relayoutOf =
+    (render: RenderMermaid, source: string, win: View): Relayout =>
+    async (block) => {
+      const width = layoutWidth(block);
+      if (width === undefined) return undefined;
+      const key = `${width}\n${source}`;
+      const pending = relaidOut.get(key) ?? layOut(render, source, win, block);
+      relaidOut.delete(key);
+      relaidOut.set(key, pending);
+      if (relaidOut.size > RELAYOUT_CACHE_SIZE) relaidOut.delete(relaidOut.keys().next().value!);
+      let drawing: Drawing;
+      try {
+        drawing = await pending;
+      } catch {
+        // the engine did not load: not kept, the next change of width tries again
+        relaidOut.delete(key);
+        return undefined;
+      }
+      if (!("svg" in drawing)) return undefined;
+      remember(source, drawing);
+      return drawing.svg;
+    };
+
   /** draw one source, once: a render already under way for it is shared.
    *  Rejects only when the engine does not load (that is not cached) */
-  const draw = (render: RenderMermaid, source: string, win: View): Promise<Drawing> => {
+  const draw = (render: RenderMermaid, source: string, win: View, block: HTMLElement): Promise<Drawing> => {
     let pending = inFlight.get(source);
     if (!pending) {
-      pending = render(source, ID_PREFIX)
-        .then((result): Drawing => {
-          let drawing: Drawing;
-          if ("svg" in result) {
-            let sanitize = sanitizers.get(win);
-            if (!sanitize) sanitizers.set(win, (sanitize = createDiagramSanitizer(win)));
-            const svg = sanitize(result.svg).firstElementChild;
-            drawing = svg ? { svg } : { error: { message: "The diagram could not be drawn." } };
-          } else drawing = { error: result.error };
+      pending = layOut(render, source, win, block)
+        .then((drawing) => {
           remember(source, drawing);
           return drawing;
         })
@@ -223,7 +282,7 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
           let drawing: Drawing;
           let done = true;
           try {
-            drawing = await draw(render, block.source, win);
+            drawing = await draw(render, block.source, win, slot);
           } catch (e) {
             drawing = { error: loadFailed(e) };
             done = false;
@@ -240,12 +299,13 @@ function present(doc: Document, slot: HTMLElement, code: HTMLElement, settled: S
   const parts: Node[] = [];
   if (settled.drawing) {
     const figure = doc.createElement("div");
-    figure.className = settled.error ? "md-mermaid-diagram is-stale" : "md-mermaid-diagram";
+    figure.className = settled.error ? `${DIAGRAM_CLASS} is-stale` : DIAGRAM_CLASS;
     figure.append(doc.importNode(settled.drawing, true));
     parts.push(figure);
   } else parts.push(code);
   if (settled.error) parts.push(errorNotice(doc, settled.error, settled.drawing !== undefined));
   slot.replaceChildren(...parts);
+  fitDiagramSlot(slot, settled.drawing);
 }
 
 /** the error notice under a block, in plain DOM */
