@@ -450,3 +450,30 @@ test("a Gantt chart is laid out anew when its block changes width, and a diagram
   );
   view.destroy();
 });
+
+test("two Gantt charts of one source are laid out anew a drawing each, so every id is on the page once (#294)", async () => {
+  const plan = "gantt\n  title A plan\n  Design :a1, 2026-01-01, 10d";
+  const m = mount(fence(plan) + "\n" + fence(plan), (_source, id, width) => ganttAt(id, width));
+  let blockWidth = 432;
+  Object.defineProperty(m.win.HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.classList.contains("md-mermaid-block") ? blockWidth : 1280;
+    },
+  });
+  const observer = observeByHand(m.win);
+  const view = mountMarkdownView(m.container, m.ctx, { mermaid: createMermaidFence(async () => m.render) });
+  await settle();
+  const shown = (): SVGSVGElement[] => [...m.container.querySelectorAll<SVGSVGElement>(".md-mermaid-diagram > svg")];
+  assert.equal(m.renders.length, 4, "each fence drawn for its own: laid out twice each");
+  assert.equal(new Set(shown().map((svg) => svg.id)).size, 2);
+
+  blockWidth = 720;
+  observer.laidOut();
+  await settle();
+  assert.equal(m.renders.length, 8, "each laid out anew for the wider block");
+  const ids = shown().map((svg) => svg.id);
+  assert.equal(new Set(ids).size, 2, `each shows a drawing of its own: ${ids.join(" ")}`);
+  for (const svg of shown()) assert.equal(svg.getAttribute("viewBox"), "0 0 553 148");
+  view.destroy();
+});
