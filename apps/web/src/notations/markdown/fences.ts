@@ -21,12 +21,27 @@
  *   with the escaped source). The sanitizer drops every data-* attribute but
  *   data-model-path, and admits no style and no SVG.
  * - Whatever `hydrate` inserts is its own to sanitize, with its own profile.
- * - Every render replaces the whole document, placeholders included, and
- *   aborts the previous `signal`. Cache the drawn output by source, so a
- *   document re-rendered for an edit elsewhere does not draw every diagram
- *   again, and put it back in the synchronous part of `hydrate`, before the
- *   first `await`: the view calls `hydrate` in a microtask right after the
- *   render, so what is back by then is on screen without a flash of code.
+ * - A render patches the document per top-level block (./view.ts): a block
+ *   whose rendered HTML did not change stays on the page as it is, with what
+ *   `hydrate` made of its placeholder; only the changed and new blocks come
+ *   new, with a fresh placeholder. So the root `hydrate` gets holds both:
+ *   upgrade each placeholder once, leave an upgraded one that is done as it
+ *   is (never wrap or draw it twice), and finish one an aborted `hydrate`
+ *   left unfinished.
+ * - Upgrade a placeholder in place: replacing it with one node is fine, but
+ *   never add or remove a node elsewhere in the root. The view finds the
+ *   blocks it keeps by their position among the root's children; once their
+ *   count is off, the next render replaces the whole document, and the
+ *   reader's selection with it.
+ * - Every render aborts the previous `signal`. Cache the drawn output by
+ *   source, so a new block with a diagram drawn before (an undo, an edit
+ *   elsewhere in its list) does not draw it again, and put it back in the
+ *   synchronous part of `hydrate`, before the first `await`: the view calls
+ *   `hydrate` in a microtask right after the render, so what is back by then
+ *   is on screen without a flash of code.
+ * - The reader's place is the view's: whatever `hydrate` inserts, at once or
+ *   later, the view keeps the first block on screen where it is when the
+ *   document's height changes, CSS scroll anchoring or not.
  */
 import { createMermaidFence } from "./mermaid-fence.ts";
 import type { FenceRenderer } from "./render.ts";

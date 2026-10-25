@@ -22,9 +22,28 @@
  * own document and window. The stylesheet comes with the lazy entry,
  * ./markdown-view.ts.
  *
- * Every render replaces the whole article. Simple and correct, but a reader's
- * text selection and keyboard focus inside the view reset whenever a
- * co-editor pauses typing: patching only the changed blocks is a follow-up.
+ * A render patches the article per top-level block (#289): a block whose
+ * rendered HTML did not change stays on the page as it is, with the reader's
+ * text selection, the keyboard focus and a drawn diagram in it, and the
+ * others are replaced. matchBlocks aligns the blocks of the two renders, so a
+ * block that repeats (a heading's text, a rule) never costs an unchanged
+ * block its place. A block that moved past others counts as changed, and so
+ * does a heading whose id a new heading with the same text renumbered. The
+ * focus in a replaced block moves to the view itself, so the keyboard stays
+ * in it. A <details> the reader opened or closed keeps that state: in a kept
+ * block as it is, in a replaced one through its summary's text. The reader's
+ * place stays too: the first block on screen stays where it is on screen,
+ * across a render (once the fences have put their cached output back) and
+ * after it, when a diagram drawn or an image loaded above it changes the
+ * article's height. A block the top of the view cuts holds the place by its
+ * end, so what follows it stays put when its own height changes, and a
+ * <summary> the reader clicks holds it while its section opens or closes.
+ * When a render replaces every block on screen (the footnotes at the end,
+ * which a new reference anywhere renews, may fill it), the end of the last
+ * block above that stays holds the place.
+ * A browser's CSS scroll anchoring often did that already, and then nothing
+ * is left to move; Safari has it only from 27 on, so the view does not rely
+ * on it.
  * While the shell shows only the source (ctx.visibility), the view does not
  * render at all, not even a document that opens that way, and catches up
  * when it shows again: an author typing in Monaco never pays for a hidden
@@ -43,6 +62,125 @@ export const RENDER_DEBOUNCE_MS = 200;
 export const RENDER_MAX_WAIT_MS = 1000;
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/** what a top-level node of the article rendered as: an element's markup
+ *  before any fence hydrated it, any other node's text */
+const blockKey = (node: Node): string =>
+  node.nodeType === node.ELEMENT_NODE ? (node as Element).outerHTML : `#${node.nodeName} ${node.textContent ?? ""}`;
+const isElementKey = (key: string): boolean => key.startsWith("<");
+
+/** a stretch of the old blocks, [oldStart, oldEnd), and of the new ones, [newStart, newEnd) */
+interface Stretch {
+  oldStart: number;
+  oldEnd: number;
+  newStart: number;
+  newEnd: number;
+}
+
+/** the largest stretch (old blocks times new ones) aligned block by block
+ *  when no block in it is unique; a larger one is replaced */
+const MAX_ALIGNED_CELLS = 1 << 18;
+
+/**
+ * Which blocks of the last render the next one keeps: for each new block, the
+ * index of the old block it is (the same key, in the same order), or -1 for
+ * one to insert. A patience alignment: the common start and end match first.
+ * In between, the blocks whose key occurs once on each side anchor the match,
+ * as many of them as keep their order, and each stretch between two anchors
+ * is matched the same way. So a key that repeats (a heading's text, a rule,
+ * the line breaks between blocks) never pulls the match past a block that
+ * could stay. A stretch without such a block is aligned block by block (the
+ * longest common subsequence, a block outweighing every line break).
+ */
+export function matchBlocks(before: readonly string[], after: readonly string[]): number[] {
+  const kept = after.map(() => -1);
+  const stretches: Stretch[] = [{ oldStart: 0, oldEnd: before.length, newStart: 0, newEnd: after.length }];
+  for (let stretch = stretches.pop(); stretch; stretch = stretches.pop()) {
+    let { oldStart, oldEnd, newStart, newEnd } = stretch;
+    while (oldStart < oldEnd && newStart < newEnd && before[oldStart] === after[newStart])
+      kept[newStart++] = oldStart++;
+    while (oldStart < oldEnd && newStart < newEnd && before[oldEnd - 1] === after[newEnd - 1])
+      kept[--newEnd] = --oldEnd;
+    if (oldStart === oldEnd || newStart === newEnd) continue;
+    const anchors = uniqueAnchors(before, after, { oldStart, oldEnd, newStart, newEnd });
+    if (anchors.length === 0) {
+      alignRepeated(before, after, { oldStart, oldEnd, newStart, newEnd }, kept);
+      continue;
+    }
+    for (const [oldAt, newAt] of anchors) {
+      kept[newAt] = oldAt;
+      stretches.push({ oldStart, oldEnd: oldAt, newStart, newEnd: newAt });
+      oldStart = oldAt + 1;
+      newStart = newAt + 1;
+    }
+    stretches.push({ oldStart, oldEnd, newStart, newEnd });
+  }
+  return kept;
+}
+
+/** the blocks (elements) whose key occurs once in the stretch on each side,
+ *  as [old index, new index], cut down to the longest run in the same order */
+function uniqueAnchors(before: readonly string[], after: readonly string[], stretch: Stretch): Array<[number, number]> {
+  const once = (keys: readonly string[], start: number, end: number): Map<string, number> => {
+    const index = new Map<string, number>();
+    for (let at = start; at < end; at++) {
+      const key = keys[at]!;
+      if (isElementKey(key)) index.set(key, index.has(key) ? -1 : at);
+    }
+    return index;
+  };
+  const oldOnce = once(before, stretch.oldStart, stretch.oldEnd);
+  const pairs: Array<[number, number]> = [];
+  for (const [key, newAt] of once(after, stretch.newStart, stretch.newEnd)) {
+    const oldAt = oldOnce.get(key) ?? -1;
+    if (newAt >= 0 && oldAt >= 0) pairs.push([oldAt, newAt]);
+  }
+  // patience sorting: tails[n] is the pair that ends the lowest run of n + 1
+  const tails: number[] = [];
+  const previous: number[] = [];
+  pairs.forEach(([oldAt], pair) => {
+    let low = 0;
+    let high = tails.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (pairs[tails[middle]!]![0] < oldAt) low = middle + 1;
+      else high = middle;
+    }
+    previous[pair] = low > 0 ? tails[low - 1]! : -1;
+    tails[low] = pair;
+  });
+  const run: Array<[number, number]> = [];
+  for (let pair = tails.at(-1) ?? -1; pair >= 0; pair = previous[pair]!) run.push(pairs[pair]!);
+  return run.reverse();
+}
+
+/** match a stretch in which no block is unique by the longest common
+ *  subsequence of its keys, a block weighing more than all its line breaks */
+function alignRepeated(before: readonly string[], after: readonly string[], stretch: Stretch, kept: number[]): void {
+  const rows = stretch.oldEnd - stretch.oldStart;
+  const columns = stretch.newEnd - stretch.newStart;
+  if (rows * columns > MAX_ALIGNED_CELLS) return;
+  const weight = (key: string): number => (isElementKey(key) ? rows + columns + 1 : 1);
+  const same = (row: number, column: number): boolean =>
+    before[stretch.oldStart + row] === after[stretch.newStart + column];
+  const width = columns + 1;
+  /** best[row * width + column]: the most weight the rest of the stretch from there matches */
+  const best = new Int32Array((rows + 1) * width);
+  for (let row = rows - 1; row >= 0; row--) {
+    for (let column = columns - 1; column >= 0; column--) {
+      const cell = row * width + column;
+      const match = same(row, column) ? best[cell + width + 1]! + weight(before[stretch.oldStart + row]!) : 0;
+      best[cell] = Math.max(best[cell + width]!, best[cell + 1]!, match);
+    }
+  }
+  for (let row = 0, column = 0; row < rows && column < columns;) {
+    const cell = row * width + column;
+    if (same(row, column) && best[cell] === best[cell + width + 1]! + weight(before[stretch.oldStart + row]!)) {
+      kept[stretch.newStart + column++] = stretch.oldStart + row++;
+    } else if (best[cell] === best[cell + width]) row++;
+    else column++;
+  }
+}
 
 export function mountMarkdownView(
   container: HTMLElement,
@@ -80,6 +218,140 @@ export function mountMarkdownView(
   let hydration: AbortController | undefined;
   /** the fence languages the last render hydrated */
   let hydrated = new Set<string>();
+  /** the keys of the article's top-level nodes as the last render put them
+   *  there; undefined while it shows no rendered document */
+  let blockKeys: string[] | undefined;
+  /** where the reader is: the first block on screen (or the summary of a
+   *  <details> the reader opens or closes), which of its edges holds the
+   *  place, where that edge was on screen, and the scroll offset then */
+  let place: { block: Element; edge: "top" | "bottom"; at: number; scrollTop: number } | undefined;
+  /** whether each <details> on the page was open as the render made it: one
+   *  that differs now the reader opened or closed */
+  const renderedOpen = new WeakMap<HTMLDetailsElement, boolean>();
+
+  /** the first of these blocks on screen, and where it is; the last one
+   *  above the view when none of them reaches into it. None at the top of
+   *  the document: a reader there stays at the top */
+  const readingPlace = (blocks: ArrayLike<Element>): typeof place => {
+    const scrollTop = scroller.scrollTop;
+    if (scrollTop <= 0) return undefined;
+    const view = scroller.getBoundingClientRect();
+    // the blocks stack down the page: the first one that ends below the top
+    let low = 0;
+    let high = blocks.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (blocks[middle]!.getBoundingClientRect().bottom > view.top) high = middle;
+      else low = middle + 1;
+    }
+    // every block that stays ends above the view, as when a render replaces
+    // the footnotes that fill it: what the reader reads follows the last one
+    const block = blocks[low] ?? blocks[low - 1];
+    if (!block) return undefined;
+    const box = block.getBoundingClientRect();
+    // a block the top of the view cuts and that ends on screen, or one above
+    // the view: the reader reads what follows it, which stays put when the
+    // block's own height changes later (a diagram drawn in it, an image loaded)
+    const edge = box.top < view.top && box.bottom <= view.bottom ? "bottom" : "top";
+    return { block, edge, at: box[edge], scrollTop };
+  };
+
+  /** scroll the reader's place back to where it was, and take it anew. Not
+   *  when the reader scrolled since, nor the browser: its CSS scroll
+   *  anchoring did it then */
+  const keepPlace = (): void => {
+    if (place?.block.isConnected && scroller.scrollTop === place.scrollTop) {
+      const shift = place.block.getBoundingClientRect()[place.edge] - place.at;
+      if (shift !== 0) scroller.scrollTop += shift;
+    }
+    place = readingPlace(article.children);
+  };
+  /** the reader opens or closes a <details> by its summary: the summary,
+   *  where the reader looks, stays put while the block around it grows or
+   *  shrinks */
+  const holdPlace = (summary: Element): void => {
+    place = { block: summary, edge: "top", at: summary.getBoundingClientRect().top, scrollTop: scroller.scrollTop };
+  };
+  const onScroll = (): void => {
+    if (scroller.scrollTop !== place?.scrollTop) place = readingPlace(article.children);
+  };
+  scroller.addEventListener("scroll", onScroll, { passive: true });
+  // what lands after a render, a diagram drawn or an image loaded above the
+  // reader, changes the article's height: the reader stays where they were
+  const resizes = "ResizeObserver" in win ? new win.ResizeObserver(() => keepPlace()) : undefined;
+  resizes?.observe(article);
+
+  /** the <details> in these blocks, theirs first */
+  const sectionsIn = (blocks: readonly ChildNode[]): HTMLDetailsElement[] =>
+    blocks.flatMap((block) => {
+      if (!(block instanceof win.Element)) return [];
+      const inside = [...block.querySelectorAll("details")];
+      return block instanceof win.HTMLDetailsElement ? [block, ...inside] : inside;
+    });
+  const summaryText = (details: HTMLDetailsElement): string =>
+    details.querySelector(":scope > summary")?.textContent?.trim() ?? "";
+
+  /** the open state the reader chose for the <details> in these blocks
+   *  (only the ones the reader opened or closed), by the text of their
+   *  summary, in document order */
+  const readerChoices = (blocks: readonly ChildNode[]): Map<string, boolean[]> => {
+    const choices = new Map<string, boolean[]>();
+    for (const details of sectionsIn(blocks)) {
+      if (details.open === renderedOpen.get(details)) continue;
+      const summary = summaryText(details);
+      choices.set(summary, [...(choices.get(summary) ?? []), details.open]);
+    }
+    return choices;
+  };
+
+  /** a co-editor's edit in a block replaces its <details> too: each one the
+   *  reader opened or closed keeps that in the new block, by its summary.
+   *  The others show as the author wrote them */
+  const restoreChoices = (blocks: readonly ChildNode[], choices: Map<string, boolean[]>): void => {
+    for (const details of sectionsIn(blocks)) {
+      renderedOpen.set(details, details.open);
+      const open = choices.get(summaryText(details))?.shift();
+      if (open !== undefined) details.open = open;
+    }
+  };
+
+  /** show a rendered document: the blocks the last render showed as they
+   *  are, the others new */
+  const patch = (fragment: DocumentFragment): void => {
+    const next = [...fragment.childNodes];
+    const nextKeys = next.map(blockKey);
+    const current = [...article.childNodes];
+    // the article's blocks are not the last render's (the empty document, or
+    // a fence extension that added or removed one): start over
+    if (blockKeys?.length !== current.length) {
+      restoreChoices(next, readerChoices(current));
+      article.replaceChildren(fragment);
+      blockKeys = nextKeys;
+      return;
+    }
+    const kept = matchBlocks(blockKeys, nextKeys);
+    const keep = new Set(kept.filter((at) => at >= 0));
+    restoreChoices(
+      next.filter((_, i) => kept[i]! < 0),
+      readerChoices(current.filter((_, at) => !keep.has(at))),
+    );
+    // settle what moved since the last frame; the reader's block may be one
+    // this render replaces, then the first block on screen that stays holds
+    // the place
+    keepPlace();
+    const staying = [...keep].map((at) => current[at]!).filter((node) => node instanceof win.Element);
+    if (place && !staying.includes(place.block)) place = readingPlace(staying);
+    current.forEach((node, at) => {
+      if (!keep.has(at)) node.remove();
+    });
+    let before: ChildNode | null = null;
+    for (let i = next.length - 1; i >= 0; i--) {
+      const at = kept[i]!;
+      if (at >= 0) before = current[at]!;
+      else before = article.insertBefore(next[i]!, before);
+    }
+    blockKeys = nextKeys;
+  };
 
   const render = (): void => {
     const source = ctx.ytext.toString();
@@ -121,23 +393,26 @@ export function mountMarkdownView(
     lastImagesLoaded = imagesLoaded;
     rendered = true;
     hydration?.abort();
-    hydration = undefined;
+    hydration = new AbortController();
+    const signal = hydration.signal;
+    const focused = doc.activeElement;
+    const focusInside = focused !== null && article.contains(focused);
     if (source.trim() === "") {
       const empty = doc.createElement("p");
       empty.className = "md-empty";
       // true beside the source (the split view) as much as one click from it
       empty.textContent = "This document is empty. Write it in the Markdown source.";
       article.replaceChildren(empty);
+      blockKeys = undefined;
     } else {
-      article.replaceChildren(sanitize(html));
+      patch(sanitize(html));
     }
+    // the focus was in a block that went: keep the keyboard in the view
+    if (focusInside && !article.contains(focused)) scroller.focus({ preventScroll: true });
     // this document's fence languages, and once more the ones the last
     // render had: with no block left, their extension forgets this document
     const languages = new Set([...seen, ...hydrated]);
     hydrated = seen;
-    if (languages.size === 0) return;
-    hydration = new AbortController();
-    const signal = hydration.signal;
     for (const lang of languages) {
       Promise.resolve()
         .then(() => fences[lang]?.hydrate?.(article, signal))
@@ -145,6 +420,11 @@ export function mountMarkdownView(
           if (!signal.aborted) ctx.onSyncError(`A ${lang} block could not be rendered: ${errorText(e)}`);
         });
     }
+    // queued after the hydrations: their synchronous part, the cached output,
+    // is back by then
+    void Promise.resolve().then(() => {
+      if (!signal.aborted) keepPlace();
+    });
   };
 
   /** scroll to a heading by its URL fragment (bare slug, maybe percent-encoded) */
@@ -157,16 +437,14 @@ export function mountMarkdownView(
     }
   };
 
-  /** the reader asked for an image from another site */
+  /** the reader asked for an image from another site; its block re-renders
+   *  with the image, and a focus on its button moves to the view */
   const loadImage = (button: HTMLButtonElement): void => {
     const url = button.dataset.imageSrc ?? "";
     if (!/^https:\/\//i.test(url)) return;
-    // the button goes with the re-render: keep the keyboard in the view
-    const hadFocus = doc.activeElement === button;
     externalImages.add(url);
     imagesLoaded++;
     update();
-    if (hadFocus) scroller.focus({ preventScroll: true });
   };
 
   // plain left clicks only: a modified or middle click opens the link's real
@@ -178,6 +456,10 @@ export function mountMarkdownView(
       e.preventDefault();
       return loadImage(button);
     }
+    // the browser opens or closes a <details> after this click on its summary
+    const target = e.target instanceof win.Element ? e.target.closest("a[href], summary") : null;
+    if (target?.localName === "summary" && target.parentElement?.localName === "details" && article.contains(target))
+      holdPlace(target);
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const link = e.target instanceof win.Element ? e.target.closest("a[href]") : null;
     if (!(link instanceof win.HTMLAnchorElement) || !article.contains(link)) return;
@@ -277,6 +559,8 @@ export function mountMarkdownView(
       offWeb?.();
       offVisibility?.();
       hydration?.abort();
+      resizes?.disconnect();
+      scroller.removeEventListener("scroll", onScroll);
       article.removeEventListener("click", onClick);
       article.removeEventListener("error", onImageError, true);
       scroller.remove();

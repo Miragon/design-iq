@@ -199,6 +199,79 @@ test("a diagram added or removed is never shown with another diagram's drawing",
   v.view.destroy();
 });
 
+test("a new diagram never shows the drawing of one that stays on the page (#289)", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const fake = fakeRenderer();
+  const v = mount(fence("flowchart One") + "\n" + fence("flowchart Two"), fake);
+  await settle();
+  assert.deepEqual(v.drawn(), ["flowchart One", "flowchart Two"]);
+
+  fake.state.hold = true;
+  v.setText(fence("flowchart Two") + "\n" + fence("flowchart Three"));
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await settle();
+  const [two, three] = v.article.querySelectorAll(".md-mermaid-block");
+  assert.equal(two?.querySelector(".md-mermaid-diagram svg text")?.textContent, "flowchart Two");
+  assert.equal(three?.querySelector("pre.md-mermaid")?.textContent, "flowchart Three\n", "the new one shows its code");
+  assert.equal(three?.querySelector(".md-mermaid-diagram"), null);
+  v.view.destroy();
+});
+
+test("a drawn diagram in a block the render keeps stays as it is: the same SVG, drawn once (#289)", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const fake = fakeRenderer();
+  const v = mount("Intro.\n\n" + fence("flowchart A") + "\nOutro.", fake);
+  await settle();
+  const svg = v.article.querySelector(".md-mermaid-diagram svg");
+  assert.ok(svg);
+
+  v.setText("Intro, edited.\n\n" + fence("flowchart A") + "\nOutro, edited.");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await settle();
+  assert.match(v.article.textContent, /Intro, edited\..*Outro, edited\./s);
+  assert.equal(v.article.querySelector(".md-mermaid-diagram svg"), svg, "the very node, not a copy");
+  assert.equal(v.article.querySelectorAll(".md-mermaid-block").length, 1);
+  assert.deepEqual(fake.calls, ["flowchart A\n"]);
+  v.view.destroy();
+});
+
+test("a diagram still drawing when the next render keeps its block lands in that block, wrapped once (#289)", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const fake = fakeRenderer();
+  fake.state.hold = true;
+  const v = mount(fence("flowchart A") + "\nText.", fake);
+  await settle();
+  const slot = v.article.querySelector(".md-mermaid-block");
+  assert.equal(slot?.getAttribute("aria-busy"), "true", "precondition: still drawing");
+
+  v.setText(fence("flowchart A") + "\nText, edited.");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  await settle();
+  assert.equal(v.article.querySelector(".md-mermaid-block"), slot, "the view kept the block");
+  // while it still shows its code: that code block is the slot's, not a new one
+  assert.equal(v.article.querySelectorAll(".md-mermaid-block").length, 1);
+  assert.equal(v.article.querySelector(".md-mermaid-block .md-mermaid-block"), null, "no slot in a slot");
+  fake.release("flowchart A\n");
+  await settle();
+  assert.deepEqual(v.drawn(), ["flowchart A"]);
+  assert.equal(v.article.querySelectorAll(".md-mermaid-block").length, 1);
+  assert.equal(slot?.hasAttribute("aria-busy"), false);
+  assert.deepEqual(fake.calls, ["flowchart A\n"], "drawn once, for both renders");
+  v.view.destroy();
+});
+
+test("a hydration whose render a newer one replaced before it ran leaves the page to the newer one (#289)", async () => {
+  const fake = fakeRenderer();
+  const root = newWindow().document.createElement("article");
+  root.innerHTML = '<pre class="md-code md-mermaid"><code class="language-mermaid">flowchart A\n</code></pre>';
+  const placeholder = root.firstElementChild;
+  const older = new AbortController();
+  older.abort();
+  await createMermaidFence(fake.load).hydrate(root, older.signal);
+  assert.equal(root.firstElementChild, placeholder, "the code block is not wrapped");
+  assert.equal(fake.loads(), 0, "the renderer does not load for it");
+});
+
 test("a deleted diagram is never taken for the next new one", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   const fake = fakeRenderer();
