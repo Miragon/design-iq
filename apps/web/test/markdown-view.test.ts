@@ -589,6 +589,58 @@ test("a footnote reference scrolls to its note, and the note's Lucide arrow back
   linked.view.destroy();
 });
 
+test("footnotes: an edit elsewhere keeps the references and the notes; a new reference renews only the blocks it renumbers (#289)", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const v = mount("Intro[^a] text.\n\nMiddle.\n\nOther[^b] and again[^a].\n\n[^a]: Note A.\n\n[^b]: Note B.");
+  const before = [...v.article.children];
+  const [intro, , other, notes] = before;
+  assert.equal(notes!.localName, "section", "precondition: the notes are the last block");
+  const again = other!.querySelector<HTMLAnchorElement>("#md-Footnote-ref-1-2")!;
+  const noteB = v.win.document.getElementById("md-Footnote-2")!;
+  const selection = v.win.getSelection()!;
+  // in this order: jsdom collapses the selection when an element takes the focus
+  again.focus();
+  selection.selectAllChildren(noteB.querySelector("p")!);
+  assert.match(selection.toString(), /^Note B\./, "precondition: a note is selected");
+
+  v.ytext.insert(v.ytext.toString().indexOf("Middle.") + 6, ", edited");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  assert.deepEqual(
+    [...v.article.children].map((block, at) => block === before[at]),
+    [true, false, true, true],
+    "only the edited block is new",
+  );
+  assert.equal(v.article.children[1]!.textContent, "Middle, edited.");
+  assert.equal(v.win.document.activeElement, again, "the focus stays on the reference");
+  assert.equal(selection.anchorNode, noteB.querySelector("p"), "the selection stays in the note");
+  // the links between references and notes in the kept blocks still scroll and name their target
+  assert.equal(v.click(again), false);
+  assert.equal(v.click(notes!.querySelector('a[href="#Footnote-ref-1-2"]')), false);
+  assert.deepEqual(v.scrolled, ["md-Footnote-1", "md-Footnote-ref-1-2"]);
+  assert.equal(v.win.location.hash, "#Footnote-ref-1-2");
+
+  // one more reference to the first note above the second: the reference
+  // after it is the third now, and the notes get a link back to it
+  v.ytext.insert(v.ytext.toString().indexOf(", edited.") + 8, "[^a]");
+  t.mock.timers.tick(RENDER_DEBOUNCE_MS);
+  const after = [...v.article.children];
+  assert.deepEqual(
+    after.map((block) => block === intro),
+    [true, false, false, false],
+    "the blocks the reference renumbered are new",
+  );
+  assert.equal(after[2]!.querySelector("#md-Footnote-ref-1-3")?.textContent, "1");
+  const ids = [...v.article.querySelectorAll("[id]")].map((element) => element.id);
+  assert.deepEqual(ids, [...new Set(ids)], "every anchor once");
+  assert.equal(v.click(after[3]!.querySelector('a[href="#Footnote-ref-1-3"]')), false);
+  assert.equal(v.scrolled.at(-1), "md-Footnote-ref-1-3");
+  const fresh = mount(v.ytext.toString());
+  assert.equal(v.article.innerHTML, fresh.article.innerHTML, "the page a fresh render shows");
+  fresh.view.destroy();
+  assert.deepEqual(v.errors, []);
+  v.view.destroy();
+});
+
 test("a <details> the reader opened stays open, the same node, through a co-editor's edit elsewhere (#289)", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
   const v = mount(

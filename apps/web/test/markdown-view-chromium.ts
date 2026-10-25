@@ -20,7 +20,8 @@
  *    selection elsewhere stays.
  *  - anchor: a click on a link to a section scrolls to it and puts it in the
  *    address; the view the router renders anew is the same one, and the
- *    section stays on screen when an edit above it lands.
+ *    section stays on screen when an edit above it lands. So does a click on
+ *    a footnote reference, for its note.
  *  - scroll: blocks inserted above the reader, a block above growing, a
  *    heading with the text every section has inserted above (their ids
  *    renumber; the reader's paragraph and the selection in it stay), a
@@ -33,10 +34,13 @@
  *    view through the outer one, and the inner summary stays on screen as
  *    the section grows and, later, shrinks; an edit above keeps both open
  *    (the same node) and the summary in place, an edit in the outer one
- *    replaces its block and both stay open. Once with the browser's scroll
- *    anchoring, once without it (overflow-anchor: none), as in Safari before
- *    27. A control shows that each edit moved that block down the document,
- *    or that the section the reader opened or closed changed its height.
+ *    replaces its block and both stay open. The footnotes at the end, which
+ *    fill the view: a paragraph citing a note pasted above replaces them (one
+ *    more link back), and the note the reader reads stays. Once with the
+ *    browser's scroll anchoring, once without it (overflow-anchor: none), as
+ *    in Safari before 27. A control shows that each edit moved that block
+ *    down the document, or that the section the reader opened or closed
+ *    changed its height.
  *
  * Exits 1 on any failed check.
  */
@@ -100,15 +104,26 @@ const COLLAPSIBLE = [
   `Notes end. ${SENTENCE}\n`,
   "</details>\n",
 ].join("\n");
+/** enough footnotes to fill the view at the end of the document */
+const NOTE_COUNT = 20;
+const CITED = `A paragraph that cites its sources.${Array.from({ length: NOTE_COUNT }, (_, i) => `[^n${i + 1}]`).join("")}`;
+const FOOTNOTES = Array.from(
+  { length: NOTE_COUNT },
+  (_, i) => `[^n${i + 1}]: Note ${i + 1}. ${SENTENCE} ${SENTENCE}\n`,
+);
+/** the note the reader reads, by its id */
+const NOTE = "md-Footnote-6";
 const DOCUMENT = [
   "# Reading while others write\n",
   `${COPY}\n`,
   `${LINKED}\n`,
+  `${CITED}\n`,
   "## The diagram\n",
   "```mermaid\n" + WIDE + "```\n",
   ...Array.from({ length: 25 }, (_, i) => section(i + 1)),
   COLLAPSIBLE,
   ...Array.from({ length: 5 }, (_, i) => section(i + 26)),
+  ...FOOTNOTES,
 ].join("\n");
 
 /** the one npx puts on PATH */
@@ -157,6 +172,7 @@ interface Marked {
   __below?: Element;
   __article?: Element;
   __notes?: HTMLDetailsElement;
+  __footnotes?: Element;
 }
 
 const failures: string[] = [];
@@ -267,6 +283,28 @@ const olderSummary: Reader = {
       const article = document.querySelector("article.markdown-body")!.getBoundingClientRect();
       return { onScreen: box.top, inDocument: box.top - article.top };
     }, OLDER),
+};
+/** a note in the footnotes, just below the top of the view: the footnotes,
+ *  the last block, are the only one on screen */
+const footnote: Reader = {
+  readOn: (page) =>
+    page.evaluate((id) => {
+      const note = document.getElementById(id)!;
+      const scroller = document.querySelector(".markdown-view")!;
+      const below = () => note.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      scroller.scrollTop += below() - 40;
+      const notes = note.closest("article.markdown-body > section")!;
+      (window as unknown as Marked).__footnotes = notes;
+      const view = scroller.getBoundingClientRect();
+      const box = notes.getBoundingClientRect();
+      return Math.abs(below() - 40) <= 1 && box.top < view.top && box.bottom >= view.bottom;
+    }, NOTE),
+  place: (page) =>
+    page.evaluate((id) => {
+      const box = document.getElementById(id)!.getBoundingClientRect();
+      const article = document.querySelector("article.markdown-body")!.getBoundingClientRect();
+      return { onScreen: box.top, inDocument: box.top - article.top };
+    }, NOTE),
 };
 /** the end of the outer collapsible section: on screen, and down the document */
 const notesEnd = (page: Page): Promise<{ onScreen: boolean; inDocument: number }> =>
@@ -415,6 +453,37 @@ try {
     "an edit above: the section stays on screen, in the address",
     stayed.offset === landed.offset && stayed.hash === "#the-diagram",
     `${stayed.offset - landed.offset} px, ${stayed.hash}`,
+  );
+  // a footnote reference: the same for its note
+  const noteHash = `#${NOTE.slice("md-".length)}`;
+  await page.evaluate((hash) => {
+    document.querySelector<HTMLElement>(`article.markdown-body a[href="${hash}"]`)!.click();
+  }, noteHash);
+  await page.waitForTimeout(300);
+  const atNote = (): Promise<{ hash: string; offset: number }> =>
+    page.evaluate((id) => {
+      const note = document.getElementById(id)!;
+      const scroller = document.querySelector(".markdown-view")!;
+      return {
+        hash: location.hash,
+        offset: Math.round(note.getBoundingClientRect().top - scroller.getBoundingClientRect().top),
+      };
+    }, NOTE);
+  const noted = await atNote();
+  check("anchor", "a footnote reference puts its note in the address", noted.hash === noteHash, noted.hash);
+  check("anchor", "the view scrolls to the note", noted.offset >= 0 && noted.offset <= 40, `${noted.offset} px`);
+  const cited = "Written above the notes.";
+  check(
+    "anchor",
+    "an edit above the notes shows",
+    await edit(page, session, insertAfter(session, "## Section 30\n", `\n${cited} ${SENTENCE}\n`), cited),
+  );
+  const stillNoted = await atNote();
+  check(
+    "anchor",
+    "an edit above: the note stays on screen, in the address",
+    stillNoted.offset === noted.offset && stillNoted.hash === noteHash,
+    `${stillNoted.offset - noted.offset} px, ${stillNoted.hash}`,
   );
 
   // scroll: edits above the reader, with the browser's scroll anchoring and without it
@@ -577,6 +646,22 @@ try {
     check(scenario, "an edit in the outer section: its block is new", !replaced.same);
     check(scenario, "an edit in the outer section: both sections stay open", replaced.notes && replaced.older);
     await toggle("the reader closes the inner section", false);
+
+    // the footnotes fill the view: a paragraph citing a note pasted above
+    // replaces them, with one more link back, and the note stays
+    const pasted = `Pasted (${anchoring}).`;
+    await measure(
+      "a paragraph citing a note pasted above the footnotes",
+      () => edit(page, session, insertAfter(session, COPY, `\n\n${pasted}[^n1] ${SENTENCE}`), pasted),
+      footnote,
+    );
+    const notesReplaced = await page.evaluate(
+      (notes) =>
+        !(window as unknown as Marked).__footnotes!.isConnected &&
+        document.querySelectorAll("article.markdown-body > section a.md-footnote-backref").length > notes,
+      NOTE_COUNT,
+    );
+    check(scenario, "control: the paste replaced the footnotes, with one more link back", notesReplaced);
   }
 
   const toasts = await page.evaluate(

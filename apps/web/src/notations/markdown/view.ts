@@ -38,6 +38,9 @@
  * article's height. A block the top of the view cuts holds the place by its
  * end, so what follows it stays put when its own height changes, and a
  * <summary> the reader clicks holds it while its section opens or closes.
+ * When a render replaces every block on screen (the footnotes at the end,
+ * which a new reference anywhere renews, may fill it), the end of the last
+ * block above that stays holds the place.
  * A browser's CSS scroll anchoring often did that already, and then nothing
  * is left to move; Safari has it only from 27 on, so the view does not rely
  * on it.
@@ -226,8 +229,9 @@ export function mountMarkdownView(
    *  that differs now the reader opened or closed */
   const renderedOpen = new WeakMap<HTMLDetailsElement, boolean>();
 
-  /** the first of these blocks on screen, and where it is. None at the top
-   *  of the document: a reader there stays at the top */
+  /** the first of these blocks on screen, and where it is; the last one
+   *  above the view when none of them reaches into it. None at the top of
+   *  the document: a reader there stays at the top */
   const readingPlace = (blocks: ArrayLike<Element>): typeof place => {
     const scrollTop = scroller.scrollTop;
     if (scrollTop <= 0) return undefined;
@@ -240,12 +244,14 @@ export function mountMarkdownView(
       if (blocks[middle]!.getBoundingClientRect().bottom > view.top) high = middle;
       else low = middle + 1;
     }
-    const block = blocks[low];
+    // every block that stays ends above the view, as when a render replaces
+    // the footnotes that fill it: what the reader reads follows the last one
+    const block = blocks[low] ?? blocks[low - 1];
     if (!block) return undefined;
     const box = block.getBoundingClientRect();
-    // a block the top of the view cuts and that ends on screen: the reader
-    // reads what follows it, which stays put when the block's own height
-    // changes later (a diagram drawn in it, an image loaded)
+    // a block the top of the view cuts and that ends on screen, or one above
+    // the view: the reader reads what follows it, which stays put when the
+    // block's own height changes later (a diagram drawn in it, an image loaded)
     const edge = box.top < view.top && box.bottom <= view.bottom ? "bottom" : "top";
     return { block, edge, at: box[edge], scrollTop };
   };

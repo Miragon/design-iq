@@ -96,9 +96,11 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   text, in the block that replaces its own. The view keeps the first block on screen where it
   is, through a render and when a diagram drawn or an image loaded later changes the height
   above it, as Safari only has CSS scroll anchoring from 27 on; a `<summary>` the reader
-  clicks stays put while its section opens or closes. `test/markdown-view.test.ts` covers the
-  sanitizer and the view under jsdom; `test/markdown-view-chromium.ts` checks the selection,
-  the focus, an in-page link, collapsible sections and the scroll position in headless
+  clicks stays put while its section opens or closes. When a render replaces every block on
+  screen, such as the footnotes, which a new reference anywhere renews, the end of the last
+  block above that stays holds the place. `test/markdown-view.test.ts` covers the sanitizer
+  and the view under jsdom; `test/markdown-view-chromium.ts` checks the selection, the focus,
+  an in-page link, a footnote, collapsible sections and the scroll position in headless
   Chromium while a guest session edits the document, with the browser's scroll anchoring and
   without it (run like the hostile check below, `PORT` 8393 unless set).
 - The split view is the shell's, for a plugin that opts in (`WebNotationPlugin.splitView`, so
