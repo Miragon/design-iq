@@ -6,10 +6,23 @@
  * now), and the source's Monaco is laid out beside them.
  */
 export interface SidePanelRoom {
-  /** px of the pane's right edge an open panel covers; 0 while none is open */
+  /**
+   * px of the pane's right edge an open panel covers, in the CSS pixels the
+   * pane lays out in (Monaco's layout, the canvas's fit); 0 while none is open
+   */
   covered(): number;
   /** a panel opened or closed; returns the unsubscribe */
   onChange(listener: () => void): () => void;
+}
+
+/**
+ * The pane's CSS pixels per pixel of its bounding box: 1, unless an ancestor
+ * sets a CSS zoom, which scales getBoundingClientRect but not the computed
+ * style the pane lays out in. A browser zoom scales neither.
+ */
+function layoutPixelsPerBoxPixel(pane: HTMLElement, boxWidth: number): number {
+  const width = Number.parseFloat(getComputedStyle(pane).width);
+  return Number.isFinite(width) && width > 0 && boxWidth > 0 ? width / boxWidth : 1;
 }
 
 /** `layers` holds the pane (the canvas host or the source) and the open panel (an `<aside>`) side by side */
@@ -21,7 +34,8 @@ export function sidePanelRoom(layers: () => HTMLElement | null, pane: () => HTML
       if (!panel || !host) return 0;
       const paneBox = host.getBoundingClientRect();
       const panelBox = panel.getBoundingClientRect();
-      return Math.round(Math.min(paneBox.width, Math.max(0, paneBox.right - panelBox.left)));
+      const overlap = Math.min(paneBox.width, Math.max(0, paneBox.right - panelBox.left));
+      return Math.round(overlap * layoutPixelsPerBoxPixel(host, paneBox.width));
     },
     onChange(listener) {
       const node = layers();
@@ -41,8 +55,8 @@ export interface LaidOutEditor {
 
 /**
  * The host's laid-out size to a fraction of a pixel, in the CSS pixels Monaco
- * lays out in (getBoundingClientRect scales by a CSS zoom). clientWidth and
- * clientHeight round it to whole pixels, up to half a pixel up.
+ * lays out in and covered() counts in. clientWidth and clientHeight round it
+ * to whole pixels, up to half a pixel up.
  */
 function laidOutSize(host: HTMLElement): { width: number; height: number } {
   const style = getComputedStyle(host);

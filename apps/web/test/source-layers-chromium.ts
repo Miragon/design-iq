@@ -33,7 +33,9 @@
  *    and the page hold still frame after frame, and a wheel over the toolbar
  *    or the logo scrolls nothing. Monaco half a pixel past its host made the
  *    page's classic scrollbar show and hide every frame, shaking both, and
- *    let a wheel scroll the page by a pixel (#326).
+ *    let a wheel scroll the page by a pixel (#326). In the XML view, with
+ *    History open, Monaco ends at the panel's left edge: the zoom scales the
+ *    panel's bounding box, not the pixels Monaco is laid out in.
  *
  * Each check first makes sure that what it looks for is on screen (the
  * scrollbar shown, the find widget open with its controls, the menu reaching
@@ -422,11 +424,13 @@ async function zoomed(view: string, scrollbars: "classic" | "hidden"): Promise<v
       check(scenario, "precondition: the page's scrollbars take room", room > 0, `${room}px`);
     }
 
-    let roundsUp: string | undefined;
+    const zoomTo = (z: number): Promise<void> =>
+      page.evaluate((zoom) => {
+        document.documentElement.style.zoom = zoom === 1 ? "" : String(zoom);
+      }, z);
+    let roundsUp: { zoom: number; detail: string } | undefined;
     for (const candidate of ZOOMS) {
-      await page.evaluate((z) => {
-        document.documentElement.style.zoom = String(z);
-      }, candidate);
+      await zoomTo(candidate);
       await page.waitForTimeout(300);
       const host = await page.evaluate((z) => {
         const source = document.querySelector<HTMLElement>(".monaco-host")!;
@@ -438,7 +442,7 @@ async function zoomed(view: string, scrollbars: "classic" | "hidden"): Promise<v
         return { roundsUp: roundedUp * z > 0.5, detail: `${style.width}×${style.height} at ${Math.round(z * 100)} %` };
       }, candidate);
       if (host.roundsUp) {
-        roundsUp = host.detail;
+        roundsUp = { zoom: candidate, detail: host.detail };
         break;
       }
     }
@@ -446,7 +450,7 @@ async function zoomed(view: string, scrollbars: "classic" | "hidden"): Promise<v
       scenario,
       "precondition: a zoom lays the source's host out to a fraction that rounds up past half a pixel",
       roundsUp !== undefined,
-      roundsUp,
+      roundsUp?.detail,
     );
     if (roundsUp === undefined) {
       await context.close();
@@ -522,6 +526,42 @@ async function zoomed(view: string, scrollbars: "classic" | "hidden"): Promise<v
       scrolled.x === 0 && scrolled.y === 0,
       `scrolled to ${scrolled.x}, ${scrolled.y}`,
     );
+
+    if (view === "XML") {
+      // opened at 100 %: on a toolbar that shakes, no click on More lands
+      await zoomTo(1);
+      await openHistory(page);
+      // the zoom scales the panel's bounding box, not the 320px Monaco is laid out beside
+      await zoomTo(roundsUp.zoom);
+      await page.waitForTimeout(300);
+      const beside = await page.evaluate(async () => {
+        const off: string[] = [];
+        let scrollable = 0;
+        for (let frame = 0; frame < 10; frame++) {
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          const panel = document.querySelector("aside")!.getBoundingClientRect();
+          const editor = document.querySelector(".monaco-host .monaco-editor")!.getBoundingClientRect();
+          const gap = panel.left - editor.right;
+          if (gap <= -0.01 || gap >= 1.5)
+            off.push(`editor to ${editor.right.toFixed(2)}, panel from ${panel.left.toFixed(2)}`);
+          const root = document.documentElement;
+          if (root.scrollWidth > root.clientWidth || root.scrollHeight > root.clientHeight) scrollable++;
+        }
+        return { off, scrollable };
+      }, 0);
+      check(
+        scenario,
+        "with History open, Monaco ends at the panel's left edge, neither under it nor short of it",
+        beside.off.length === 0,
+        beside.off[0],
+      );
+      check(
+        scenario,
+        "with History open, the page has nothing to scroll",
+        beside.scrollable === 0,
+        `${beside.scrollable} of 10 frames`,
+      );
+    }
     await context.close();
   } finally {
     if (from !== browser) await from.close();

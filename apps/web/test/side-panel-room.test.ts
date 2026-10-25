@@ -5,7 +5,8 @@
  * width clear and the source's Monaco is laid out beside them (#288); a lazy
  * panel that joins the layers later still reports its change. Monaco never
  * reaches past a host laid out to a fraction of a pixel: the page would scroll
- * by that pixel, and with classic scrollbars shake (#326).
+ * by that pixel, and with classic scrollbars shake (#326). Under a CSS zoom
+ * the panel's width counts in the pixels the pane lays out in.
  */
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -168,6 +169,44 @@ test("layoutBesideSidePanels: a host laid out to a fraction of a pixel gets Mona
     laidOut(1163.64, 609.75);
     observers.at(0)?.resized();
     assert.deepEqual(layouts.at(-1), { width: 843, height: 609 }, "resized: rounded down again");
+  } finally {
+    restore();
+  }
+});
+
+test("sidePanelRoom: under a CSS zoom on an ancestor, the width a panel covers in the pane's own CSS pixels, so Monaco ends at the panel's edge", async () => {
+  const { layoutBesideSidePanels, sidePanelRoom } = await import("../src/lib/side-panel-room.ts");
+  const observers: FakeResizeObserver[] = [];
+  const restore = fakeResizeObservers(observers);
+  try {
+    const layers = host();
+    const source = document.createElement("div");
+    layers.append(source);
+    const room = sidePanelRoom(
+      () => layers,
+      () => source,
+    );
+    const panel = document.createElement("aside");
+    layers.append(panel);
+    // a 1280px wide window: the zoom scales the bounding boxes, not the host's computed size or the 320px panel
+    const zoomed = (zoom: number): void => {
+      source.style.width = `${1280 / zoom}px`;
+      source.style.height = `${640 / zoom}px`;
+      box(source, 0, 1280);
+      box(panel, 1280 - 320 * zoom, 320 * zoom);
+    };
+
+    zoomed(0.9);
+    assert.equal(room.covered(), 320, "at 90 %: not the 288 of its box");
+    const layouts: Array<{ width: number; height: number }> = [];
+    const off = layoutBesideSidePanels({ layout: (dimension) => void layouts.push(dimension) }, source, room);
+    assert.deepEqual(layouts.at(-1), { width: 1102, height: 711 }, "at 90 %: left of the panel, not 32px under it");
+
+    zoomed(1.25);
+    observers.at(0)?.resized();
+    assert.equal(room.covered(), 320, "at 125 %: not the 400 of its box");
+    assert.deepEqual(layouts.at(-1), { width: 704, height: 512 }, "at 125 %: up to the panel, not 80px short of it");
+    off();
   } finally {
     restore();
   }
