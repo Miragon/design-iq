@@ -33,12 +33,15 @@
  *   blocks it keeps by their position among the root's children; once their
  *   count is off, the next render replaces the whole document, and the
  *   reader's selection with it.
- * - Every render aborts the previous `signal`. Cache the drawn output by
- *   source, so a new block with a diagram drawn before (an undo, an edit
- *   elsewhere in its list) does not draw it again, and put it back in the
- *   synchronous part of `hydrate`, before the first `await`: the view calls
- *   `hydrate` in a microtask right after the render, so what is back by then
- *   is on screen without a flash of code.
+ * - Every render aborts the previous `signal`. Cache the drawn output, so a
+ *   new block with a diagram drawn before (an undo, an edit elsewhere in its
+ *   list) does not draw it again, and put it back in the synchronous part of
+ *   `hydrate`, before the first `await`: the view calls `hydrate` in a
+ *   microtask right after the render, so what is back by then is on screen
+ *   without a flash of code. Output with ids of its own goes on the page
+ *   once: key it by what one block shows, never by its node, which changes
+ *   when it is laid out anew (./mermaid-fence.ts: a source two blocks show
+ *   is drawn twice).
  * - The reader's place is the view's: whatever `hydrate` inserts, at once or
  *   later, the view keeps the first block on screen where it is when the
  *   document's height changes, CSS scroll anchoring or not.

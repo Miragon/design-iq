@@ -19,27 +19,34 @@
  *   a slot an aborted hydration left drawing are drawn. The renderer, and
  *   mermaid behind it, load here, so only a document with a mermaid fence
  *   fetches them (ADR 0006).
- * - Drawings are cached by source: a new block with a diagram drawn before
- *   (an edit elsewhere in its list or quote, an undo) gets it back before
- *   the browser paints, and only a changed diagram is drawn again. Until it
- *   is, the new block shows what the one it replaced showed (the n-th
- *   diagram takes over the n-th one's drawing while no diagram is added or
+ * - Drawings are cached by source and by which of that source's drawings
+ *   they are (./drawingKey): a new block with a diagram drawn before (an
+ *   edit elsewhere in its list or quote, an undo) gets it back before the
+ *   browser paints, and only a changed diagram is drawn again. Until it is,
+ *   the new block shows what the one it replaced showed (the n-th diagram
+ *   takes over the n-th one's drawing while no diagram is added or
  *   removed), so a live edit never flashes a diagram back to code. One
  *   drawing is never in two places, which would put each of its ids on the
- *   page twice (#294): a source the document shows twice is drawn twice,
- *   each block of it keeps its own drawing while another is edited, and a
- *   block whose last drawing another block now shows waits for its new one
- *   with its code.
+ *   page twice (#294). A drawing has more than one element over time (laid
+ *   out anew for another width, drawn again after the cache let it go), so
+ *   blocks share drawings out by key, never by element: a source the
+ *   document shows twice is drawn twice; a block the view kept holds what
+ *   it shows, its own drawing or the last good one of a source it no longer
+ *   has, so a render leaves it as it is; a new block takes one of its
+ *   source's drawings that no block holds, and a block whose last drawing
+ *   another block takes or holds waits for its new one with its code.
  * - A source mermaid cannot read gets a notice (the error and its line)
  *   under the block's last good drawing, dimmed, or under its code when it
- *   never drew.
+ *   never drew. The error is cached by source alone: every fence of that
+ *   source fails alike, so a copy of it is not drawn again.
  * - A newer render aborts the older hydration: its late results are cached,
  *   never written into the page by it. The newer one picks up a slot the
  *   view kept and draws into it.
  *
- * Node-loadable like the rest of the view (test/markdown-mermaid.test.ts
- * runs it under jsdom with a fake renderer): relative `.ts` imports, every
- * DOM access through the root's own document.
+ * Node-loadable like the rest of the view (test/markdown-mermaid.test.ts and
+ * test/markdown-mermaid-drawings.test.ts run it under jsdom with a fake
+ * renderer): relative `.ts` imports, every DOM access through the root's own
+ * document.
  */
 import type { RenderMermaid } from "../../lib/mermaid-frame.ts";
 import { caseXyChartLines } from "../../lib/mermaid-line-casing.ts";
@@ -63,7 +70,8 @@ export type { RenderMermaid };
 export const MERMAID_BLOCK_CLASS = "md-mermaid";
 /** the class of the slot hydrate puts that block in, where it draws */
 const SLOT_CLASS = "md-mermaid-block";
-/** drawings kept by source: a long document's diagrams and their recent edits */
+/** drawings kept by source and repeat (./drawingKey), errors by source: a
+ *  long document's diagrams and their recent edits */
 export const DRAWING_CACHE_SIZE = 64;
 /** drawings laid out anew for another block width, kept by width and drawing
  *  (./drawingKey): the same source in a quote and outside it, a column back
@@ -128,6 +136,8 @@ const loadRenderer = async (): Promise<RenderMermaid> =>
 
 /** what a drawing is cached by: its source, and which of that source's drawings it is (a source two fences show has two) */
 const drawingKey = (source: string, repeat: number): string => `${repeat}:${source}`;
+/** what a source's error is cached by: never a drawingKey, which starts with a number */
+const errorKey = (source: string): string => `error:${source}`;
 
 /** `load` resolves the renderer; tests hand in a fake, the view the lazy chunk */
 export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRenderer): MermaidFence {
@@ -140,6 +150,11 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
   const sanitizers = new WeakMap<View, Sanitize>();
   /** the source a drawing shows, and which of that source's drawings it is */
   const origins = new WeakMap<Element, { source: string; repeat: number }>();
+  /** the drawingKey of a drawing drawingOf made: every block's drawing is one */
+  const keyOf = (drawing: Element): string => {
+    const origin = origins.get(drawing)!;
+    return drawingKey(origin.source, origin.repeat);
+  };
 
   const recall = (key: string): Drawing | undefined => {
     const known = drawings.get(key);
@@ -183,32 +198,39 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
     const refitted =
       refit === undefined ? drawing : drawingOf(await render(source, ID_PREFIX, refit), win, source, repeat);
     const fitted = "svg" in refitted ? refitted : drawing;
-    followBlockWidth(fitted.svg, width, relayoutOf(render, source, repeat, win));
+    followBlockWidth(fitted.svg, width, relayoutOf(render, source, repeat, win, fitted.svg));
     return fitted;
   };
 
   const relaidOut = new Map<string, Promise<Drawing>>(); // by width and drawingKey, least recently used first
-  /** one of the source's drawings laid out for its block's width now, and kept as that drawing */
+  /** one of the source's drawings laid out for its block's width now, and kept as that drawing; `from` is the
+   *  element the block showed it as */
   const relayoutOf =
-    (render: RenderMermaid, source: string, repeat: number, win: View): Relayout =>
-    async (block) => {
-      const width = layoutWidth(block);
+    (render: RenderMermaid, source: string, repeat: number, win: View, from: Element): Relayout =>
+    async (slot) => {
+      const width = layoutWidth(slot);
       if (width === undefined) return undefined;
-      const key = `${width}\n${drawingKey(source, repeat)}`;
-      const pending = relaidOut.get(key) ?? layOut(render, source, repeat, win, block);
-      relaidOut.delete(key);
-      relaidOut.set(key, pending);
+      const key = drawingKey(source, repeat);
+      const widthKey = `${width}\n${key}`;
+      const pending = relaidOut.get(widthKey) ?? layOut(render, source, repeat, win, slot);
+      relaidOut.delete(widthKey);
+      relaidOut.set(widthKey, pending);
       if (relaidOut.size > RELAYOUT_CACHE_SIZE) relaidOut.delete(relaidOut.keys().next().value!);
       let drawing: Drawing;
       try {
         drawing = await pending;
       } catch {
         // the engine did not load: not kept, the next change of width tries again
-        relaidOut.delete(key);
+        relaidOut.delete(widthKey);
         return undefined;
       }
       if (!("svg" in drawing)) return undefined;
-      remember(drawingKey(source, repeat), drawing);
+      remember(key, drawing);
+      // the block's own record follows, or the next render would put the
+      // drawing back at the width it had before
+      const block = blocks.get(slot);
+      if (slot.isConnected && block?.settled.drawing === from)
+        block.settled = { ...block.settled, drawing: drawing.svg };
       return drawing.svg;
     };
 
@@ -227,7 +249,7 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
     if (!pending) {
       pending = layOut(render, source, repeat, win, block)
         .then((drawing) => {
-          remember(key, drawing);
+          remember("svg" in drawing ? key : errorKey(source), drawing);
           return drawing;
         })
         .finally(() => inFlight.delete(key));
@@ -286,53 +308,67 @@ export function createMermaidFence(load: () => Promise<RenderMermaid> = loadRend
         slots.push(slot);
       });
 
-      // which of its source's drawings a block takes: the one it shows
-      // already, else the first no other block takes
-      const taken = new Map<string, Set<number>>();
-      const takenOf = (source: string): Set<number> => {
-        let repeats = taken.get(source);
-        if (!repeats) taken.set(source, (repeats = new Set()));
-        return repeats;
-      };
-      const shownAlready = slots.map((slot) => {
+      // which block holds each drawing (by drawingKey), and which of its
+      // source's drawings each block takes. A block the view kept holds what
+      // it shows, the last good drawing of a source it no longer has too, so
+      // the render leaves it as it is and no new block takes that drawing
+      // from under it, wherever the new block stands. A new block takes the
+      // drawing it took over when that is one of its source's; every other
+      // block the first of its source's that no block holds
+      const holders = new Map<string, HTMLElement>();
+      const ownRepeat = new Map<HTMLElement, number>();
+      for (const slot of [...slots.filter((kept) => !added.has(kept)), ...added]) {
         const { source, settled } = blocks.get(slot)!;
-        const origin = settled.drawing && origins.get(settled.drawing);
-        if (!origin || origin.source !== source || takenOf(source).has(origin.repeat)) return undefined;
-        takenOf(source).add(origin.repeat);
-        return origin.repeat;
-      });
+        if (!settled.drawing) continue;
+        const origin = origins.get(settled.drawing)!;
+        const key = drawingKey(origin.source, origin.repeat);
+        if (holders.has(key) || (origin.source !== source && added.has(slot))) continue;
+        holders.set(key, slot);
+        if (origin.source === source) ownRepeat.set(slot, origin.repeat);
+      }
+      for (const slot of slots) {
+        const block = blocks.get(slot)!;
+        let repeat = ownRepeat.get(slot);
+        if (repeat === undefined) {
+          for (repeat = 0; holders.has(drawingKey(block.source, repeat)); repeat++);
+          holders.set(drawingKey(block.source, repeat), slot);
+        }
+        block.repeat = repeat;
+      }
+      const recallOwn = (block: Block): Drawing | undefined =>
+        recall(drawingKey(block.source, block.repeat)) ?? recall(errorKey(block.source));
       // the blocks to show anew: the new ones, and a kept one still drawing
       // (kept while it was drawn, or the renderer did not load)
       const known = new Map<HTMLElement, Drawing | undefined>();
-      slots.forEach((slot, index) => {
+      for (const slot of slots) {
         const block = blocks.get(slot)!;
-        let repeat = shownAlready[index];
-        if (repeat === undefined) {
-          for (repeat = 0; takenOf(block.source).has(repeat); repeat++);
-          takenOf(block.source).add(repeat);
-        }
-        block.repeat = repeat;
-        if (added.has(slot) || !block.done) known.set(slot, recall(drawingKey(block.source, repeat)));
-      });
+        if (added.has(slot) || !block.done) known.set(slot, recallOwn(block));
+      }
 
       // a block without a drawing of its own keeps its last one, unless
-      // another block shows that one now; a kept block that shows its own
-      // stays as it is
-      const placed = new Set<Element>();
-      for (const drawing of known.values()) if (drawing && "svg" in drawing) placed.add(drawing.svg);
+      // another block takes or holds that one: then it shows its code until
+      // its own is drawn. Should that ever befall a block that counted as
+      // done, it draws again, or it would show its code for good
       const bared = new Set<HTMLElement>();
-      const keepLast = (slot: HTMLElement): void => {
+      for (const slot of slots) {
+        const own = known.get(slot);
         const block = blocks.get(slot)!;
         const last = block.settled.drawing;
-        if (!last) return;
-        if (!placed.has(last)) placed.add(last);
-        else {
-          block.settled = { error: block.settled.error };
-          bared.add(slot);
+        if ((own && "svg" in own) || !last) continue;
+        const key = keyOf(last);
+        const holder = holders.get(key);
+        if (holder === slot) continue;
+        if (holder === undefined) {
+          holders.set(key, slot);
+          continue;
         }
-      };
-      for (const slot of slots) if (!known.has(slot)) keepLast(slot);
-      for (const [slot, drawing] of known) if (!drawing || !("svg" in drawing)) keepLast(slot);
+        block.settled = { error: block.settled.error };
+        bared.add(slot);
+        if (!known.has(slot) && !block.settled.error) {
+          block.done = false;
+          known.set(slot, recallOwn(block));
+        }
+      }
 
       // first, before the browser paints: every block drawn before, or
       // showing what it showed, or what the one it replaced showed, while
