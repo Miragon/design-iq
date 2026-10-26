@@ -19,7 +19,7 @@
  *
  * Fest im Kit: base aus DOCS_BASE, saubere URLs, Datum der letzten Änderung, Komet als Icon, zwei
  * theme-color, Geist vorgeladen, Shiki-Themes mit AA, Anker wie auf GitHub, Mermaid, Komet und
- * Produktname im Titel, Gliederung H2 und H3, lokale Suche, Bearbeiten-Link, 404-Texte und die Rechtsleiste
+ * Produktname im Titel, Gliederung H2 und H3, lokale Suche, Bearbeiten-Link, GitHub mit Sternen im Header, Bitte um einen Stern am Seitenende, 404-Texte und die Rechtsleiste
  * (Copyright, Impressum, Datenschutz) auf jeder Seite. Die Farben kommen aus theme/miragon.css.
  */
 import { mergeConfig, type DefaultTheme, type HeadConfig, type UserConfig } from "vitepress"
@@ -48,6 +48,11 @@ export interface MiragonDocsOptions {
   nav?: DefaultTheme.NavItem[]
   /** Seitenleiste, als Liste oder je Pfad. */
   sidebar?: DefaultTheme.Sidebar
+  /**
+   * Sterne des Repos im Header neben dem GitHub-Icon und die Bitte um einen Stern am Ende jeder Seite.
+   * Standard true, false zeigt nur das GitHub-Icon.
+   */
+  githubStars?: boolean
   /** Weitere Icons nach dem GitHub-Icon, etwa npm. */
   socialLinks?: DefaultTheme.SocialLink[]
   /** Zweig für den Bearbeiten-Link. Standard "main". */
@@ -72,7 +77,30 @@ export interface MiragonDocsOptions {
 }
 
 export interface MiragonThemeConfig extends DefaultTheme.Config {
-  miragon: { legal: MiragonLegal }
+  miragon: { legal: MiragonLegal; github?: MiragonGitHub }
+}
+
+/** Repo und Sterne für den Knopf im Header (theme/GitHubStars.vue). */
+export interface MiragonGitHub {
+  link: string
+  stars?: number
+  /** Bitte um einen Stern am Ende jeder Seite mit Seitenleiste (theme/StarPrompt.vue). */
+  prompt: { title: string; text: string; button: string }
+}
+
+/**
+ * Sterne beim Build: Die Zahl steht gleich im HTML. Im Browser holt theme/useStars.ts sie live
+ * nach. Ohne Antwort in drei Sekunden steht der Knopf bis dahin ohne Zahl da.
+ */
+async function sterne(repo: string): Promise<number | undefined> {
+  try {
+    const antwort = await fetch(`https://api.github.com/repos/${repo}`, { signal: AbortSignal.timeout(3000) })
+    if (!antwort.ok) return undefined
+    const { stargazers_count } = (await antwort.json()) as { stargazers_count?: number }
+    return stargazers_count
+  } catch {
+    return undefined
+  }
 }
 
 const SPRACHEN = ["en-US", "de-DE"] as const
@@ -81,6 +109,11 @@ const SPRACHEN = ["en-US", "de-DE"] as const
 const TEXTE = {
   "en-US": {
     editLink: "Edit this page on GitHub",
+    starPrompt: (name: string) => ({
+      title: "Did this page help?",
+      text: `A star on GitHub helps other teams find ${name}.`,
+      button: "Star",
+    }),
     lastUpdated: "Last updated",
     // Was passiert ist und was zu tun ist, im Satzbau statt „PAGE NOT FOUND“ und Zitat.
     notFound: {
@@ -94,6 +127,11 @@ const TEXTE = {
   },
   "de-DE": {
     editLink: "Diese Seite auf GitHub bearbeiten",
+    starPrompt: (name: string) => ({
+      title: "Hat dir die Seite geholfen?",
+      text: `Ein Stern auf GitHub hilft anderen Teams, ${name} zu finden.`,
+      button: "Stern",
+    }),
     lastUpdated: "Zuletzt aktualisiert",
     notFound: {
       title: "Diese Seite gibt es nicht",
@@ -143,7 +181,7 @@ function basis(wert: string | undefined): string {
   return pfad ? `/${pfad}/`.replace(/\/{2,}/g, "/") : "/"
 }
 
-export function miragonDocs(options: MiragonDocsOptions): UserConfig<MiragonThemeConfig> {
+export async function miragonDocs(options: MiragonDocsOptions): Promise<UserConfig<MiragonThemeConfig>> {
   const lang = options.lang ?? "en-US"
   if (!SPRACHEN.includes(lang)) {
     throw new Error(`miragonDocs: lang ist "${lang}", erlaubt sind ${SPRACHEN.join(" und ")}.`)
@@ -235,7 +273,17 @@ export function miragonDocs(options: MiragonDocsOptions): UserConfig<MiragonThem
       // Kein footer von VitePress: Er fehlt auf Seiten mit Seitenleiste. Die Rechtsleiste
       // (theme/LegalRow.vue) steht auf jeder Seite.
       // Texte und Links aus legal.ts.
-      miragon: { legal: miragonLegal({ lang, message: options.footerMessage }) },
+      miragon: {
+        legal: miragonLegal({ lang, message: options.footerMessage }),
+        github:
+          options.githubStars === false
+            ? undefined
+            : {
+                link: repoUrl,
+                stars: await sterne(options.repo),
+                prompt: texte.starPrompt(options.title.replace(/^Miragon\s+/, "")),
+              },
+      },
     },
   }
 
