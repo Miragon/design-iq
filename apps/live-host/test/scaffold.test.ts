@@ -13,6 +13,7 @@ import { test } from "node:test";
 import { CONTENT_KEY } from "@designiq/contracts/live";
 import type { TodoModelRef } from "@designiq/contracts/todo-anchor";
 import { AppError } from "@designiq/http-kit";
+import { type NotationDescriptor, NOTATIONS } from "@designiq/notations";
 import * as Y from "yjs";
 
 import {
@@ -340,6 +341,28 @@ test("createNotationModel: an unknown notation is a 422", async () => {
     () => createNotationModel(REPO, ws, { notation: "uml", name: "Nope" }),
     rejectsWith("scaffold/unknown-notation", 422),
   );
+});
+
+test("createNotationModel: a registered notation without a template is a 422 and creates no file", async () => {
+  // every shipped notation has a template, so the guard that keeps a future
+  // descriptor from creating an empty file is reached through a stand-in
+  const registry = NOTATIONS as NotationDescriptor[];
+  const stand: NotationDescriptor = {
+    ...registry.find((descriptor) => descriptor.id === "markdown")!,
+    id: "gitonly",
+    extensions: [".gitonly"],
+  };
+  registry.push(stand);
+  try {
+    const ws = workspace();
+    await assert.rejects(
+      () => createNotationModel(REPO, ws, { notation: "gitonly", name: "Nope" }),
+      rejectsWith("scaffold/no-template", 422),
+    );
+    assert.equal(existsSync(join(ws, "processes", "nope.gitonly")), false);
+  } finally {
+    registry.pop();
+  }
 });
 
 test("createNotationModel: markdown documents are creatable (a first-class notation)", async () => {
