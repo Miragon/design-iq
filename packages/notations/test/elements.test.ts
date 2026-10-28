@@ -121,3 +121,49 @@ test("closestElements: a very long id is compared by its start", () => {
   const long = `cmp_${"a".repeat(5000)}`;
   assert.deepEqual(closestElements([{ id: "cmp_b" }, { id: long }], `${long}b`, 1), [{ id: long }]);
 });
+
+test("closestElements: the pruned ranking equals ranking every element by its full edit distance", () => {
+  const reference = (left: string, right: string): number => {
+    const a = left.slice(0, 64).toLowerCase();
+    const b = right.slice(0, 64).toLowerCase();
+    const table = Array.from({ length: a.length + 1 }, (_, i) =>
+      Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
+    );
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        table[i]![j] = Math.min(
+          table[i - 1]![j]! + 1,
+          table[i]![j - 1]! + 1,
+          table[i - 1]![j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1),
+        );
+      }
+    }
+    return table[a.length]![b.length]!;
+  };
+  let seed = 7;
+  const next = (bound: number): number => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed % bound;
+  };
+  const word = (): string => Array.from({ length: 1 + next(14) }, () => "abcDE_1-".charAt(next(8))).join("");
+  for (let round = 0; round < 200; round++) {
+    const elements: ModelElement[] = Array.from({ length: 1 + next(40) }, () =>
+      next(3) === 0 ? { id: word(), name: word() } : { id: word() },
+    );
+    const wanted = word();
+    const limit = 1 + next(5);
+    const expected = elements
+      .map((element, order) => ({
+        element,
+        order,
+        distance: Math.min(
+          reference(wanted, element.id),
+          element.name === undefined ? Infinity : reference(wanted, element.name),
+        ),
+      }))
+      .sort((x, y) => x.distance - y.distance || x.order - y.order)
+      .slice(0, limit)
+      .map(({ element }) => element);
+    assert.deepEqual(closestElements(elements, wanted, limit), expected, `round ${round}: ${wanted}`);
+  }
+});

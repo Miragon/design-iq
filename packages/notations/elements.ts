@@ -92,19 +92,30 @@ export function modelElements(notationOrPath: string, raw: string): ModelElement
 /** long ids and names are compared by their start: a ranking needs no more */
 const COMPARED_LENGTH = 64;
 
-function editDistance(left: string, right: string): number {
+/**
+ * The edit distance, or Infinity once it cannot come out below `cutoff`: a
+ * refusal ranks every element of a model on the one thread that also syncs
+ * the room, and most elements are far from the id asked for.
+ */
+function editDistance(left: string, right: string, cutoff: number): number {
   const a = left.slice(0, COMPARED_LENGTH).toLowerCase();
   const b = right.slice(0, COMPARED_LENGTH).toLowerCase();
-  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  if (Math.abs(a.length - b.length) >= cutoff) return Infinity;
+  let previous = Uint16Array.from({ length: b.length + 1 }, (_, index) => index);
+  let current = new Uint16Array(b.length + 1);
   for (let i = 1; i <= a.length; i++) {
-    const current = [i];
+    current[0] = i;
+    let rowMinimum = i;
     for (let j = 1; j <= b.length; j++) {
-      const substitution = previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1);
-      current.push(Math.min(previous[j]! + 1, current[j - 1]! + 1, substitution));
+      const substitution = previous[j - 1]! + (a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1);
+      const distance = Math.min(previous[j]! + 1, current[j - 1]! + 1, substitution);
+      current[j] = distance;
+      if (distance < rowMinimum) rowMinimum = distance;
     }
-    previous = current;
+    if (rowMinimum >= cutoff) return Infinity;
+    [previous, current] = [current, previous];
   }
-  return previous[b.length]!;
+  return previous[b.length]! < cutoff ? previous[b.length]! : Infinity;
 }
 
 /**
@@ -114,16 +125,18 @@ function editDistance(left: string, right: string): number {
  * id first.
  */
 export function closestElements(elements: readonly ModelElement[], wanted: string, limit = 3): ModelElement[] {
-  return elements
-    .map((element, order) => ({
-      element,
-      order,
-      distance: Math.min(
-        editDistance(wanted, element.id),
-        element.name === undefined ? Infinity : editDistance(wanted, element.name),
-      ),
-    }))
-    .sort((x, y) => x.distance - y.distance || x.order - y.order)
-    .slice(0, limit)
-    .map(({ element }) => element);
+  const closest: Array<{ element: ModelElement; distance: number }> = [];
+  for (const element of elements) {
+    // a later element ties with the last one kept and loses to it
+    const cutoff = closest.length < limit ? Infinity : closest[closest.length - 1]!.distance;
+    const distance = Math.min(
+      editDistance(wanted, element.id, cutoff),
+      element.name === undefined ? Infinity : editDistance(wanted, element.name, cutoff),
+    );
+    if (distance === Infinity) continue;
+    const position = closest.findIndex((kept) => kept.distance > distance);
+    closest.splice(position === -1 ? closest.length : position, 0, { element, distance });
+    if (closest.length > limit) closest.pop();
+  }
+  return closest.map(({ element }) => element);
 }
