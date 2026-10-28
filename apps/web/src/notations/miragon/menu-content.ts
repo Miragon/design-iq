@@ -4,10 +4,13 @@
  * Chain): the chrome their dialogs and popovers take (a modeler-shell handle's
  * shape, filled from the shell's own messages so the shortcut tables name the
  * zoom keys as the modelers do), dialogs built on first use and removed with the
- * mount, the image exports (without the presence layer) and the text ones.
- * Loaded with the renderer (behind each spec's `load()`).
+ * mount, the modeler shell's Keyboard shortcuts… dialog, the image exports
+ * (without the presence layer) and the text ones. Loaded with the renderer
+ * (behind each spec's `load()`).
  */
-import { defaultMessages, detectPlatform } from "@miragon/modeler-shell/core";
+import { CD } from "@designiq/ui-kit/lib/tokens";
+import { type ShellDialog, type ShortcutGroup, showShortcutsDialog } from "@miragon/modeler-shell";
+import { defaultMessages, detectPlatform, withChromeShortcuts } from "@miragon/modeler-shell/core";
 
 import { withoutPresence } from "../../lib/presence-canvas.ts";
 import type { ExportFile } from "../../mcp-app/core/engine.ts";
@@ -15,6 +18,10 @@ import type { MiragonMenuHost } from "./spec.ts";
 
 /** designIQ's one UI language (UI copy stays English) */
 export const MENU_LANG = "en";
+
+/** what lies under the drawing in a PNG export (guide §10.7): the light plot
+ *  for a notation drawn on one (Wardley), the light canvas ground for every other */
+export const PNG_BACKGROUND = { plot: CD.weiss, ground: CD.grau } as const;
 
 /** the chrome the renderers' dialogs, popovers and shortcut tables take */
 export function dialogChrome(host: MiragonMenuHost) {
@@ -53,6 +60,44 @@ export function lazily<T extends { destroy(): void }>(make: () => T): Lazy<T> {
     destroy() {
       made?.destroy();
       made = undefined;
+    },
+  };
+}
+
+export interface ShortcutsDialog {
+  open(): void;
+  /** closes an open one: it lives in the mount's host and goes with the mount */
+  destroy(): void;
+}
+
+/**
+ * Keyboard shortcuts… (guide §5.4, §8) on the modeler shell's dialog, which
+ * opens without a mounted shell: inside the mount's host and centred over it,
+ * with the renderer's groups as its pure shortcut table builds them. designIQ
+ * binds the zoom and fit keys itself (lib/chrome-keys.ts), so the shell's rows
+ * for them lead the View group, named and chipped as its tooltips show them.
+ * The dialog is built on open and removed on close; the focus goes back to
+ * where it was (the menu trigger in the widget), else to the trigger (the
+ * SPA's menu entry is gone by then). Its look is the shell's sheet, which
+ * each spec's `load()` brings with the renderer's.
+ */
+export function shortcutsDialog(
+  host: MiragonMenuHost,
+  groups: (chrome: ReturnType<typeof dialogChrome>) => readonly ShortcutGroup[],
+): ShortcutsDialog {
+  let shown: ShellDialog | undefined;
+  return {
+    open() {
+      if (shown?.isOpen()) return;
+      const chrome = dialogChrome(host);
+      shown = showShortcutsDialog(withChromeShortcuts(groups(chrome), chrome), {
+        container: host.root,
+        focusFallback: () => host.trigger.focus(),
+      });
+    },
+    destroy() {
+      shown?.close();
+      shown = undefined;
     },
   };
 }

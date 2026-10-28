@@ -497,35 +497,60 @@ tool and its place before the canvas in the tab order. `test/vendor-css.test.ts`
 `test/value-chain-palette-dom.test.ts` fail once a release does either itself, and the file
 goes then. The hover tooltip with the shortcut chip is the renderer's own.
 
-**PNG exports in Geist.** Export as PNG draws the renderer's standalone SVG as an image
-(`lib/export-image.ts`, the same for every Miragon renderer, in the SPA and in the widget) on
-the design guide's light export ground (§10.7): the plot's white under a Wardley map, the canvas
-grey under the others (a Team Topologies SVG starts with a white sheet that would hide it, so the
-PNG is drawn without that sheet; the SVG download keeps the renderer's own until
-Miragon/modeler-suite#234 removes it there). Neither export carries the peers on the canvas: the
-renderers' `saveSVG` copies the whole live canvas, designIQ's presence layer with its cursors,
-outlines and name pills included, so `imageExports` (`notations/miragon/menu-content.ts`) removes
-that layer first (`withoutPresence`, `lib/presence-canvas.ts`). An SVG drawn as an image cannot reach the page's fonts. So before it is
-drawn, `lib/export-font.ts` puts the page's own `'Geist Variable'` faces into the SVG's `<style>`,
-their files inline: the subsets whose `unicode-range` holds a character of the diagram's text
-(the SPA has latin, latin-ext, cyrillic, cyrillic-ext and vietnamese; the widget only latin and
-latin-ext, so other scripts stay in the system sans there, as on its canvas). Each face also
-gets a hidden text up front, set in a character that only this face draws: without it,
-Chromium calls the SVG image loaded while a subset that only a later character of a label
-needs is still loading, and that text comes out in the system sans. The image loads as a
-data: URL, which an MCP host's CSP allows where it refuses blob: (the reason Wardley and
-Value Chain do not use their packages' own `svgToPng`), and the data: fonts inside it load although the
-host's `font-src` blocks the widget's own (checked in Chromium and WebKit). A page without
-Geist still exports, in the system sans, with a console warning.
-The SVG download embeds no font: it shows Geist where the font is installed (guide §4).
-`test/png-export-font-chromium.ts` checks it in the built app, from the SPA's menu and from
-each widget under the MCP Apps default CSP: the PNG's label must be as wide as in Geist (the
-labels hold figures, where Geist and the system sans differ most) and the whole PNG must be
-the check's own drawing in Geist, a latin-ext text included. After a renderer, fontsource or
-browser update, from the repository root: `pnpm build`, then
-`npx -y -p playwright@1.56.1 -c "node apps/web/test/png-export-font-chromium.ts"` (`PORT` sets
-the Live Host's port, 8393 unless set; `BROWSER=webkit` runs it in WebKit, after
+**PNG exports in Geist.** Export as PNG draws the renderer's standalone SVG as an image with
+the modeler shell's `svgToPng` (`@miragon/modeler-shell/export`, the same for every Miragon
+renderer, in the SPA and in the widget) on the design guide's light export ground (§10.7,
+`PNG_BACKGROUND` in `notations/miragon/menu-content.ts`): the plot's white under a Wardley map,
+the canvas grey under the others (a Team Topologies SVG starts with a white sheet that would
+hide it, so the PNG is drawn without that sheet; the SVG download keeps the renderer's own until
+a team-topologies-renderer release without it, Miragon/modeler-suite#234). Neither export
+carries the peers on the canvas: the renderers' `saveSVG` copies the whole live canvas,
+designIQ's presence layer with its cursors, outlines and name pills included, so `imageExports`
+(`notations/miragon/menu-content.ts`) removes that layer first (`withoutPresence`,
+`lib/presence-canvas.ts`). An SVG drawn as an image cannot reach the page's fonts. So before it
+is drawn, the helper puts the page's own
+`'Geist Variable'` faces into the SVG's `<style>`, their files inline: the subsets whose
+`unicode-range` holds a character of the diagram's text (the SPA has latin, latin-ext,
+cyrillic, cyrillic-ext and vietnamese; the widget only latin and latin-ext, so other scripts
+stay in the system sans there, as on its canvas). Each face also gets a hidden text up front,
+set in a character that only this face draws: without it, Chromium calls the SVG image loaded
+while a subset that only a later character of a label needs is still loading, and that text
+comes out in the system sans. The image loads as a data: URL, which an MCP host's CSP allows
+where it refuses blob: (the reason Wardley and Value Chain do not use their packages' own
+`svgToPng`), and the data: fonts inside it load although the host's `font-src` blocks the
+widget's own (checked in Chromium and WebKit). A Geist file that cannot be read leaves the
+labels in the system sans, with a console warning. The shell's helper was modelled on
+designIQ's own rasterizer (`lib/export-image.ts` and `lib/export-font.ts` until 5.12), and with
+the 2026-10-28 renderers both write byte-identical PNGs for every notation in the SPA and in
+the widget (headless Chromium); it also draws a label with a broken emoji, where
+`encodeURIComponent` threw on the lone surrogate, and tries a smaller canvas where a browser
+refuses a large one (iOS Safari above 2^24 pixels). The SVG download embeds no font: it shows Geist where the
+font is installed (guide §4). `test/png-export-font-chromium.ts` checks it in the built app,
+from the SPA's menu and from each widget under the MCP Apps default CSP: the PNG's label must
+be as wide as in Geist (the labels hold figures, where Geist and the system sans differ most)
+and the whole PNG must be the check's own drawing in Geist, a latin-ext text included. After a
+renderer, modeler-shell, fontsource or browser update, from the repository root: `pnpm build`,
+then `npx -y -p playwright@1.56.1 -c "node apps/web/test/png-export-font-chromium.ts"` (`PORT`
+sets the Live Host's port, 8393 unless set; `BROWSER=webkit` runs it in WebKit, after
 `npx -y playwright@1.56.1 install webkit`).
+
+**Keyboard shortcuts… is the modeler shell's dialog.** Every Miragon notation's Help entry
+opens `showShortcutsDialog` of `@miragon/modeler-shell`, the standalone dialog for a host
+without a mounted shell, in both hosts (`shortcutsDialog` in
+`notations/miragon/menu-content.ts`): a native modal `<dialog>` of guide §8 inside the mount's
+canvas host, centred over it while it fits there, with the renderer's own groups from its pure
+shortcut table (`mapShortcuts`, `boardShortcuts`, `contextMapShortcuts`, `diagramShortcuts`).
+designIQ binds the zoom and fit keys itself, so `withChromeShortcuts` puts the shell's rows for
+them at the top of the View group, named and chipped as the zoom buttons' tooltips show them.
+The dialog is built on open and removed on close, keeps the focus inside, gives it back to the
+⋯ trigger, and goes with the mount. Its look is the shell's sheet
+(`@miragon/modeler-shell/shell.css`), which each spec's `load()` brings with the renderer's:
+the SPA does not scope it, since every rule of it keys on the shell's own classes, and its
+legend-row rules, which reach the rows the renderers draw into designIQ's Legend panel, set
+nothing `lib/miragon-legend.css` does not set itself (`test/vendor-css.test.ts`). The roles it
+reads (`--cd-ui-*`) come from the renderer's token layer, as for `lib/value-chain-palette.css`.
+The renderers' own `createShortcutsDialog` is deprecated in the suite. The title dialogs and
+the popovers ("Map title…", "Map size…", "X-axis labels…") are still the renderers'.
 
 **A gesture holds the live re-imports back.** Every live binding, the SPA's editors and
 the widget engines alike, passes live-client the element it mounts the canvas in: while a
@@ -578,9 +603,11 @@ sized by `miragon-styles.css`) and removes it with the engine.
    (contract 1.3) where it has one.
    Optional: `title` (the document's title, the menu header's display name),
    `menu` (the package's own menu content, its dialogs built with the
-   helpers in `menu-content.ts` inside the mount's host, its exports with
-   `imageExports` and `textExport` there, its PNG drawn by
-   `lib/export-image.ts`, not a rasterizer of the package's own) and, with
+   helpers in `menu-content.ts` inside the mount's host, Keyboard shortcuts…
+   with `shortcutsDialog` and the package's shortcut table, its exports with
+   `imageExports` and `textExport` there, its PNG drawn by the modeler
+   shell's `svgToPng` on a `PNG_BACKGROUND`, not a rasterizer of the
+   package's own) and, with
    `hasLegend`, `legend` (the rows of the Legend panel both hosts show,
    laid out by `lib/miragon-legend.css`: the SPA's panel lies outside the
    canvas class that scopes the renderer's own rules for them).

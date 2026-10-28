@@ -10,16 +10,22 @@ allowBuilds:
   esbuild: true
   inferno: false
 minimumReleaseAgeExclude:
-  # the Miragon releases of wave 4 that removed the deprecated renderer APIs
+  # the Miragon releases of wave 4 with modeler-shell 0.7.0 and contract 1.5
   # (Miragon/modeler-suite#170): published 2026-10-28, adopted the same day
-  - "@miragon/wardley-renderer@0.12.0"
-  - "@miragon/event-storming-renderer@0.6.0"
-  - "@miragon/team-topologies-renderer@0.15.0"
-  - "@miragon/team-topologies-schema-model@0.15.0"
-  - "@miragon/context-maps-renderer@0.7.0"
+  - "@miragon/modeler-api@1.5.0"
+  - "@miragon/modeler-shell@0.7.0"
+  - "@miragon/wardley-renderer@0.13.0"
+  - "@miragon/wardley-dsl@0.8.0"
+  - "@miragon/event-storming-renderer@0.7.0"
+  - "@miragon/event-storming-dsl@0.3.3"
+  - "@miragon/event-storming-schema-model@0.3.0"
+  - "@miragon/team-topologies-renderer@0.15.1"
+  - "@miragon/team-topologies-schema-model@0.15.1"
+  - "@miragon/context-maps-renderer@0.7.1"
   - "@miragon/context-maps-schema-model@0.5.0"
   - "@miragon/context-maps-cml@0.1.7"
-  - "@miragon/value-chain-renderer@0.8.0"
+  - "@miragon/value-chain-renderer@0.8.1"
+  - "@miragon/value-chain-schema-model@0.7.2"
 overrides:
   # vitepress 1.6.4 (docs/) is the latest release and still requests vite
   # ^5.4.14, which is stuck below the dev-server fixes; 6.4.5 also closes the

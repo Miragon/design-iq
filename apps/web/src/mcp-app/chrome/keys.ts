@@ -51,8 +51,9 @@ export const mountKeys: MountKeys = (doc, deps) => {
     const command = keyCommand(e, targetOf(doc, e.target));
     let handled = false;
     if (command === "save") handled = deps.save();
-    // a renderer's modal dialog takes Escape itself (the native cancel): the
-    // chrome's layers under it stay as they are
+    // a modal dialog (the shell's Keyboard shortcuts…, a renderer's Map
+    // title…) takes Escape itself (the native cancel): the chrome's layers
+    // under it stay as they are
     else if (command === "escape" && !openDialogs(doc).modal) handled = deps.escape.some((layer) => layer());
     if (handled) e.preventDefault();
   };

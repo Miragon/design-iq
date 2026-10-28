@@ -2,8 +2,11 @@
  *  lands in the free area the mount names. Its menu content (`boardMenu`)
  *  brings the Level radio group (an undoable edit of the board), the Type
  *  captions checkbox (a view preference: usable read-only, kept for the
- *  page's later boards), the PNG and SVG exports and the shortcuts dialog;
- *  the .storm file itself is no export, it is the model. */
+ *  page's later boards), the PNG and SVG exports and Keyboard shortcuts…,
+ *  which opens the modeler shell's dialog with the package's
+ *  `boardShortcuts`; the .storm file itself is no export, it is the model.
+ *  Its PNG goes through the modeler shell's `svgToPng` (Geist inside) on the
+ *  canvas ground (guide §10.7). */
 import type { BoardLevels, EventStormingViewOptions, NavigatedViewer } from "@miragon/event-storming-renderer";
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
@@ -18,15 +21,17 @@ export const spec: MiragonRendererSpec = {
   contractNotation: "event-storming",
   async load(): Promise<LoadedMiragonRenderer> {
     const [
-      { boardMenu, createCollaborativeModeler, createCollaborativeViewer, createShortcutsDialog },
+      { boardMenu, boardShortcuts, createCollaborativeModeler, createCollaborativeViewer },
       ,
-      { dialogChrome, imageExports, lazily, ownTitle },
+      ,
+      { imageExports, ownTitle, PNG_BACKGROUND, shortcutsDialog },
       { svgToPng },
     ] = await Promise.all([
       import("@miragon/event-storming-renderer"),
       import("@miragon/event-storming-renderer/assets/event-storming.css"),
+      import("@miragon/modeler-shell/shell.css"),
       import("./menu-content.ts"),
-      import("../../lib/export-image.ts"),
+      import("@miragon/modeler-shell/export"),
     ]);
     // the Modeler and the viewer share this surface (EventStormingBaseViewer)
     const boardOf = (modeler: { diagram: unknown }): NavigatedViewer => modeler.diagram as NavigatedViewer;
@@ -44,15 +49,19 @@ export const spec: MiragonRendererSpec = {
           getLevel: () => board.exportMap().config.level ?? "design",
           setLevel: (level) => board.get<BoardLevels>("eventStormingModeling").setLevel(level),
         };
-        const shortcuts = lazily(() => createShortcutsDialog(dialogChrome(host)));
+        const shortcuts = shortcutsDialog(host, boardShortcuts);
         const groups = boardMenu({
           levels,
           typeCaptions: viewOptions,
           onTypeCaptionsToggled: (visible) => {
             typeCaptions = visible;
           },
-          exports: imageExports(host, async () => (await board.saveSVG()).svg, svgToPng),
-          showKeyboardShortcuts: () => shortcuts.get().open(),
+          exports: imageExports(
+            host,
+            async () => (await board.saveSVG()).svg,
+            (svg) => svgToPng(svg, { background: PNG_BACKGROUND.ground }),
+          ),
+          showKeyboardShortcuts: () => shortcuts.open(),
         });
         return { groups, destroy: () => shortcuts.destroy() };
       },

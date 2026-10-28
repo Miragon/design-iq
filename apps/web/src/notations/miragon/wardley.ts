@@ -6,9 +6,10 @@
  *  reports (contract 1.3) holds it, and its pan constraint keeps a host's
  *  fit to that box in place. Its menu content (`mapMenu`) brings Map
  *  title…, Map size… and X-axis labels… (one undoable step each), the PNG
- *  and SVG exports and the shortcuts dialog; the map file itself is no
- *  export, it is the model. Its PNG goes through designIQ's rasterizer
- *  (lib/export-image.ts, Geist inside) on the plot's white (guide §10.7). */
+ *  and SVG exports and Keyboard shortcuts…, which opens the modeler shell's
+ *  dialog with the package's `mapShortcuts`; the map file itself is no
+ *  export, it is the model. Its PNG goes through the modeler shell's
+ *  `svgToPng` (Geist inside) on the plot's white (guide §10.7). */
 import type { Modeler } from "@miragon/wardley-renderer";
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
@@ -25,18 +26,20 @@ export const spec: MiragonRendererSpec = {
         createCollaborativeModeler,
         createCollaborativeViewer,
         createMapSizePopover,
-        createShortcutsDialog,
         createTitleDialog,
         mapMenu,
+        mapShortcuts,
       },
       ,
-      { dialogChrome, imageExports, lazily, ownTitle },
-      { PNG_BACKGROUND, svgToPng },
+      ,
+      { dialogChrome, imageExports, lazily, ownTitle, PNG_BACKGROUND, shortcutsDialog },
+      { svgToPng },
     ] = await Promise.all([
       import("@miragon/wardley-renderer"),
       import("@miragon/wardley-renderer/assets/wardley.css"),
+      import("@miragon/modeler-shell/shell.css"),
       import("./menu-content.ts"),
-      import("../../lib/export-image.ts"),
+      import("@miragon/modeler-shell/export"),
     ]);
     // the viewer is a NavigatedViewer: it reads the map like the Modeler, and
     // the entries that would write it stay disabled on a read-only canvas
@@ -52,7 +55,7 @@ export const spec: MiragonRendererSpec = {
         const title = lazily(() => createTitleDialog(chrome, map));
         const size = lazily(() => createMapSizePopover(chrome, map));
         const axis = lazily(() => createAxisLabelsPopover(chrome, map));
-        const shortcuts = lazily(() => createShortcutsDialog(chrome));
+        const shortcuts = shortcutsDialog(host, mapShortcuts);
         const groups = mapMenu({
           mapTitle: () => title.get().open(),
           mapSize: () => size.get().open(),
@@ -62,7 +65,7 @@ export const spec: MiragonRendererSpec = {
             async () => (await map.saveSVG()).svg,
             (svg) => svgToPng(svg, { background: PNG_BACKGROUND.plot }),
           ),
-          showKeyboardShortcuts: () => shortcuts.get().open(),
+          showKeyboardShortcuts: () => shortcuts.open(),
         });
         return {
           groups,

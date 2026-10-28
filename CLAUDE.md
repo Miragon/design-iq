@@ -120,7 +120,9 @@ https://raw.githubusercontent.com/Miragon/corporate-identity/main/plugins/mirago
 - **Geist / Geist Mono** everywhere, canvas text included; **Lucide** is the only icon set
   (no emoji or unicode glyphs as icons, no sparkles/wand/robot for AI).
 - The Miragon renderers (`@miragon/*-renderer`) bring their own CI styling — don't restyle
-  them. The one exception is Value Chain's palette: value-chain-renderer 0.8.0 lays it out
+  them, nor the modeler shell's Keyboard shortcuts… dialog every Miragon notation opens
+  (`showShortcutsDialog` of `@miragon/modeler-shell`, its look the shell's `shell.css`, loaded
+  with each renderer). The one exception is Value Chain's palette: value-chain-renderer 0.8.1 lays it out
   and makes it reachable by keyboard only inside the modeler shell's chrome, so
   `apps/web/src/lib/value-chain-palette.css` and `.ts` do what the shell does until a release
   ships it (`test/vendor-css.test.ts` and `test/value-chain-palette-dom.test.ts` fail then, and

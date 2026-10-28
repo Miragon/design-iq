@@ -206,6 +206,23 @@ test("each spec's factories are its renderer's: meta.notation is the spec's cont
   }
 });
 
+/**
+ * Contract 1.5 types an optional interaction surface (is a gesture running)
+ * and an appearance surface (the themes a modeler draws). live-client still
+ * reads a gesture from the canvas's DOM (model-sync.ts watchCanvasGesture),
+ * since no pinned renderer offers the surface yet: a release that does fails
+ * here, and the binding can then ask the renderer instead.
+ */
+test("contract 1.5: no pinned renderer offers the interaction or the appearance surface yet", async () => {
+  for (const spec of MIRAGON_RENDERERS) {
+    const renderer = await spec.load();
+    for (const modeler of [renderer.create(), renderer.createViewer()]) {
+      assert.deepEqual([modeler.interaction, modeler.appearance], [undefined, undefined], spec.id);
+      modeler.destroy();
+    }
+  }
+});
+
 test("the renderer's root mounts INSIDE the host, which keeps the scope class; destroy removes only that root", async () => {
   for (const spec of MIRAGON_RENDERERS) {
     const widget = host(spec.canvasClassName);
