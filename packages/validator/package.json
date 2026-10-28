@@ -56,6 +56,6 @@
   },
   "devDependencies": {
     "@designiq/notations": "workspace:*",
-    "tsdown": "0.23.1"
+    "tsdown": "0.23.2"
   }
 }
