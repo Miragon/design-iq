@@ -1,8 +1,9 @@
 /**
- * The Legend side panel of a Miragon notation that has one (context map):
- * the renderer's legend rows (LoadedMiragonRenderer.legend) in the editor's
- * side-panel shell, where the widget shows them in its own panel too. The
- * renderer module is the editor engine's, already loaded when the panel opens.
+ * The Legend side panel of a Miragon notation that has one (context map,
+ * team topology): the renderer's legend rows (LoadedMiragonRenderer.legend)
+ * in the editor's side-panel shell, where the widget shows them in its own
+ * panel too. The renderer module is the editor engine's, already loaded when
+ * the panel opens.
  */
 import { BookOpen } from "lucide-react";
 import { useEffect, useRef } from "react";

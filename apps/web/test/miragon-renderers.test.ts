@@ -1159,6 +1159,58 @@ test("Context Maps: no mount draws the renderer's legend card; the spec draws th
   body.remove();
 });
 
+test("Team Topologies: no mount draws a legend on the canvas; the spec draws the legend into a host's panel", async () => {
+  const [spec, renderer] = await load("team-topology");
+  assert.equal(spec.hasLegend, true, "both hosts offer the Legend toggle before the engine loads");
+  const text = newTtJson("teams", "Team Landscape");
+  const LEGEND_ROWS = ".cd-shell-legend-row, .tt-legend__row";
+
+  const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
+  const spa = host("tt-canvas");
+  const doc = new Y.Doc();
+  doc.getText("content").insert(0, text);
+  const editor = mountMiragonEditor(
+    spec,
+    renderer,
+    spa,
+    spaContext({ ytext: doc.getText("content"), doc, onSyncError: assert.fail, onImportFailed: assert.fail }),
+  );
+  await wait(50);
+  assert.equal(spa.querySelector(LEGEND_ROWS), null, "the SPA editor: no legend over the diagram");
+  editor.destroy();
+  for (const readonly of [false, true]) {
+    const widget = host("tt-canvas");
+    const engine = mountMiragonEngine(spec, renderer, widget, readonly);
+    await engine.importText(text);
+    assert.equal(widget.querySelector(LEGEND_ROWS), null, readonly ? "the viewer" : "the editor");
+    engine.destroy();
+  }
+
+  // the panel's body: three named lists, each under a visible heading, a
+  // rule between them, and each row's meaning as visible text under its name
+  const body = host();
+  const remove = renderer.legend!(body);
+  assert.deepEqual(
+    [...body.querySelectorAll("ul")].map((list) => list.getAttribute("aria-label")),
+    ["Team types", "Interaction modes", "Other elements"],
+  );
+  assert.deepEqual(
+    [...body.querySelectorAll(".tt-legend__heading")].map((heading) => heading.textContent),
+    ["Teams: solid, long-lived", "Interactions: dashed, short-lived", "Other elements"],
+  );
+  assert.equal(body.querySelectorAll('[role="separator"]').length, 2);
+  const rows = [...body.querySelectorAll<HTMLElement>(".cd-shell-legend-row")];
+  assert.equal(rows.length, 9, "four team types, three interaction modes, the flow and the annotation");
+  for (const row of rows) {
+    assert.ok(row.querySelector(".cd-shell-legend-preview svg"), `${row.textContent}: a preview as in the palette`);
+    assert.match(row.querySelector(".tt-legend__explanation")?.textContent ?? "", /^\S/, "and what it stands for");
+  }
+  assert.ok(rows.some((row) => row.textContent === "Platform Self-service for other teams"));
+  remove();
+  assert.equal(body.childElementCount, 0, "taken off again");
+  body.remove();
+});
+
 test("todos on every Miragon renderer in the SPA editor: badges, selection, reveal and the deep link on document ids", async () => {
   const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
   const todo = (id: string, elements: string[]): TodoWire => ({

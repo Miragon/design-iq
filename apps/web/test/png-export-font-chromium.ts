@@ -13,9 +13,9 @@
  *
  * It starts a Live Host of its own (LIVE_AUTH=none, on PORT, 8393 unless
  * set) on a generated content repo with a Wardley map, an Event Storming
- * board and a Context Map, each with one label to measure (it holds figures,
- * where Geist and the system sans differ most) and a latin-ext text beside
- * it, so two subsets go in. It exports each as PNG and as SVG from the SPA's
+ * board, a Context Map and a Team Topology, each with one label to measure
+ * (it holds figures, where Geist and the system sans differ most) and a
+ * latin-ext text beside it, so two subsets go in. It exports each as PNG and as SVG from the SPA's
  * ⋯ menu, and from the notation's widget behind a minimal MCP-Apps host that
  * serves it under the MCP Apps default CSP, whose font-src (default-src
  * 'none') blocks every data: font of the widget's own document. Then it draws
@@ -110,6 +110,8 @@ interface Model {
   label: string;
   /** what lies under the SVG in the PNG (lib/export-image.ts) */
   paper: string;
+  /** the drawing leaves its corner bare, so the PNG's corner is the paper: nothing of the renderer's covers it */
+  paperAtCorner?: boolean;
 }
 
 const MODELS: Model[] = [
@@ -148,6 +150,40 @@ const MODELS: Model[] = [
     widget: "mcp-app-context-map.html",
     label: "Gate 11 Check-in",
     paper: "#F9F7F7",
+  },
+  {
+    notation: "team-topology",
+    file: "squads.tt",
+    text: `${JSON.stringify(
+      {
+        version: 3,
+        title: "Squads",
+        nodes: [
+          {
+            id: "team_payments",
+            type: "stream-aligned",
+            label: "Squad 11 Payments",
+            position: { x: 40, y: 40 },
+            size: { width: 280, height: 96 },
+          },
+          {
+            id: "team_platform",
+            type: "platform",
+            label: "Łódź Platform",
+            position: { x: 40, y: 220 },
+            size: { width: 280, height: 96 },
+          },
+        ],
+        interactions: [],
+        flows: [],
+      },
+      null,
+      2,
+    )}\n`,
+    widget: "mcp-app-team-topology.html",
+    label: "Squad 11 Payments",
+    paper: "#F9F7F7",
+    paperAtCorner: true,
   },
 ];
 
@@ -228,6 +264,8 @@ interface Widths {
   /** pixels of the whole PNG that differ from the check's own drawing in Geist, and in the system sans */
   offGeist: number;
   offSystem: number;
+  /** the PNG's top-left pixel, as #RRGGBB */
+  corner: string;
 }
 
 /** in the measuring page: the label's ink width in the exported PNG, and in the check's own drawings */
@@ -244,6 +282,8 @@ async function measureLabel(input: {
   const height = Number.parseFloat(source.getAttribute("height") ?? "") * 2;
   const variant = (geist: boolean, withLabel: boolean): string => {
     const svg = new DOMParser().parseFromString(input.svg, "image/svg+xml");
+    // the Team Topologies PNG is drawn without the renderer's white sheet (notations/miragon/team-topology.ts)
+    for (const sheet of [...svg.querySelectorAll("rect.tt-export-paper")]) sheet.remove();
     if (!withLabel) {
       const flat = (text: string | null) => (text ?? "").replace(/\s+/g, "");
       for (const text of [...svg.querySelectorAll("text")])
@@ -331,7 +371,16 @@ async function measureLabel(input: {
     if (differs(png, geist, at)) offGeist++;
     if (differs(png, system, at)) offSystem++;
   }
-  return { png: span(ink(png, geistBare, around)), geist: span(inGeist), system: span(inSystem), offGeist, offSystem };
+  const corner =
+    `#${[png[0], png[1], png[2]].map((value) => value!.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+  return {
+    png: span(ink(png, geistBare, around)),
+    geist: span(inGeist),
+    system: span(inSystem),
+    offGeist,
+    offSystem,
+    corner,
+  };
 }
 
 const failures: string[] = [];
@@ -494,6 +543,9 @@ try {
         widths.offGeist === 0 && widths.offSystem > 0,
         `${name}: the PNG is the drawing in Geist, every label and subset`,
       );
+      if (model.paperAtCorner) {
+        check(widths.corner === model.paper.toUpperCase(), `${name}: the PNG's corner is the paper (${widths.corner})`);
+      }
     }
   }
   await context.close();
