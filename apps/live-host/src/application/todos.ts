@@ -11,7 +11,8 @@
  * must take todos (@designiq/notations `todos`). A client file is kept only
  * when it names that model (the platform contract: a path names its own
  * model); anything else normalizes to the discovered path. Elements drop
- * empty ids.
+ * empty ids, and an id the model's live text does not have is refused, with
+ * the closest ids it has: a todo anchored to nothing shows no badge anywhere.
  *
  * Every todo is filed with a type (#313): one of the repo's own (its issue
  * templates) or the built-in `Todo`, which a repo without templates — or one
@@ -30,10 +31,12 @@ import {
 } from "@designiq/contracts/todo-types";
 import { AppError } from "@designiq/http-kit";
 import { byExtension, byId, hasTodos, modelStem, NOTATIONS } from "@designiq/notations";
+import { closestElements, type ModelElement, modelElements } from "@designiq/notations/elements";
 
 import type { Session } from "../adapters/sqlite/sessions.ts";
 import type { IssueTracker, Todo } from "../ports/issue-tracker.ts";
 import type { ConnectedRepo } from "../repos/registry.ts";
+import { type ContentDeps, getContent } from "./content.ts";
 import { type FindModelDeps, findModelNotation, findModelPath, findModelPaths } from "./find-model.ts";
 
 /** the model a repo-relative path names — id IS the file stem (the content
@@ -132,9 +135,63 @@ function fieldValuesOf(fields: unknown): TodoFieldValues {
   return fields as TodoFieldValues;
 }
 
+/** an agent corrects a few ids at a time: the rest are counted, not ranked */
+const RANKED_UNKNOWN_IDS = 5;
+
+/** an id or a name on one short line of the message */
+function shown(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > 60 ? `${line.slice(0, 59)}…` : line;
+}
+
+function unknownElementsMessage(noun: string, modelId: string, unknown: string[], known: ModelElement[]): string {
+  const label = ({ id, name }: ModelElement): string => (name ? `${shown(id)} (${shown(name)})` : shown(id));
+  const lines = unknown.slice(0, RANKED_UNKNOWN_IDS).map((id) => {
+    const closest = closestElements(known, id);
+    return closest.length > 0 ? `- ${shown(id)}: closest ${closest.map(label).join(", ")}` : `- ${shown(id)}`;
+  });
+  if (unknown.length > RANKED_UNKNOWN_IDS) lines.push(`- and ${unknown.length - RANKED_UNKNOWN_IDS} more`);
+  const next =
+    known.length > 0
+      ? `Anchor the todo to ids get_view reports, or omit \`elements\` for a todo on the whole ${noun}.`
+      : `It has no elements yet: omit \`elements\` for a todo on the whole ${noun}.`;
+  return `The ${noun} '${modelId}' has no element with ${unknown.length === 1 ? "this id" : "these ids"}:\n${lines.join("\n")}\n${next}`;
+}
+
+/** the anchored ids must be elements of the model's LIVE text, the one its canvas shows */
+async function requireModelElements(
+  opts: ContentDeps,
+  repo: ConnectedRepo,
+  path: string,
+  model: TodoModelRef,
+  ids: string[],
+): Promise<void> {
+  const noun = byId(model.notation)?.noun.singular ?? model.notation;
+  const { content } = await getContent(opts, repo, path);
+  let known: ModelElement[] | undefined;
+  try {
+    known = modelElements(path, content);
+  } catch {
+    // a text that does not parse (a peer mid-edit in the source) has no ids
+    // to hold the anchor against; its canvas still shows the last good state
+    return;
+  }
+  if (known === undefined) {
+    throw badRequest(
+      "todos/elements-unsupported",
+      `a ${noun} takes todos on the whole ${noun} only: omit \`elements\``,
+    );
+  }
+  const knownIds = new Set(known.map((element) => element.id));
+  const unknown = [...new Set(ids)].filter((id) => !knownIds.has(id));
+  if (unknown.length > 0) {
+    throw badRequest("todos/unknown-element", unknownElementsMessage(noun, model.id, unknown, known));
+  }
+}
+
 /** validate, resolve the anchor, file the todo, write the audit line */
 export async function fileTodo(
-  opts: FindModelDeps,
+  opts: FindModelDeps & ContentDeps,
   issues: IssueTracker,
   session: Session,
   repo: ConnectedRepo,
@@ -179,6 +236,18 @@ export async function fileTodo(
   }
   const title = input.title.trim();
   const description = fields.description;
+  const elements = (input.elements ?? [])
+    .filter((el) => typeof el?.id === "string" && el.id.length > 0)
+    .map((el) => ({ id: el.id as string, name: typeof el.name === "string" ? el.name : null }));
+  if (elements.length > 0) {
+    await requireModelElements(
+      opts,
+      repo,
+      resolvedPath,
+      model,
+      elements.map((el) => el.id),
+    );
+  }
 
   const todo = await issues.createTodo(repo.fullName, {
     title: type.titlePrefix && !title.startsWith(type.titlePrefix) ? `${type.titlePrefix}${title}` : title,
@@ -188,9 +257,7 @@ export async function fileTodo(
       notation: model.notation,
       model: model.id,
       file,
-      elements: (input.elements ?? [])
-        .filter((el) => typeof el?.id === "string" && el.id.length > 0)
-        .map((el) => ({ id: el.id as string, name: typeof el.name === "string" ? el.name : null })),
+      elements,
       processVersion: typeof input.processVersion === "string" ? input.processVersion : null,
       ...(builtIn ? {} : { type: { id: type.id, name: type.name } }),
     },

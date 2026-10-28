@@ -81,6 +81,19 @@ element under the `.tt` file's own field names: `teams` (`id`, `label`, `type`, 
 `attachedTo`). The Live Host has no `get_model`, so there `detail` is where an agent reads the
 flow labels and the annotation texts.
 
+A Wardley Map is read with `@miragon/wardley-dsl`, the parser its canvas reads it with (pinned
+to the release `@miragon/wardley-renderer` depends on), so a node's id is the canvas's element
+id: `cmp_` and the name's slug for a component (lowercase, every other run of characters one
+`_`, `_2` on a clash: `cmp_cup_of_tea`), `anchor_`, `pipeline_`, `submap_` and `accel_` for the
+other named elements, with the name in `name`. Read an id from `get_view`, never build it by hand
+(`Größe` is `cmp_gr_e`, `茶` is `cmp_x`). Notes, annotations, regions and
+drawings are no nodes: the parser takes their ids from the line order, so an edit above them
+moves the id to another element. A link is an edge of kind `dependency` (`A -> B`) or `flow`
+(`A +> B`) between those ids, numbered `dep_1`, `flow_1` by line order in `get_model`. `get_view`
+counts `components` and `dependencies` in `stats` and lists the nodes in `detail.elements` (`id`,
+`type`, `name`, the position) and the links in `detail.links` (`from`, `to`, `kind`, `label`,
+with no id: no canvas addresses a link, so a todo cannot anchor to one).
+
 All tools carry `readOnlyHint` annotations, so clients may auto-approve them, and a short display
 `title` ("List models", "Get BPMN process view") that clients show people instead of the tool
 name (`test/tools.test.ts` pins that every tool has one and no two share it). The content repo
@@ -255,8 +268,9 @@ the same way once live (`mint_ws_ticket` carries their name and color), and the 
 (BPMN and the Miragon renderers) publish that person's pointer and selection and render the peers'
 cursors on their own canvas (the web shell's presence controller, unchanged). On the Miragon
 renderers the selection travels as the document's element ids (`@miragon/modeler-api`'s element
-surface), and an element the agent names (a Wardley map's components) is outlined by its name,
-together with every other element of that name (the component's pipeline). A selection of
+surface), the ids the Live Host derives from the same text for the elements an agent changed
+(`cmp_<name>` for a Wardley component). An id the canvas does not know is looked up as an element
+name and outlines every element of that name (a component and its pipeline). A selection of
 something the element surface does not address (a Wardley note, annotation, region or drawing,
 an Event Storming note or drawing) is not shared.
 
@@ -385,10 +399,18 @@ file stems, unique per notation but not across them, so the label names the nota
 `<notation>:<id>` (`bpmn:order-to-cash`, `wardley:tea-shop`).
 `create_todo` and `list_todos` take a model as the generic tools do (`id` or `path`, `notation`
 for a stem shared across notations; without it a process wins). Element ids are the ones the
-canvas reports: a process's from `get_process`, a canvas model's the node ids `get_view`
-reports. A Wardley component may also be named by its name, which `get_view` reports as its id:
-the canvas resolves it to the component. A Markdown document takes todos on the whole document,
-without elements. A rename moves a model's todos along and a delete closes them on request, in
+canvas reports: a process's from `get_process` (any element of the BPMN counts, a lane or a pool
+too), a canvas model's the ids `get_view` lists in `detail` (a Wardley component's is `cmp_` and
+its name's slug, `detail.elements` has it, its name is in `name`). Only what the canvas addresses
+is an anchor: a Wardley link, an Event Storming note, drawing or arrow takes its id from the line
+order and is refused like an unknown id. `create_todo` and `POST …/todos` hold every id against
+the model's live text and refuse one it does not have (`todos/unknown-element`, a 400) with the
+closest ids it has, ranked by edit distance over the model's ids and names, so a component asked
+for by its name answers with its id. A text that does not parse at that moment (a peer mid-edit
+in the source) is not checked. A todo anchored to a Wardley component's name before that check
+still lands on its component: the canvas looks an anchor it does not know up by name. A Markdown
+document takes todos on the whole document, without elements (`todos/elements-unsupported`).
+A rename moves a model's todos along and a delete closes them on request, in
 the background, as for a process. The links in an item body open a process on its process
 route and any other model on the file route (`/f/<path>?element=<id>`), where the element is
 revealed once the canvas has imported. A move to another folder keeps the model's id, so

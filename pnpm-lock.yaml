@@ -437,6 +437,9 @@ importers:
 
   packages/mcp:
     dependencies:
+      '@miragon/wardley-dsl':
+        specifier: 0.7.1
+        version: 0.7.1(zod@4.6.7)
       '@modelcontextprotocol/node':
         specifier: 2.1.1
         version: 2.1.1(@modelcontextprotocol/server@2.3.1)
@@ -499,12 +502,18 @@ importers:
 
   packages/notations:
     dependencies:
+      '@miragon/wardley-dsl':
+        specifier: 0.7.1
+        version: 0.7.1(zod@4.6.7)
       fast-xml-parser:
         specifier: 5.11.2
         version: 5.11.2
       yaml:
         specifier: 2.9.1
         version: 2.9.1
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       '@miragon/context-maps-schema-model':
         specifier: 0.5.0
@@ -515,9 +524,6 @@ importers:
       '@types/node':
         specifier: 26.6.5
         version: 26.6.5
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
 
   packages/ui-kit:
     dependencies:
@@ -580,6 +586,9 @@ importers:
         specifier: 0.15.0
         version: 0.15.0(zod@4.6.7)
       '@miragon/value-chain-schema-model':
+        specifier: 0.7.1
+        version: 0.7.1(zod@4.6.7)
+      '@miragon/wardley-dsl':
         specifier: 0.7.1
         version: 0.7.1(zod@4.6.7)
       fast-xml-parser:

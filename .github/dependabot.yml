@@ -81,7 +81,8 @@ updates:
         update-types: ["minor", "patch"]
       # a renderer and its schema model move together (the renderer pins the
       # schema model exactly; packages/notations pins it as a devDependency to
-      # hold the new-file templates to it), so one PR per family, its majors
+      # hold the new-file templates to it, and reads a Wardley Map with the
+      # renderer's @miragon/wardley-dsl), so one PR per family, its majors
       # included
       miragon-wardley:
         applies-to: version-updates

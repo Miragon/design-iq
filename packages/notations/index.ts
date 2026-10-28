@@ -7,6 +7,8 @@
  * BEHAVIOR attaches per capability in sibling modules keyed by descriptor id,
  * statically composed:
  *   - ./extract    raw file text → generic ModelGraph (extractModelGraph)
+ *   - ./elements   the element ids a todo anchors to (modelElements) and the
+ *                  closest ones to an id a model does not have (closestElements)
  *   - ./derive     ModelGraph → derived views (deriveView + the rich per-
  *                  notation views deriveProcess/deriveDecision)
  *   - ./templates  blank-model file content (templateFor)

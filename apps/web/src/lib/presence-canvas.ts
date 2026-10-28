@@ -23,7 +23,8 @@
  * A modeler behind @miragon/modeler-api hands in its element surface: the
  * selection then travels as the DOCUMENT's element ids, the ones every peer
  * and the Live Host read from the same text, and an id this canvas does not
- * know is looked up as an element name — the Live Host names a Wardley
+ * know is looked up as an element name, as a todo anchor is
+ * (lib/todo-surface-canvas.ts): until #275 the Live Host named a Wardley
  * map's components, the canvas ids them `cmp_<name>`. Every element that
  * carries the name is outlined (a Wardley pipeline carries its
  * component's). The outline is the box the surface reports (contract 1.2

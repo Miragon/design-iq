@@ -314,7 +314,7 @@ const counted = (stats: Record<string, number>): string =>
 /** the sticky kinds of an event storming board — the nodes with a place on
  *  the timeline (notes and drawings are annotations). The .storm vocabulary,
  *  mirrored here so this eager module stays free of extract.ts values */
-const STORM_STICKY_KINDS = new Set([
+export const STORM_STICKY_KINDS: ReadonlySet<string> = new Set([
   "event",
   "command",
   "actor",
@@ -373,8 +373,23 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
     };
   },
   wardley: (graph) => {
-    const stats = { components: graph.nodes.length, dependencies: graph.edges.length };
-    return { notation: "wardley", name: null, summary: `Wardley Map with ${counted(stats)}`, stats };
+    const stats = {
+      components: graph.nodes.filter((n) => n.type === "component").length,
+      dependencies: graph.edges.filter((e) => e.kind === "dependency").length,
+    };
+    return {
+      notation: "wardley",
+      name: null,
+      summary: `Wardley Map with ${counted(stats)}`,
+      stats,
+      // the canvas's own element ids (`cmp_tea`), the ids a todo anchors to; a
+      // link has no id here: the parser numbers links by line order, no
+      // canvas addresses one, and an edit above it would hand its id to another
+      detail: {
+        elements: graph.nodes.map((n) => ({ id: n.id, type: n.type, name: n.name ?? null, ...n.extra })),
+        links: graph.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind, label: e.name ?? null })),
+      },
+    };
   },
   "team-topology": (graph) => {
     // interactions, flows and annotations are placed shapes, so nodes of

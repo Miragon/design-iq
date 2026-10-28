@@ -6,8 +6,10 @@
  * ModelGraph and automatically cover every notation that implements extract —
  * instead of one parser per tool per notation.
  *
- * Node-safe: fast-xml-parser + JSON + regex only, no DOM, no editor libraries.
+ * Node-safe: fast-xml-parser, JSON, regex and the DOM-free Wardley DSL parser
+ * (@miragon/wardley-dsl) only, no DOM, no editor libraries.
  */
+import { parseDSL as parseWardleyDsl } from "@miragon/wardley-dsl";
 import { XMLParser } from "fast-xml-parser";
 
 // re-exported so the validator's raw well-formedness check needs no direct
@@ -393,34 +395,53 @@ function splitFeelList(raw: string): string[] {
     .filter((s) => s.length > 0);
 }
 
-/** OWM DSL: `component Name [y, x]`, `Name -> Other`, `evolve Name x` */
+// ── the OWM text of a Wardley Map (Miragon/modeler-suite, modelers/wardley-maps) ──
+// Read with the parser the canvas reads it with (@miragon/wardley-dsl, the
+// release @miragon/wardley-renderer pins: test/wardley-dsl-pin.test.ts), so a
+// node's id IS the canvas's element id (`cmp_tea`, `anchor_business`): the
+// text writes no ids, the parser derives them from the names. The nodes are
+// the elements the canvas addresses (todos, deep links, presence): their names
+// are unique on a map, so their ids survive edits elsewhere. Notes,
+// annotations, regions and drawings repeat their text or kind and take their
+// ids from the line order, so they are left out. A link between elements is
+// an edge, a dependency (`A -> B`) or a flow (`A +> B`).
+
+const WARDLEY_ADDRESSABLE_TYPES: ReadonlySet<string> = new Set([
+  "component",
+  "anchor",
+  "pipeline",
+  "submap",
+  "accelerator",
+]);
+
+const wardleyStage = (evolution: number): string =>
+  evolution < 0.25 ? "genesis" : evolution < 0.5 ? "custom-built" : evolution < 0.75 ? "product" : "commodity";
+
 function extractWardley(raw: string): ModelGraph {
+  const map = parseWardleyDsl(raw);
   const nodes: ModelNode[] = [];
-  const edges: ModelEdge[] = [];
-  for (const m of raw.matchAll(/^component\s+([^[\n]+?)\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]/gm)) {
-    const evolution = Number(m[3]);
+  for (const element of map.elements) {
+    if (!WARDLEY_ADDRESSABLE_TYPES.has(element.elementType)) continue;
+    const { visibility, evolution } = element.position;
     nodes.push({
-      id: m[1] ?? "",
-      type: "component",
-      name: m[1],
-      extra: {
-        visibility: Number(m[2]),
-        evolution,
-        stage:
-          evolution < 0.25 ? "genesis" : evolution < 0.5 ? "custom-built" : evolution < 0.75 ? "product" : "commodity",
-      },
+      id: element.id,
+      type: element.elementType,
+      name: element.label,
+      extra:
+        element.elementType === "pipeline"
+          ? { visibility, evolutionStart: element.evolutionStart, evolutionEnd: element.evolutionEnd }
+          : element.elementType === "component"
+            ? { visibility, evolution, stage: wardleyStage(evolution) }
+            : { visibility, evolution },
     });
   }
-  // an OWM DIRECTIVE line is never a dependency, even when it contains "->":
-  // `evolution Genesis->Custom->Product` is syntax, and a map TITLE with an
-  // arrow (platform-authorable via the create dialog, #139) is plain text
-  const directive =
-    /^(title|component|anchor|market|note|annotation|annotations|style|evolution|submap|url|pipeline)\b/;
-  let i = 0;
-  for (const m of raw.matchAll(/^([^\s>[\n][^>[\n]*?)\s*->\s*([^\n;]+)$/gm)) {
-    if (directive.test(m[0] ?? "")) continue;
-    edges.push({ id: `dep-${i++}`, from: m[1]?.trim() ?? "", to: m[2]?.trim() ?? "", kind: "dependency" });
-  }
+  const edges: ModelEdge[] = map.edges.map((link) => ({
+    id: link.id,
+    from: link.from,
+    to: link.to,
+    kind: link.edgeType,
+    ...(link.label ? { name: link.label } : {}),
+  }));
   return { notation: "wardley", nodes, edges };
 }
 

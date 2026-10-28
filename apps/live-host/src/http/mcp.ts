@@ -946,7 +946,8 @@ export function createLiveMcpServer(
       description:
         "The derived view of ANY live model — its own name, a one-line summary, stats, and the " +
         "rich notation payload in `detail` where one exists (the process view for BPMN, the decision " +
-        "tables for DMN). Works for every notation with extract+derive capabilities " +
+        "tables for DMN, the elements of a canvas model under the ids its canvas uses, which todos anchor " +
+        "to). Works for every notation with extract+derive capabilities " +
         `(${NOTATIONS.filter((n) => hasDeriver(n.id))
           .map((n) => n.id)
           .join(", ")}). Read this before the source text when you need the structure.`,
@@ -1562,11 +1563,13 @@ export function createLiveMcpServer(
           title: "Create a todo on a model",
           description:
             `File a todo on a model (${TODO_NOTATION_IDS}) into the repository's issue tracker. Anchor it to ` +
-            "concrete elements via `elements` — a process's from get_process/get_bpmn_xml, a canvas model's " +
-            "(Wardley Map, Event Storming board, Context Map, Team Topology) the node ids get_view reports, a " +
-            "Wardley component also by its name — and the modeler shows a badge on each one; omit them for a " +
-            "todo on the whole model (a Markdown document takes no elements). The item is bot-authored, you " +
-            "stay attributed. " +
+            "concrete elements via `elements`, by the ids the canvas uses: a process's from get_process or " +
+            "get_bpmn_xml, a canvas model's (Wardley Map, Event Storming board, Context Map, Team Topology) " +
+            "from get_view's `detail` (a Wardley component's id is `cmp_` and its name in lowercase with " +
+            "other characters as `_`, e.g. `cmp_cup_of_tea`: take it from `detail.elements`, never build it; " +
+            "its name is in `name`). The modeler shows a badge on each one. An id the model does not have is " +
+            "refused, and the error names the closest ids it has. Omit `elements` for a todo on the whole " +
+            "model (a Markdown document takes none). The item is bot-authored, you stay attributed. " +
             "Pick a `type` from list_todo_types and pass its `fields` by id: input and textarea take a string, " +
             "dropdown an option label (a list when it allows several), checkboxes the list of checked labels. " +
             "A missing required field fails with the list of what is missing.",
@@ -1582,7 +1585,7 @@ export function createLiveMcpServer(
             elements: z
               .array(
                 z.object({
-                  id: z.string().describe("element id — the anchor"),
+                  id: z.string().describe("element id of the model (get_process, get_view): the anchor"),
                   name: z.string().nullable().optional().describe("display name; snapshotted for readability"),
                 }),
               )
