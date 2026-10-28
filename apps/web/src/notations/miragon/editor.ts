@@ -95,6 +95,7 @@ export function mountMiragonEditor(
 ): MountedEditor {
   const modeler = renderer.create({ fitOnImport: false });
   modeler.attachTo(container);
+  const detach = renderer.attached?.(modeler, container);
   const fitInsets = (): Insets =>
     spaFitInsets({ paletteBottom: paletteBottomIn(container), coveredRight: ctx.sidePanels?.covered() ?? 0 });
   // before the binding: its first import may finish right away, and the fit
@@ -115,6 +116,7 @@ export function mountMiragonEditor(
   } catch (error) {
     todos.destroy();
     view.destroy();
+    detach?.();
     modeler.destroy();
     throw error;
   }
@@ -168,6 +170,7 @@ export function mountMiragonEditor(
       offSidePanels?.();
       doc.removeEventListener("keydown", onKey);
       unrouteKeys();
+      detach?.();
       view.destroy();
       todos.destroy();
       presenceCanvas?.destroy();

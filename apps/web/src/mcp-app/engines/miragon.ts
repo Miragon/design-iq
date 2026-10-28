@@ -85,6 +85,7 @@ export function mountMiragonEngine(
     throw error;
   }
   modeler.attachTo(container);
+  const detach = renderer.attached?.(modeler, container);
   const view = miragonView(modeler, opts ? { insets: opts.insets } : {});
   // Value Chain's diagram-js keeps its own zoom keys on the focused canvas: the
   // chrome's run there first, and the document's listener skips a prevented key
@@ -141,6 +142,7 @@ export function mountMiragonEngine(
     destroy(): void {
       menu?.destroy();
       unrouteKeys?.();
+      detach?.();
       view.destroy();
       modeler.destroy();
     },

@@ -273,6 +273,22 @@ test("value-chain: the renderer lays out no palette outside the shell's chrome, 
   for (const sheet of sheets) assert.match(sheet, /@import "[./]*\/?lib\/value-chain-palette\.css";/);
 });
 
+test("value-chain: every role and shell measure lib/value-chain-palette.css reads is declared by the renderer's own sheet", () => {
+  // ui-kit's vendored sheet predates both families (packages/ui-kit/test/cd-references.test.ts lists this file),
+  // so the renderer's token layer is the one place they come from
+  const spec = MIRAGON_RENDERERS.find((s) => s.id === "value-chain")!;
+  const declared = new Set(
+    [...readFileSync(stylesheetOf(spec), "utf8").matchAll(/(--cd-(?:ui|shell)-[\w-]+)\s*:/g)].map((m) => m[1]!),
+  );
+  const sheet = readFileSync(new URL("../src/lib/value-chain-palette.css", import.meta.url), "utf8");
+  const read = new Set([...sheet.matchAll(/var\(\s*(--cd-(?:ui|shell)-[\w-]+)/g)].map((m) => m[1]!));
+  assert.ok(read.size >= 8, "the sheet reads the renderer's roles");
+  assert.deepEqual(
+    [...read].filter((name) => !declared.has(name)),
+    [],
+  );
+});
+
 /** the declarations of the unlayered `:root` rules that set --bio-* */
 async function bioMapping(spec: MiragonRendererSpec): Promise<string[]> {
   const declarations: string[] = [];

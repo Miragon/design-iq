@@ -89,6 +89,10 @@ export interface LoadedMiragonRenderer {
   createViewer(options?: MiragonMountOptions): MiragonModeler;
   /** the document's own title, for the menu header; undefined = none set */
   title?(modeler: MiragonModeler): string | undefined;
+  /** what a mount adds to the renderer's own DOM once it sits in the canvas
+   *  host (the keyboard side of a palette the renderer leaves to the shell);
+   *  returns what takes it off again */
+  attached?(modeler: MiragonModeler, host: HTMLElement): () => void;
   /** the renderer's own menu content (Model, Export, Help), where its
    *  package ships it */
   menu?(modeler: MiragonModeler, host: MiragonMenuHost): MiragonMenu;
