@@ -27,6 +27,8 @@ so each refusal is an ERROR (`team-topology/schema`, `context-map/schema`,
 - in all three notations, an id that names a built-in JavaScript object property such as
   `constructor`, `toString` or `__proto__`: the canvas keeps its elements in a plain object and
   cannot import it;
+- in all three notations, objects and arrays nested more than 100 levels deep, the document
+  counting as the first, at the first level too deep;
 - in a Team Topology whose `version` is not 1, a file without `version` included: an interaction
   without `position` or `size`, at the missing field (`interactions.0.size`). Opened anyway, it
   would drop out of the file with the next save. A version 1 file still loses its edge
@@ -35,10 +37,7 @@ so each refusal is an ERROR (`team-topology/schema`, `context-map/schema`,
   sizes beyond 1,000,000, and a repeated id at the path of the repeat, e.g.
   `contexts.2.id: duplicate id "a"; ids must be unique across contexts and relationships`;
 - in a Value Chain: keys other than `x`, `y`, `width`, `height` in `bounds` and other than `x`,
-  `y` in a waypoint, coordinates beyond ±1e9, a `__proto__` key anywhere, and nesting deeper than
-  100 levels;
-- in a Team Topology and a Context Map: a document nested too deep for the schema model's
-  serializer, which every canvas save runs, as `(root): could not be checked: …`.
+  `y` in a waypoint, coordinates beyond ±1e9 and a `__proto__` key anywhere.
 
 A Context Map's strategic-DDD rules (`validateDocument`, e.g. `protect-or-conform`,
 `endpoints-on-map`) are WARNs, `context-map/semantics`, with the rule named at the end of the

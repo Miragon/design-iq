@@ -1,10 +1,11 @@
 /** @miragon/team-topologies-renderer — one JSON document, the factory's text
  *  is its canonical serialization with a closing line break; a document with
- *  duplicate or reserved ids, or an interaction without a position or size
- *  in a file that is not version 1, is refused with the path named. Every committed edit,
- *  the label editor's included, runs through the command stack; drags and an
- *  open label editor stay previews until they commit. Its 0.12 package ships
- *  no menu content: the menu names the document's title, nothing more. */
+ *  duplicate or reserved ids, nested more than 100 levels deep, or with an
+ *  interaction without a position or size in a file that is not version 1,
+ *  is refused with the path named. Every committed edit, the label editor's
+ *  included, runs through the command stack; drags and an open label editor
+ *  stay previews until they commit. designIQ does not mount the menu content
+ *  the package ships yet: the menu names the document's title, nothing more. */
 import type { TtBaseViewer } from "@miragon/team-topologies-renderer";
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";

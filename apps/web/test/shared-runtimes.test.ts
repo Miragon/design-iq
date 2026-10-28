@@ -30,7 +30,10 @@ type ImporterDependencies = Record<string, { version: string }>;
 type SnapshotDependencies = Record<string, string>;
 interface Lockfile {
   importers: Record<string, { dependencies?: ImporterDependencies; optionalDependencies?: ImporterDependencies }>;
-  packages: Record<string, { peerDependencies?: Record<string, string> }>;
+  packages: Record<
+    string,
+    { peerDependencies?: Record<string, string>; peerDependenciesMeta?: Record<string, { optional?: boolean }> }
+  >;
   snapshots: Record<string, { dependencies?: SnapshotDependencies; optionalDependencies?: SnapshotDependencies }>;
 }
 const lock = parse(read("../../../pnpm-lock.yaml")) as Lockfile;
@@ -45,12 +48,20 @@ const packageName = (snapshotKey: string): string => snapshotKey.slice(0, snapsh
 const snapshotKey = (name: string, version: string): string =>
   /^(@[^/@]+\/)?[^/@:(]+@/.test(version) ? version : `${name}@${version}`;
 
+/** the peers a package draws with; an optional one is a tool it brings only
+ *  where the host has it (modeler-shell's VS Code and Playwright drivers),
+ *  never a runtime apps/web hands it */
+function requiredPeers(packageKey: string): string[] {
+  const { peerDependencies = {}, peerDependenciesMeta = {} } = lock.packages[packageKey] ?? {};
+  return Object.keys(peerDependencies).filter((peer) => peerDependenciesMeta[peer]?.optional !== true);
+}
+
 const miragonPackages = Object.entries(lock.importers[WEB_IMPORTER]?.dependencies ?? {})
   .filter(([name]) => name.startsWith("@miragon/"))
   .map(([name, { version }]) => ({
     name,
     snapshot: snapshotKey(name, version),
-    peers: Object.keys(lock.packages[`${name}@${bare(version)}`]?.peerDependencies ?? {}),
+    peers: requiredPeers(`${name}@${bare(version)}`),
   }));
 const renderers = miragonPackages.filter(({ peers }) => peers.length > 0);
 

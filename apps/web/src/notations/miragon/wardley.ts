@@ -8,7 +8,7 @@
  *  title…, Map size… and X-axis labels… (one undoable step each), the PNG
  *  and SVG exports and the shortcuts dialog; the map file itself is no
  *  export, it is the model. Its PNG goes through designIQ's rasterizer
- *  (lib/export-image.ts, Geist inside) on the renderer's paper. */
+ *  (lib/export-image.ts, Geist inside) on the plot's white (guide §10.7). */
 import type { Modeler } from "@miragon/wardley-renderer";
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
@@ -21,7 +21,6 @@ export const spec: MiragonRendererSpec = {
   async load(): Promise<LoadedMiragonRenderer> {
     const [
       {
-        COLORS,
         createAxisLabelsPopover,
         createCollaborativeModeler,
         createCollaborativeViewer,
@@ -32,7 +31,7 @@ export const spec: MiragonRendererSpec = {
       },
       ,
       { dialogChrome, imageExports, lazily, ownTitle },
-      { svgToPng },
+      { PNG_BACKGROUND, svgToPng },
     ] = await Promise.all([
       import("@miragon/wardley-renderer"),
       import("@miragon/wardley-renderer/assets/wardley.css"),
@@ -61,7 +60,7 @@ export const spec: MiragonRendererSpec = {
           exports: imageExports(
             host,
             async () => (await map.saveSVG()).svg,
-            (svg) => svgToPng(svg, { background: COLORS.paper }),
+            (svg) => svgToPng(svg, { background: PNG_BACKGROUND.plot }),
           ),
           showKeyboardShortcuts: () => shortcuts.get().open(),
         });

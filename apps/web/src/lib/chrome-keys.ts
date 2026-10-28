@@ -8,16 +8,13 @@
  * shell's own key listener does, so a renderer's dialog or popover counts
  * as soon as it shows.
  */
-import { TEXT_FIELD_SELECTOR } from "@miragon/modeler-shell/core";
+import { isTextField } from "@miragon/modeler-shell/core";
 
 import { type ChromeKey, chromeKeyAction } from "../mcp-app/core/keymap.ts";
 
-/** an inherited contenteditable counts, as for the shell */
-export function isTextField(target: EventTarget | null): boolean {
-  if (!target || typeof (target as Element).closest !== "function") return false;
-  const element = target as HTMLElement;
-  return element.isContentEditable === true || element.closest(TEXT_FIELD_SELECTOR) !== null;
-}
+// the shell's own rule, not a copy of it: an EditContext editor and all of
+// Monaco (the SPA's source beside the canvas) keep their keys, as in the shell
+export { isTextField };
 
 // a dialog a renderer closes by hiding it (`hidden`, a class with
 // display: none) is closed too
