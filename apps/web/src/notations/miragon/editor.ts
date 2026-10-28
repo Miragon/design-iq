@@ -31,7 +31,7 @@ import type { ExportFile, Insets } from "@/mcp-app/core/engine";
 import { miragonView } from "@/mcp-app/engines/miragon";
 
 import type { EditorContext, MountedEditor } from "../registry";
-import type { LoadedMiragonRenderer, MiragonRendererSpec } from "./spec";
+import type { LoadedMiragonRenderer, MiragonMountOptions, MiragonRendererSpec } from "./spec";
 
 /** what floats over the SPA's canvas, measured in px from its edges */
 export interface SpaCanvasRoom {
@@ -57,7 +57,10 @@ export function spaFitInsets(room: SpaCanvasRoom): Insets {
   };
 }
 
-function paletteBottomIn(container: HTMLElement): number {
+/** what the SPA hands every mount: no fit of the renderer's own, the editor fits the first import */
+export const SPA_MOUNT: MiragonMountOptions = { fitOnImport: false };
+
+export function paletteBottomIn(container: HTMLElement): number {
   const palette = container.querySelector(".djs-palette");
   if (!palette) return 0;
   const box = palette.getBoundingClientRect();
@@ -93,7 +96,7 @@ export function mountMiragonEditor(
   container: HTMLElement,
   ctx: EditorContext,
 ): MountedEditor {
-  const modeler = renderer.create({ fitOnImport: false });
+  const modeler = renderer.create(SPA_MOUNT);
   modeler.attachTo(container);
   const detach = renderer.attached?.(modeler, container);
   const fitInsets = (): Insets =>

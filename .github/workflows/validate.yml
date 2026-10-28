@@ -36,6 +36,43 @@ jobs:
         run: pnpm validate
       - name: Tests (notations, validator, web sync merge, live-host release flow)
         run: pnpm test
+      # The conformance kit of @miragon/modeler-api against the Miragon renderers as
+      # designIQ mounts them (#301), in headless Chromium: only for a change that moves a
+      # Miragon package (a bump changes its lines in the lockfile) or the code that mounts
+      # one. In this job, so the required check holds it.
+      - name: Does the change move a Miragon renderer or the code that mounts one?
+        id: miragon
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          mounting=(
+            apps/web/src/notations/miragon
+            apps/web/src/mcp-app/engines/miragon.ts
+            apps/web/src/mcp-app/engines/diagram-js.ts
+            apps/web/src/mcp-app/engines/fit.ts
+            apps/web/src/mcp-app/core/layout.ts
+            apps/web/src/lib/value-chain-palette.ts
+            apps/web/src/lib/value-chain-palette.css
+            apps/web/vite.config.ts
+            apps/web/vitest.browser.config.ts
+            apps/web/test/browser
+            packages/live-client/src/miragon-sync.ts
+            .github/workflows/validate.yml
+          )
+          if ! git fetch --no-tags --depth=1 origin "$BASE_SHA"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif ! git diff --quiet "$BASE_SHA" HEAD -- "${mounting[@]}" ||
+            git diff "$BASE_SHA" HEAD -- pnpm-lock.yaml ':(glob)**/package.json' | grep -qE '^[-+].*@miragon/(wardley|event-storming|team-topologies|context-maps|value-chain|modeler)-'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Chromium for the conformance kit
+        if: steps.miragon.outputs.run == 'true'
+        run: pnpm --filter @designiq/web exec playwright install --with-deps --only-shell chromium
+      - name: Conformance kit against the Miragon renderers as the SPA and the widget mount them
+        if: steps.miragon.outputs.run == 'true'
+        run: pnpm --filter @designiq/web test:browser
       - name: Build (web app — a Vite break must not first surface in the Fly image)
         run: pnpm build
       - name: Docker workspace coverage (a missing COPY builds green and dies at boot — #87)

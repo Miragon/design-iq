@@ -1,0 +1,10 @@
+{"title":"Online shop — order fulfilment",
+ "contexts":[
+  {"label":"Shipping","id":"ctx_shipping","subdomainType":"supporting","position":{"x":760.004,"y":80},"size":{"width":200,"height":110}},
+  {"id":"ctx_ordering","label":"Ordering","subdomainType":"core","team":"Checkout Team","description":"Carts, checkout and the order lifecycle.","position":{"x":420,"y":80},"size":{"width":200,"height":110}},
+  {"id":"ctx_catalog","label":"Product Catalog","subdomainType":"supporting","team":"Catalog Team","description":"Products, prices and availability shown in the shop.","position":{"x":80,"y":80},"size":{"width":200,"height":110}}
+ ],
+ "relationships":[
+  {"id":"rel_ordering_shipping","from":"ctx_ordering","to":"ctx_shipping","pattern":"partnership","upstreamRoles":[]},
+  {"id":"rel_catalog_ordering","from":"ctx_catalog","to":"ctx_ordering","pattern":"upstream-downstream","upstreamRoles":["PL","OHS"],"downstreamRoles":["CF"],"label":"product data"}
+ ]}

@@ -7,14 +7,15 @@ Desktop, ChatGPT).
 
 ## Scripts
 
-| Script                                  | What it does                                                                                                                                                                                                                                                                                                                                                                                           |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm --filter @designiq/web dev`       | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                                                                                                                                                                                                        |
-| `pnpm --filter @designiq/web build`     | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                                                                                                                                                                                                            |
-| `pnpm --filter @designiq/web test`      | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and what it makes of hostile sources, the Mermaid frame and the Miragon renderers themselves (`test/renderer-dom.ts`). |
-| `pnpm --filter @designiq/web typecheck` | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                                                                                |
+| Script                                     | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter @designiq/web dev`          | Vite dev server: the SPA, and every widget at `/mcp-app*.html` (raw boot marker → editable, this origin as the deep-link base).                                                                                                                                                                                                                                                                                                                         |
+| `pnpm --filter @designiq/web build`        | The SPA plus **one single-file bundle per widget** into `dist/` (`vite build`, then `scripts/build-widgets.ts`, see below).                                                                                                                                                                                                                                                                                                                             |
+| `pnpm --filter @designiq/web test`         | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and what it makes of hostile sources, the Mermaid frame and the Miragon renderers themselves (`test/renderer-dom.ts`).                                                  |
+| `pnpm --filter @designiq/web typecheck`    | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `pnpm --filter @designiq/web test:browser` | Vitest in headless Chromium, on the app's Vite config (`vitest.browser.config.ts`): `@miragon/modeler-api`'s conformance kit against the five Miragon renderers as the SPA's editor and the MCP-App widget mount them (`test/browser/`, issue 301). Chromium once: `pnpm --filter @designiq/web exec playwright install --only-shell chromium`. CI runs it in the `validate` job for a change that moves a Miragon package or the code that mounts one. |
 
-Eight checks run by hand in headless Chromium, as CI has no browser: `test/hostile-mermaid-chromium.ts`,
+Eight checks run by hand in headless Chromium, outside CI: `test/hostile-mermaid-chromium.ts`,
 `test/markdown-view-chromium.ts` and `test/wide-mermaid-chromium.ts` (all three under the Markdown view
 below), `test/live-gesture-chromium.ts`, `test/canvas-focus-chromium.ts` and
 `test/png-export-font-chromium.ts` (all three under the MCP-App widgets below),
@@ -232,7 +233,7 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   diagram type, links, click callbacks, front matter, `%%{init}%%` directives and foreignObject
   HTML through the pinned mermaid (the sources: `test/mermaid-hostile-sources.ts`);
   `test/mermaid-frame.test.ts` pins the frame's policy. What a browser makes of that policy is
-  checked by hand, as CI has no browser: `test/hostile-mermaid-chromium.ts` starts a Live Host
+  checked by hand, outside CI: `test/hostile-mermaid-chromium.ts` starts a Live Host
   of its own on the same sources, opens them in the built SPA and in the BPMN and DMN widgets in
   headless Chromium, and fails on anything that ran or loaded. Run it after a mermaid or a
   browser update, from the repository root: `pnpm build`, once
@@ -526,7 +527,7 @@ moves of one element), or whose merge would fail the notation's gate (well-forme
 BPMN and DMN, a text that is not blank for the Miragon notations), gives way to the peer's
 change, with the conflict toast.
 `test/live-gesture.test.ts` covers every mount under jsdom, with diagram-js's dragging run
-without a pointer. Pointer drags in a browser are checked by hand, as CI has no browser:
+without a pointer. Pointer drags in a browser are checked by hand, outside CI:
 `test/live-gesture-chromium.ts` starts a Live Host of its own and drags, creates and arms
 palette tools in two SPA pages per notation (bpmn-js, the DMN DRD and every Miragon
 renderer) while the other page drops a move, and requires both edits kept also where their

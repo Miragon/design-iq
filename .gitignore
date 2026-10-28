@@ -18,6 +18,8 @@ node_modules/
 packages/validator/dist/
 packages/mcp/dist/
 apps/web/dist/
+# vitest browser mode: screenshots of failed cases
+apps/web/.vitest/
 apps/vscode/out/
 apps/vscode/.vscode-test/
 process-documentation/.vitepress/cache/
