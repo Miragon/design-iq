@@ -32,13 +32,9 @@ import { mermaidHeader } from "@designiq/notations/mermaid";
 import { hasRefs, type ModelRef, refsOf } from "@designiq/notations/refs";
 import {
   parseDocumentText as parseContextMap,
-  serializeDocumentText as serializeContextMap,
   validateDocument as contextMapRules,
 } from "@miragon/context-maps-schema-model";
-import {
-  parseDocument as parseTeamTopology,
-  serializeDocument as serializeTeamTopology,
-} from "@miragon/team-topologies-schema-model";
+import { parseDocument as parseTeamTopology } from "@miragon/team-topologies-schema-model";
 import { documentIssues as valueChainIssues } from "@miragon/value-chain-schema-model";
 
 export type Severity = "ERROR" | "WARN";
@@ -483,13 +479,7 @@ const schemaError =
 
 function checkTeamTopology(raw: string, file: string): Finding[] {
   const parsed = parseTeamTopology(JSON.parse(raw));
-  if (!parsed.ok) return parsed.issues.map(schemaError("team-topology/schema", file));
-  // the schema model sets no nesting limit on unknown fields, and its
-  // serializer, the canvas's export, recurses into them: a document it cannot
-  // write back is one no canvas save can land (it throws, and
-  // checkSchemaModel reports it)
-  serializeTeamTopology(parsed.document);
-  return [];
+  return parsed.ok ? [] : parsed.issues.map(schemaError("team-topology/schema", file));
 }
 
 /**
@@ -503,9 +493,6 @@ function checkContextMap(raw: string, file: string): Finding[] {
   if (!parsed.ok) {
     return (parsed.issues ?? [{ path: [], message: parsed.error }]).map(schemaError("context-map/schema", file));
   }
-  // as for a Team Topology: a map nested too deep for the serializer opens,
-  // but every save of it fails
-  serializeContextMap(parsed.document);
   const { errors, warnings } = contextMapRules(parsed.document);
   return [...errors, ...warnings].map((finding): Finding => ({
     severity: "WARN",

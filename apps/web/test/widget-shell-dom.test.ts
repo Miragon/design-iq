@@ -3,7 +3,8 @@
  * real skeletons (mcp-app-miragon.html, mcp-app.html): what only the
  * composition decides. A Miragon widget binds the zoom keys and ⇧1 to the
  * view, keeps them off behind a state card and names them on the zoom
- * buttons; the bpmn widget leaves them to its canvas. The menu's Legend
+ * buttons, the tooltip's chip and aria-keyshortcuts alike, for the US and the
+ * German layout; the bpmn widget leaves them to its canvas. The menu's Legend
  * toggles the registered panel, and a renderer's web link in the canvas
  * goes through the host instead of the sandbox's blocked new window.
  */
@@ -11,6 +12,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { after, test } from "node:test";
 
+import { ariaKeyShortcutsFromLabel } from "@miragon/modeler-shell/core";
 import { JSDOM } from "jsdom";
 
 import type { WidgetChrome } from "../src/mcp-app/chrome/contracts.ts";
@@ -23,13 +25,14 @@ after(closeDom);
 const ENTRIES = { miragon: "mcp-app-miragon.html", bpmn: "mcp-app.html" } as const;
 
 /** one widget page: the skeleton's body, the globals the chrome reads, a host that records */
-function page(kind: keyof typeof ENTRIES) {
+function page(kind: keyof typeof ENTRIES, platform?: string) {
   const html = readFileSync(new URL(`../${ENTRIES[kind]}`, import.meta.url), "utf8").replace(
     /<script[\s\S]*?<\/script>/g,
     "",
   );
   const dom = new JSDOM(html, { url: "http://localhost/", pretendToBeVisual: true });
   const { window } = dom;
+  if (platform) Object.defineProperty(window.navigator, "platform", { value: platform, configurable: true });
   const globals = globalThis as Record<string, unknown>;
   for (const key of [
     "window",
@@ -71,8 +74,8 @@ function page(kind: keyof typeof ENTRIES) {
   return { window, document: window.document, app, links, close: () => window.close() };
 }
 
-async function chromeOf(kind: keyof typeof ENTRIES) {
-  const p = page(kind);
+async function chromeOf(kind: keyof typeof ENTRIES, platform?: string) {
+  const p = page(kind, platform);
   const { mountChrome } = await import("../src/mcp-app/shell.ts");
   const chrome: WidgetChrome = mountChrome({
     app: p.app as never,
@@ -110,7 +113,23 @@ async function chromeOf(kind: keyof typeof ENTRIES) {
     p.document.body.dispatchEvent(event);
     return event.defaultPrevented;
   };
-  return { ...p, chrome, zoomed, press };
+  /** each zoom button's tooltip and the keys it names to assistive tech */
+  const zoomNames = (): Array<[string, string | null]> =>
+    ["zoom-out", "zoom-pct", "zoom-in", "zoom-fit"].map((id) => {
+      const button = p.document.getElementById(id)!;
+      return [button.title, button.getAttribute("aria-keyshortcuts")];
+    });
+  return { ...p, chrome, zoomed, press, zoomNames };
+}
+
+/** the chip a tooltip ends in: "Zoom in (Ctrl+Plus)" → "Ctrl+Plus" */
+const chipOf = (title: string): string => /\(([^()]+)\)$/.exec(title)?.[1] ?? "";
+
+/** guide §5.6: aria-keyshortcuts names the keys that type the chip's character
+ *  on the US and the German layout, so the tooltip's chip, read the shell's
+ *  way, and the button's aria-keyshortcuts must agree */
+function assertChipsNameTheirKeys(names: Array<[string, string | null]>): void {
+  for (const [title, keys] of names) assert.equal(ariaKeyShortcutsFromLabel(chipOf(title)), keys, title);
 }
 
 test("a Miragon widget: the zoom keys run the view, a state card leaves them to the browser, the buttons name them", async () => {
@@ -124,12 +143,8 @@ test("a Miragon widget: the zoom keys run the view, a state card leaves them to 
   assert.equal(w.press("=", "Equal", { ctrlKey: true }), false, "a state card hides the diagram");
   assert.deepEqual(w.zoomed, ["in", "out", "to 1"]);
 
-  const button = (id: string) => w.document.getElementById(id)!;
   assert.deepEqual(
-    ["zoom-out", "zoom-pct", "zoom-in", "zoom-fit"].map((id) => [
-      button(id).title,
-      button(id).getAttribute("aria-keyshortcuts"),
-    ]),
+    w.zoomNames(),
     [
       ["Zoom out (Ctrl+Minus)", "Control+-"],
       ["Zoom to 100% (Ctrl+0)", "Control+0"],
@@ -138,7 +153,20 @@ test("a Miragon widget: the zoom keys run the view, a state card leaves them to 
     ],
     "jsdom's navigator is no Mac: the Ctrl names",
   );
-  assert.equal(button("zoom-fit").getAttribute("aria-label"), "Fit to view");
+  assertChipsNameTheirKeys(w.zoomNames());
+  assert.equal(w.document.getElementById("zoom-fit")!.getAttribute("aria-label"), "Fit to view");
+  w.close();
+});
+
+test("a Miragon widget on a Mac: the zoom buttons name ⌘ and Meta, each chip the keys of the US and the German layout", async () => {
+  const w = await chromeOf("miragon", "MacIntel");
+  assert.deepEqual(w.zoomNames(), [
+    ["Zoom out (⌘−)", "Meta+-"],
+    ["Zoom to 100% (⌘0)", "Meta+0"],
+    ["Zoom in (⌘+)", "Meta+= Meta+Plus"],
+    ["Fit to view (⇧1)", "Shift+1"],
+  ]);
+  assertChipsNameTheirKeys(w.zoomNames());
   w.close();
 });
 

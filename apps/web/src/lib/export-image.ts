@@ -15,8 +15,12 @@ const SCALE = 2;
 const MAX_SIDE = 16_384;
 const MAX_AREA = 16_384 * 16_384;
 
+/** what lies under the drawing in the PNG (guide §10.7): the light plot for a
+ *  notation drawn on one (Wardley), the light canvas ground for every other */
+export const PNG_BACKGROUND = { plot: CD.weiss, ground: CD.grau } as const;
+
 export interface PngOptions {
-  /** what lies under the SVG: white unless the notation names its own paper colour */
+  /** what lies under the SVG: the canvas ground unless the notation draws on a plot */
   background?: string;
 }
 
@@ -40,7 +44,7 @@ async function inGeist(svg: string): Promise<string> {
   }
 }
 
-export async function svgToPng(svg: string, { background = CD.weiss }: PngOptions = {}): Promise<Blob> {
+export async function svgToPng(svg: string, { background = PNG_BACKGROUND.ground }: PngOptions = {}): Promise<Blob> {
   const { width, height } = svgSize(svg);
   const scale = Math.min(SCALE, MAX_SIDE / width, MAX_SIDE / height, Math.sqrt(MAX_AREA / (width * height)));
   const image = new Image();

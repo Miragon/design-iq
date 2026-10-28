@@ -355,14 +355,22 @@ test("a document nested too deep for its schema model is one ERROR at the first 
 const deepForeignField = (json: string, depth: number): string =>
   json.replace(/"label":/, `"extra": ${'{"a":'.repeat(depth)}1${"}".repeat(depth)}, "label":`);
 
-test("a Team Topology or Context Map nested too deep for its serializer, the canvas's export, is an ERROR, not a pass", () => {
+test("a Team Topology or Context Map nested deeper than 100 levels is one ERROR at the first level too deep", () => {
   for (const [notation, json, ruleId] of [
     ["team-topology", teamTopology({ nodes: [team("a")] }), "team-topology/schema"],
     ["context-map", contextMap({ contexts: [context("a")] }), "context-map/schema"],
   ] as const) {
-    assert.deepEqual(checkSchemaModel(deepForeignField(json, 100), { notation }), [], notation);
-    const findings = brief(checkSchemaModel(deepForeignField(json, 50_000), { notation }));
-    assert.deepEqual(findings, [["ERROR", ruleId, "(root): could not be checked: Maximum call stack size exceeded"]]);
+    // the document, its list and the team or context are the first three levels
+    assert.deepEqual(checkSchemaModel(deepForeignField(json, 97), { notation }), [], notation);
+    for (const depth of [98, 50_000]) {
+      const [finding, ...more] = brief(checkSchemaModel(deepForeignField(json, depth), { notation }));
+      assert.deepEqual(more, [], `${notation}, ${depth}`);
+      assert.deepEqual(finding?.slice(0, 2), ["ERROR", ruleId], `${notation}, ${depth}`);
+      const [path, message] = (finding?.[2] ?? "").split(": ");
+      assert.match(path ?? "", /^(nodes|contexts)\.0\.extra(\.a)+$/, `${notation}, ${depth}`);
+      assert.equal(path?.split(".").length, 100, `${notation}, ${depth}: the path of level 101`);
+      assert.equal(message, "objects and arrays may nest at most 100 levels deep", `${notation}, ${depth}`);
+    }
   }
 });
 

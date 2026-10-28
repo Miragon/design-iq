@@ -432,9 +432,10 @@ async function exportPng(id: string) {
   return { files, failures, drawn };
 }
 
-test("exports: the PNG is drawn from the SVG with Geist inside, through a data: URL, on each renderer's own paper", async () => {
+test("exports: the PNG is drawn from the SVG with Geist inside, through a data: URL, on the guide's light ground", async () => {
   const removeGeist = geistOnThePage();
-  const paper: Record<string, string> = { wardley: "#F9F7F7", "event-storming": "#FFFFFF", "context-map": "#FFFFFF" };
+  // guide §10.7: the plot's white under a map with a plot, the canvas ground's grey under the others
+  const paper: Record<string, string> = { wardley: "#FFFFFF", "event-storming": "#F9F7F7", "context-map": "#F9F7F7" };
   try {
     for (const id of Object.keys(EXPECTED)) {
       const { files, failures, drawn } = await exportPng(id);

@@ -383,7 +383,8 @@ const FREE_AREA_INSETS: Record<string, (diagram: MiragonModeler["diagram"]) => u
   wardley: (diagram) => (diagram.get("wardleyFreeRect") as { insets(): unknown }).insets(),
   "event-storming": (diagram) =>
     (diagram.get("config.eventStormingPalette") as { freeArea?: { insets?(): unknown } }).freeArea?.insets?.(),
-  "context-map": (diagram) => (diagram.get("config.cmPalette") as { freeRectInsets(): unknown }).freeRectInsets(),
+  "context-map": (diagram) =>
+    (diagram.get("config.cmPalette") as { freeArea?: { insets?(): unknown } }).freeArea?.insets?.(),
   "team-topology": (diagram) =>
     (diagram.get("config.ttPalette") as { freeArea?: { insets?(): unknown } }).freeArea?.insets?.(),
 };
@@ -746,23 +747,25 @@ test("Team Topologies takes no key while its canvas is inert or a modal dialog i
   const engine = await engineOf("team-topology", canvasHost);
   await engine.importText(TEAMS);
   const diagram = engine.modeler.diagram as unknown as DiagramServices;
-  const deleteOnThePage = (): number => {
+  // the renderer takes keys only from its own canvas (0.14.0), so the key
+  // comes from there, as it does once a click gave the canvas the focus
+  const svg = canvasHost.querySelector(".djs-container > svg");
+  assert.ok(svg, "the canvas");
+  const deleteOnTheCanvas = (): number => {
     diagram.get("selection").select(shapesOf(diagram)[0]);
-    layer.ownerDocument.body.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }),
-    );
+    svg.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
     return shapesOf(diagram).length;
   };
   const before = shapesOf(diagram).length;
   layer.setAttribute("inert", "");
-  assert.equal(deleteOnThePage(), before, "an inert layer around the canvas");
+  assert.equal(deleteOnTheCanvas(), before, "an inert layer around the canvas");
   layer.removeAttribute("inert");
   const dialog = layer.ownerDocument.createElement("div");
   dialog.setAttribute("aria-modal", "true");
   layer.ownerDocument.body.append(dialog);
-  assert.equal(deleteOnThePage(), before, "a modal dialog");
+  assert.equal(deleteOnTheCanvas(), before, "a modal dialog");
   dialog.remove();
-  assert.ok(deleteOnThePage() < before, "neither: the page's key is the canvas's");
+  assert.ok(deleteOnTheCanvas() < before, "neither: the canvas takes its key");
   engine.destroy();
   layer.remove();
 });
@@ -941,7 +944,7 @@ interface WardleyLinkEditor {
   get(name: "elementRegistry"): { get(id: string): unknown };
   get(name: "wardleyLinkEditing"): {
     activate(element: unknown): void;
-    getActiveEdit(): { elementId: string; value: string } | null;
+    getActiveEdit(): { elementId: string; value: string; selection: { start: number; end: number } } | null;
   };
 }
 
@@ -966,7 +969,11 @@ test("Wardley, in both hosts: a typed link address survives the host's view chan
     modeler.setViewState({ ...view, x: view.x + 80, y: view.y - 40 });
     await wait(20);
     assert.equal(ytext.toString(), text, `${where}: the host's view change commits nothing`);
-    assert.deepEqual(links.getActiveEdit(), { elementId: "cmp_cup_of_tea", value: address.slice(0, 15) }, where);
+    assert.deepEqual(
+      links.getActiveEdit(),
+      { elementId: "cmp_cup_of_tea", value: address.slice(0, 15), selection: { start: 15, end: 15 } },
+      where,
+    );
 
     doc.transact(() => {
       ytext.delete(0, ytext.length);
@@ -977,6 +984,11 @@ test("Wardley, in both hosts: a typed link address survives the host's view chan
     const reopened = container.querySelector<HTMLInputElement>("input.wardley-link-input");
     assert.ok(reopened, `${where}: the link editor stays open over the re-import`);
     assert.equal(reopened.value, address.slice(0, 15), `${where}: with what was typed`);
+    assert.deepEqual(
+      [reopened.selectionStart, reopened.selectionEnd],
+      [15, 15],
+      `${where}: and the caret where it was`,
+    );
 
     let writes = 0;
     ytext.observe(() => writes++);

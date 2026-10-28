@@ -220,13 +220,14 @@ model rejects is an ERROR at its JSON path (`nodes.1.id: duplicate id "a"`; rule
 the canvas could not open. Rejected are a duplicate id and the ids a diagram keeps for itself:
 `tt-root`, `cm-root`, `vc-root`, every id starting with `__implicitroot`, `assoc_<annotation id>`
 in a Team Topology, and in all three notations the names of built-in object properties such as
-`constructor` or `toString`.
+`constructor` or `toString`. In all three notations a file nested deeper than 100 levels is
+rejected too.
 A Team Topology whose `version` is not 1 (a file without `version` included) is also rejected with
 an interaction that has no `position` or `size` (a version 1 file still opens without its edge
 interactions); a Context Map as a list, with
 a `version` above 1 or with coordinates or sizes beyond 1,000,000; a Value Chain with extra keys in
-`bounds` or in a waypoint, with coordinates beyond ±1e9, with a `__proto__` key or nested deeper
-than 100 levels. A Context Map's strategic-DDD rules (`protect-or-conform`, `endpoints-on-map`, …)
+`bounds` or in a waypoint, with coordinates beyond ±1e9 or with a `__proto__` key. A Context Map's
+strategic-DDD rules (`protect-or-conform`, `endpoints-on-map`, …)
 are WARNs, `context-map/semantics`: the canvas opens such a map and marks the finding. Some rules
 only run once the file's shape is valid, so `validate_model` can report further errors after a
 fix: check again until it answers `ok`.

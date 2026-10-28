@@ -119,7 +119,7 @@ const MODELS: Model[] = [
     text: "title Tea Shop\ncomponent Tier 1 Support [0.70, 0.30]\ncomponent Kettle from Łódź [0.30, 0.75]\n",
     widget: "mcp-app-wardley.html",
     label: "Tier 1 Support",
-    paper: "#F9F7F7",
+    paper: "#FFFFFF",
   },
   {
     notation: "event-storming",
@@ -127,7 +127,7 @@ const MODELS: Model[] = [
     text: "title Box Office\ncommand Sell in Łódź [240, 300]\nevent Ticket 11 Sold [620, 300]\n",
     widget: "mcp-app-event-storming.html",
     label: "Ticket 11 Sold",
-    paper: "#FFFFFF",
+    paper: "#F9F7F7",
   },
   {
     notation: "context-map",
@@ -147,7 +147,7 @@ const MODELS: Model[] = [
     )}\n`,
     widget: "mcp-app-context-map.html",
     label: "Gate 11 Check-in",
-    paper: "#FFFFFF",
+    paper: "#F9F7F7",
   },
 ];
 
