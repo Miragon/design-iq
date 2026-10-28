@@ -1,19 +1,21 @@
 /**
- * The zoom keys and ⇧1 of the SPA's bpmn-js and DMN DRD canvases (guide
- * §5.8), as the widget's bpmn and dmn engines take them: Cmd/Ctrl + `+` /
- * `-` / `0` and ⇧1 while the canvas has the focus, through the keymap of the
- * SPA's Miragon editors (lib/chrome-keys.ts) and the widget's view of a
- * diagram-js canvas (engines/diagram-js.ts `diagramView`). The focus rule is
- * the one bpmn-js and dmn-js give every other key of theirs; the source,
- * a side panel and the toolbar keep the keys, and the browser zooms the page
- * there. bpmn-js's and dmn-js's own zoom keys clamp a step out to 20 %, which
- * zooms in from a fit below it; they never act.
+ * The zoom keys, ⇧1 and the wheel of the SPA's bpmn-js and DMN DRD canvases
+ * (guide §5.8), as the widget's bpmn and dmn engines take them: Cmd/Ctrl +
+ * `+` / `-` / `0` and ⇧1 on the whole page while the canvas is on screen,
+ * through the keymap of the SPA's Miragon editors (lib/chrome-keys.ts) and
+ * the widget's view of a diagram-js canvas (engines/diagram-js.ts
+ * `diagramView`). A text field (the Monaco source, a side panel's field)
+ * and an open modal dialog keep the keys, and the browser zooms the page
+ * there; so does the source view, where the canvas is not on screen.
+ * bpmn-js's and dmn-js's own zoom keys and wheel clamp a step out to 20 %,
+ * which zooms in from a fit below it: the keys never reach them, and the
+ * wheel stays put there.
  */
 import { SHELL } from "@miragon/modeler-shell/core";
 
-import { routeCanvasChromeKeys } from "@/lib/chrome-keys";
+import { type ChromeKeyDeps, handleChromeKey, routeCanvasChromeKeys } from "@/lib/chrome-keys";
 import type { Insets } from "@/mcp-app/core/engine";
-import { type DiagramLike, diagramView } from "@/mcp-app/engines/diagram-js";
+import { type DiagramLike, diagramView, keepWheelZoomDirection } from "@/mcp-app/engines/diagram-js";
 
 import type { EditorContext } from "./registry";
 
@@ -66,31 +68,42 @@ function canvasRoomIn(container: HTMLElement, coveredRight: number): BpmnIoCanva
 
 /**
  * Binds the chrome keys of `diagram` (a bpmn-js modeler, a DRD viewer)
- * mounted in `container` to a view of its canvas; `shown` says whether that
- * canvas is the one dmn-js shows. Returns the unbind.
+ * mounted in `container` to a view of its canvas, on the canvas ahead of
+ * diagram-js's own zoom and on the rest of the document, and keeps its wheel
+ * zoom from turning around; `shown` says whether that canvas is the one
+ * dmn-js shows. Returns the unbind.
  */
-export function bindBpmnIoChromeKeys(
+export function bindBpmnIoZoom(
   diagram: Pick<DiagramLike, "get" | "on" | "off">,
   container: HTMLElement,
-  ctx: Pick<EditorContext, "sidePanels">,
+  ctx: Pick<EditorContext, "sidePanels" | "visibility">,
   shown: () => boolean = () => true,
 ): () => void {
   const doc = container.ownerDocument;
   const view = diagramView(diagram);
   const reducedMotion = (): boolean =>
     doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-  const unroute = routeCanvasChromeKeys(diagram, doc, {
+  const keys: ChromeKeyDeps = {
     menuOpen: () => false,
-    viewport: () => shown() && container.clientWidth > 0 && container.clientHeight > 0,
+    // the source view keeps the canvas mounted, hidden behind it
+    viewport: () =>
+      (ctx.visibility?.visible() ?? true) && shown() && container.clientWidth > 0 && container.clientHeight > 0,
     run: (key) => {
       if (key === "fit")
         view.fit(bpmnIoFitInsets(canvasRoomIn(container, ctx.sidePanels?.covered() ?? 0)), !reducedMotion());
       else if (key === "zoomToActual") view.zoomTo(1);
       else view.stepZoom(key === "zoomIn" ? 1 : -1);
     },
-  });
+  };
+  const unroute = routeCanvasChromeKeys(diagram, doc, keys);
+  // a key the canvas ran is prevented, so this skips it
+  const onKey = (event: KeyboardEvent): void => void handleChromeKey(event, doc, keys);
+  doc.addEventListener("keydown", onKey);
+  const unguardWheel = keepWheelZoomDirection(diagram);
   return () => {
     unroute();
+    doc.removeEventListener("keydown", onKey);
+    unguardWheel();
     view.destroy();
   };
 }

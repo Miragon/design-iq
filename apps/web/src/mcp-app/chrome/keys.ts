@@ -1,27 +1,26 @@
 /**
- * The widget's ONE keydown listener (spec §8): ⌘S / Ctrl+S, ⇧1, the zoom
- * keys of the Miragon widgets and the Escape layers (topmost first: menu →
- * popover → compact palette → panel, the panel's own inline form before the
- * panel; never a decision card). What a key means — and which text fields
- * keep their keys — is core/keymap.ts; this binds it and calls
- * preventDefault only for a key that was handled (read-only ⌘S stays the
- * browser's).
- * bpmn-js and dmn-js bind their own keyboard (undo/redo, select all,
- * delete) to the focused canvas, and their zoom keys and ⇧1 act there too:
- * their engines route them to the same `chromeKeyDeps`
- * (EngineOptions.chromeKeys, lib/chrome-keys.ts routeCanvasChromeKeys), so
- * they step as the −/+ buttons do. The Miragon renderers bind no zoom keys:
- * `chromeKeys` gives their widgets the modeler shell's on the whole widget
- * document (lib/chrome-keys.ts, as in the SPA).
+ * The widget's ONE keydown listener (spec §8): ⌘S / Ctrl+S, the zoom keys
+ * and ⇧1, and the Escape layers (topmost first: menu → popover → compact
+ * palette → panel, the panel's own inline form before the panel; never a
+ * decision card). What a key means — and which text fields keep their keys —
+ * is core/keymap.ts; this binds it and calls preventDefault only for a key
+ * that was handled (read-only ⌘S stays the browser's).
+ * The zoom keys and ⇧1 act on the whole widget document (guide §5.8), by the
+ * modeler shell's keymap (lib/chrome-keys.ts, as in the SPA). bpmn-js and
+ * dmn-js bind their own keyboard (undo/redo, select all, delete, and a zoom
+ * of their own) to the focused canvas: their engines run the same
+ * `chromeKeyDeps` there first (EngineOptions.chromeKeys, lib/chrome-keys.ts
+ * routeCanvasChromeKeys) and prevent the key, so this listener skips it and
+ * each press acts once.
  */
 import { type ChromeKeyDeps, handleChromeKey, isTextField, openDialogs } from "../../lib/chrome-keys.ts";
 import { type ChromeKey, keyCommand, type KeyTarget } from "../core/keymap.ts";
 import type { MountKeys } from "./contracts.ts";
 
 /**
- * The zoom keys and ⇧1 of a widget: KeyDeps.chromeKeys in a Miragon widget,
- * EngineOptions.chromeKeys for the focused canvas of bpmn and the DMN DRD; a
- * state card hides the diagram, so the browser keeps them.
+ * The zoom keys and ⇧1 of a widget: KeyDeps.chromeKeys on the document, and
+ * EngineOptions.chromeKeys on the canvas of bpmn and the DMN DRD; a state
+ * card hides the diagram, so the browser keeps them.
  */
 export function chromeKeyDeps(state: {
   menuOpen(): boolean;
@@ -47,11 +46,10 @@ function targetOf(doc: Document, target: EventTarget | null): KeyTarget {
 export const mountKeys: MountKeys = (doc, deps) => {
   const onKey = (e: KeyboardEvent): void => {
     if (e.defaultPrevented) return;
-    if (deps.chromeKeys && handleChromeKey(e, doc, deps.chromeKeys)) return;
+    if (handleChromeKey(e, doc, deps.chromeKeys)) return;
     const command = keyCommand(e, targetOf(doc, e.target));
     let handled = false;
     if (command === "save") handled = deps.save();
-    else if (command === "fit" && !deps.chromeKeys) handled = deps.fit();
     // a renderer's modal dialog takes Escape itself (the native cancel): the
     // chrome's layers under it stay as they are
     else if (command === "escape" && !openDialogs(doc).modal) handled = deps.escape.some((layer) => layer());

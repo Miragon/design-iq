@@ -193,14 +193,13 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
       else view?.stepZoom(key === "zoomIn" ? 1 : -1);
     },
   });
-  // the Miragon renderers bind no keys of their own: the chrome takes the
-  // zoom keys on the whole widget document; bpmn-js and the DMN DRD hear them
-  // on their focused canvas (EngineOptions.chromeKeys)
-  const documentKeys = kind === "miragon";
+  // the zoom keys act on the whole widget document (guide §5.8), so every
+  // zoom button names its key; bpmn-js and the DMN DRD run them on their
+  // canvas first (EngineOptions.chromeKeys), ahead of their own zoom
   const zoom = mountZoom({
     els,
     fit: () => layout.refit(true),
-    ...(documentKeys ? { keys: { platform: mac ? "mac" : "other" } } : {}),
+    keys: { platform: mac ? "mac" : "other" },
   });
   mountKeys(document, {
     save: () => {
@@ -212,13 +211,8 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
       actions.save();
       return true;
     },
-    fit: () => {
-      if (!view?.hasViewport()) return false;
-      layout.refit(true);
-      return true;
-    },
     escape: [() => menu.close(true), () => sync.closePopover(), () => layout.closeTools(), () => panels.escape()],
-    ...(documentKeys ? { chromeKeys } : {}),
+    chromeKeys,
   });
   // a renderer's dialog or popover links out (Wardley's X-axis labels…): the
   // sandbox blocks the new window, so the host opens it, never silently

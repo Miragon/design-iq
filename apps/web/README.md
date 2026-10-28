@@ -385,25 +385,25 @@ pans; a display-mode change always re-fits. The view math and the readout are
 `@miragon/modeler-shell/core`'s (`fitViewbox`, `sameView`,
 `interpolateViewbox`, `zoomReadout`), and so are the zoom keys and ⇧1
 (`decideKey`, through `src/lib/chrome-keys.ts`, which the SPA's editors bind
-too): the Miragon widgets take them on the whole document (`chrome/keys.ts`),
-the bpmn and dmn widgets on their focused canvas, where the engine routes them
-from the diagram-js keyboard ahead of bpmn-js's and dmn-js's own zoom
-(`routeCanvasChromeKeys`, `EngineOptions.chromeKeys`). The −/+ buttons and the
+too): every widget takes them on the whole document (`chrome/keys.ts`), and
+on a bpmn-js or DRD canvas the engine routes them from the diagram-js keyboard
+first, ahead of bpmn-js's and dmn-js's own zoom (`routeCanvasChromeKeys`,
+`EngineOptions.chromeKeys`). The −/+ buttons and the
 zoom keys step on the design guide's fixed zoom steps (22, 30, 41, 55, 74, 100,
 135, 182, 246 and 331 %, `zoomStepLevel` in `engines/fit.ts`), the raster of
 diagram-js's `zoomScroll.stepZoom`. The − button and every zoom-out key stop at
 a fit below 20 % instead of zooming in to 20 %, as `zoomScroll.stepZoom`, which
-clamps, would. The widget's geometry (the 36px corners, the 12/16px insets)
+clamps, would; so does the wheel there (`keepWheelZoomDirection`). The widget's geometry (the 36px corners, the 12/16px insets)
 stays designIQ's; the full shell is not mounted.
 In the SPA a Miragon editor's ⇧1 fits 24px clear of the renderer's palette as
 measured, of the canvas's sides and bottom, and of an open side panel (the
 panels dock over the canvas's right edge, `src/lib/side-panel-room.ts`);
 opening or closing a side panel re-fits a view nobody moved since the import
 or the last fit, as the widget does with its cards. The SPA's BPMN and DMN
-editors take the same keys while their canvas has the focus, as bpmn-js and
-dmn-js hear every other key (`src/notations/bpmn-io-keys.ts`); there ⇧1 fits
-24px clear of the palette column, the DRD's name card, its simulation card and
-an open side panel. The first view of a Miragon editor is that
+editors take the same keys on the whole page while their canvas is on screen
+(`src/notations/bpmn-io-keys.ts`), and their wheel zoom stays put below 20 %;
+there ⇧1 fits 24px clear of the palette column, the DRD's name card, its
+simulation card and an open side panel. The first view of a Miragon editor is that
 fit too: the editor mounts the renderer with `fitOnImport: false`, because
 the renderer's own import fit leaves no room for the palette over the canvas,
 and fits the first import itself (`firstFit` in `diagramView`); a peer's

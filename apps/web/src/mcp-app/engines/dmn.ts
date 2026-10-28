@@ -27,8 +27,9 @@
  * active table wrapped for the widget-owned "Try a scenario" form (the
  * add-on's own form is hidden by CSS, never reparented), `revealMatch()` for
  * a replayed rule — and a `view` that is the DRD's canvas (the table view has
- * no viewport: it scrolls). The zoom keys and ⇧1 on the DRD's focused canvas
- * are the chrome's (EngineOptions.chromeKeys), never dmn-js's own zoom.
+ * no viewport: it scrolls). The zoom keys and ⇧1 on the DRD's canvas are the
+ * chrome's (EngineOptions.chromeKeys), never dmn-js's own zoom, and its wheel
+ * zoom never turns around below 20 % (keepWheelZoomDirection).
  *
  * Both value crossings go through `variableOf` from the shared library rather
  * than a local guess, because the two sides do NOT hold the same thing: the
@@ -64,7 +65,7 @@ import type {
   ViewControls,
   WidgetEngine,
 } from "../core/engine.ts";
-import { type DiagramView, diagramView } from "./diagram-js.ts";
+import { type DiagramView, diagramView, keepWheelZoomDirection } from "./diagram-js.ts";
 
 /** an evaluation as the add-on's store reports it (EvaluationResult) */
 interface EvaluationLike {
@@ -289,16 +290,24 @@ export const mountDmnEngine: EngineFactory<DmnEngine> = (container, readonly, op
     unbindStore?.();
     unbindStore = scenarioSubs.size > 0 ? store()?.subscribe(notifyScenario) : undefined;
   };
-  // dmn-js keeps one DRD viewer per instance: its keys are routed once it shows
-  const routedKeys = new Map<unknown, () => void>();
-  const routeDrdKeys = (): void => {
-    if (!opts?.chromeKeys || instance.getActiveView()?.type !== "drd") return;
+  // dmn-js keeps one DRD viewer per instance: its zoom keys and wheel are
+  // bound once, the first time it shows
+  const boundDrds = new Map<unknown, () => void>();
+  const bindDrdZoom = (): void => {
+    if (instance.getActiveView()?.type !== "drd") return;
     const viewer = instance.getActiveViewer();
-    if (!viewer || routedKeys.has(viewer)) return;
-    routedKeys.set(viewer, routeCanvasChromeKeys(viewer as never, container.ownerDocument, opts.chromeKeys));
+    if (!viewer || boundDrds.has(viewer)) return;
+    const unrouteKeys = opts?.chromeKeys
+      ? routeCanvasChromeKeys(viewer as never, container.ownerDocument, opts.chromeKeys)
+      : undefined;
+    const unguardWheel = keepWheelZoomDirection(viewer as never);
+    boundDrds.set(viewer, () => {
+      unrouteKeys?.();
+      unguardWheel();
+    });
   };
   const onViews = (): void => {
-    routeDrdKeys();
+    bindDrdZoom();
     bindStore();
     notifyView();
     notifyScenario();
@@ -441,8 +450,8 @@ export const mountDmnEngine: EngineFactory<DmnEngine> = (container, readonly, op
       scenarioSubs.clear();
       drd?.off();
       drd?.view.destroy();
-      for (const unroute of routedKeys.values()) unroute();
-      routedKeys.clear();
+      for (const unbind of boundDrds.values()) unbind();
+      boundDrds.clear();
       viewListeners.clear();
       instance.destroy();
     },

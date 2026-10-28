@@ -7,7 +7,7 @@
  * every import.done (bindBpmn re-imports remote changes); without todos the
  * list stays empty and no badge ever renders. The canvas wears the CI
  * (lib/canvas-theme.ts) and waits for its font before the first import. Its
- * zoom keys and ⇧1 are the chrome's (bpmn-io-keys.ts).
+ * zoom keys, ⇧1 and wheel zoom follow guide §5.8 (bpmn-io-keys.ts).
  */
 import { bindBpmn } from "@designiq/live-client/bpmn-sync";
 import BpmnModeler from "bpmn-js/lib/Modeler";
@@ -18,7 +18,7 @@ import { attachPresenceCanvas } from "@/lib/presence-canvas";
 import { attachTodoCanvas } from "@/lib/todo-canvas";
 
 import { bpmnColorModule } from "./bpmn-color";
-import { bindBpmnIoChromeKeys } from "./bpmn-io-keys";
+import { bindBpmnIoZoom } from "./bpmn-io-keys";
 import { bpmnStickyModule, stickyModdle, tbpmToggleAction } from "./bpmn-sticky";
 import type { EditorContext, MountedEditor } from "./registry";
 
@@ -33,7 +33,7 @@ export async function mountBpmnEditor(container: HTMLElement, ctx: EditorContext
     additionalModules: [bpmnStickyModule, bpmnColorModule],
     moddleExtensions: { sticky: stickyModdle },
   });
-  const unbindKeys = bindBpmnIoChromeKeys(modeler as never, container, ctx);
+  const unbindZoom = bindBpmnIoZoom(modeler as never, container, ctx);
   const unbind = bindBpmn(
     modeler as never,
     ctx.ytext,
@@ -57,7 +57,7 @@ export async function mountBpmnEditor(container: HTMLElement, ctx: EditorContext
       presenceCanvas?.destroy();
       todoCanvas.destroy();
       unbind();
-      unbindKeys();
+      unbindZoom();
       modeler.destroy();
     },
   };

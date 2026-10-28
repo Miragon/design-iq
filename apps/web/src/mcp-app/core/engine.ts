@@ -141,9 +141,10 @@ export type LiveEngine = WidgetEngine & Required<Pick<WidgetEngine, "bindLive">>
 export interface EngineOptions {
   /** the layout's current fit insets (core/layout.ts fitInsets), read at every fit */
   insets(): Insets;
-  /** the chrome's zoom keys and ⇧1, for a canvas that hears its keys only
-   *  while it has the focus: bpmn-js and the DMN DRD route them here
-   *  (lib/chrome-keys.ts routeCanvasChromeKeys) instead of to their own zoom */
+  /** the chrome's zoom keys and ⇧1 on a canvas that binds its own zoom keys
+   *  there: bpmn-js and the DMN DRD route them here (lib/chrome-keys.ts
+   *  routeCanvasChromeKeys) ahead of that zoom; the chrome's listener on the
+   *  document takes them everywhere else */
   chromeKeys?: ChromeKeyDeps;
   /** for a renderer that brings menu content (WidgetEngine.menu) */
   menuHost?: MenuHost;

@@ -1,14 +1,18 @@
 /**
- * The zoom keys and ⇧1 of bpmn-js and the DMN DRD on their focused canvas
- * (src/lib/chrome-keys.ts routeCanvasChromeKeys), on real canvases under
- * jsdom (test/renderer-dom.ts): the SPA's editors (src/notations/
- * bpmn-io-keys.ts) and the widget's engines (EngineOptions.chromeKeys).
- * Cmd/Ctrl + `+` / `-` / `0` step on the guide's fixed steps once per press
- * and keep the page from zooming, ⇧1 fits, and diagram-js's own zoom never
- * acts: its step clamps to 20 %, so from a fit below 20 % its zoom out zoomed
- * in (guide §5.8). A step out from there stays put, a step in goes to 20 %.
- * The keys act only while the canvas has the focus: one pressed elsewhere
- * (the toolbar, the source, a side panel) is the browser's.
+ * The zoom keys, ⇧1 and the wheel of bpmn-js and the DMN DRD (guide §5.8),
+ * on real canvases under jsdom (test/renderer-dom.ts): the SPA's editors
+ * (src/notations/bpmn-io-keys.ts) and the widget's engines
+ * (EngineOptions.chromeKeys) with the widget's document listener
+ * (chrome/keys.ts). Cmd/Ctrl + `+` / `-` / `0` step on the guide's fixed
+ * steps once per press and keep the page from zooming, ⇧1 fits, and
+ * diagram-js's own zoom never acts: its step clamps to 20 %, so from a fit
+ * below 20 % its zoom out zoomed in. A step out from there stays put, a step
+ * in goes to 20 %, and the wheel stays put too. The keys act on the whole
+ * document (the canvas, the toolbar, the page), except in a text field (the
+ * Monaco source), under a modal dialog and while no diagram is on screen
+ * (the source view, the DMN decision table). dmn-js keeps one DRD viewer and
+ * binds it once: after a trip to a decision table and back a press still
+ * acts once.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -44,8 +48,9 @@ interface Diagram {
   get(service: "canvas"): {
     viewbox(): Viewbox;
     viewbox(box: { x: number; y: number; width: number; height: number }): void;
+    zoom(level?: number, center?: unknown): number;
   };
-  get(service: "zoomScroll"): { stepZoom(direction: number): void };
+  get(service: "zoomScroll"): { stepZoom(direction: number): void; toggle(enabled: boolean): void };
 }
 
 /** the level a canvas reads back, to three decimals as diagram-js keeps it */
@@ -69,6 +74,31 @@ function spyOnOwnZoom(diagram: Diagram): string[] {
     stepZoom(direction);
   };
   return steps;
+}
+
+/**
+ * One Ctrl + wheel turn out on the canvas, as a trackpad pinch sends it, and
+ * the levels diagram-js's wheel zoom set for it: recorded, not applied (jsdom
+ * keeps no CTM, renderer-dom.ts)
+ */
+function wheelOut(diagram: Diagram, container: HTMLElement): number[] {
+  const canvas = diagram.get("canvas");
+  const zoomScroll = diagram.get("zoomScroll");
+  const set: number[] = [];
+  canvas.zoom = (level?: number) => {
+    if (level !== undefined) set.push(Math.round(level * 1000) / 1000);
+    return canvas.viewbox().scale;
+  };
+  zoomScroll.toggle(true);
+  try {
+    const frame = container.querySelector(".djs-container");
+    assert.ok(frame, "the canvas's frame, where diagram-js listens to the wheel");
+    frame.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, ctrlKey: true, bubbles: true, cancelable: true }));
+  } finally {
+    zoomScroll.toggle(false);
+    delete (canvas as { zoom?: unknown }).zoom;
+  }
+  return set;
 }
 
 function press(
@@ -100,6 +130,9 @@ function withContent<T>(box: { x: number; y: number; width: number; height: numb
   }
 }
 
+/** whether the SPA shows the canvas layer (EditorContext.visibility): the source view hides it */
+const layer = { visible: true };
+
 const context = (doc: Y.Doc, docPath: string): EditorContext =>
   ({
     ytext: doc.getText("content"),
@@ -109,6 +142,7 @@ const context = (doc: Y.Doc, docPath: string): EditorContext =>
     onImportFailed: assert.fail,
     onBadgeClick: () => {},
     onSelectionChanged: () => {},
+    visibility: { visible: () => layer.visible, onChange: () => () => {} },
   }) as unknown as EditorContext;
 
 const docOf = (text: string): Y.Doc => {
@@ -145,6 +179,39 @@ async function spaBpmnEditor(): Promise<SpaEditor> {
   }
 }
 
+/**
+ * Opens the decision table and the DRD again: dmn-js says views.changed
+ * each time, and the DRD's zoom stays bound once (a second canvas route
+ * would also mean a second document listener and view). While the table
+ * shows, no diagram is on screen and the browser keeps the keys.
+ */
+async function toTableAndBack(modeler: {
+  getViews(): Array<{ type: string }>;
+  getActiveViewer(): unknown;
+  open(view: { type: string }): Promise<unknown>;
+}): Promise<void> {
+  const view = (type: string) => modeler.getViews().find((candidate) => candidate.type === type)!;
+  type AddListener = (...args: unknown[]) => void;
+  const drd = modeler.getActiveViewer() as { get(name: "keyboard"): { addListener: AddListener } };
+  const keyboard = drd.get("keyboard");
+  let routes = 0;
+  const addListener = keyboard.addListener;
+  keyboard.addListener = (...args) => {
+    routes++;
+    addListener.apply(keyboard, args);
+  };
+  try {
+    await modeler.open(view("decisionTable"));
+    await wait(10);
+    assert.equal(press(document.body, "=", "Equal", { ctrlKey: true }).defaultPrevented, false, "the table scrolls");
+    await modeler.open(view("drd"));
+    await wait(10);
+  } finally {
+    keyboard.addListener = addListener;
+  }
+  assert.equal(routes, 0, "the DRD's zoom stays bound once");
+}
+
 async function spaDmnEditor(): Promise<SpaEditor> {
   const { default: DmnModeler } = await import("dmn-js/lib/Modeler");
   const { mountDmnEditor } = await import("../src/notations/dmn-editor.ts");
@@ -165,6 +232,8 @@ async function spaDmnEditor(): Promise<SpaEditor> {
     const modeler = modelers[0]!;
     assert.equal(modeler.getActiveView()?.type, "drd", "the editor opens on the DRD");
     const diagram = modeler.getActiveViewer() as unknown as Diagram;
+    await toTableAndBack(modeler);
+    assert.equal(modeler.getActiveViewer(), diagram, "dmn-js keeps its DRD viewer");
     return { editor, container, diagram, svg: svgOf(container) };
   } finally {
     DmnModeler.prototype.importXML = importXML;
@@ -177,7 +246,7 @@ const SPA_EDITORS: Array<[name: string, mount: () => Promise<SpaEditor>]> = [
 ];
 
 for (const [name, mount] of SPA_EDITORS) {
-  test(`the SPA's ${name}: the zoom keys step once on the focused canvas, never turn around below 20 %, and stay off the rest of the page`, async () => {
+  test(`the SPA's ${name}: the zoom keys step once on the canvas and the rest of the page, never turn around below 20 %, and leave text fields, modal dialogs and the source view alone`, async () => {
     const { editor, container, diagram, svg } = await mount();
     const own = spyOnOwnZoom(diagram);
     editor.focus?.();
@@ -189,6 +258,8 @@ for (const [name, mount] of SPA_EDITORS) {
     assert.equal(levelOf(diagram), 0.12, "from a fit at 12 % a step out stays put");
     press(svg, "_", "Minus", { ctrlKey: true, shiftKey: true });
     assert.equal(levelOf(diagram), 0.12, "and so does Ctrl+_");
+    viewAt(diagram, 0.12);
+    assert.deepEqual(wheelOut(diagram, container), [], "and so does the wheel, which clamps to 20 % as well");
     press(svg, "+", "NumpadAdd", { ctrlKey: true });
     assert.equal(levelOf(diagram), 0.2, "a step in goes to 20 %");
 
@@ -200,18 +271,32 @@ for (const [name, mount] of SPA_EDITORS) {
     assert.equal(levelOf(diagram), 1, "⌘- one step out");
     assert.deepEqual(own, [], `${name}: diagram-js's own zoom never acts`);
 
+    assert.deepEqual(wheelOut(diagram, container), [0.861], "from 100 % the wheel zooms out half a step");
+
     const toolbarButton = document.createElement("button");
     const source = document.createElement("div");
     source.className = "monaco-editor";
     const typed = document.createElement("textarea");
     source.append(typed);
-    document.body.append(toolbarButton, source);
-    for (const target of [document.body, toolbarButton, typed]) {
-      assert.equal(press(target, "=", "Equal", { ctrlKey: true }).defaultPrevented, false);
-    }
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.hidden = true;
+    document.body.append(toolbarButton, source, dialog);
+    assert.equal(press(toolbarButton, "=", "Equal", { ctrlKey: true }).defaultPrevented, true, "a toolbar button");
+    assert.equal(levelOf(diagram), 1.349, "the page does not zoom, the diagram does, once");
+    assert.equal(press(document.body, "-", "Minus", { metaKey: true }).defaultPrevented, true, "the page itself");
+    assert.equal(levelOf(diagram), 1);
+    assert.equal(press(typed, "=", "Equal", { ctrlKey: true }).defaultPrevented, false, "the source types");
+    dialog.hidden = false;
+    assert.equal(press(toolbarButton, "=", "Equal", { ctrlKey: true }).defaultPrevented, false, "a modal dialog");
+    dialog.remove();
+    layer.visible = false;
+    assert.equal(press(document.body, "=", "Equal", { ctrlKey: true }).defaultPrevented, false, "the source view");
+    layer.visible = true;
     toolbarButton.remove();
     source.remove();
-    assert.equal(levelOf(diagram), 1, "off the canvas (the page, the toolbar, the source) the browser keeps the keys");
+    assert.equal(levelOf(diagram), 1, "the browser keeps those keys: none zoomed the diagram");
 
     press(svg, "=", "Equal", { ctrlKey: true, isComposing: true });
     assert.equal(levelOf(diagram), 1, "an IME composition keeps the key");
@@ -250,6 +335,7 @@ test("the SPA's fit for bpmn-js and the DRD: 24px clear of the palette column, t
 });
 
 interface ZoomTarget {
+  hasViewport(): boolean;
   stepZoom(direction: 1 | -1): void;
   zoomTo(level: number): void;
 }
@@ -261,7 +347,7 @@ function chromeKeys() {
   let view: ZoomTarget | undefined;
   const deps: ChromeKeyDeps = {
     menuOpen: () => false,
-    viewport: () => true,
+    viewport: () => view?.hasViewport() ?? false,
     run(key) {
       ran.push(key);
       if (key === "zoomToActual") view?.zoomTo(1);
@@ -279,9 +365,14 @@ function chromeKeys() {
 
 const insets = (): Insets => ({ top: 56, right: 16, bottom: 56, left: 16 });
 
-test("the bpmn widget: its focused canvas runs the chrome's keys once each, a step out below 20 % stays put, and the document keeps ⇧1 elsewhere", async () => {
-  const { mountBpmnEngine } = await import("../src/mcp-app/engines/bpmn.ts");
+/** the widget's one document listener (chrome/keys.ts), as shell.ts mounts it with the same deps */
+async function documentKeys(deps: ChromeKeyDeps): Promise<() => void> {
   const { mountKeys } = await import("../src/mcp-app/chrome/keys.ts");
+  return mountKeys(document, { save: () => false, escape: [], chromeKeys: deps });
+}
+
+test("the bpmn widget: its canvas and the rest of the document run the chrome's keys once each, a step out below 20 % stays put", async () => {
+  const { mountBpmnEngine } = await import("../src/mcp-app/engines/bpmn.ts");
   const { ran, deps, bind } = chromeKeys();
   const container = host("bpmn-canvas");
   const engine = mountBpmnEngine(container, false, { insets, chromeKeys: deps });
@@ -289,21 +380,15 @@ test("the bpmn widget: its focused canvas runs the chrome's keys once each, a st
   await engine.importText(model("order-to-cash.bpmn"));
   const diagram = engine.raw as unknown as Diagram;
   const own = spyOnOwnZoom(diagram);
-  // the widget's one document listener (chrome/keys.ts), as a bpmn widget mounts it: no chromeKeys
-  const unbindKeys = mountKeys(document, {
-    save: () => false,
-    fit: () => {
-      ran.push("fit (document)" as ChromeKey);
-      return true;
-    },
-    escape: [],
-  });
+  const unbindKeys = await documentKeys(deps);
   const svg = svgOf(container);
 
   viewAt(diagram, 0.12);
   assert.equal(press(svg, "-", "Minus", { ctrlKey: true }).defaultPrevented, true, "the page does not zoom");
   assert.deepEqual(own, [], "bpmn-js's own zoom, which clamps to 20 % and so zooms in, never acts");
   assert.equal(levelOf(diagram), 0.12, "from a fit at 12 % a step out stays put");
+  viewAt(diagram, 0.12);
+  assert.deepEqual(wheelOut(diagram, container), [], "and so does the wheel");
   press(svg, "=", "Equal", { metaKey: true });
   assert.equal(levelOf(diagram), 0.2, "a step in goes to 20 %");
   press(svg, "0", "Digit0", { ctrlKey: true });
@@ -312,10 +397,16 @@ test("the bpmn widget: its focused canvas runs the chrome's keys once each, a st
   assert.deepEqual(ran, ["zoomOut", "zoomIn", "zoomToActual", "fit"], "each press runs once, ⇧1 too");
   assert.deepEqual(own, [], "bpmn-js's own zoom never acts");
 
+  assert.deepEqual(wheelOut(diagram, container), [0.861], "from 100 % the wheel zooms out half a step");
+
   ran.length = 0;
-  assert.equal(press(document.body, "=", "Equal", { ctrlKey: true }).defaultPrevented, false);
-  press(document.body, "!", "Digit1", { shiftKey: true });
-  assert.deepEqual(ran, ["fit (document)"], "off the canvas the zoom keys are the browser's, ⇧1 the chrome's fit");
+  const chromeButton = document.createElement("button");
+  document.body.append(chromeButton);
+  assert.equal(press(chromeButton, "=", "Equal", { ctrlKey: true }).defaultPrevented, true, "a chrome button");
+  assert.equal(levelOf(diagram), 1.349);
+  assert.equal(press(document.body, "!", "Digit1", { shiftKey: true }).defaultPrevented, true, "the page");
+  assert.deepEqual(ran, ["zoomIn", "fit"], "off the canvas the document runs them, once each");
+  chromeButton.remove();
 
   unbindKeys();
   engine.destroy();
@@ -338,7 +429,45 @@ test("the read-only bpmn widget: its canvas takes the chrome's zoom keys too", a
   container.remove();
 });
 
-test("the dmn widget: the DRD's focused canvas runs the chrome's keys once each, a step out below 20 % stays put", async () => {
+test("the read-only dmn widget: its DRD, which binds no keyboard, takes the chrome's keys through the document", async () => {
+  const { default: DmnViewer } = await import("dmn-js/lib/Viewer");
+  const { mountDmnEngine } = await import("../src/mcp-app/engines/dmn.ts");
+  type Viewer = InstanceType<typeof DmnViewer>;
+  const viewers: Viewer[] = [];
+  const importXML = DmnViewer.prototype.importXML;
+  DmnViewer.prototype.importXML = function (this: Viewer, xml: string) {
+    viewers.push(this);
+    return importXML.call(this, xml);
+  };
+  try {
+    const { ran, deps, bind } = chromeKeys();
+    const container = host("dmn-canvas");
+    const engine = mountDmnEngine(container, true, { insets, chromeKeys: deps });
+    bind(engine.view);
+    await engine.importText(model("credit-limit-check.dmn"));
+    await wait(0);
+    const unbindKeys = await documentKeys(deps);
+    const diagram = viewers[0]?.getActiveViewer() as unknown as Diagram;
+    assert.ok(diagram);
+    assert.throws(() => (diagram as unknown as { get(name: string): unknown }).get("keyboard"), "no keyboard");
+    const svg = svgOf(container);
+
+    viewAt(diagram, 1);
+    assert.equal(press(svg, "=", "Equal", { ctrlKey: true }).defaultPrevented, true, "the page zoomed before");
+    assert.equal(levelOf(diagram), 1.349);
+    viewAt(diagram, 0.12);
+    press(svg, "-", "Minus", { metaKey: true });
+    assert.equal(levelOf(diagram), 0.12, "from a fit at 12 % a step out stays put");
+    assert.deepEqual(ran, ["zoomIn", "zoomOut"], "each press runs once");
+    unbindKeys();
+    engine.destroy();
+    container.remove();
+  } finally {
+    DmnViewer.prototype.importXML = importXML;
+  }
+});
+
+test("the dmn widget: the DRD's canvas runs the chrome's keys once each, also after a trip to a table, a step out below 20 % stays put", async () => {
   const { default: DmnModeler } = await import("dmn-js/lib/Modeler");
   const { mountDmnEngine } = await import("../src/mcp-app/engines/dmn.ts");
   // the engine keeps its dmn-js instance to itself; its import names it
@@ -359,6 +488,8 @@ test("the dmn widget: the DRD's focused canvas runs the chrome's keys once each,
     assert.equal(engine.view.hasViewport(), true, "the DRD is the active view");
     const diagram = modelers[0]?.getActiveViewer() as unknown as Diagram;
     assert.ok(diagram);
+    const unbindKeys = await documentKeys(deps);
+    await toTableAndBack(modelers[0]!);
     const own = spyOnOwnZoom(diagram);
     const svg = svgOf(container);
 
@@ -370,8 +501,13 @@ test("the dmn widget: the DRD's focused canvas runs the chrome's keys once each,
     assert.equal(levelOf(diagram), 0.2, "a step in goes to 20 %");
     press(svg, "0", "Numpad0", { ctrlKey: true });
     assert.equal(levelOf(diagram), 1);
-    assert.deepEqual(ran, ["zoomOut", "zoomIn", "zoomToActual"], "each press runs once");
+    press(svg, "=", "Equal", { ctrlKey: true });
+    assert.equal(levelOf(diagram), 1.349, "one step, once");
+    assert.deepEqual(ran, ["zoomOut", "zoomIn", "zoomToActual", "zoomIn"], "each press runs once");
     assert.deepEqual(own, [], "dmn-js's own zoom never acts");
+    viewAt(diagram, 0.12);
+    assert.deepEqual(wheelOut(diagram, container), [], "the wheel stays put below 20 %");
+    unbindKeys();
     engine.destroy();
     container.remove();
   } finally {

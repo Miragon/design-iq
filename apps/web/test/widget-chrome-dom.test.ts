@@ -531,6 +531,7 @@ test("zoom group: a click hands the focus back to the canvas, Enter or Space lea
       zoomFit: asEl(els.zoomFit),
     },
     fit: () => void did.push("fit"),
+    keys: { platform: "other" },
   });
   zoom.bind(view);
   const press = (el: FakeElement, detail: number): void =>

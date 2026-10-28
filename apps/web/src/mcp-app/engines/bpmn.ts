@@ -11,8 +11,9 @@
  * brush only in the editable widget, the viewer renders the DI colours as is.
  * bpmn-js clears its command stack
  * SILENTLY on import, so no dirty suppression is needed here (contrast the
- * DSL engines). The zoom keys and ⇧1 on the focused canvas are the chrome's
- * (EngineOptions.chromeKeys), never bpmn-js's own zoom.
+ * DSL engines). The zoom keys and ⇧1 on the canvas are the chrome's
+ * (EngineOptions.chromeKeys), never bpmn-js's own zoom, and its wheel zoom
+ * never turns around below 20 % (keepWheelZoomDirection).
  */
 import { bindBpmn } from "@designiq/live-client/bpmn-sync";
 import Modeler from "bpmn-js/lib/Modeler";
@@ -25,7 +26,7 @@ import { attachPresenceCanvas } from "../../lib/presence-canvas.ts";
 import { bpmnColorModule } from "../../notations/bpmn-color.ts";
 import { bpmnStickyModule, bpmnStickyViewModule, stickyModdle } from "../../notations/bpmn-sticky/index.ts";
 import type { EngineFactory, LiveBindHooks, WidgetEngine } from "../core/engine.ts";
-import { type DiagramView, diagramView, selectedElementOf } from "./diagram-js.ts";
+import { type DiagramView, diagramView, keepWheelZoomDirection, selectedElementOf } from "./diagram-js.ts";
 
 export interface BpmnEngine extends WidgetEngine {
   /** the underlying bpmn-js instance — todos, the t.BPM switch and the live
@@ -61,6 +62,7 @@ export const mountBpmnEngine: EngineFactory<BpmnEngine> = (container, readonly, 
   const unrouteKeys = opts?.chromeKeys
     ? routeCanvasChromeKeys(instance as never, container.ownerDocument, opts.chromeKeys)
     : undefined;
+  const unguardWheel = keepWheelZoomDirection(instance as never);
   const dirtyCbs = new Set<() => void>();
   if (!readonly) {
     // fires on every applied/undone command — exactly the web editor's signal
@@ -109,6 +111,7 @@ export const mountBpmnEngine: EngineFactory<BpmnEngine> = (container, readonly, 
     },
     destroy(): void {
       unrouteKeys?.();
+      unguardWheel();
       view.destroy();
       instance.destroy();
     },

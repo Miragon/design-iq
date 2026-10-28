@@ -7,10 +7,9 @@
  * layout's forced re-fit, which resets "touched". The readout and its limits
  * are the modeler shell's (`zoomReadout`), so it reads and speaks like the
  * Miragon modelers' own zoom panel. Keyboard zoom (Ctrl/⌘ + / − / 0) and ⇧1
- * are chrome/keys.ts: the widget's own keymap on the whole document in the
- * Miragon widgets, whose buttons then name their keys (`keys`), and the same
- * keymap on the focused canvas in bpmn and the DMN DRD view
- * (EngineOptions.chromeKeys), where a step goes the way it points as here.
+ * are chrome/keys.ts: the widget's own keymap on the whole document, run on
+ * the canvas of bpmn and the DMN DRD view first (EngineOptions.chromeKeys),
+ * where a step goes the way it points as here; the buttons name the keys.
  * Touch undo/redo is phase 2.
  */
 import {
@@ -64,21 +63,19 @@ export const mountZoom: MountZoom = ({ els, fit, keys }) => {
       if (e.detail > 0) view?.focus?.();
     };
   els.zoomPct.title = defaultMessages.zoomToActual(formatPercent(1, LANG));
-  // where the widget binds the zoom keys, each button names its key in the
-  // tooltip and to assistive tech (guide §5.6, §5.8), in the shell's words
-  if (keys) {
-    const named: Array<[HTMLElement, ChromeKey, string]> = [
-      [els.zoomOut, "zoomOut", defaultMessages.zoomOut],
-      [els.zoomPct, "zoomToActual", els.zoomPct.title],
-      [els.zoomIn, "zoomIn", defaultMessages.zoomIn],
-      [els.zoomFit, "fit", defaultMessages.fit],
-    ];
-    for (const [button, key, name] of named) {
-      button.title = `${name} (${shortcutLabel(key, keys.platform, defaultMessages.keyNames)})`;
-      button.setAttribute("aria-keyshortcuts", ariaKeyShortcuts(key, keys.platform));
-      // the readout's name says where it stands ("Zoom to 100% (now 56%)")
-      if (button !== els.zoomPct) button.setAttribute("aria-label", name);
-    }
+  // each button names its key in the tooltip and to assistive tech (guide
+  // §5.6, §5.8), in the shell's words
+  const named: Array<[HTMLElement, ChromeKey, string]> = [
+    [els.zoomOut, "zoomOut", defaultMessages.zoomOut],
+    [els.zoomPct, "zoomToActual", els.zoomPct.title],
+    [els.zoomIn, "zoomIn", defaultMessages.zoomIn],
+    [els.zoomFit, "fit", defaultMessages.fit],
+  ];
+  for (const [button, key, name] of named) {
+    button.title = `${name} (${shortcutLabel(key, keys.platform, defaultMessages.keyNames)})`;
+    button.setAttribute("aria-keyshortcuts", ariaKeyShortcuts(key, keys.platform));
+    // the readout's name says where it stands ("Zoom to 100% (now 56%)")
+    if (button !== els.zoomPct) button.setAttribute("aria-label", name);
   }
   els.zoomOut.onclick = thenCanvas(() => view?.stepZoom(-1));
   els.zoomIn.onclick = thenCanvas(() => view?.stepZoom(1));

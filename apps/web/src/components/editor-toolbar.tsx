@@ -173,7 +173,8 @@ export function EditorToolbar({
   modelerMenu?: ModelerMenu;
   /** the ⋯ trigger, where the renderer's dialogs give the focus back */
   menuTriggerRef?: Ref<HTMLButtonElement>;
-  /** the canvas a click on a Model action of the ⋯ menu hands the focus to */
+  /** the canvas a click on a Model action of the ⋯ menu or on a document mode
+   *  (the Workshop switch) hands the focus to */
   canvas?: FocusableCanvas;
 }) {
   const [owner = "", name = ""] = repo.split("/");

@@ -1,11 +1,11 @@
 /**
  * The widget chrome as shell.ts composes it (mountChrome), under jsdom on the
  * real skeletons (mcp-app-miragon.html, mcp-app.html): what only the
- * composition decides. A Miragon widget binds the zoom keys and ⇧1 to the
- * view, keeps them off behind a state card and names them on the zoom
- * buttons, the tooltip's chip and aria-keyshortcuts alike, for the US and the
- * German layout; the bpmn widget hands them to its engine for the focused
- * canvas (WidgetChrome.canvasKeys), off behind a state card too. The menu's Legend
+ * composition decides. Every widget binds the zoom keys and ⇧1 to the view
+ * on its whole document, keeps them off behind a state card and names them
+ * on the zoom buttons, the tooltip's chip and aria-keyshortcuts alike, for
+ * the US and the German layout; the bpmn widget also hands the same keys to
+ * its engine for its canvas (WidgetChrome.canvasKeys). The menu's Legend
  * toggles the registered panel, and a renderer's web link in the canvas
  * goes through the host instead of the sandbox's blocked new window.
  */
@@ -131,57 +131,54 @@ function assertChipsNameTheirKeys(names: Array<[string, string | null]>): void {
   for (const [title, keys] of names) assert.equal(ariaKeyShortcutsFromLabel(chipOf(title)), keys, title);
 }
 
-test("a Miragon widget: the zoom keys run the view, a state card leaves them to the browser, the buttons name them", async () => {
-  const w = await chromeOf("miragon");
-  assert.equal(w.press("=", "Equal", { ctrlKey: true }), true, "the page does not zoom");
-  assert.equal(w.press("-", "Minus", { ctrlKey: true }), true);
-  assert.equal(w.press("0", "Digit0", { ctrlKey: true }), true);
-  assert.deepEqual(w.zoomed, ["in", "out", "to 1"]);
+for (const kind of ["miragon", "bpmn"] as const) {
+  test(`a ${kind} widget: the zoom keys run the view on the whole document, a state card leaves them to the browser, the buttons name them`, async () => {
+    const w = await chromeOf(kind);
+    assert.equal(w.press("=", "Equal", { ctrlKey: true }), true, "the page does not zoom");
+    assert.equal(w.press("-", "Minus", { ctrlKey: true }), true);
+    assert.equal(w.press("0", "Digit0", { ctrlKey: true }), true);
+    assert.deepEqual(w.zoomed, ["in", "out", "to 1"]);
 
-  w.chrome.showState({ kind: "read-failed", error: "gone" });
-  assert.equal(w.press("=", "Equal", { ctrlKey: true }), false, "a state card hides the diagram");
-  assert.deepEqual(w.zoomed, ["in", "out", "to 1"]);
+    w.chrome.showState({ kind: "read-failed", error: "gone" });
+    assert.equal(w.press("=", "Equal", { ctrlKey: true }), false, "a state card hides the diagram");
+    assert.deepEqual(w.zoomed, ["in", "out", "to 1"]);
 
-  assert.deepEqual(
-    w.zoomNames(),
-    [
-      ["Zoom out (Ctrl+Minus)", "Control+-"],
-      ["Zoom to 100% (Ctrl+0)", "Control+0"],
-      ["Zoom in (Ctrl+Plus)", "Control+= Control+Plus"],
-      ["Fit to view (Shift+1)", "Shift+1"],
-    ],
-    "jsdom's navigator is no Mac: the Ctrl names",
-  );
-  assertChipsNameTheirKeys(w.zoomNames());
-  assert.equal(w.document.getElementById("zoom-fit")!.getAttribute("aria-label"), "Fit to view");
-  w.close();
-});
+    assert.deepEqual(
+      w.zoomNames(),
+      [
+        ["Zoom out (Ctrl+Minus)", "Control+-"],
+        ["Zoom to 100% (Ctrl+0)", "Control+0"],
+        ["Zoom in (Ctrl+Plus)", "Control+= Control+Plus"],
+        ["Fit to view (Shift+1)", "Shift+1"],
+      ],
+      "jsdom's navigator is no Mac: the Ctrl names",
+    );
+    assertChipsNameTheirKeys(w.zoomNames());
+    assert.equal(w.document.getElementById("zoom-fit")!.getAttribute("aria-label"), "Fit to view");
+    w.close();
+  });
 
-test("a Miragon widget on a Mac: the zoom buttons name ⌘ and Meta, each chip the keys of the US and the German layout", async () => {
-  const w = await chromeOf("miragon", "MacIntel");
-  assert.deepEqual(w.zoomNames(), [
-    ["Zoom out (⌘−)", "Meta+-"],
-    ["Zoom to 100% (⌘0)", "Meta+0"],
-    ["Zoom in (⌘+)", "Meta+= Meta+Plus"],
-    ["Fit to view (⇧1)", "Shift+1"],
-  ]);
-  assertChipsNameTheirKeys(w.zoomNames());
-  w.close();
-});
+  test(`a ${kind} widget on a Mac: the zoom buttons name ⌘ and Meta, each chip the keys of the US and the German layout`, async () => {
+    const w = await chromeOf(kind, "MacIntel");
+    assert.deepEqual(w.zoomNames(), [
+      ["Zoom out (⌘−)", "Meta+-"],
+      ["Zoom to 100% (⌘0)", "Meta+0"],
+      ["Zoom in (⌘+)", "Meta+= Meta+Plus"],
+      ["Fit to view (⇧1)", "Shift+1"],
+    ]);
+    assertChipsNameTheirKeys(w.zoomNames());
+    w.close();
+  });
+}
 
-test("the bpmn widget: its focused canvas takes the zoom keys through the chrome, the page does not, and its buttons stay as they were", async () => {
+test("the bpmn widget: its engine gets the chrome's keys for the canvas, off behind a state card", async () => {
   const w = await chromeOf("bpmn");
-  assert.equal(w.press("=", "Equal", { ctrlKey: true }), false);
-  assert.equal(w.press("0", "Digit0", { ctrlKey: true }), false);
-  assert.deepEqual(w.zoomed, [], "off the canvas the browser keeps them");
   const keys = w.chrome.canvasKeys;
   assert.equal(keys.viewport(), true);
   for (const key of ["zoomIn", "zoomOut", "zoomToActual", "fit"] as const) keys.run(key);
   assert.deepEqual(w.zoomed, ["in", "out", "to 1", "fit"], "the engine's canvas runs them as the zoom group does");
   w.chrome.showState({ kind: "read-failed", error: "gone" });
   assert.equal(keys.viewport(), false, "a state card hides the diagram: the browser keeps them");
-  assert.equal(w.document.getElementById("zoom-in")!.hasAttribute("aria-keyshortcuts"), false);
-  assert.equal(w.document.getElementById("zoom-fit")!.title, "Fit diagram (Shift+1)");
   w.close();
 });
 

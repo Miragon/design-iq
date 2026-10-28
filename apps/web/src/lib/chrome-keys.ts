@@ -8,7 +8,9 @@
  * (routeCanvasChromeKeys). What a key means is the modeler shell's keymap
  * (mcp-app/core/keymap.ts chromeKeyAction); this reads what it depends on
  * from the DOM the way the shell's own key listener does, so a renderer's
- * dialog or popover counts as soon as it shows.
+ * dialog or popover counts as soon as it shows. Every view takes the keys on
+ * its whole document (guide §5.8), except in a text field, while a modal
+ * dialog is open and while no diagram is on screen.
  */
 import { isTextField, matchChromeKey } from "@miragon/modeler-shell/core";
 
@@ -80,21 +82,23 @@ interface CanvasKeyboard {
   removeListener(listener: CanvasKeyListener): void;
 }
 
-/** above every binding diagram-js, bpmn-js and dmn-js register (1000) */
-const BEFORE_CANVAS_BINDINGS = 1500;
+/** above every keyboard listener diagram-js, bpmn-js and dmn-js register
+ *  (their bindings at 1000, HandTool and KeyboardMoveSelection at 1500), as
+ *  the modeler shell's own guard sits */
+const BEFORE_CANVAS_BINDINGS = 2000;
 
 /**
- * The chrome keys of a diagram-js canvas (bpmn-js, the DMN DRD) while it has
- * the focus: its keyboard listens on the canvas's `<svg>` only, so the keys
- * act there and nowhere else, as the canvas's other keys do. Each one goes
- * through `handleChromeKey` to `deps.run`. diagram-js binds Cmd/Ctrl + `+` /
- * `-` / `0` to its own `zoomScroll`, which clamps a step to 20 %, so from a
- * fit below 20 % its zoom out zooms in (guide §5.8); this listens before that
- * binding and never lets it act, so each press acts once and a step only goes
- * the way it points (the view's `stepZoom`). A key the keymap leaves alone
- * (a modal dialog, a composition) keeps its default, so the browser zooms the
- * page. A diagram without a keyboard (a viewer that registers none) is left
- * as it is. Returns the unbind.
+ * The chrome keys of a diagram-js canvas (bpmn-js, the DMN DRD) on the canvas
+ * itself, where its keyboard listens (the canvas's `<svg>`). diagram-js binds
+ * Cmd/Ctrl + `+` / `-` / `0` there to its own `zoomScroll`, which clamps a
+ * step to 20 %, so from a fit below 20 % its zoom out zooms in (guide §5.8);
+ * this listens before that binding and never lets it act. Each key goes
+ * through `handleChromeKey` to `deps.run` and is prevented, so the caller's
+ * listener on the document, which takes the keys everywhere else, skips it
+ * and each press acts once. A key the keymap leaves alone (a modal dialog, a
+ * composition) keeps its default, so the browser zooms the page. A diagram
+ * without a keyboard (dmn-js's read-only DRD) binds no zoom of its own: the
+ * document listener alone takes its keys. Returns the unbind.
  */
 export function routeCanvasChromeKeys(
   diagram: { get(service: string): unknown },

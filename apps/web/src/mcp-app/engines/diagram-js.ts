@@ -317,3 +317,37 @@ export function diagramView(
     },
   };
 }
+
+// ── the wheel's direction ───────────────────────────────────────────────────
+
+interface ZoomScrollLike {
+  zoom(delta: number, position?: unknown): void;
+}
+
+/**
+ * diagram-js's wheel and pinch zoom (`zoomScroll.zoom`) caps the next level
+ * to 20 to 400 %, so from a fit below 20 % a zoom out zooms in to 20 %, and
+ * above 400 % a zoom in zooms out (guide §5.8: zooming out never zooms in).
+ * There the level stays as it is, as the view's `stepZoom` keeps it for the
+ * buttons and keys. For bpmn-js and the DMN DRD; a diagram without
+ * `zoomScroll` (dmn-js's read-only DRD) has no wheel zoom. Returns the undo.
+ */
+export function keepWheelZoomDirection(instance: Pick<DiagramLike, "get">): () => void {
+  let zoomScroll: ZoomScrollLike;
+  let canvas: { zoom(): number };
+  try {
+    zoomScroll = instance.get("zoomScroll") as ZoomScrollLike;
+    canvas = instance.get("canvas") as { zoom(): number };
+  } catch {
+    return () => {};
+  }
+  const zoom = zoomScroll.zoom;
+  zoomScroll.zoom = (delta, position) => {
+    const level = canvas.zoom();
+    if (delta > 0 ? !canZoomIn(level) : !canZoomOut(level)) return;
+    zoom.call(zoomScroll, delta, position);
+  };
+  return () => {
+    zoomScroll.zoom = zoom;
+  };
+}
