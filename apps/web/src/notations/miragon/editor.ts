@@ -10,7 +10,10 @@
  * mounts it without one and fits the first import as ⇧1 does, beside the
  * palette; a peer's re-import keeps the view the user has.
  * The zoom keys and ⇧1 are the MCP-App widget's (lib/chrome-keys.ts): the
- * renderers bind none, and without them Cmd/Ctrl + `+` zooms the page. A
+ * renderers bind none, and without them Cmd/Ctrl + `+` zooms the page. They
+ * act on the whole page while the canvas is on screen; a text field, a modal
+ * dialog and the source view leave them to the browser. Every other key is
+ * the renderer's, which acts only on a key aimed at its own canvas. A
  * renderer's own menu entries reach the shell's ⋯ menu (MountedEditor.menu),
  * its element surface the shell's todos (MountedEditor.elements, through
  * lib/todo-surface-canvas.ts).
@@ -119,13 +122,11 @@ export function mountMiragonEditor(
   const doc = container.ownerDocument;
   const reducedMotion = (): boolean =>
     doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-  // the live editor holds every key from document listeners while the canvas
-  // is behind the source or a dialog (lib/canvas-keys), so this hears only
-  // the keys meant for the canvas in front
   const onKey = (event: KeyboardEvent): void => {
     handleChromeKey(event, doc, {
       menuOpen: () => false,
-      viewport: () => container.clientWidth > 0 && container.clientHeight > 0,
+      // the source view keeps the canvas mounted, hidden behind it at its full size
+      viewport: () => (ctx.visibility?.visible() ?? true) && container.clientWidth > 0 && container.clientHeight > 0,
       run: (key) => {
         if (key === "fit") view.fit(fitInsets(), !reducedMotion());
         else if (key === "zoomToActual") view.zoomTo(1);

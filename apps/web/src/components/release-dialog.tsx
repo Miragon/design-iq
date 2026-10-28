@@ -20,7 +20,7 @@ import { Badge } from "@designiq/ui-kit/components/badge";
 import { Button } from "@designiq/ui-kit/components/button";
 import { cn } from "@designiq/ui-kit/lib/utils";
 import { Link2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import { dialogBackdrop, dialogPanel, fieldClass } from "@/components/dialog-shell";
 import { type ChangedFileWire } from "@/lib/api";
@@ -62,6 +62,7 @@ export function ReleaseDialog({
   const repos = useRepos();
   const branch = repos.data?.find((r) => r.fullName === repo)?.defaultBranch ?? "main";
 
+  const titleId = useId();
   // no close while the release runs — an unmounted dialog would drop the
   // mutation's onSuccess (toast + refetch), same as the create dialogs
   const close = () => {
@@ -124,11 +125,16 @@ export function ReleaseDialog({
   return (
     <div className={dialogBackdrop} onClick={close}>
       <form
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className={cn(dialogPanel, "flex max-h-[85vh] max-w-lg flex-col")}
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
       >
-        <h2 className="text-base font-semibold">Release → PR</h2>
+        <h2 id={titleId} className="text-base font-semibold">
+          Release → PR
+        </h2>
         <p className="text-muted-foreground mt-1.5 text-xs">
           Ship exactly the files you pick as one pull request. The workspace is shared — files marked{" "}
           <Badge variant="warning">active</Badge> are open in a live session and may be mid-edit.

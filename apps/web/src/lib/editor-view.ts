@@ -16,8 +16,7 @@
  * every resize. Without the room the canvas shows, and the choice stays.
  *
  * What the shell derives from the view lives here too, so its rules are
- * tested without a browser: the layers on screen (editorLayers) and when a
- * canvas engine's keys are held (heldCanvasKeys).
+ * tested without a browser: the layers on screen (editorLayers).
  *
  * Pure, storage a parameter (test/editor-view.test.ts), on the pattern of
  * ./repos-snapshot.ts.
@@ -146,22 +145,6 @@ export function editorLayers(
 ): EditorLayers {
   const shown = doc.structured ? "canvas" : doc.visual ? shownView(view, doc.splitAvailable) : "source";
   return { shown, sourceShown: shown !== "canvas", canvasShown: shown !== "source", split: shown === "split" };
-}
-
-/**
- * Which keys the shell holds from a canvas engine that takes them from
- * document (WebNotationPlugin.documentKeys, lib/canvas-keys): all of them
- * while its layer is hidden or a dialog is up; in the split view, where it is
- * in front, the ones typed in the source beside it (typing there must not
- * edit the diagram); none while it is in front alone.
- */
-export function heldCanvasKeys(
-  layers: EditorLayers,
-  state: { documentKeys: boolean; dialogOpen: boolean },
-): "all" | "source" | "none" {
-  if (!state.documentKeys) return "none";
-  if (!layers.canvasShown || state.dialogOpen) return "all";
-  return layers.split ? "source" : "none";
 }
 
 type ViewUpdate = EditorView | ((current: EditorView) => EditorView);

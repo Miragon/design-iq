@@ -1,16 +1,27 @@
 /**
  * The focus after a click on the SPA's chrome (issue 298, guide §5.4 and
- * §5.8) in the built app, in headless Chromium, with the real modelers:
- * bpmn-js, the dmn-js DRD and every Miragon renderer. A check run by hand,
- * not by `pnpm test`, because CI has no browser. The jsdom suites run the
- * rules on the real canvases (test/canvas-focus-dom.test.ts) and the toolbar
- * with radix's menu beside a stand-in canvas (test/toolbar-focus-dom.test.ts),
- * never the two together in the live editor. Run it after a change to the
- * editor's toolbar, radix or a renderer, from the repository root:
+ * §5.8) and the keys of a hidden canvas, in the built app, in headless
+ * Chromium or WebKit, with the real modelers: bpmn-js, the dmn-js DRD and
+ * every Miragon renderer. A check run by hand, not by `pnpm test`, because
+ * CI has no browser. The jsdom suites run the rules on the real canvases
+ * (test/canvas-focus-dom.test.ts, test/canvas-keys-dom.test.ts) and the
+ * toolbar with radix's menu beside a stand-in canvas
+ * (test/toolbar-focus-dom.test.ts), never the two together in the live
+ * editor. Run it after a change to the editor's toolbar, radix or a
+ * renderer, from the repository root, in both engines:
  *
  *   pnpm build
  *   npx -y playwright@1.56.1 install --only-shell chromium     # once
  *   npx -y -p playwright@1.56.1 -c "node apps/web/test/canvas-focus-chromium.ts"
+ *
+ * BROWSER=webkit runs it in WebKit (`install webkit` instead, once).
+ *
+ * Safari gives a clicked button no focus: its mousedown takes the focus off
+ * whatever held it, so the page has it when the click runs. Chromium and
+ * Playwright's WebKit focus the button. Every page here clicks as Safari
+ * does (the init script of the modeler shell's e2e/pointer-focus.spec.ts),
+ * so a hand-back that waits for the clicked button to hold the focus fails
+ * in both engines (Miragon/modeler-suite#165).
  *
  * It starts a Live Host of its own (LIVE_AUTH=none, on PORT, 8393 unless
  * set) on a generated content repo with one model per notation (NOTATIONS,
@@ -20,13 +31,23 @@
  *     with a click where the notation has one (Event Storming's Type
  *     captions, the Context Map's Legend): one click on an element of the
  *     canvas closes the menu, selects the element and leaves the canvas the
- *     focus, and Delete deletes it.
+ *     focus, Delete deletes it and Cmd/Ctrl+Z brings it back.
  *  2. Escape closes the ⋯ menu and gives its trigger the focus; a click on
- *     Rename… leaves the focus to the dialog's field.
+ *     Rename… leaves the focus to the dialog's field. Under the modal
+ *     Release → PR dialog Cmd/Ctrl+= is not prevented (the browser zooms the
+ *     page) and leaves the canvas's view.
  *  3. The view switch: Enter on the source side and then on the canvas side
  *     keeps the focus on the switch, and Delete deletes nothing; a click on
  *     the source side and then on the canvas side hands the canvas the
- *     focus, and Delete deletes the selected element.
+ *     focus, Delete deletes the selected element and Cmd/Ctrl+Z brings it
+ *     back.
+ *  4. The canvas behind the source view (the live editor holds no keys):
+ *     after a delete on the canvas and a click on the source side, with the
+ *     focus on the page and then on the switch, Cmd/Ctrl+Z, Delete,
+ *     Backspace (in Chromium), an arrow, Cmd/Ctrl+A and the renderers'
+ *     single-key tools change nothing, and Cmd/Ctrl+= is not prevented (the
+ *     browser zooms the page) and leaves the view. A click on the canvas
+ *     side, then Cmd/Ctrl+Z, undoes the delete.
  *
  * No page error and no console error on the way. Exits 1 on any failure.
  */
@@ -51,21 +72,22 @@ interface Page {
   on(event: "pageerror", listener: (error: Error) => void): void;
   on(event: "console", listener: (message: { type(): string; text(): string }) => void): void;
 }
-interface Playwright {
-  chromium: {
-    launch(options: { headless: boolean }): Promise<{
-      newContext(options: { viewport: { width: number; height: number } }): Promise<{
-        newPage(): Promise<Page>;
-        close(): Promise<void>;
-      }>;
+interface BrowserType {
+  launch(options: { headless: boolean }): Promise<{
+    newContext(options: { viewport: { width: number; height: number } }): Promise<{
+      addInitScript(script: () => void): Promise<void>;
+      newPage(): Promise<Page>;
       close(): Promise<void>;
     }>;
-  };
+    close(): Promise<void>;
+  }>;
 }
+type Playwright = Record<"chromium" | "webkit", BrowserType>;
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const DIST = join(ROOT, "apps/web/dist");
 const PORT = Number(process.env.PORT ?? 8393);
+const engine = process.env.BROWSER === "webkit" ? "webkit" : "chromium";
 const BASE = `http://localhost:${PORT}`;
 const REPO = "acme/focus";
 /** what the canvas, the menu or the switch does on a click or a key has settled by then */
@@ -251,6 +273,58 @@ const SWITCH = '[role="group"][aria-label="Editor view"] button';
 const CANVAS_SIDE = `${SWITCH}:first-child`;
 const SOURCE_SIDE = `${SWITCH}:last-child`;
 
+/** ⌘ on macOS, Ctrl elsewhere: the modifier of undo, select all and the zoom keys */
+const MOD = "ControlOrMeta";
+
+/**
+ * Safari's click model, as the modeler shell's e2e/pointer-focus.spec.ts
+ * forces it: a pressed button takes no focus, and its mousedown takes the
+ * focus off the element that held it. Runs in the page, so it stays
+ * self-contained.
+ */
+function clickButtonsLikeSafari(): void {
+  document.addEventListener(
+    "mousedown",
+    (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest("button")) return;
+      event.preventDefault();
+      (document.activeElement as HTMLElement | SVGElement | null)?.blur();
+    },
+    true,
+  );
+}
+
+/** what a key that reached the canvas would change: its shapes, where they are, its view */
+const canvasState = (page: Page): Promise<string> =>
+  page.evaluate(() => {
+    const shapes = [...document.querySelectorAll(".djs-shape[data-element-id]")].map(
+      (shape) => `${shape.getAttribute("data-element-id")}@${shape.getAttribute("transform")}`,
+    );
+    const viewport = document.querySelector(".djs-container > svg .viewport")?.getAttribute("transform");
+    return JSON.stringify({ shapes: shapes.sort(), viewport });
+  }, undefined);
+
+/** records, at window, whether each keydown was prevented: the browser acts on one that was not */
+const recordKeys = (page: Page): Promise<void> =>
+  page.evaluate(() => {
+    const record = window as unknown as { keysPrevented: boolean[] };
+    record.keysPrevented = [];
+    window.addEventListener("keydown", (event) => record.keysPrevented.push(event.defaultPrevented));
+  }, undefined);
+
+const lastKeyPrevented = (page: Page): Promise<boolean | undefined> =>
+  page.evaluate(() => (window as unknown as { keysPrevented: boolean[] }).keysPrevented.at(-1), undefined);
+
+/**
+ * keys a canvas acts on: undo, select all, delete, move, and the renderers'
+ * single-key tools. Backspace, which the renderers take as Delete, only in
+ * Chromium: Playwright's WebKit goes back in the history on a Backspace
+ * outside a text field (Safari does not), which would leave the page
+ */
+const CANVAS_KEYS = [`${MOD}+z`, "Delete", "ArrowRight", `${MOD}+a`, "c", "e", "l", "a"].concat(
+  engine === "webkit" ? [] : ["Backspace"],
+);
+
 async function run(page: Page, model: Model): Promise<void> {
   const name = model.notation;
 
@@ -284,6 +358,9 @@ async function run(page: Page, model: Model): Promise<void> {
   await page.keyboard.press("Delete");
   await page.waitForTimeout(SETTLE);
   check(!(await exists(page, model.a)), `${name}: Delete deletes ${model.a}`);
+  await page.keyboard.press(`${MOD}+z`);
+  await page.waitForTimeout(SETTLE);
+  check(await exists(page, model.a), `${name}: ... and ${MOD}+Z brings it back`);
 
   // 2. Escape gives the trigger the focus
   await page.click('button[aria-label="More"]');
@@ -303,6 +380,21 @@ async function run(page: Page, model: Model): Promise<void> {
     undefined,
   );
   check(inDialog, `${name}: a click on Rename… leaves the focus to the dialog's field`);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(SETTLE);
+  const view = await canvasState(page);
+  await page.click('button[aria-label="More"]');
+  await page.click('[role="menu"] [role="menuitem"]:has-text("Release → PR")');
+  await page.waitForTimeout(SETTLE);
+  const modal = await page.evaluate(
+    () => document.querySelector('[role="dialog"][aria-modal="true"]') !== null,
+    undefined,
+  );
+  check(modal, `${name}: Release → PR opens a modal dialog`);
+  await page.keyboard.press(`${MOD}+=`);
+  check((await lastKeyPrevented(page)) === false, `${name}: ... under it ${MOD}+= is the browser's`);
+  await page.waitForTimeout(SETTLE);
+  check((await canvasState(page)) === view, `${name}: ... and the canvas keeps its view`);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(SETTLE);
 
@@ -331,6 +423,44 @@ async function run(page: Page, model: Model): Promise<void> {
   await page.keyboard.press("Delete");
   await page.waitForTimeout(SETTLE);
   check(!(await exists(page, model.b)), `${name}: ... and Delete deletes ${model.b}`);
+  await page.keyboard.press(`${MOD}+z`);
+  await page.waitForTimeout(SETTLE);
+  check(await exists(page, model.b), `${name}: ... and ${MOD}+Z brings it back`);
+
+  // 4. behind the source view the canvas hears no key, wherever the focus is outside it
+  await clickElement(page, model.a);
+  await page.waitForTimeout(SETTLE);
+  await page.keyboard.press("Delete");
+  await page.waitForTimeout(SETTLE);
+  check(!(await exists(page, model.a)), `${name}: Delete deletes ${model.a}, an edit to undo`);
+  await clickElement(page, model.b);
+  await page.waitForTimeout(SETTLE);
+  check(await selected(page, model.b), `${name}: ${model.b} is selected`);
+  const before = await canvasState(page);
+  await page.click(SOURCE_SIDE);
+  await page.waitForTimeout(SETTLE);
+  const afterSource = await focused(page);
+  check(afterSource === "body", `${name}: a click on the source side leaves the page the focus (${afterSource})`);
+  const url = await page.evaluate(() => location.href, undefined);
+  for (const where of ["the page", "the switch"]) {
+    if (where === "the switch") await page.focus(SOURCE_SIDE);
+    for (const key of CANVAS_KEYS) await page.keyboard.press(key);
+    await page.keyboard.press(`${MOD}+=`);
+    check((await lastKeyPrevented(page)) === false, `${name}: with the focus on ${where}, ${MOD}+= is the browser's`);
+    await page.waitForTimeout(SETTLE);
+    check(
+      (await canvasState(page)) === before,
+      `${name}: with the focus on ${where}, no key reaches the canvas behind the source`,
+    );
+  }
+  check((await page.evaluate(() => location.href, undefined)) === url, `${name}: ... and the page stays`);
+  await page.click(CANVAS_SIDE);
+  await page.waitForTimeout(SETTLE);
+  const backOnCanvas = await focused(page);
+  check(backOnCanvas === "canvas", `${name}: a click on the canvas side hands the canvas the focus (${backOnCanvas})`);
+  await page.keyboard.press(`${MOD}+z`);
+  await page.waitForTimeout(SETTLE);
+  check(await exists(page, model.a), `${name}: ... and ${MOD}+Z undoes the delete from before the source view`);
 }
 
 const playwright = loadPlaywright();
@@ -342,13 +472,14 @@ mkdirSync(join(work, "content", "models"), { recursive: true });
 writeFileSync(join(work, "content", "designiq.yml"), "models: models\n");
 for (const model of MODELS) writeFileSync(join(work, "content", "models", model.fileName), model.text);
 const host = await startLiveHost(join(work, "content"), join(work, "data"));
-const browser = await playwright.chromium.launch({ headless: true });
+const browser = await playwright[engine].launch({ headless: true });
 
 const picked = process.env.NOTATIONS?.split(",");
 try {
   for (const model of MODELS.filter(({ notation }) => !picked || picked.includes(notation))) {
     console.log(`\n== ${model.notation} (${model.fileName})`);
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    await context.addInitScript(clickButtonsLikeSafari);
     const page = await context.newPage();
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
@@ -366,6 +497,7 @@ try {
         { timeout: 60_000, polling: 100 },
       );
       await page.waitForTimeout(500);
+      await recordKeys(page);
       await run(page, model);
       check(errors.length === 0, `${model.notation}: no page error, no console error`);
       for (const error of errors) console.log(`     ${error}`);
@@ -386,5 +518,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  "\nA click on the canvas or the view switch's canvas side left every canvas the focus; Enter and Escape kept the guide's.",
+  `\nIn ${engine}, clicking as Safari does: a click on the canvas or the view switch's canvas side left every canvas the focus, Enter and Escape kept the guide's, and no key reached a canvas behind the source.`,
 );
