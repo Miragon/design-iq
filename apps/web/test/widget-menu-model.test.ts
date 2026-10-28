@@ -219,7 +219,7 @@ test("key model: ↑/↓ wrap past disabled items, Home/End jump, first-letter t
   assert.equal(menuKeyNav(items, 3, "Tab"), 3, "not a navigation key");
 });
 
-// ── a Miragon renderer's own entries (mapMenu / boardMenu / contextMapMenu) ──
+// ── a Miragon renderer's own entries (mapMenu / boardMenu / contextMapMenu / diagramMenu) ──
 
 /** the shape of a renderer's menu content, with what each entry reports */
 function rendererMenu() {
