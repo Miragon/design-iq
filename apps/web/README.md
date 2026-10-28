@@ -477,11 +477,15 @@ are the ONE template + entry, built once per spec with the spec aliased in
 through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
 `mcp-app-<id>.html`. The dev server resolves that alias to
 `widget-spec.dev.ts`: `/mcp-app-miragon.html?notation=<id>` previews any of them.
-One renderer needs a sheet of designIQ's own: value-chain-renderer lays out its palette only
-inside the modeler shell's chrome, which designIQ does not mount, so `lib/value-chain-palette.css`
-(imported by `index.css` and `miragon-styles.css`) gives it the horizontal palette at the top
-centre of guide §5.5, as the other renderers draw theirs; `test/vendor-css.test.ts` fails once a
-release lays the palette out itself, and the sheet goes then.
+One renderer needs a sheet and a module of designIQ's own: value-chain-renderer lays out its
+palette, and makes it reachable by keyboard, only inside the modeler shell's chrome, which
+designIQ does not mount. `lib/value-chain-palette.css` (imported by `index.css` and
+`miragon-styles.css`) gives it the horizontal glass palette at the top centre of guide §5.5, in
+the renderer's own roles; `lib/value-chain-palette.ts` (the spec's `attached` hook, in both
+hosts) gives it the toolbar semantics, the roving tab stop with Enter and Space, the pressed
+tool and its place before the canvas in the tab order. `test/vendor-css.test.ts` and
+`test/value-chain-palette-dom.test.ts` fail once a release does either itself, and the file
+goes then. The hover tooltip with the shortcut chip is the renderer's own.
 
 **PNG exports in Geist.** Export as PNG draws the renderer's standalone SVG as an image
 (`lib/export-image.ts`, the same for every Miragon renderer, in the SPA and in the widget) on
