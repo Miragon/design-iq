@@ -50,12 +50,11 @@ import {
   type TodoWire,
 } from "@/lib/api";
 import { type FocusableCanvas, focusCanvasIn, viewSwitchFocus } from "@/lib/canvas-focus";
-import { keepKeysFromCanvas } from "@/lib/canvas-keys";
 import {
+  canvasInert,
   editorLayers,
   type EditorView,
   editorViews,
-  heldCanvasKeys,
   readViewChoice,
   rememberViewChoice,
   type ViewChoice,
@@ -645,6 +644,7 @@ export function LiveEditor({
   const splitAvailable = splitView && room.fits;
   const layers = editorLayers(view, { visual: isVisual, structured: structuredDoc, splitAvailable });
   const { shown, split, sourceShown, canvasShown } = layers;
+  const dialogOpen = diff !== null || todoCreateOpen || releaseOpen || renameOpen || duplicateOpen;
   const bounds = ratioBounds(room.width, room.rem);
   const shownRatio = clampRatio(ratio, bounds);
   const ActivePanel = activePanelSpec?.component;
@@ -666,16 +666,6 @@ export function LiveEditor({
     });
     return () => void toast.dismiss(id);
   }, [unrenderable, sourceShown]);
-  // the canvas engine stays mounted behind the source layer and the dialogs:
-  // one that takes its shortcuts from document hears keys only while in front
-  // (lib/canvas-keys), and in the split view not those typed in the source
-  // beside it (Monaco and its widgets live inside the source layer)
-  const dialogOpen = diff !== null || todoCreateOpen || releaseOpen || renameOpen || duplicateOpen;
-  const keysHeld = heldCanvasKeys(layers, { documentKeys: plugin?.documentKeys === true, dialogOpen });
-  useEffect(() => {
-    if (keysHeld === "none") return undefined;
-    return keepKeysFromCanvas(document, keysHeld === "source" ? (sourceRef.current ?? undefined) : undefined);
-  }, [keysHeld]);
 
   // the notation plugin's panels and the shell's own (todos, history) are the
   // same KIND of thing to the user, so they render the same way and carry the
@@ -792,7 +782,7 @@ export function LiveEditor({
         )}
         <div
           ref={canvasRef}
-          inert={!canvasShown}
+          inert={canvasInert(layers, dialogOpen)}
           className={cn(plugin?.canvasClassName, "absolute inset-0", !canvasShown && "pointer-events-none opacity-0")}
           style={split ? SPLIT_PANES.canvas : undefined}
         />

@@ -16,8 +16,8 @@
  * every resize. Without the room the canvas shows, and the choice stays.
  *
  * What the shell derives from the view lives here too, so its rules are
- * tested without a browser: the layers on screen (editorLayers) and when a
- * canvas engine's keys are held (heldCanvasKeys).
+ * tested without a browser: the layers on screen (editorLayers) and when the
+ * canvas is out of reach (canvasInert).
  *
  * Pure, storage a parameter (test/editor-view.test.ts), on the pattern of
  * ./repos-snapshot.ts.
@@ -149,19 +149,13 @@ export function editorLayers(
 }
 
 /**
- * Which keys the shell holds from a canvas engine that takes them from
- * document (WebNotationPlugin.documentKeys, lib/canvas-keys): all of them
- * while its layer is hidden or a dialog is up; in the split view, where it is
- * in front, the ones typed in the source beside it (typing there must not
- * edit the diagram); none while it is in front alone.
+ * Whether the canvas layer is out of reach: behind the source view, and
+ * behind a modal dialog. Nothing in the dialogs keeps the focus inside them,
+ * so a Tab would otherwise land on the canvas behind one, and a renderer acts
+ * on a key aimed at its focused canvas, however dimmed it is.
  */
-export function heldCanvasKeys(
-  layers: EditorLayers,
-  state: { documentKeys: boolean; dialogOpen: boolean },
-): "all" | "source" | "none" {
-  if (!state.documentKeys) return "none";
-  if (!layers.canvasShown || state.dialogOpen) return "all";
-  return layers.split ? "source" : "none";
+export function canvasInert(layers: EditorLayers, dialogOpen: boolean): boolean {
+  return !layers.canvasShown || dialogOpen;
 }
 
 type ViewUpdate = EditorView | ((current: EditorView) => EditorView);

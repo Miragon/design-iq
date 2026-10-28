@@ -20,7 +20,7 @@ import { Button } from "@designiq/ui-kit/components/button";
 import { cn } from "@designiq/ui-kit/lib/utils";
 import { GitCompare, RotateCcw, X } from "lucide-react";
 import * as monaco from "monaco-editor";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { dialogBackdrop } from "@/components/dialog-shell";
 import type { FileCommitWire } from "@/lib/api";
@@ -50,6 +50,7 @@ export function HistoryDiffDialog({
   onRestore: () => void;
   onClose: () => void;
 }) {
+  const titleId = useId();
   const monacoHostRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<"diagram" | "text">(diagramDiff ? "diagram" : "text");
   /** the plugin's diff could not render this pair (invalid intermediate content) */
@@ -95,12 +96,15 @@ export function HistoryDiffDialog({
   return (
     <div className={dialogBackdrop} onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className="bg-popover text-popover-foreground flex h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b px-4 py-2">
           <GitCompare className="text-muted-foreground size-4 shrink-0" />
-          <span className="truncate text-sm font-medium">
+          <span id={titleId} className="truncate text-sm font-medium">
             <span className="font-mono">{commit.sha.slice(0, 7)}</span> · {commit.subject}
           </span>
           <div className="flex-1" />

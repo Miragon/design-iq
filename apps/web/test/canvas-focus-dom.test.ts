@@ -9,7 +9,10 @@
  * selection; Enter on it keeps the focus on the switch, and Delete does
  * nothing. A click on a Model action of the ⋯ menu hands the canvas the focus
  * as the menu closes; Enter on it leaves the focus to radix (the trigger).
- * The toolbar's React wiring (the non-modal ⋯ menu, its entries' clicks):
+ * Both hand-backs also hold under Safari's click model, where a pressed
+ * button takes no focus and takes it off the canvas, so the click finds the
+ * page focused (Miragon/modeler-suite#165): the click is dispatched without
+ * moving the focus to the button. The toolbar's React wiring (the non-modal ⋯ menu, its entries' clicks):
  * test/toolbar-focus-dom.test.ts; the whole SPA in a browser:
  * test/canvas-focus-chromium.ts.
  */
@@ -261,5 +264,81 @@ for (const [name, mount] of EDITORS) {
     diagramSide.remove();
     trigger.remove();
     container.remove();
+  });
+}
+
+/** a pointer click as Safari runs it: the pressed button takes no focus and takes it off what held it */
+function clickLikeSafari(button: HTMLElement): void {
+  const pressed = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, detail: 1 });
+  if (button.dispatchEvent(pressed)) (document.activeElement as HTMLElement | SVGElement | null)?.blur();
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+}
+
+for (const [name, mount] of EDITORS) {
+  test(`${name}: clicking as Safari does, the Diagram side and a Model action hand the canvas the focus, and Delete and Ctrl+Z act there`, async () => {
+    const { focusCanvasIn, isPointerClick, menuCloseFocus, viewSwitchFocus } =
+      await import("../src/lib/canvas-focus.ts");
+    const { editor, container, diagram } = await mount();
+    const svg = container.querySelector(".djs-container > svg");
+    assert.ok(svg, `${name}: the canvas`);
+    const shapes = (): DiagramElement[] =>
+      diagram()
+        .get("elementRegistry")
+        .filter((element) => element.parent !== undefined && !element.labelTarget && !element.waypoints);
+    const select = (): void => diagram().get("selection").select(shapes()[0]!);
+    const press = (key: string, init: KeyboardEventInit = {}): void =>
+      void document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }),
+      );
+
+    let shown = true;
+    const canvas = { shown: () => shown, focus: () => focusCanvasIn(container, editor) };
+    const views = viewSwitchFocus(canvas);
+    const sourceSide = document.createElement("button");
+    const diagramSide = document.createElement("button");
+    document.body.append(sourceSide, diagramSide);
+    sourceSide.addEventListener("click", (event) => {
+      views.chose("source", isPointerClick(event));
+      shown = false;
+      views.shown();
+    });
+    diagramSide.addEventListener("click", (event) => views.chose("canvas", isPointerClick(event)));
+    const showCanvas = (): void => {
+      shown = true;
+      views.shown();
+    };
+
+    try {
+      (svg as SVGSVGElement).focus();
+      select();
+      const before = shapes().length;
+      clickLikeSafari(sourceSide);
+      assert.equal(document.activeElement, document.body, `${name}: the press took the focus off the canvas`);
+      clickLikeSafari(diagramSide);
+      assert.equal(document.activeElement, document.body, `${name}: the clicked button took none`);
+      showCanvas();
+      assert.equal(document.activeElement, svg, `${name}: a click on Diagram hands the canvas the focus`);
+      press("Delete");
+      assert.equal(shapes().length, before - 1, `${name}: Delete deletes the selection`);
+      press("z", { ctrlKey: true, code: "KeyZ" });
+      assert.equal(shapes().length, before, `${name}: Ctrl+Z brings it back`);
+
+      const menu = menuCloseFocus();
+      select();
+      (document.activeElement as HTMLElement | SVGElement | null)?.blur();
+      menu.pointerReleased();
+      menu.actedOnCanvas({ detail: 1 });
+      assert.equal(menu.closing(canvas), true, `${name}: a click on a Model action settles the focus`);
+      assert.equal(document.activeElement, svg, `${name}: on the canvas, from the page`);
+      press("Delete");
+      assert.equal(shapes().length, before - 1, `${name}: Delete deletes the selection`);
+      press("z", { ctrlKey: true, code: "KeyZ" });
+      assert.equal(shapes().length, before, `${name}: Ctrl+Z brings it back`);
+    } finally {
+      editor.destroy();
+      sourceSide.remove();
+      diagramSide.remove();
+      container.remove();
+    }
   });
 }

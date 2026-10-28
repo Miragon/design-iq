@@ -164,6 +164,7 @@ export function TodoCreateDialog({
   onClose: () => void;
 }) {
   const idPrefix = useId();
+  const titleId = useId();
   const [title, setTitle] = useState("");
   const [typeId, setTypeId] = useState<string | null>(null);
   const [edited, setEdited] = useState<TodoFieldValues | null>(null);
@@ -223,11 +224,16 @@ export function TodoCreateDialog({
     <div className={dialogBackdrop} onClick={onClose}>
       <form
         noValidate
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className={cn(dialogPanel, "flex max-h-[85vh] max-w-md flex-col")}
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
       >
-        <h2 className="text-base font-semibold">Create todo</h2>
+        <h2 id={titleId} className="text-base font-semibold">
+          Create todo
+        </h2>
         {elements.length > 0 ? (
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             <span className="text-muted-foreground text-xs">Anchored to:</span>

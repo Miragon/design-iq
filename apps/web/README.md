@@ -26,6 +26,8 @@ live in a minimal MCP-Apps host. From the repository root:
 `pnpm build`, once `npx -y playwright@1.56.1 install --only-shell chromium`, then
 `npx -y -p playwright@1.56.1 -c "node apps/web/test/live-repair-chromium.ts"` (`PORT` sets the
 Live Host's port, 8392 unless set; `ONLY` and `SHOTS` are in its header).
+`test/canvas-focus-chromium.ts` also runs in WebKit: `npx -y playwright@1.56.1 install webkit` once,
+then the same command with `BROWSER=webkit`.
 
 The side panels (History, Todos, Notes, …) dock over the right edge of the editor, the source
 included (issue 288). The source's Monaco is laid out beside an open panel, in place of Monaco's
@@ -427,8 +429,9 @@ rules (a keyboard user never lands on `<body>`) are tested on a small fake DOM
 
 **A click on the SPA's chrome hands the canvas the focus.** bpmn-js, the DMN DRD and the Miragon
 renderers hear their keys only while their canvas has the focus. A toolbar control that kept the
-focus after a click took Delete, the arrows and ⌘Z
-away from the canvas, so the SPA hands the canvas the focus back after a click, as the widget does
+focus after a click (Chromium), or the page that kept it (Safari, where a clicked button takes
+none), took Delete, the arrows and ⌘Z away from the canvas, so the SPA hands the canvas the focus
+back after a click, without waiting for the button to hold it, as the widget does
 after a zoom click (guide §5.8, `src/lib/canvas-focus.ts`): a click on the view switch's Diagram
 side focuses the canvas once it shows, and so does a click on a Model action of the ⋯ menu that
 opens no dialog (no renderer ships one yet) or on BPMN's Workshop switch in the toolbar, which
@@ -436,12 +439,27 @@ changes the canvas for every participant. Enter and Space keep the focus on the 
 menu entry they, like Escape, give it to the menu's trigger (§5.4). The ⋯ menu is not modal: a
 click on the canvas closes it and acts there, so after a toggle that keeps the menu open (Type
 captions, Legend) that one click gives the canvas the focus. `test/canvas-focus.test.ts` holds the
-rules, `test/canvas-focus-dom.test.ts` runs them on each real canvas, and
-`test/toolbar-focus-dom.test.ts` renders the toolbar with React under jsdom
+rules, `test/canvas-focus-dom.test.ts` runs them on each real canvas, also clicking as Safari does,
+and `test/toolbar-focus-dom.test.ts` renders the toolbar with React under jsdom
 (`test/component-dom.ts` loads its `.tsx`): the menu stays non-modal, and its entries and the view
 switch tell a click from Enter. `test/canvas-focus-chromium.ts` runs the built SPA by hand (its
-header says how); the live editor's few lines that pass the view switch's choice to the canvas run
-only there.
+header says how), in Chromium and with `BROWSER=webkit` in WebKit, clicking as Safari does; the
+live editor's few lines that pass the view switch's choice to the canvas run only there. The
+other toolbar buttons (the panel toggles, Add todo) hand nothing back, as the guide lists none: after a
+click on one the focus is on the button or on the page, and Delete and ⌘Z reach the canvas again once
+a click on it has the focus.
+
+**The live editor holds no keys from its canvas.** Every renderer acts only on a key aimed at its
+own focused canvas, so a key typed in the source view, a dialog or on the toolbar reaches no
+canvas, also while it stays mounted behind them (`test/canvas-keys-dom.test.ts` holds each Miragon
+renderer to that). The canvas layer is also `inert` behind the source view and behind a dialog
+(`canvasInert` in `lib/editor-view.ts`): the dialogs do not keep the focus inside them, and a Tab out
+of one would otherwise land on the canvas behind it, where a renderer acts on Delete and ⌘Z.
+`test/canvas-focus-chromium.ts` presses Tab and the canvas keys under the Release and Rename
+dialogs in both engines. The zoom keys of the SPA's Miragon editors act on the whole page, so they
+check what is on screen themselves: behind the source view (`EditorContext.visibility`), in a text
+field and under a modal dialog (the SPA's dialogs are `aria-modal`, `test/dialogs-modal-dom.test.ts`)
+the browser zooms the page.
 
 **One spec per Miragon renderer.** The four Miragon widgets are not four
 entries: `src/notations/miragon/<id>.ts` holds ONE `MiragonRendererSpec` per

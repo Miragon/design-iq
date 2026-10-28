@@ -2,17 +2,17 @@
  * The editor's view choice (src/lib/editor-view.ts): what a notation with the
  * split view remembers across documents and page loads, how a damaged or
  * blocked storage degrades, when Split has room (with hysteresis), what
- * shows while it has none, which layers are on screen, when a canvas
- * engine's keys are held, and that only a choice is ever written.
+ * shows while it has none, which layers are on screen, when the canvas is
+ * out of reach, and that only a choice is ever written.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  canvasInert,
   editorLayers,
   type EditorView,
   editorViews,
-  heldCanvasKeys,
   parseViewChoices,
   readViewChoice,
   rememberViewChoice,
@@ -171,16 +171,12 @@ test("a document without a visual editor shows its source, a structured one its 
   }
 });
 
-test("a canvas engine that listens on document has its keys held unless it is in front; in Split, those from the source", () => {
-  const held = (view: EditorView, dialogOpen = false, documentKeys = true) =>
-    heldCanvasKeys(editorLayers(view, MARKDOWN), { documentKeys, dialogOpen });
-  assert.equal(held("canvas"), "none", "in front alone: every key is its own");
-  assert.equal(held("source"), "all", "behind the source");
-  assert.equal(held("split"), "source", "in front beside the source: typing there is not for the canvas");
-  assert.equal(held("canvas", true), "all", "behind a dialog");
-  assert.equal(held("split", true), "all");
+test("the canvas is out of reach behind the source view and behind a dialog, in front of everything else", () => {
+  assert.equal(canvasInert(editorLayers("canvas", MARKDOWN), false), false, "in front alone");
+  assert.equal(canvasInert(editorLayers("split", MARKDOWN), false), false, "in front beside the source");
+  assert.equal(canvasInert(editorLayers("source", MARKDOWN), false), true, "behind the source");
   for (const view of ["canvas", "split", "source"] as const) {
-    assert.equal(held(view, true, false), "none", "an engine with its own key scope is never held");
+    assert.equal(canvasInert(editorLayers(view, MARKDOWN), true), true, `behind a dialog, in the ${view} view`);
   }
 });
 
