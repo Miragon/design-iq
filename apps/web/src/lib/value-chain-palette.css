@@ -1,0 +1,66 @@
+/* The Value Chain palette in both hosts (src/index.css and the widgets'
+ * mcp-app/miragon-styles.css import it). value-chain-renderer 0.8.0 lays its
+ * palette out only inside the modeler shell's chrome (`data-chrome="palette"`),
+ * which designIQ does not mount, so its canvas would show diagram-js's
+ * vertical palette. These rules give it the horizontal palette at the top
+ * centre that guide §5.5 asks of every modeler, drawn as the other Miragon
+ * renderers draw theirs without the shell. The widget places it under its
+ * corner row (miragon-styles.css). */
+
+.vc-canvas .vc-container .djs-palette:not([data-chrome="palette"]) {
+  z-index: 110;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  width: auto;
+  padding: 3px;
+  background: var(--cd-ui-flaeche-hoch);
+  border: 1px solid var(--cd-ui-linie);
+  border-radius: var(--cd-radius-md);
+  box-shadow: var(--cd-shadow-1);
+}
+
+.vc-canvas .vc-container .djs-palette:not([data-chrome="palette"]) .djs-palette-entries,
+.vc-canvas .vc-container .djs-palette:not([data-chrome="palette"]) .group {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+}
+
+.vc-canvas .vc-container .djs-palette:not([data-chrome="palette"]) .entry {
+  position: relative;
+  float: none;
+  width: 32px;
+  height: 32px;
+  line-height: normal;
+  border-radius: var(--cd-radius-sm);
+  color: var(--cd-ui-text);
+  transition:
+    background-color var(--cd-motion-fast) var(--cd-ease),
+    color var(--cd-motion-fast) var(--cd-ease),
+    box-shadow var(--cd-motion-fast) var(--cd-ease);
+}
+
+.vc-canvas .vc-container .djs-palette:not([data-chrome="palette"]) .entry:hover {
+  background: var(--cd-ui-hover);
+}
+
+/* the separator between two groups: 1px, inset 4px, 8px on either side */
+.vc-canvas .vc-container .djs-palette:not([data-chrome="palette"]) .group + .group {
+  position: relative;
+  margin-left: 8px;
+  padding-left: 9px;
+}
+
+.vc-canvas .vc-container .djs-palette:not([data-chrome="palette"]) .group + .group::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 1px;
+  background: var(--cd-ui-linie);
+}

@@ -2,11 +2,11 @@
  * What the Miragon renderers bring to designIQ's chrome, for real (under
  * jsdom, test/renderer-dom.ts), through the specs both hosts mount them with:
  * their own menu content (Wardley mapMenu, Event Storming boardMenu, Context
- * Maps contextMapMenu, Team Topologies diagramMenu) in the widget engine and
- * the SPA editor, the dialogs and popovers it opens inside the mount's host,
- * the edits they make (one undoable step each), the exports a host hands to
- * the user, the document title as the menu header's display name, and the
- * zoom keys and ⇧1 of the SPA's editors on a real canvas.
+ * Maps contextMapMenu, Team Topologies diagramMenu, Value Chain diagramMenu)
+ * in the widget engine and the SPA editor, the dialogs and popovers it opens
+ * inside the mount's host, the edits they make (one undoable step each), the
+ * exports a host hands to the user, the document title as the menu header's
+ * display name, and the zoom keys and ⇧1 of the SPA's editors on a real canvas.
  */
 import assert from "node:assert/strict";
 import { after, mock, test } from "node:test";
@@ -57,11 +57,20 @@ const TEAMS = JSON.stringify({
   interactions: [],
   flows: [],
 });
+const VALUE_CHAIN = JSON.stringify({
+  schemaVersion: 1,
+  meta: { name: "Order to Cash" },
+  elements: [
+    { id: "step_order", elementType: "step", name: "Order", bounds: { x: 40, y: 40, width: 200, height: 80 } },
+  ],
+  connections: [],
+});
 const DOCUMENT: Record<string, [text: string, title: string]> = {
   wardley: [MAP, "Tea Shop"],
   "event-storming": [BOARD, "Checkout"],
   "context-map": [CONTEXT_MAP, "Conference"],
   "team-topology": [TEAMS, "Online Shop"],
+  "value-chain": [VALUE_CHAIN, "Order to Cash"],
 };
 
 /** the chrome around a mount: a menu trigger in the page, a download that records */
@@ -176,6 +185,12 @@ const EXPECTED = {
   },
   "team-topology": {
     model: ["diagram-title"],
+    export: ["export-png", "export-svg"],
+    help: ["keyboard-shortcuts"],
+  },
+  // no title dialog in the package: the document's name is edited as JSON
+  "value-chain": {
+    model: [],
     export: ["export-png", "export-svg"],
     help: ["keyboard-shortcuts"],
   },
@@ -465,6 +480,7 @@ test("exports: the PNG is drawn from the SVG with Geist inside, through a data: 
     "event-storming": "#F9F7F7",
     "context-map": "#F9F7F7",
     "team-topology": "#F9F7F7",
+    "value-chain": "#F9F7F7",
   };
   try {
     for (const id of Object.keys(EXPECTED)) {
@@ -518,10 +534,11 @@ test("displayName: every renderer's document title", async () => {
   }
 });
 
-test("displayName: a map or board without a title line has none, not the parser's placeholder", async () => {
+test("displayName: a map or board without a title line, or a value chain without a name, has none, not a placeholder", async () => {
   const untitled: Record<string, string> = {
     wardley: MAP.replace(/^title .*\n/, ""),
     "event-storming": BOARD.replace(/^title .*\n/, ""),
+    "value-chain": VALUE_CHAIN.replace('"name":"Order to Cash"', '"name":" "'),
   };
   for (const [id, text] of Object.entries(untitled)) {
     const [spec, renderer] = await load(id);

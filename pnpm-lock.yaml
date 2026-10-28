@@ -211,6 +211,9 @@ importers:
       '@miragon/team-topologies-renderer':
         specifier: 0.15.0
         version: 0.15.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
+      '@miragon/value-chain-renderer':
+        specifier: 0.8.0
+        version: 0.8.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/wardley-renderer':
         specifier: 0.12.0
         version: 0.12.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
@@ -521,6 +524,9 @@ importers:
       '@miragon/team-topologies-schema-model':
         specifier: 0.15.0
         version: 0.15.0(zod@4.6.7)
+      '@miragon/value-chain-schema-model':
+        specifier: 0.7.1
+        version: 0.7.1(zod@4.6.7)
       '@types/node':
         specifier: 26.6.5
         version: 26.6.5
@@ -1498,6 +1504,14 @@ packages:
   '@miragon/team-topologies-schema-model@0.15.0':
     resolution: {integrity: sha512-6Woj83owTZxKsJimFMp4NXazwsnhd4wBaHX7IHQeOWdDewcij0k+vMstLlGwCYt8dqLU6+Dt/MBWEHkjLJWdzA==}
     peerDependencies:
+      zod: ^4.6.0
+
+  '@miragon/value-chain-renderer@0.8.0':
+    resolution: {integrity: sha512-EUWlSCVS7v34tKNwPa2aBVxVFtQ0R7ljSy2u+Ww62gcqcUzuuwaHWIaK4K4LiGr1Os6g6fH4pZHJFxtD7QLHsQ==}
+    peerDependencies:
+      diagram-js: ^15.28.0
+      didi: ^11.0.0 || ^12.0.0
+      tiny-svg: ^4.1.4
       zod: ^4.6.0
 
   '@miragon/value-chain-schema-model@0.7.1':
@@ -5671,6 +5685,16 @@ snapshots:
   '@miragon/team-topologies-schema-model@0.15.0(zod@4.6.7)':
     dependencies:
       nanoid: 6.0.2
+      zod: 4.6.7
+
+  '@miragon/value-chain-renderer@0.8.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
+    dependencies:
+      '@miragon/modeler-api': 1.4.0
+      '@miragon/value-chain-schema-model': 0.7.1(zod@4.6.7)
+      diagram-js: 15.28.1
+      diagram-js-direct-editing: 3.6.0(diagram-js@15.28.1)
+      didi: 11.0.1
+      tiny-svg: 4.1.4
       zod: 4.6.7
 
   '@miragon/value-chain-schema-model@0.7.1(zod@4.6.7)':

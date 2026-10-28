@@ -1,7 +1,8 @@
 /**
  * The focus after a click on the SPA's chrome (src/lib/canvas-focus.ts) on
  * the real canvases, one case per notation with a canvas: the Miragon
- * renderers (Wardley, Event Storming, Context Map, Team Topology), bpmn-js
+ * renderers (Wardley, Event Storming, Context Map, Team Topology, Value
+ * Chain), bpmn-js
  * and the dmn-js DRD, each mounted by its SPA editor under jsdom
  * (test/renderer-dom.ts). Each hears Delete only while its canvas has the
  * focus. A click on the view switch's Diagram side, behind which the source
@@ -101,6 +102,15 @@ const MIRAGON: Record<string, string> = {
     ],
     interactions: [],
     flows: [],
+  }),
+  "value-chain": JSON.stringify({
+    schemaVersion: 1,
+    meta: { name: "Order to Cash" },
+    elements: [
+      { id: "step_order", elementType: "step", name: "Order", bounds: { x: 40, y: 40, width: 200, height: 80 } },
+      { id: "step_ship", elementType: "step", name: "Ship", bounds: { x: 500, y: 40, width: 200, height: 80 } },
+    ],
+    connections: [],
   }),
 };
 

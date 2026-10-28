@@ -36,6 +36,7 @@
   "devDependencies": {
     "@miragon/context-maps-schema-model": "0.5.0",
     "@miragon/team-topologies-schema-model": "0.15.0",
+    "@miragon/value-chain-schema-model": "0.7.1",
     "@types/node": "26.6.5"
   }
 }

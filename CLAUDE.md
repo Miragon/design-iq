@@ -26,14 +26,15 @@ Registered in `packages/notations/index.ts` (id = the `notation` argument of the
 
 Every notation gets live sync, the generic MCP model tools, validation and release-as-PR.
 In the web client a notation's plugin (`apps/web/src/notations/registry.ts`) decides what a
-model opens in: a visual modeler (BPMN, DMN, the Miragon renderers), a rendered, live read
-view (Markdown, `apps/web/src/notations/markdown/`, its `mermaid` fences drawn as diagrams) or
-Monaco alone (Value Chain). The Monaco source is one click away for every one of them.
+model opens in: a visual modeler (BPMN, DMN, the Miragon renderers: Wardley Map, Team Topology,
+Event Storming, Context Map, Value Chain) or a rendered, live read view (Markdown,
+`apps/web/src/notations/markdown/`, its `mermaid` fences drawn as diagrams); a notation without
+a plugin opens in Monaco alone. The Monaco source is one click away for every one of them.
 A diagram-as-code is no notation of its own: it is a `mermaid` fence in a Markdown document,
 next to the prose that explains it (`.mmd`/`.mermaid` files are plain repository files), and
 the validator checks each fence's diagram type (a WARN, `mermaid/diagram-type`).
 Todos (work items in the repo's issue tracker, anchored to a model and optionally its
-elements) are filed on every notation but DMN and Value Chain (the descriptor's `todos` flag).
+elements) are filed on every notation but DMN (the descriptor's `todos` flag).
 BPMN and DMN have the deepest tooling (derived process and decision views, decision
 simulation and tests) and the BPMN/DMN hard rules below.
 

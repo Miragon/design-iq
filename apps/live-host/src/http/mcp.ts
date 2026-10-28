@@ -307,7 +307,13 @@ const DMN_WIDGET: WidgetSpec = {
 /** the notations whose widget is a Miragon renderer on the widget core
  *  (apps/web/src/mcp-app/miragon-main.ts). Adding one = this id + its renderer
  *  spec in apps/web/src/notations/miragon (the build derives the bundle). */
-const GENERATED_WIDGET_NOTATIONS = ["wardley", "team-topology", "event-storming", "context-map"] as const;
+const GENERATED_WIDGET_NOTATIONS = [
+  "wardley",
+  "team-topology",
+  "event-storming",
+  "context-map",
+  "value-chain",
+] as const;
 /** a core-based widget: everything derives from the descriptor */
 const generatedWidget = (id: string): WidgetSpec => {
   const n = byId(id);

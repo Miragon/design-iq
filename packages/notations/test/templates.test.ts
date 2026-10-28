@@ -4,10 +4,11 @@
  * consumes them through the domain shims); here only the dispatch contract.
  * That a Miragon template is its renderer's own serialization (no phantom
  * diff on the first canvas save) is pinned against the renderers apps/web
- * ships, in apps/web/test/miragon-renderers.test.ts. The Team Topology and
- * Context Map templates are also held against their schema model's own
- * serializer here (devDependencies at the versions the renderers apps/web
- * pins depend on), so a format change fails in this package's suite too.
+ * ships, in apps/web/test/miragon-renderers.test.ts. The Team Topology,
+ * Context Map and Value Chain templates are also held against their schema
+ * model's own serializer here (devDependencies at the versions the renderers
+ * apps/web pins depend on), so a format change fails in this package's suite
+ * too.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -17,6 +18,10 @@ import {
   serializeDocumentText as serializeContextMap,
 } from "@miragon/context-maps-schema-model";
 import { emptyDocument, serializeDocument } from "@miragon/team-topologies-schema-model";
+import {
+  createEmptyDocument as emptyValueChain,
+  serializeDocument as serializeValueChain,
+} from "@miragon/value-chain-schema-model";
 
 import {
   hasTemplate,
@@ -27,6 +32,7 @@ import {
   newOwmText,
   newStormText,
   newTtJson,
+  newVcJson,
   templateFor,
 } from "../templates.ts";
 
@@ -37,19 +43,27 @@ test("templateFor: dispatches to the notation's builder, undefined without one",
   assert.equal(templateFor("team-topology", "teams", "Teams"), newTtJson("teams", "Teams"));
   assert.equal(templateFor("event-storming", "board", "Board"), newStormText("board", "Board"));
   assert.equal(templateFor("context-map", "map", "Map"), newCmJson("map", "Map"));
+  assert.equal(templateFor("value-chain", "chain", "Chain"), newVcJson("chain", "Chain"));
   assert.equal(templateFor("markdown", "notes", "Notes"), newMarkdownText("notes", "Notes"));
-  // value-chain stays git-only until it has a mounted editor (#139 decision)
-  assert.equal(templateFor("value-chain", "x", "X"), undefined);
   assert.equal(templateFor("no-such", "x", "X"), undefined);
 });
 
 test("hasTemplate mirrors templateFor — it drives the New menu and the create route", () => {
-  for (const id of ["bpmn", "dmn", "wardley", "team-topology", "event-storming", "context-map", "markdown"]) {
+  for (const id of [
+    "bpmn",
+    "dmn",
+    "wardley",
+    "team-topology",
+    "event-storming",
+    "context-map",
+    "value-chain",
+    "markdown",
+  ]) {
     assert.equal(hasTemplate(id), true, id);
   }
   // mermaid: withdrawn in 5.5, not in the New menu nor create_model (a
   // diagram is a fence in a Markdown document)
-  for (const id of ["value-chain", "mermaid", "no-such"]) assert.equal(hasTemplate(id), false, id);
+  for (const id of ["mermaid", "no-such"]) assert.equal(hasTemplate(id), false, id);
   // prototype members are NOT templates (the `in`/bare-index bug class):
   // templateFor("toString") used to return "[object Object]" as file content
   for (const id of ["toString", "constructor", "__proto__"]) {
@@ -84,6 +98,16 @@ test("the context-map template is the schema-model's CANONICAL empty document (b
   }
   assert.ok(newCmJson("map", "Conference Planner").endsWith("}\n"));
   assert.equal((JSON.parse(newCmJson("x", "A\nB")) as { title: string }).title, "A B");
+});
+
+test("the value-chain template is the schema-model's CANONICAL empty document (byte-stable first save)", () => {
+  // the renderer's exportText (createCollaborativeModeler) is serializeDocument: every key
+  // sorted, 2-space indent, a closing line break
+  for (const name of ["Porter Value Chain", "Orders & Billing", 'Quote " and \\ backslash']) {
+    assert.equal(newVcJson("chain", name), serializeValueChain(emptyValueChain(name)), name);
+  }
+  assert.ok(newVcJson("chain", "Porter Value Chain").endsWith("}\n"));
+  assert.equal((JSON.parse(newVcJson("x", "A\nB")) as { meta: { name: string } }).meta.name, "A B");
 });
 
 test("template names are forced onto one line — control chars would break OWM and JSON alike", () => {

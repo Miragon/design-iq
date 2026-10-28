@@ -333,6 +333,7 @@ by `vite.widget.config.ts`'s factory; `scripts/build-widgets.ts` runs every buil
 | `mcp-app-team-topology.html`  | `open_team_topology_modeler`  | `@miragon/team-topologies-renderer`                                             |
 | `mcp-app-event-storming.html` | `open_event_storming_modeler` | `@miragon/event-storming-renderer`                                              |
 | `mcp-app-context-map.html`    | `open_context_map_modeler`    | `@miragon/context-maps-renderer` (+ `@miragon/context-maps-cml`, Export as CML) |
+| `mcp-app-value-chain.html`    | `open_value_chain_modeler`    | `@miragon/value-chain-renderer`                                                 |
 
 **One lifecycle.** Every widget shares `src/mcp-app/core/`: `lifecycle.ts`
 (tool input → load via `get_model_content` → engine → debounced CAS autosave via
@@ -461,7 +462,7 @@ check what is on screen themselves: behind the source view (`EditorContext.visib
 field and under a modal dialog (the SPA's dialogs are `aria-modal`, `test/dialogs-modal-dom.test.ts`)
 the browser zooms the page.
 
-**One spec per Miragon renderer.** The four Miragon widgets are not four
+**One spec per Miragon renderer.** The five Miragon widgets are not five
 entries: `src/notations/miragon/<id>.ts` holds ONE `MiragonRendererSpec` per
 renderer (package, canvas class, the renderer's `meta.notation`, a lazy
 `load()` yielding its two `@miragon/modeler-api` factories, `create` and
@@ -476,6 +477,11 @@ are the ONE template + entry, built once per spec with the spec aliased in
 through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
 `mcp-app-<id>.html`. The dev server resolves that alias to
 `widget-spec.dev.ts`: `/mcp-app-miragon.html?notation=<id>` previews any of them.
+One renderer needs a sheet of designIQ's own: value-chain-renderer lays out its palette only
+inside the modeler shell's chrome, which designIQ does not mount, so `lib/value-chain-palette.css`
+(imported by `index.css` and `miragon-styles.css`) gives it the horizontal palette at the top
+centre of guide §5.5, as the other renderers draw theirs; `test/vendor-css.test.ts` fails once a
+release lays the palette out itself, and the sheet goes then.
 
 **PNG exports in Geist.** Export as PNG draws the renderer's standalone SVG as an image
 (`lib/export-image.ts`, the same for every Miragon renderer, in the SPA and in the widget) on
@@ -490,8 +496,8 @@ latin-ext, so other scripts stay in the system sans there, as on its canvas). Ea
 gets a hidden text up front, set in a character that only this face draws: without it,
 Chromium calls the SVG image loaded while a subset that only a later character of a label
 needs is still loading, and that text comes out in the system sans. The image loads as a
-data: URL, which an MCP host's CSP allows where it refuses blob: (the reason Wardley no
-longer uses its package's own `svgToPng`), and the data: fonts inside it load although the
+data: URL, which an MCP host's CSP allows where it refuses blob: (the reason Wardley and
+Value Chain do not use their packages' own `svgToPng`), and the data: fonts inside it load although the
 host's `font-src` blocks the widget's own (checked in Chromium and WebKit). A page without
 Geist still exports, in the system sans, with a console warning.
 The SVG download embeds no font: it shows Geist where the font is installed (guide §4).

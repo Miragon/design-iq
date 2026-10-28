@@ -136,6 +136,14 @@ const KNOWN_GLOBAL: Record<string, string[]> = {
     ":root[data-cd-kontrast=hoch] .cm-dialog-button:focus-visible",
     ":root[data-cd-kontrast=hoch] .cm-dialog-input:focus-visible",
   ],
+  "value-chain": [
+    ...tokensIn("value-chain-tokens"),
+    ":root { --bio-* }",
+    ":root[data-cd-kontrast=hoch] .vc-container .djs-context-pad.open",
+    ":root[data-cd-kontrast=hoch] .vc-container .djs-direct-editing-parent",
+    ":root[data-cd-kontrast=hoch] .vc-shortcuts",
+    ":root[data-cd-kontrast=hoch] .vc-shortcuts-close:focus-visible",
+  ],
 };
 
 test("the scoping keys on each renderer's own files, as pnpm's store spells them", () => {
@@ -158,6 +166,7 @@ const RENDERER_ROOT: Record<string, string> = {
   "team-topology": "tt-djs-container",
   "event-storming": "event-storming-container",
   "context-map": "cm-djs-container",
+  "value-chain": "vc-container",
 };
 
 /**
@@ -187,6 +196,7 @@ const ROOT_RULES: Record<string, string[]> = {
     ".es-canvas .event-storming-container.event-storming-draw-mode",
   ],
   "context-map": [".cm-canvas .cm-djs-container", ".cm-canvas .cm-djs-container:focus"],
+  "value-chain": [".vc-canvas .vc-container"],
 };
 
 /** the root rules of the scoped sheet, sorted; every scoped rule must be a descendant of the host */
@@ -209,6 +219,7 @@ async function rootRulesOf(spec: MiragonRendererSpec, css?: string): Promise<str
 
 for (const spec of MIRAGON_RENDERERS) {
   test(`${spec.id}: every scoped rule is a descendant of the canvas host, the renderer's root rules included`, async () => {
+    assert.ok(RENDERER_ROOT[spec.id], `${spec.id}: the root its factory mounts is named`);
     const expected = [...(ROOT_RULES[spec.id] ?? [])].sort();
     assert.deepEqual(await rootRulesOf(spec), expected);
     // a renderer bump that only reorders its sheet changes nothing to review
@@ -240,6 +251,26 @@ test("designIQ's own rules on a renderer's root name it as a descendant of the c
     });
   }
   assert.ok(named > 0, "src/index.css keeps the Team Topologies palette below the SPA's empty top strip");
+});
+
+/** the palette properties lib/value-chain-palette.css sets for a host without the shell's chrome */
+const PALETTE_LAYOUT = new Set(["display", "flex-direction", "top", "left", "transform", "width", "float"]);
+
+test("value-chain: the renderer lays out no palette outside the shell's chrome, so designIQ's own sheet does (guide §5.5)", async () => {
+  const spec = MIRAGON_RENDERERS.find((s) => s.id === "value-chain")!;
+  const outsideChrome: string[] = [];
+  (await scopedSheet(spec)).walkRules((rule) => {
+    if (!rule.selectors.some((selector) => selector.includes(".djs-palette:not([data-chrome=palette])"))) return;
+    rule.walkDecls(
+      (decl) => void (PALETTE_LAYOUT.has(decl.prop) && outsideChrome.push(`${rule.selector} { ${decl.prop} }`)),
+    );
+  });
+  // a release that lays its palette out itself makes lib/value-chain-palette.css redundant: drop it then
+  assert.deepEqual(outsideChrome, []);
+  const sheets = ["../src/index.css", "../src/mcp-app/miragon-styles.css"].map((path) =>
+    readFileSync(new URL(path, import.meta.url), "utf8"),
+  );
+  for (const sheet of sheets) assert.match(sheet, /@import "[./]*\/?lib\/value-chain-palette\.css";/);
 });
 
 /** the declarations of the unlayered `:root` rules that set --bio-* */

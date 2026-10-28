@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import type { TodoElementWire, TodoWire } from "@designiq/contracts/live-host";
-import { newCmJson, newOwmText, newStormText, newTtJson } from "@designiq/notations/templates";
+import { newCmJson, newOwmText, newStormText, newTtJson, newVcJson } from "@designiq/notations/templates";
 import { fitViewbox } from "@miragon/modeler-shell/core";
 import * as Y from "yjs";
 
@@ -153,12 +153,24 @@ const TEAMS = JSON.stringify({
   flows: [],
 });
 
+/** hand-written, not the canonical serialization (one line, keys and ids unsorted) */
+const VALUE_CHAIN = JSON.stringify({
+  schemaVersion: 1,
+  meta: { name: "Order to Cash" },
+  elements: [
+    { id: "step_ship", elementType: "step", name: "Ship", bounds: { x: 400, y: 40, width: 200, height: 80 } },
+    { id: "step_order", elementType: "step", name: "Order", bounds: { x: 40, y: 40, width: 200, height: 80 } },
+  ],
+  connections: [],
+});
+
 /** one hand-written document per notation, and a second one a peer turns it into */
 const DOCUMENTS: Array<[id: string, text: string, peer: string]> = [
   ["wardley", MAP, MAP.replace("[0.82, 0.45]", "[0.82, 0.55]")],
   ["event-storming", BOARD, BOARD.replace("[620, 300]", "[640, 300]")],
   ["context-map", CONTEXT_MAP, CONTEXT_MAP.replace('"label":"Agenda"', '"label":"Agenda Builder"')],
   ["team-topology", TEAMS, TEAMS.replace('"label":"Platform"', '"label":"Cloud Platform"')],
+  ["value-chain", VALUE_CHAIN, VALUE_CHAIN.replace('"name":"Ship"', '"name":"Ship Goods"')],
 ];
 
 /** the shapes a user can select and delete (no root, no external label) */
@@ -200,6 +212,7 @@ test("the new-file templates are the renderers' own serialization: the first can
     ["event-storming", newStormText("board", "Order Checkout")],
     ["context-map", newCmJson("map", "Conference Planner")],
     ["team-topology", newTtJson("teams", "Team Landscape")],
+    ["value-chain", newVcJson("chain", "Porter Value Chain")],
   ];
   for (const [id, text] of templates) {
     const engine = await engineOf(id, host());
@@ -269,6 +282,9 @@ const REFUSED: Array<[id: string, good: string, refused: string, reason: RegExp]
   ["team-topology", TEAMS, withUnsizedInteraction(TEAMS), /^interactions\.0\.size: Invalid input: expected object/],
   ["context-map", CONTEXT_MAP, CONTEXT_MAP.slice(0, 40), /^\(root\): not valid JSON/],
   ["team-topology", TEAMS, TEAMS.slice(0, 40), /JSON/],
+  ["value-chain", VALUE_CHAIN, withId(VALUE_CHAIN, "elements", 0, "vc-root"), /^Id "vc-root" is reserved/],
+  ["value-chain", VALUE_CHAIN, withId(VALUE_CHAIN, "elements", 1, "step_ship"), /^Duplicate id "step_ship"/],
+  ["value-chain", VALUE_CHAIN, VALUE_CHAIN.slice(0, 40), /JSON/],
 ];
 
 /** the document with an interaction that has a position and no size */
@@ -279,7 +295,7 @@ function withUnsizedInteraction(json: string): string {
 }
 
 /** the document with one element's id replaced */
-function withId(json: string, list: "nodes" | "contexts", index: number, id: string): string {
+function withId(json: string, list: "nodes" | "contexts" | "elements", index: number, id: string): string {
   const document = JSON.parse(json) as Record<string, Array<{ id: string }>>;
   document[list]![index]!.id = id;
   return JSON.stringify(document);
@@ -387,6 +403,8 @@ const FREE_AREA_INSETS: Record<string, (diagram: MiragonModeler["diagram"]) => u
     (diagram.get("config.cmPalette") as { freeArea?: { insets?(): unknown } }).freeArea?.insets?.(),
   "team-topology": (diagram) =>
     (diagram.get("config.ttPalette") as { freeArea?: { insets?(): unknown } }).freeArea?.insets?.(),
+  "value-chain": (diagram) =>
+    (diagram.get("config.vcPalette") as { freeArea?: { insets?(): unknown } }).freeArea?.insets?.(),
 };
 
 test("each spec hands the chrome's insets to its renderer as the contract's free area", async () => {
@@ -830,6 +848,7 @@ const LABEL_EDITS: Record<string, [elementId: string, peerChange: string]> = {
   "event-storming": ["cmd_place_order", "Order Placed [640, 300]"],
   "context-map": ["ctx_cfp", "Agenda Builder"],
   "team-topology": ["team_checkout", "Cloud Platform"],
+  "value-chain": ["step_order", "Ship Goods"],
 };
 
 interface EditableDiagram {
@@ -1029,21 +1048,24 @@ test("Team Topologies: typing a label is no edit until it commits, and a peer's 
   engine.destroy();
 });
 
-/** an element's position in a Context Maps or Team Topologies document */
+/** an element's position in a Context Maps, Team Topologies or Value Chain document */
 function positionOf(json: string, elementId: string): unknown {
   const document = JSON.parse(json) as Record<string, unknown>;
-  for (const list of [document.contexts, document.nodes]) {
-    const element = (list as Array<{ id: string; position: unknown }> | undefined)?.find((e) => e.id === elementId);
-    if (element) return element.position;
+  for (const list of [document.contexts, document.nodes, document.elements]) {
+    const element = (list as Array<{ id: string; position?: unknown; bounds?: unknown }> | undefined)?.find(
+      (e) => e.id === elementId,
+    );
+    if (element) return element.position ?? element.bounds;
   }
   assert.fail(elementId);
 }
 
-test("Context Maps and Team Topologies: two peers' first edits at once, on a file without the closing line break, merge into valid JSON", async () => {
+test("the JSON notations: two peers' first edits at once, on a file without the closing line break, merge into valid JSON", async () => {
   const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
   const cases: Array<[id: string, text: string, moved: [string, string]]> = [
     ["context-map", CONTEXT_MAP, ["ctx_cfp", "ctx_agenda"]],
     ["team-topology", TEAMS, ["team_checkout", "team_platform"]],
+    ["value-chain", VALUE_CHAIN, ["step_order", "step_ship"]],
   ];
   for (const [id, text, moved] of cases) {
     const [spec, renderer] = await load(id);
@@ -1241,6 +1263,7 @@ test("todos on every Miragon renderer in the SPA editor: badges, selection, reve
     ],
     ["context-map", CONTEXT_MAP, "ctx_cfp", "ctx_agenda"],
     ["team-topology", TEAMS, "team_platform", "team_checkout"],
+    ["value-chain", VALUE_CHAIN, "step_order", "step_ship"],
   ];
   for (const [id, text, a, b] of FIXTURES) {
     const [spec, renderer] = await load(id);

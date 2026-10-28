@@ -5,6 +5,7 @@
 @import "./todos.css";
 @import "./geist-mono.css";
 @import "../lib/miragon-legend.css";
+@import "../lib/value-chain-palette.css";
 
 /* top-centre (the renderer sheets centre it), under the row (tier 2) unless
    it fits between the clusters (tier 1); `max-content` lifts the leaked

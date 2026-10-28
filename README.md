@@ -22,7 +22,7 @@ integration and the decision records. The site is built from [`docs/`](docs/).
 - **Model live**: every model file (`.bpmn`, `.dmn`, `.owm`, `.tt`, `.storm`, `.cm.json`,
   `.vc.json`, `.yaml`, `.md`) syncs as a shared Y.Text document; the web client and VS Code
   bind their editors to it. The browser has a visual modeler for BPMN, DMN, Wardley Maps,
-  Team Topologies, Event Storming boards and Context Maps, a rendered view for Markdown
+  Team Topologies, Event Storming boards, Context Maps and Value Chains, a rendered view for Markdown
   documents (links between models open inside designIQ, `mermaid` fences drawn as
   diagrams), and a text view for every file. A Mermaid diagram lives as a `mermaid` fence
   in a document, next to the prose that explains it, and the validator checks its type.

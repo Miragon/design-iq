@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { after, test } from "node:test";
 
-import { newCmJson, newOwmText, newStormText, newTtJson } from "@designiq/notations/templates";
+import { newCmJson, newOwmText, newStormText, newTtJson, newVcJson } from "@designiq/notations/templates";
 
 import type { Insets, ViewControls } from "../src/mcp-app/core/engine.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
@@ -93,6 +93,7 @@ const DOCUMENTS: Record<string, string> = {
   "event-storming": newStormText("board", "Order Checkout"),
   "context-map": newCmJson("map", "Conference Planner"),
   "team-topology": newTtJson("teams", "Team Landscape"),
+  "value-chain": newVcJson("chain", "Porter Value Chain"),
 };
 
 test("every Miragon renderer in the widget: − and + step as diagram-js's zoomScroll does, 100 % to 135 % and 74 %", async () => {

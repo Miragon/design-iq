@@ -23,6 +23,7 @@ import type { TodoType } from "@designiq/contracts/todo-types";
 import { DIAGRAMS_IN_DOCUMENTS } from "@designiq/mcp-kit";
 import { toolNamesIn, toolText } from "@designiq/mcp-kit/testing";
 import { NOTATIONS } from "@designiq/notations";
+import { templateFor } from "@designiq/notations/templates";
 import { Server as HocuspocusServer } from "@hocuspocus/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
@@ -264,6 +265,7 @@ test("registration: every tool; read-only mode drops the write tools AND the ws 
     "open_event_storming_modeler",
     "open_modeler",
     "open_team_topology_modeler",
+    "open_value_chain_modeler",
     "open_wardley_modeler",
     "release_process",
     "run_decision_tests",
@@ -298,6 +300,7 @@ test("registration: every tool; read-only mode drops the write tools AND the ws 
     "open_event_storming_modeler",
     "open_modeler",
     "open_team_topology_modeler",
+    "open_value_chain_modeler",
     "open_wardley_modeler",
     "run_decision_tests",
     "simulate_decision",
@@ -1605,7 +1608,7 @@ test("generic model tools: get/save ANY notation with CAS, validate_model, creat
   assert.equal(saved.ok, true);
   assert.equal((await callJson("get_model_content", { repo: REPO.fullName, path: OWM_PATH })).content, OWM_V2);
 
-  // create: a template-capable notation becomes a live model; git-only and unknown notations answer errors
+  // create: a template-capable notation becomes a live model; an unknown notation answers an error
   const created = await callJson("create_model", {
     repo: REPO.fullName,
     notation: "event-storming",
@@ -1622,8 +1625,12 @@ test("generic model tools: get/save ANY notation with CAS, validate_model, creat
     baseVersion: storm.baseVersion,
   });
   assert.equal(stormSaved.ok, true);
-  const gitOnly = await call("create_model", { repo: REPO.fullName, notation: "value-chain", name: "Chain" });
-  assert.ok(gitOnly.isError && /arrive via git/.test(gitOnly.text), gitOnly.text);
+  const chain = await callJson("create_model", { repo: REPO.fullName, notation: "value-chain", name: "Chain" });
+  assert.equal(chain.model.path, "processes/chain.vc.json");
+  assert.equal(
+    (await callJson("get_model_content", { repo: REPO.fullName, path: chain.model.path })).content,
+    templateFor("value-chain", "chain", "Chain"),
+  );
   const bogus = await call("create_model", { repo: REPO.fullName, notation: "nope", name: "X" });
   assert.ok(bogus.isError && /unknown notation/.test(bogus.text), bogus.text);
 
@@ -1790,6 +1797,7 @@ test("widgets: a bundle missing from the web dist drops exactly its tool; the ti
     "open_team_topology_modeler",
     "open_event_storming_modeler",
     "open_context_map_modeler",
+    "open_value_chain_modeler",
     "mint_ws_ticket",
   ]) {
     assert.ok(noWardley.includes(t), `${t} still registered`);
@@ -1824,10 +1832,11 @@ test("widgets: a bundle missing from the web dist drops exactly its tool; the ti
 
 test("widgets: the generated open_<notation>_modeler tools serve their own bundle and open the file route", async () => {
   const { client, callJson } = await connect(deps());
-  // fixtures for the two notations the workspace lacks — the create scaffolds
+  // fixtures for the notations the workspace lacks — the create scaffolds
   await callJson("create_model", { repo: REPO.fullName, notation: "team-topology", name: "Teams" });
   await callJson("create_model", { repo: REPO.fullName, notation: "event-storming", name: "Order Storm" });
   await callJson("create_model", { repo: REPO.fullName, notation: "context-map", name: "Conference" });
+  await callJson("create_model", { repo: REPO.fullName, notation: "value-chain", name: "Porter" });
   const cases = [
     { tool: "open_wardley_modeler", notation: "wardley", id: "strategy", path: OWM_PATH, text: "component Platform" },
     {
@@ -1850,6 +1859,13 @@ test("widgets: the generated open_<notation>_modeler tools serve their own bundl
       id: "conference",
       path: "processes/conference.cm.json",
       text: "version", // quote-free, and never a key of the derived stats
+    },
+    {
+      tool: "open_value_chain_modeler",
+      notation: "value-chain",
+      id: "porter",
+      path: "processes/porter.vc.json",
+      text: "schemaVersion", // quote-free, and never a key of the derived stats
     },
   ];
   const tools = (await client.listTools()).tools;

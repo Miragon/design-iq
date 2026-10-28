@@ -313,6 +313,16 @@ test("createNotationModel: context map from the schema-model's canonical empty d
   assert.deepEqual(doc, { version: 1, title: "Conference Planner", contexts: [], relationships: [] });
 });
 
+test("createNotationModel: value chain from the schema-model's canonical empty document", async () => {
+  const ws = workspace();
+  const created = await createNotationModel(REPO, ws, { notation: "value-chain", name: "Porter Value Chain" });
+  assert.equal(created.path, "processes/porter-value-chain.vc.json");
+  assert.equal(created.notation, "value-chain");
+  assert.equal(created.id, "porter-value-chain");
+  const doc = JSON.parse(readFileSync(join(ws, created.path), "utf8")) as Record<string, unknown>;
+  assert.deepEqual(doc, { connections: [], elements: [], meta: { name: "Porter Value Chain" }, schemaVersion: 1 });
+});
+
 test("createNotationModel: stems are unique PER NOTATION — a wardley map may share a stem with a bpmn process", async () => {
   const ws = workspace(); // workspace() already has processes/order.bpmn
   const created = await createNotationModel(REPO, ws, { notation: "wardley", name: "Order" });
@@ -324,16 +334,11 @@ test("createNotationModel: stems are unique PER NOTATION — a wardley map may s
   );
 });
 
-test("createNotationModel: unknown notation and template-less notation are 422s", async () => {
+test("createNotationModel: an unknown notation is a 422", async () => {
   const ws = workspace();
   await assert.rejects(
     () => createNotationModel(REPO, ws, { notation: "uml", name: "Nope" }),
     rejectsWith("scaffold/unknown-notation", 422),
-  );
-  // value-chain is registered but has NO template — git-only by design
-  await assert.rejects(
-    () => createNotationModel(REPO, ws, { notation: "value-chain", name: "Nope" }),
-    rejectsWith("scaffold/no-template", 422),
   );
 });
 

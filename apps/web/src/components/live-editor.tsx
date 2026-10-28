@@ -10,7 +10,7 @@
  *                  and its source tooling (Markdown: Insert diagram) attaches
  *                  to that Monaco, its chunk loading once the session is live
  *   no plugin    → Monaco text editor on the shared Y.Text, language from the
- *                  registry (Value Chains and YAML live-edit as text)
+ *                  registry (YAML files live-edit as text)
  *
  * React owns the shell (toolbar, presence, release); the editor ENGINES stay
  * imperative — the mounted plugin / Monaco / Yjs live in refs inside one effect

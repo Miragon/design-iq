@@ -1,6 +1,7 @@
 /**
  * The Miragon-renderer widget — ONE entry for every notation whose editor is
- * a Miragon modeler (wardley, team topology, event storming, context map).
+ * a Miragon modeler (wardley, team topology, event storming, context map,
+ * value chain).
  * The renderer spec rides in through the build-time alias
  * `@/mcp-app/widget-spec` (vite.widget.config.ts miragonWidgetConfig: one
  * single-file bundle per spec — exactly one engine per emitted file is the

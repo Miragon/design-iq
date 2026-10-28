@@ -4,8 +4,8 @@
  * two Y.Docs whose drops cross on the wire, one in the SPA editor and one in
  * the live widget's engine. One bpmn-js move rewrites order-to-cash.bpmn from
  * line 11 to line 176 (lane refs and DI are reordered on export); the first
- * edit of a hand-written Context Maps, Team Topologies, Wardley or Event
- * Storming file rewrites all of it. Each merge is a text no canvas imports,
+ * edit of a hand-written Context Maps, Team Topologies, Value Chain, Wardley
+ * or Event Storming file rewrites all of it. Each merge is a text no canvas imports,
  * or one the Wardley and Event Storming parsers read garbled (every element
  * twice). Afterwards both peers hold exactly one peer's export, both canvases
  * show it, and the peer whose edit is lost has been told, through the SPA's
@@ -172,11 +172,11 @@ test("bpmn-js: two moves of order-to-cash.bpmn dropped at once (#274) are repair
   editor.destroy();
 });
 
-test("Context Maps and Team Topologies: both peers' first edits of a hand-written file at once are repaired into one peer's export", async () => {
+test("the JSON notations: both peers' first edits of a hand-written file at once are repaired into one peer's export", async () => {
   const { MIRAGON_RENDERERS } = await import("../src/notations/miragon/index.ts");
   const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
   const { mountMiragonEngine } = await import("../src/mcp-app/engines/miragon.ts");
-  type Element = { id: string; position: { x: number; y: number } };
+  type Element = { id: string; position?: { x: number; y: number }; bounds?: { x: number; y: number } };
   const files: Array<[id: string, text: string, moved: [string, string]]> = [
     [
       "context-map",
@@ -217,6 +217,19 @@ test("Context Maps and Team Topologies: both peers' first edits of a hand-writte
         flows: [],
       }),
       ["team_checkout", "team_platform"],
+    ],
+    [
+      "value-chain",
+      JSON.stringify({
+        schemaVersion: 1,
+        meta: { name: "Order to Cash" },
+        elements: [
+          { name: "Ship", id: "step_ship", elementType: "step", bounds: { x: 400, y: 40, width: 200, height: 80 } },
+          { name: "Order", id: "step_order", elementType: "step", bounds: { x: 40, y: 40, width: 200, height: 80 } },
+        ],
+        connections: [],
+      }),
+      ["step_order", "step_ship"],
     ],
   ];
   for (const [id, text, moved] of files) {
@@ -260,8 +273,9 @@ test("Context Maps and Team Topologies: both peers' first edits of a hand-writte
     assert.equal(shared, spaOwn, `${id}: the SPA's peer has the lower client id: its export, exactly`);
     assert.deepEqual([spa.exportText(), engine.modeler.exportText()], [shared, shared], `${id}: both canvases show it`);
     const positionOf = (json: string, elementId: string): unknown => {
-      const document = JSON.parse(json) as { contexts?: Element[]; nodes?: Element[] };
-      return (document.contexts ?? document.nodes)?.find((e) => e.id === elementId)?.position;
+      const document = JSON.parse(json) as { contexts?: Element[]; nodes?: Element[]; elements?: Element[] };
+      const element = (document.contexts ?? document.nodes ?? document.elements)?.find((e) => e.id === elementId);
+      return element?.position ?? element?.bounds;
     };
     assert.deepEqual(positionOf(shared, moved[0]), positionOf(spaOwn, moved[0]), `${id}: the SPA's move kept`);
     assert.deepEqual(spaConflicts, [], id);
