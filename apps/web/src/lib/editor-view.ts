@@ -16,7 +16,8 @@
  * every resize. Without the room the canvas shows, and the choice stays.
  *
  * What the shell derives from the view lives here too, so its rules are
- * tested without a browser: the layers on screen (editorLayers).
+ * tested without a browser: the layers on screen (editorLayers) and when the
+ * canvas is out of reach (canvasInert).
  *
  * Pure, storage a parameter (test/editor-view.test.ts), on the pattern of
  * ./repos-snapshot.ts.
@@ -145,6 +146,16 @@ export function editorLayers(
 ): EditorLayers {
   const shown = doc.structured ? "canvas" : doc.visual ? shownView(view, doc.splitAvailable) : "source";
   return { shown, sourceShown: shown !== "canvas", canvasShown: shown !== "source", split: shown === "split" };
+}
+
+/**
+ * Whether the canvas layer is out of reach: behind the source view, and
+ * behind a modal dialog. Nothing in the dialogs keeps the focus inside them,
+ * so a Tab would otherwise land on the canvas behind one, and a renderer acts
+ * on a key aimed at its focused canvas, however dimmed it is.
+ */
+export function canvasInert(layers: EditorLayers, dialogOpen: boolean): boolean {
+  return !layers.canvasShown || dialogOpen;
 }
 
 type ViewUpdate = EditorView | ((current: EditorView) => EditorView);

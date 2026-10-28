@@ -116,7 +116,7 @@ async function mount(id: string) {
   return { editor, container, diagram, svg, layer };
 }
 
-/** the page around the canvas: a toolbar button, the Monaco source, a dialog's field */
+/** the page around the canvas: a toolbar button, the Monaco source, and a modal dialog with a field, not yet on screen */
 function chrome() {
   const button = document.createElement("button");
   const source = document.createElement("div");
@@ -130,7 +130,7 @@ function chrome() {
   dialog.setAttribute("aria-modal", "true");
   const field = document.createElement("input");
   dialog.append(field);
-  document.body.append(button, source, dialog);
+  document.body.append(button, source);
   return {
     button,
     editContext,
@@ -193,23 +193,25 @@ for (const id of Object.keys(DOCUMENTS)) {
     const before = state();
 
     const page = chrome();
-    const targets: Array<[string, () => Element]> = [
-      ["the page (Safari, after a click on a button)", () => document.body],
-      ["a toolbar button", () => page.button],
-      ["the Monaco source", () => page.editContext],
-      ["a dialog's field", () => page.field],
+    // the dialog is on screen only for its own target: Team Topology hears no key at all while a modal dialog is
+    // open, so with it there the other targets would prove nothing for that renderer
+    const targets: Array<{ where: string; aim: () => Element; modal?: true }> = [
+      { where: "the page (Safari, after a click on a button)", aim: () => document.body },
+      { where: "a toolbar button", aim: () => page.button },
+      { where: "the Monaco source", aim: () => page.editContext },
+      { where: "a dialog's field", aim: () => page.field, modal: true },
     ];
     try {
-      for (const [where, target] of targets) {
-        const element = target();
+      for (const { where, aim, modal } of targets) {
+        if (modal) document.body.append(page.dialog);
+        const element = aim();
         if (element instanceof HTMLElement && element !== document.body) element.focus();
         else (document.activeElement as HTMLElement | null)?.blur();
         for (const [key, init] of CANVAS_KEYS) press(element, key, init);
         assert.equal(state(), before, `${id}: no key from ${where} reaches the canvas`);
+        page.dialog.remove();
       }
 
-      // Team Topology hears no key at all while a modal dialog is open
-      page.dialog.remove();
       svg.focus();
       press(svg, "z", { ctrlKey: true, code: "KeyZ" });
       assert.equal(shapes().length, 2, `${id}: Ctrl+Z on the focused canvas undoes the delete`);
@@ -231,7 +233,6 @@ for (const id of Object.keys(DOCUMENTS)) {
     const start = scale();
     const popover = document.createElement("div");
     const page = chrome();
-    page.dialog.remove();
     try {
       layer.shown = false;
       assert.equal(zoomIn(), false, `${id}: behind the source view the browser zooms the page`);

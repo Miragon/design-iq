@@ -26,6 +26,8 @@ live in a minimal MCP-Apps host. From the repository root:
 `pnpm build`, once `npx -y playwright@1.56.1 install --only-shell chromium`, then
 `npx -y -p playwright@1.56.1 -c "node apps/web/test/live-repair-chromium.ts"` (`PORT` sets the
 Live Host's port, 8392 unless set; `ONLY` and `SHOTS` are in its header).
+`test/canvas-focus-chromium.ts` also runs in WebKit: `npx -y playwright@1.56.1 install webkit` once,
+then the same command with `BROWSER=webkit`.
 
 The side panels (History, Todos, Notes, …) dock over the right edge of the editor, the source
 included (issue 288). The source's Monaco is laid out beside an open panel, in place of Monaco's
@@ -442,14 +444,22 @@ and `test/toolbar-focus-dom.test.ts` renders the toolbar with React under jsdom
 (`test/component-dom.ts` loads its `.tsx`): the menu stays non-modal, and its entries and the view
 switch tell a click from Enter. `test/canvas-focus-chromium.ts` runs the built SPA by hand (its
 header says how), in Chromium and with `BROWSER=webkit` in WebKit, clicking as Safari does; the
-live editor's few lines that pass the view switch's choice to the canvas run only there.
+live editor's few lines that pass the view switch's choice to the canvas run only there. The
+other toolbar buttons (the panel toggles, Add todo) hand nothing back, as the guide lists none: after a
+click on one the focus is on the button or on the page, and Delete and ⌘Z reach the canvas again once
+a click on it has the focus.
 
 **The live editor holds no keys from its canvas.** Every renderer acts only on a key aimed at its
 own focused canvas, so a key typed in the source view, a dialog or on the toolbar reaches no
 canvas, also while it stays mounted behind them (`test/canvas-keys-dom.test.ts` holds each Miragon
-renderer to that). The zoom keys of the SPA's Miragon editors act on the whole page, so they check
-what is on screen themselves: behind the source view (`EditorContext.visibility`), in a text field
-and under a modal dialog (the SPA's dialogs are `aria-modal`) the browser zooms the page.
+renderer to that). The canvas layer is also `inert` behind the source view and behind a dialog
+(`canvasInert` in `lib/editor-view.ts`): the dialogs do not keep the focus inside them, and a Tab out
+of one would otherwise land on the canvas behind it, where a renderer acts on Delete and ⌘Z.
+`test/canvas-focus-chromium.ts` presses Tab and the canvas keys under the Release and Rename
+dialogs in both engines. The zoom keys of the SPA's Miragon editors act on the whole page, so they
+check what is on screen themselves: behind the source view (`EditorContext.visibility`), in a text
+field and under a modal dialog (the SPA's dialogs are `aria-modal`, `test/dialogs-modal-dom.test.ts`)
+the browser zooms the page.
 
 **One spec per Miragon renderer.** The four Miragon widgets are not four
 entries: `src/notations/miragon/<id>.ts` holds ONE `MiragonRendererSpec` per
