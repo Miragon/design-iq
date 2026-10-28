@@ -462,8 +462,9 @@ through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
 **PNG exports in Geist.** Export as PNG draws the renderer's standalone SVG as an image
 (`lib/export-image.ts`, the same for every Miragon renderer, in the SPA and in the widget) on
 the design guide's light export ground (§10.7): the plot's white under a Wardley map, the canvas
-grey under the others (a Team Topologies SVG still lays a white sheet of its own over it,
-Miragon/modeler-suite#234). An SVG drawn as an image cannot reach the page's fonts. So before it is
+grey under the others (a Team Topologies SVG starts with a white sheet that would hide it, so the
+PNG is drawn without that sheet; the SVG download keeps the renderer's own until
+Miragon/modeler-suite#234 removes it there). An SVG drawn as an image cannot reach the page's fonts. So before it is
 drawn, `lib/export-font.ts` puts the page's own `'Geist Variable'` faces into the SVG's `<style>`,
 their files inline: the subsets whose `unicode-range` holds a character of the diagram's text
 (the SPA has latin, latin-ext, cyrillic, cyrillic-ext and vietnamese; the widget only latin and

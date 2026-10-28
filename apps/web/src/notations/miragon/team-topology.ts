@@ -14,6 +14,23 @@ import type { TtBaseViewer, TtModeling } from "@miragon/team-topologies-renderer
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
 
+const EXPORT_SHEET_CLASS = "tt-export-paper";
+
+/** The renderer's SVG starts with a white sheet the size of the drawing, which
+ *  would hide the canvas ground of guide §10.7 that the PNG fills under the
+ *  drawing. Miragon/modeler-suite#234 drops the sheet from the renderer; an
+ *  SVG without it passes through untouched, so that release needs no change
+ *  here. The SVG download stays the renderer's own. */
+export function withoutExportSheet(svg: string): string {
+  const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
+  const sheet = Array.from(parsed.documentElement.children).find(
+    (child) => child.localName === "rect" && child.getAttribute("class") === EXPORT_SHEET_CLASS,
+  );
+  if (!sheet) return svg;
+  sheet.remove();
+  return new XMLSerializer().serializeToString(parsed);
+}
+
 export const spec: MiragonRendererSpec = {
   id: "team-topology",
   pkg: "@miragon/team-topologies-renderer",
@@ -57,10 +74,11 @@ export const spec: MiragonRendererSpec = {
         const shortcuts = lazily(() => createShortcutsDialog(chrome));
         const groups = diagramMenu({
           editTitle: () => title.get().open(),
-          // the canvas ground of guide §10.7 lies under the drawing, but the
-          // renderer's SVG covers it with a white sheet of its own until
-          // Miragon/modeler-suite#234 is settled upstream
-          exports: imageExports(host, async () => diagram.saveSVG().svg, svgToPng),
+          exports: imageExports(
+            host,
+            async () => diagram.saveSVG().svg,
+            (svg) => svgToPng(withoutExportSheet(svg)),
+          ),
           showKeyboardShortcuts: () => shortcuts.get().open(),
         });
         return {

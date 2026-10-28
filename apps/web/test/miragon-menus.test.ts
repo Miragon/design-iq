@@ -480,6 +480,7 @@ test("exports: the PNG is drawn from the SVG with Geist inside, through a data: 
       );
       assert.match(svg, /<text[^>]*font-family[^>]*Geist Variable/, `${id}: and its text asks for it`);
       assert.equal(background, paper[id], `${id}: the paper under the drawing`);
+      assert.doesNotMatch(svg, /tt-export-paper/, `${id}: no sheet of the renderer's over that paper`);
     }
   } finally {
     removeGeist();
@@ -491,6 +492,18 @@ test("exports: the PNG is drawn from the SVG with Geist inside, through a data: 
   assert.equal(files[0]?.name, "tea-shop.png");
   assert.doesNotMatch(drawn[0]?.svg ?? "", /@font-face/);
   assert.equal(warned.mock.callCount(), 1, "the fallback is no secret");
+});
+
+test("Team Topologies: the PNG's SVG loses the renderer's white sheet and nothing else", async () => {
+  const { withoutExportSheet } = await import("../src/notations/miragon/team-topology.ts");
+  const sheet = '<rect class="tt-export-paper" x="0" y="0" width="80" height="40" fill="#FFFFFF"/>';
+  const drawing = (first: string) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 40" width="80" height="40">${first}<g class="viewport"><rect class="team" width="10" height="10"/></g></svg>`;
+  const without = withoutExportSheet(drawing(sheet));
+  assert.doesNotMatch(without, /tt-export-paper/);
+  assert.match(without, /<g class="viewport"><rect class="team" width="10" height="10"\/><\/g>/);
+  // a renderer that no longer draws the sheet (Miragon/modeler-suite#234) needs no change here
+  assert.equal(withoutExportSheet(drawing("")), drawing(""));
 });
 
 test("displayName: every renderer's document title", async () => {
