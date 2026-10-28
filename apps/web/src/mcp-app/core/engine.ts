@@ -142,7 +142,8 @@ export interface EngineOptions {
   /** the layout's current fit insets (core/layout.ts fitInsets), read at every fit */
   insets(): Insets;
   /** the chrome's zoom keys and ⇧1 on a canvas that binds its own zoom keys
-   *  there: bpmn-js and the DMN DRD route them here (lib/chrome-keys.ts
+   *  there: bpmn-js, the DMN DRD and the Miragon renderers (Value Chain's
+   *  diagram-js keeps its own) route them here (lib/chrome-keys.ts
    *  routeCanvasChromeKeys) ahead of that zoom; the chrome's listener on the
    *  document takes them everywhere else */
   chromeKeys?: ChromeKeyDeps;

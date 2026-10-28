@@ -194,7 +194,7 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
     },
   });
   // the zoom keys act on the whole widget document (guide §5.8), so every
-  // zoom button names its key; bpmn-js and the DMN DRD run them on their
+  // zoom button names its key; bpmn-js, the DMN DRD and Value Chain run them on their
   // canvas first (EngineOptions.chromeKeys), ahead of their own zoom
   const zoom = mountZoom({
     els,

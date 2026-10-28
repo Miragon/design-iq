@@ -584,6 +584,84 @@ test("the SPA's Miragon editors: the zoom keys and ⇧1 drive the canvas, a text
   assert.equal(press("=", "Equal", { ctrlKey: true }).defaultPrevented, false, "gone with the editor");
 });
 
+/** Value Chain's diagram-js keeps its own zoom on the focused canvas: a step it clamps to 20 %, so from a fit below it a step out zooms in */
+async function valueChainKeys(
+  mountChrome: () => Promise<{ container: HTMLElement; diagram: MiragonModeler["diagram"] }>,
+) {
+  const { container, diagram } = await mountChrome();
+  const canvas = diagram.get("canvas") as {
+    viewbox(): { scale: number; outer: { width: number; height: number } };
+    viewbox(box: { x: number; y: number; width: number; height: number }): void;
+  };
+  const zoomScroll = diagram.get("zoomScroll") as { stepZoom(direction: number): void };
+  const own: number[] = [];
+  const stepZoom = zoomScroll.stepZoom.bind(zoomScroll);
+  zoomScroll.stepZoom = (direction) => {
+    own.push(direction);
+    stepZoom(direction);
+  };
+  const svg = container.querySelector<SVGSVGElement>(".djs-container > svg");
+  assert.ok(svg, "the canvas");
+  const level = (): number => Math.round(canvas.viewbox().scale * 1000) / 1000;
+  // a viewbox write, not canvas.zoom: jsdom keeps no CTM (renderer-dom.ts)
+  const viewAt = (scale: number): void => {
+    const { outer } = canvas.viewbox();
+    canvas.viewbox({ x: 0, y: 0, width: outer.width / scale, height: outer.height / scale });
+  };
+  const press = (key: string, code: string, mods: Partial<KeyboardEventInit>): KeyboardEvent => {
+    const event = new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods });
+    svg.dispatchEvent(event);
+    return event;
+  };
+  return { svg, own, level, viewAt, press };
+}
+
+test("the SPA's Value Chain editor: a zoom key on the focused canvas is the chrome's, never diagram-js's own, which zooms in below 20 %", async () => {
+  const { editor, container, modeler } = await editorOf("value-chain");
+  const { svg, own, level, viewAt, press } = await valueChainKeys(async () => ({
+    container,
+    diagram: modeler.diagram,
+  }));
+  editor.focus?.();
+  assert.equal(document.activeElement, svg, "the canvas has the focus");
+  viewAt(0.12);
+  assert.equal(press("-", "Minus", { ctrlKey: true }).defaultPrevented, true, "the page does not zoom");
+  assert.equal(level(), 0.12, "from a fit below 20 % a step out stays put");
+  press("+", "NumpadAdd", { ctrlKey: true });
+  assert.equal(level(), 0.2, "a step in goes to 20 %");
+  press("0", "Digit0", { ctrlKey: true });
+  assert.equal(level(), 1, "Ctrl+0: 100 %");
+  press("=", "Equal", { metaKey: true });
+  assert.equal(level(), 1.349, "one step in, to the guide's 135 %, once");
+  press("-", "Minus", { metaKey: true });
+  assert.equal(level(), 1, "and one step out");
+  assert.deepEqual(own, [], "diagram-js's own zoom never acts");
+  press("=", "Equal", { ctrlKey: true, isComposing: true });
+  assert.equal(level(), 1, "an IME composition keeps the key");
+  editor.destroy();
+  assert.equal(press("=", "Equal", { ctrlKey: true }).defaultPrevented, false, "gone with the editor");
+});
+
+test("the widget's Value Chain engine: a zoom key on the focused canvas runs the chrome's deps first and prevents the key", async () => {
+  const [spec, renderer] = await load("value-chain");
+  const container = host(spec.canvasClassName);
+  const ran: string[] = [];
+  const engine = mountMiragonEngine(spec, renderer, container, false, {
+    insets: () => ({ top: 56, right: 16, bottom: 56, left: 16 }),
+    chromeKeys: { menuOpen: () => false, viewport: () => true, run: (key) => void ran.push(key) },
+  });
+  await engine.importText(DOCUMENT["value-chain"]![0]);
+  const { svg, own, press } = await valueChainKeys(async () => ({ container, diagram: engine.modeler.diagram }));
+  svg.focus();
+  assert.equal(press("-", "Minus", { ctrlKey: true }).defaultPrevented, true);
+  assert.equal(press("=", "Equal", { ctrlKey: true }).defaultPrevented, true);
+  assert.equal(press("0", "Digit0", { metaKey: true }).defaultPrevented, true);
+  assert.equal(press("!", "Digit1", { shiftKey: true }).defaultPrevented, true);
+  assert.deepEqual(ran, ["zoomOut", "zoomIn", "zoomToActual", "fit"], "each press acts once");
+  assert.deepEqual(own, [], "diagram-js's own zoom never acts");
+  engine.destroy();
+});
+
 test("the SPA's fit: 24px clear of the measured palette, the sides, the bottom and an open side panel", async () => {
   const { spaFitInsets } = await import("../src/notations/miragon/editor.ts");
   assert.deepEqual(spaFitInsets({ paletteBottom: 64, coveredRight: 0 }), { top: 88, right: 24, bottom: 24, left: 24 });

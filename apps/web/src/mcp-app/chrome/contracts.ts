@@ -390,7 +390,7 @@ export interface KeyDeps {
   save(): boolean;
   /** Cmd/Ctrl + `+` / `-` / `0` and ⇧1 by the shell's keymap
    *  (core/keymap.ts chromeKeyAction) on the whole document (guide §5.8); a
-   *  bpmn-js or DMN DRD canvas runs the same deps first, on itself
+   *  bpmn-js, DMN DRD or Value Chain canvas runs the same deps first, on itself
    *  (WidgetChrome.canvasKeys), and prevents what it ran */
   chromeKeys: ChromeKeyDeps;
   /** topmost first: menu → popover → compact palette → panel (its form first);
@@ -469,8 +469,8 @@ export interface ChromeOptions {
 export interface WidgetChrome extends ChromePort {
   readonly els: ChromeElements;
   readonly kind: WidgetKind;
-  /** EngineOptions.chromeKeys: the zoom keys and ⇧1 on a bpmn-js or DMN DRD
-   *  canvas, the deps the document's keys run too (KeyDeps.chromeKeys) */
+  /** EngineOptions.chromeKeys: the zoom keys and ⇧1 on a bpmn-js, DMN DRD or
+   *  Miragon canvas, the deps the document's keys run too (KeyDeps.chromeKeys) */
   readonly canvasKeys: ChromeKeyDeps;
   /** a Todos / Checks panel (main.ts / dmn-main.ts) */
   registerPanel(spec: PanelSpec): PanelHandle;

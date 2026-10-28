@@ -9,11 +9,13 @@
  * and the renderer's own import fit does not leave it free: the editor
  * mounts it without one and fits the first import as ⇧1 does, beside the
  * palette; a peer's re-import keeps the view the user has.
- * The zoom keys and ⇧1 are the MCP-App widget's (lib/chrome-keys.ts): the
- * renderers bind none, and without them Cmd/Ctrl + `+` zooms the page. They
- * act on the whole page while the canvas is on screen; a text field, a modal
- * dialog and the source view leave them to the browser. Every other key is
- * the renderer's, which acts only on a key aimed at its own canvas. A
+ * The zoom keys and ⇧1 are the MCP-App widget's (lib/chrome-keys.ts): four
+ * renderers bind none, and without them Cmd/Ctrl + `+` zooms the page. Value
+ * Chain's diagram-js keeps its own on the focused canvas, so every canvas
+ * hands them to the chrome first (routeCanvasChromeKeys). They act on the
+ * whole page while the canvas is on screen; a text field, a modal dialog and
+ * the source view leave them to the browser. Every other key is the
+ * renderer's, which acts only on a key aimed at its own canvas. A
  * renderer's own menu entries reach the shell's ⋯ menu (MountedEditor.menu),
  * its element surface the shell's todos (MountedEditor.elements, through
  * lib/todo-surface-canvas.ts).
@@ -22,7 +24,7 @@ import { bindMiragon } from "@designiq/live-client/miragon-sync";
 import { modelStem } from "@designiq/notations";
 import { SHELL } from "@miragon/modeler-shell/core";
 
-import { handleChromeKey } from "@/lib/chrome-keys";
+import { type ChromeKeyDeps, handleChromeKey, routeCanvasChromeKeys } from "@/lib/chrome-keys";
 import { attachPresenceCanvas } from "@/lib/presence-canvas";
 import { attachSurfaceTodoCanvas } from "@/lib/todo-surface-canvas";
 import type { ExportFile, Insets } from "@/mcp-app/core/engine";
@@ -122,18 +124,19 @@ export function mountMiragonEditor(
   const doc = container.ownerDocument;
   const reducedMotion = (): boolean =>
     doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-  const onKey = (event: KeyboardEvent): void => {
-    handleChromeKey(event, doc, {
-      menuOpen: () => false,
-      // the source view keeps the canvas mounted, hidden behind it at its full size
-      viewport: () => (ctx.visibility?.visible() ?? true) && container.clientWidth > 0 && container.clientHeight > 0,
-      run: (key) => {
-        if (key === "fit") view.fit(fitInsets(), !reducedMotion());
-        else if (key === "zoomToActual") view.zoomTo(1);
-        else view.stepZoom(key === "zoomIn" ? 1 : -1);
-      },
-    });
+  const keys: ChromeKeyDeps = {
+    menuOpen: () => false,
+    // the source view keeps the canvas mounted, hidden behind it at its full size
+    viewport: () => (ctx.visibility?.visible() ?? true) && container.clientWidth > 0 && container.clientHeight > 0,
+    run: (key) => {
+      if (key === "fit") view.fit(fitInsets(), !reducedMotion());
+      else if (key === "zoomToActual") view.zoomTo(1);
+      else view.stepZoom(key === "zoomIn" ? 1 : -1);
+    },
   };
+  // a key the canvas ran is prevented, so the document's listener skips it
+  const unrouteKeys = routeCanvasChromeKeys(modeler.diagram, doc, keys);
+  const onKey = (event: KeyboardEvent): void => void handleChromeKey(event, doc, keys);
   doc.addEventListener("keydown", onKey);
   // a side panel opening or closing over the canvas: a view nobody moved
   // since the import or the last fit re-fits beside it, as in the widget
@@ -164,6 +167,7 @@ export function mountMiragonEditor(
       menu?.destroy();
       offSidePanels?.();
       doc.removeEventListener("keydown", onKey);
+      unrouteKeys();
       view.destroy();
       todos.destroy();
       presenceCanvas?.destroy();

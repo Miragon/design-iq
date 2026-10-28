@@ -1,11 +1,11 @@
 /**
  * The zoom keys and ⇧1 of a canvas, in the MCP-App widget
- * (mcp-app/chrome/keys.ts, the bpmn and dmn engines) and in the SPA's
- * editors (notations/miragon/editor.ts, notations/bpmn-io-keys.ts). No
- * Miragon renderer binds Cmd/Ctrl + `+` / `-` / `0`, so without this they
- * would zoom the page instead of the diagram; bpmn-js and dmn-js bind them to
- * a zoom that turns a step out into a zoom in below 20 %
- * (routeCanvasChromeKeys). What a key means is the modeler shell's keymap
+ * (mcp-app/chrome/keys.ts, the bpmn, dmn and Miragon engines) and in the SPA's
+ * editors (notations/miragon/editor.ts, notations/bpmn-io-keys.ts). Wardley,
+ * Event Storming, Team Topologies and Context Maps bind no Cmd/Ctrl + `+` /
+ * `-` / `0`, so without this they would zoom the page instead of the
+ * diagram; bpmn-js, dmn-js and Value Chain bind them to a zoom that turns a
+ * step out into a zoom in below 20 % (routeCanvasChromeKeys). What a key means is the modeler shell's keymap
  * (mcp-app/core/keymap.ts chromeKeyAction); this reads what it depends on
  * from the DOM the way the shell's own key listener does, so a renderer's
  * dialog or popover counts as soon as it shows. Every view takes the keys on
@@ -88,7 +88,7 @@ interface CanvasKeyboard {
 const BEFORE_CANVAS_BINDINGS = 2000;
 
 /**
- * The chrome keys of a diagram-js canvas (bpmn-js, the DMN DRD) on the canvas
+ * The chrome keys of a diagram-js canvas (bpmn-js, the DMN DRD, Value Chain) on the canvas
  * itself, where its keyboard listens (the canvas's `<svg>`). diagram-js binds
  * Cmd/Ctrl + `+` / `-` / `0` there to its own `zoomScroll`, which clamps a
  * step to 20 %, so from a fit below 20 % its zoom out zooms in (guide §5.8);
