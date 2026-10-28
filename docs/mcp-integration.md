@@ -72,7 +72,9 @@ definitions live in `packages/mcp/tools.ts`, shared by two entry points:
 A Value Chain (`.vc.json`) is read from the document's own ids: `get_view` reports its `meta.name` as
 the model's `name`, counts `elements` and `connections` in `stats` and lists them in `detail`
 (`elements` with `id`, `type` and `name`, `connections` with `id`, `from`, `to` and `type`). Those
-are the ids its canvas selects and a todo anchors to.
+are the ids its canvas selects and a todo anchors to: both kinds are anchors, and `create_todo`
+refuses any other id (`todos/unknown-element`) with the closest ones, as it does on every canvas
+model.
 
 A Team Topology's graph has no edges: its teams, interactions, flows of change and annotations
 are all placed shapes, so each is a node (a team keeps its team type, the others are of type
