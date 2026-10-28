@@ -32,13 +32,10 @@ test("⌘S and Ctrl+S save — everywhere, a modeler's own text included (no bro
   assert.equal(keyCommand(key("s", "KeyS"), "plain"), undefined, "a bare s");
 });
 
-test("⇧1 fits — never inside text, where it types '!'", () => {
-  assert.equal(keyCommand(key("!", "Digit1", { shiftKey: true }), "plain"), "fit");
-  assert.equal(keyCommand(key("!", "Digit1", { shiftKey: true }), "chrome-text"), undefined);
-  assert.equal(keyCommand(key("!", "Digit1", { shiftKey: true }), "canvas-text"), undefined);
-  assert.equal(keyCommand(key("1", "Digit1"), "plain"), undefined);
-  assert.equal(keyCommand(key("!", "Digit1", { shiftKey: true, metaKey: true }), "plain"), undefined);
-  assert.equal(keyCommand(key("1", "Numpad1", { shiftKey: true }), "plain"), undefined, "the numpad is not ⇧1");
+test("⇧1 is no keyCommand: the shell's keymap fits in every widget (chromeKeyAction)", () => {
+  for (const target of ["plain", "chrome-text", "canvas-text"] as const) {
+    assert.equal(keyCommand(key("!", "Digit1", { shiftKey: true }), target), undefined, target);
+  }
 });
 
 test("Escape walks the layers — from a chrome field too (the inline form), never from the canvas's own text", () => {
@@ -134,9 +131,4 @@ test("without a diagram on screen (a state card) the browser keeps the zoom keys
   assert.equal(chromeKeyAction(key("=", "Equal", { metaKey: true }), { ...free, viewport: false }), undefined);
   assert.equal(chromeKeyAction(key("0", "Digit0", { ctrlKey: true }), { ...free, viewport: false }), undefined);
   assert.equal(chromeKeyAction(key("!", "Digit1", { shiftKey: true }), { ...free, viewport: false }), undefined);
-});
-
-test("keyCommand finds ⇧1 in every layout by the key's position, as the shell does", () => {
-  assert.equal(keyCommand(key("1", "Digit1", { shiftKey: true }), "plain"), "fit", "AZERTY");
-  assert.equal(keyCommand(key("!", "Digit1", { shiftKey: true, altKey: true }), "plain"), undefined, "AltGr");
 });

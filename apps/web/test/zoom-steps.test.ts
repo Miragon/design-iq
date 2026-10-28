@@ -2,10 +2,11 @@
  * The −/+ step of every diagram-js view designIQ mounts, on real canvases
  * (under jsdom, test/renderer-dom.ts): the widget engines of the Miragon
  * renderers, of bpmn-js and of the DMN DRD step exactly as diagram-js's own
- * `zoomScroll.stepZoom` does, the step of bpmn-js's and dmn-js's ⌘+ / ⌘−
- * and of the Miragon modelers' own zoom panel: the guide's fixed zoom steps
- * (§5.8). The SPA's Miragon editors step through the same view
- * (miragon-menus.test.ts presses their keys).
+ * `zoomScroll.stepZoom` does, the step of the Miragon modelers' own zoom
+ * panel: the guide's fixed zoom steps (§5.8). The zoom keys step through the
+ * same view: the SPA's Miragon editors (miragon-menus.test.ts presses their
+ * keys), and bpmn-js and the DMN DRD in both hosts
+ * (canvas-zoom-keys-dom.test.ts), where `zoomScroll.stepZoom` no longer acts.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -106,7 +107,7 @@ test("every Miragon renderer in the widget: − and + step as diagram-js's zoomS
   }
 });
 
-test("bpmn-js in the widget: − and + step as its own ⌘+ / ⌘− do", async () => {
+test("bpmn-js in the widget: − and + step as its zoomScroll does", async () => {
   const { mountBpmnEngine } = await import("../src/mcp-app/engines/bpmn.ts");
   const engine = mountBpmnEngine(host("bpmn-canvas"), false, { insets });
   await engine.importText(model("order-to-cash.bpmn"));
@@ -116,7 +117,7 @@ test("bpmn-js in the widget: − and + step as its own ⌘+ / ⌘− do", async 
   engine.destroy();
 });
 
-test("the DMN DRD in the widget: − and + step as its own ⌘+ / ⌘− do", async () => {
+test("the DMN DRD in the widget: − and + step as its zoomScroll does", async () => {
   const { default: DmnModeler } = await import("dmn-js/lib/Modeler");
   const { mountDmnEngine } = await import("../src/mcp-app/engines/dmn.ts");
   // the engine keeps its dmn-js instance to itself; its import names it

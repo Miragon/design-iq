@@ -5,8 +5,8 @@
  * the DRD | Table switch, the focus hand-back around a loading card, a toast
  * that yields its place in the lane, a decision card over a folded sheet — and
  * a decision card's consequence lines describe their buttons; a leaving toast
- * fades out of the lane's flow; a click on the zoom group hands the keys back
- * to the canvas.
+ * fades out of the lane's flow; a click on the zoom group or on the Workshop
+ * chip hands the keys back to the canvas.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -387,6 +387,43 @@ test("Workshop chip: switched OFF where only the menu keeps it (step ≥ 3), the
   assert.deepEqual(said, ["Workshop mode off"], "the switch announces itself (aria-checked)");
 });
 
+test("Workshop chip: a click switches it and hands the canvas the focus; Enter or Space keep the focus on the chip", () => {
+  const dom = installFakeDom();
+  const slot = dom.el("span", { id: "mode-slot" });
+  const canvas = dom.el("svg", { tabindex: "0" });
+  let on = false;
+  const listeners = new Set<() => void>();
+  mountModeChip(
+    asEl(slot),
+    {
+      label: "Workshop",
+      title: "Workshop mode",
+      isOn: () => on,
+      toggle: () => {
+        on = !on;
+        for (const cb of listeners) cb();
+      },
+      onChanged: (cb) => {
+        listeners.add(cb);
+        return () => listeners.delete(cb);
+      },
+    },
+    () => {},
+    { focusCanvas: () => canvas.focus() },
+  );
+  const chip = slot.querySelector("button")!;
+  chip.focus();
+  chip.click(1);
+  assert.equal(on, true);
+  assert.equal(chip.getAttribute("aria-checked"), "true");
+  assert.equal(dom.active(), canvas, "a click hands the canvas the focus (guide §5.8)");
+
+  chip.focus();
+  chip.click(0);
+  assert.equal(on, false);
+  assert.equal(dom.active(), chip, "Enter or Space keep it on the chip");
+});
+
 test("DRD | Table switch: a keyboard press keeps the focus on the segment across the view change", async () => {
   const dom = installFakeDom();
   const slot = dom.el("span", { id: "mode-slot" });
@@ -494,6 +531,7 @@ test("zoom group: a click hands the focus back to the canvas, Enter or Space lea
       zoomFit: asEl(els.zoomFit),
     },
     fit: () => void did.push("fit"),
+    keys: { platform: "other" },
   });
   zoom.bind(view);
   const press = (el: FakeElement, detail: number): void =>

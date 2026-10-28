@@ -1,14 +1,18 @@
 /**
- * The zoom keys and ⇧1 of a Miragon canvas, in the MCP-App widget
- * (mcp-app/chrome/keys.ts) and in the SPA's Miragon editors
- * (notations/miragon/editor.ts). No Miragon renderer binds Cmd/Ctrl + `+` /
- * `-` / `0`, so without this they would zoom the page instead of the diagram.
- * What a key means is the modeler shell's keymap (mcp-app/core/keymap.ts
- * chromeKeyAction); this reads what it depends on from the DOM the way the
- * shell's own key listener does, so a renderer's dialog or popover counts
- * as soon as it shows.
+ * The zoom keys and ⇧1 of a canvas, in the MCP-App widget
+ * (mcp-app/chrome/keys.ts, the bpmn and dmn engines) and in the SPA's
+ * editors (notations/miragon/editor.ts, notations/bpmn-io-keys.ts). No
+ * Miragon renderer binds Cmd/Ctrl + `+` / `-` / `0`, so without this they
+ * would zoom the page instead of the diagram; bpmn-js and dmn-js bind them to
+ * a zoom that turns a step out into a zoom in below 20 %
+ * (routeCanvasChromeKeys). What a key means is the modeler shell's keymap
+ * (mcp-app/core/keymap.ts chromeKeyAction); this reads what it depends on
+ * from the DOM the way the shell's own key listener does, so a renderer's
+ * dialog or popover counts as soon as it shows. Every view takes the keys on
+ * its whole document (guide §5.8), except in a text field, while a modal
+ * dialog is open and while no diagram is on screen.
  */
-import { isTextField } from "@miragon/modeler-shell/core";
+import { isTextField, matchChromeKey } from "@miragon/modeler-shell/core";
 
 import { type ChromeKey, chromeKeyAction } from "../mcp-app/core/keymap.ts";
 
@@ -66,4 +70,52 @@ export function handleChromeKey(event: KeyboardEvent, scope: ParentNode, deps: C
   deps.run(action);
   event.preventDefault();
   return true;
+}
+
+/** a diagram-js 15 `keyboard.keydown` listener: true handles the key (the
+ *  keyboard prevents its default), false keeps the bindings below from it */
+type CanvasKeyListener = (context: { keyEvent: KeyboardEvent }) => boolean | undefined;
+
+/** the `keyboard` service of a diagram-js 15 canvas, as far as this uses it */
+interface CanvasKeyboard {
+  addListener(priority: number, listener: CanvasKeyListener): void;
+  removeListener(listener: CanvasKeyListener): void;
+}
+
+/** above every keyboard listener diagram-js, bpmn-js and dmn-js register
+ *  (their bindings at 1000, HandTool and KeyboardMoveSelection at 1500), as
+ *  the modeler shell's own guard sits */
+const BEFORE_CANVAS_BINDINGS = 2000;
+
+/**
+ * The chrome keys of a diagram-js canvas (bpmn-js, the DMN DRD) on the canvas
+ * itself, where its keyboard listens (the canvas's `<svg>`). diagram-js binds
+ * Cmd/Ctrl + `+` / `-` / `0` there to its own `zoomScroll`, which clamps a
+ * step to 20 %, so from a fit below 20 % its zoom out zooms in (guide §5.8);
+ * this listens before that binding and never lets it act. Each key goes
+ * through `handleChromeKey` to `deps.run` and is prevented, so the caller's
+ * listener on the document, which takes the keys everywhere else, skips it
+ * and each press acts once. A key the keymap leaves alone (a modal dialog, a
+ * composition) keeps its default, so the browser zooms the page. A diagram
+ * without a keyboard (dmn-js's read-only DRD) binds no zoom of its own: the
+ * document listener alone takes its keys. Returns the unbind.
+ */
+export function routeCanvasChromeKeys(
+  diagram: { get(service: string): unknown },
+  scope: ParentNode,
+  deps: ChromeKeyDeps,
+): () => void {
+  let keyboard: CanvasKeyboard;
+  try {
+    // didi's strict lookup throws for a service the diagram does not register
+    keyboard = diagram.get("keyboard") as CanvasKeyboard;
+  } catch {
+    return () => {};
+  }
+  const listener: CanvasKeyListener = ({ keyEvent }) => {
+    if (matchChromeKey(keyEvent) === undefined) return undefined;
+    return handleChromeKey(keyEvent, scope, deps);
+  };
+  keyboard.addListener(BEFORE_CANVAS_BINDINGS, listener);
+  return () => keyboard.removeListener(listener);
 }

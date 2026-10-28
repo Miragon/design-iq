@@ -27,7 +27,7 @@ import type {
 import { mountDecision } from "./chrome/decision.ts";
 import { focusReturn } from "./chrome/focus.ts";
 import { mountHost } from "./chrome/host.ts";
-import { chromeKeysFor, mountKeys } from "./chrome/keys.ts";
+import { chromeKeyDeps, mountKeys } from "./chrome/keys.ts";
 import { mountLayout } from "./chrome/layout-dom.ts";
 import { mountExternalLinks } from "./chrome/links.ts";
 import { mountMenu } from "./chrome/menu.ts";
@@ -183,7 +183,7 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
     displayName: () => actions.displayName(),
     onSelect: (id) => onMenu(id),
   });
-  const chromeKeys = chromeKeysFor(kind, {
+  const chromeKeys = chromeKeyDeps({
     menuOpen: () => menu.isOpen(),
     hasViewport: () => view?.hasViewport() ?? false,
     stateCardShown: () => stateCards.current() !== undefined,
@@ -193,10 +193,13 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
       else view?.stepZoom(key === "zoomIn" ? 1 : -1);
     },
   });
+  // the zoom keys act on the whole widget document (guide §5.8), so every
+  // zoom button names its key; bpmn-js and the DMN DRD run them on their
+  // canvas first (EngineOptions.chromeKeys), ahead of their own zoom
   const zoom = mountZoom({
     els,
     fit: () => layout.refit(true),
-    ...(chromeKeys ? { keys: { platform: mac ? "mac" : "other" } } : {}),
+    keys: { platform: mac ? "mac" : "other" },
   });
   mountKeys(document, {
     save: () => {
@@ -208,13 +211,8 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
       actions.save();
       return true;
     },
-    fit: () => {
-      if (!view?.hasViewport()) return false;
-      layout.refit(true);
-      return true;
-    },
     escape: [() => menu.close(true), () => sync.closePopover(), () => layout.closeTools(), () => panels.escape()],
-    ...(chromeKeys ? { chromeKeys } : {}),
+    chromeKeys,
   });
   // a renderer's dialog or popover links out (Wardley's X-axis labels…): the
   // sandbox blocks the new window, so the host opens it, never silently
@@ -416,6 +414,7 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
   const chrome: WidgetChrome = {
     els,
     kind,
+    canvasKeys: chromeKeys,
     // ── ChromePort ──
     setDocument(next) {
       doc = next;
@@ -500,7 +499,7 @@ export function mountChrome(opts: ChromeOptions): WidgetChrome {
             layout.update();
           },
           // the switch lives in the menu once the OFF chip leaves the row (step ≥ 3)
-          { fallbackFocus: () => els.trigger, announce: live.polite },
+          { fallbackFocus: () => els.trigger, announce: live.polite, focusCanvas: () => view?.focus?.() },
         );
       }
       layout.update();

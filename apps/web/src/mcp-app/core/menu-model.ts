@@ -372,9 +372,9 @@ export function buildMenu(ctx: MenuContext): MenuGroup[] {
     if (ctx.viewport) {
       view.push({
         id: "fit",
-        // a Miragon widget names it as the modeler shell and the renderer's
-        // Keyboard shortcuts… dialog do
-        label: ctx.kind === "miragon" ? defaultMessages.fit : "Fit diagram",
+        // named as the modeler shell, the zoom group and a Miragon renderer's
+        // Keyboard shortcuts… dialog name it
+        label: defaultMessages.fit,
         icon: "scan",
         role: "menuitem",
         kbd: "⇧1",

@@ -51,8 +51,12 @@ const RASTER = Math.log10(ZOOM_MAX / ZOOM_MIN) / 10;
 
 /** the level one −/+ step leads to (guide §5.8): one step on from the nearest
  *  full step of 22, 30, 41, 55, 74, 100, 135, 182, 246 and 331 %, clamped to
- *  20 … 400 % — the arithmetic of diagram-js's `zoomScroll.stepZoom` */
+ *  20 … 400 %, the arithmetic of diagram-js's `zoomScroll.stepZoom`. Unlike
+ *  there, the clamp never turns a step around: from a fit below 20 % a step
+ *  out stays where it is (`zoomScroll` would zoom in to 20 %), and so does a
+ *  step in above 400 % */
 export function zoomStepLevel(level: number, direction: 1 | -1): number {
   const next = 10 ** (Math.round(Math.log10(level) / RASTER) * RASTER + RASTER * direction);
-  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+  const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+  return direction < 0 ? Math.min(level, clamped) : Math.max(level, clamped);
 }

@@ -1,22 +1,25 @@
 /**
  * The widget's one keydown listener (src/mcp-app/chrome/keys.ts) and the
- * shared chrome-key binding it and the SPA's Miragon editors use
- * (src/lib/chrome-keys.ts), under jsdom with real keyboard events: in a
- * Miragon widget Cmd/Ctrl + `+` / `-` / `0` and ⇧1 run the view and keep
- * the page from zooming, a text field, an open modal dialog, a composition
- * and a widget without a diagram keep the key, and Escape leaves a modal
- * dialog's layers alone. The bpmn and dmn widgets keep their keys: ⇧1 is
- * the chrome's fit, the zoom keys pass to the focused canvas untouched.
+ * shared chrome-key binding it and the SPA's editors use
+ * (src/lib/chrome-keys.ts), under jsdom with real keyboard events: in every
+ * widget Cmd/Ctrl + `+` / `-` / `0` and ⇧1 run the view and keep the page
+ * from zooming, a text field, an open modal dialog, a composition and a
+ * widget without a diagram keep the key, and Escape leaves a modal dialog's
+ * layers alone. A bpmn-js or DRD canvas runs them first and prevents them
+ * (test/canvas-zoom-keys-dom.test.ts), so this listener skips a prevented
+ * key. Monaco and an EditContext editor are text fields, as for the shell.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { isTextField as shellIsTextField } from "@miragon/modeler-shell/core";
 import { JSDOM } from "jsdom";
 
+import { isTextField } from "../src/lib/chrome-keys.ts";
 import { mountKeys } from "../src/mcp-app/chrome/keys.ts";
 import type { ChromeKey } from "../src/mcp-app/core/keymap.ts";
 
-function widget(opts: { miragon: boolean; viewport?: boolean }) {
+function widget(opts: { viewport?: boolean } = {}) {
   const { window } = new JSDOM(
     `<!doctype html><html><body><div id="app">
       <div id="canvas"><div class="wardley-canvas"><svg tabindex="0"></svg><input id="label"></div></div>
@@ -34,25 +37,17 @@ function widget(opts: { miragon: boolean; viewport?: boolean }) {
       ran.push("save");
       return true;
     },
-    fit: () => {
-      ran.push("fit (bpmn)");
-      return true;
-    },
     escape: [
       () => {
         ran.push("escape");
         return true;
       },
     ],
-    ...(opts.miragon
-      ? {
-          chromeKeys: {
-            menuOpen: () => false,
-            viewport: () => viewport,
-            run: (key: ChromeKey) => void ran.push(key),
-          },
-        }
-      : {}),
+    chromeKeys: {
+      menuOpen: () => false,
+      viewport: () => viewport,
+      run: (key: ChromeKey) => void ran.push(key),
+    },
   });
   const press = (
     target: string | undefined,
@@ -76,8 +71,8 @@ function widget(opts: { miragon: boolean; viewport?: boolean }) {
   };
 }
 
-test("a Miragon widget: each zoom key and ⇧1 runs once and keeps the page from zooming", () => {
-  const w = widget({ miragon: true });
+test("a widget: each zoom key and ⇧1 runs once and keeps the page from zooming", () => {
+  const w = widget();
   const keys: Array<[string, string, Record<string, boolean>, string]> = [
     ["=", "Equal", { metaKey: true }, "zoomIn"],
     ["+", "NumpadAdd", { ctrlKey: true }, "zoomIn"],
@@ -93,11 +88,14 @@ test("a Miragon widget: each zoom key and ⇧1 runs once and keeps the page from
   }
   w.ran.length = 0;
   assert.equal(w.press(undefined, "!", "Digit1", { shiftKey: true }).defaultPrevented, true);
-  assert.deepEqual(w.ran, ["fit"], "⇧1 is the shell's fit, never also the bpmn path");
+  assert.deepEqual(w.ran, ["fit"], "⇧1 is the shell's fit, once");
+  w.unbind();
+  w.press(undefined, "!", "Digit1", { shiftKey: true });
+  assert.deepEqual(w.ran, ["fit"], "unbound");
 });
 
-test("a Miragon widget: a text field, an open modal, a composition, a handled key and a missing diagram keep the key", () => {
-  const w = widget({ miragon: true });
+test("a widget: a text field, an open modal, a composition, a handled key and a missing diagram keep the key", () => {
+  const w = widget();
   for (const field of ["label", "chrome-field", "monaco"]) {
     const event = w.press(field, "=", "Equal", { metaKey: true });
     assert.equal(event.defaultPrevented, false, `${field}: the browser zooms the page`);
@@ -138,14 +136,35 @@ test("a Miragon widget: a text field, an open modal, a composition, a handled ke
   assert.deepEqual(w.ran, ["escape", "save"], "Escape and ⌘S stay designIQ's");
 });
 
-test("the bpmn and dmn widgets keep their own zoom keys; ⇧1 is the chrome's fit there", () => {
-  const w = widget({ miragon: false });
-  assert.equal(w.press(undefined, "=", "Equal", { metaKey: true }).defaultPrevented, false);
-  assert.equal(w.press(undefined, "0", "Digit0", { ctrlKey: true }).defaultPrevented, false);
-  assert.deepEqual(w.ran, [], "the diagram-js keyboard on the focused canvas takes them");
-  assert.equal(w.press(undefined, "!", "Digit1", { shiftKey: true }).defaultPrevented, true);
-  assert.deepEqual(w.ran, ["fit (bpmn)"]);
-  w.unbind();
-  w.press(undefined, "!", "Digit1", { shiftKey: true });
-  assert.deepEqual(w.ran, ["fit (bpmn)"], "unbound");
+test("isTextField: every input, select list and editable text, an EditContext editor and all of Monaco; never a button or the page", () => {
+  const { window } = new JSDOM(
+    `<!doctype html><body>
+      <input id="input"><textarea id="textarea"></textarea><select id="select"></select>
+      <div contenteditable="true"><span id="label">Check order</span></div>
+      <div contenteditable="false" id="locked"></div>
+      <div class="monaco-editor"><div class="find-widget"><button id="find-next"></button></div></div>
+      <div id="edit-context"></div>
+      <button id="button"></button>
+    </body>`,
+  );
+  const { document } = window;
+  const byId = (id: string) => document.getElementById(id)!;
+  // Chromium's EditContext (Monaco types into one); jsdom has none
+  Object.defineProperty(byId("edit-context"), "editContext", { value: {} });
+  // jsdom computes no isContentEditable: the label inherits it from its editor
+  Object.defineProperty(byId("label"), "isContentEditable", { value: true });
+  for (const id of ["input", "textarea", "select", "label", "find-next", "edit-context"]) {
+    assert.equal(isTextField(byId(id)), true, id);
+  }
+  for (const target of [byId("button"), byId("locked"), document.body, document, window, null]) {
+    assert.equal(isTextField(target as EventTarget | null), false, String((target as Element | null)?.id ?? target));
+  }
+});
+
+test("isTextField is the modeler shell's own, not a copy that could drift from it", () => {
+  assert.equal(
+    isTextField,
+    shellIsTextField,
+    "src/lib/chrome-keys.ts re-exports isTextField from @miragon/modeler-shell/core: keep the shell's rule, never a local copy",
+  );
 });

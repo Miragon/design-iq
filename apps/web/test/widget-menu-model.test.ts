@@ -203,7 +203,7 @@ test("key model: ↑/↓ wrap past disabled items, Home/End jump, first-letter t
     { label: "Open in designIQ" },
     { label: "Save now", disabled: true },
     { label: "Reload latest version" },
-    { label: "Fit diagram" },
+    { label: "Fit to view" },
     { label: "Open fullscreen" },
   ];
   assert.equal(menuKeyNav(items, -1, "ArrowDown"), 0, "↓ opens on the first enabled item");
@@ -395,10 +395,11 @@ test("the Legend panel: the Model group's last entry, a checkbox with its check 
   assert.equal(item(miragon, "legend"), undefined, "a notation without a legend has none");
 });
 
-test("Fit: a Miragon widget names it in the modeler shell's words, bpmn and dmn keep theirs", () => {
-  assert.equal(item(miragon, "fit")?.label, "Fit to view");
-  assert.equal(item(miragon, "fit")?.kbd, "⇧1");
-  assert.equal(item({ ...miragon, kind: "bpmn" }, "fit")?.label, "Fit diagram");
+test("Fit: every widget names it in the modeler shell's words, as the zoom group's fit button", () => {
+  for (const kind of ["miragon", "bpmn", "dmn"] as const) {
+    assert.equal(item({ ...miragon, kind }, "fit")?.label, "Fit to view", kind);
+    assert.equal(item({ ...miragon, kind }, "fit")?.kbd, "⇧1", kind);
+  }
 });
 
 test("panelOfItem: the items that toggle a panel, and only those", () => {

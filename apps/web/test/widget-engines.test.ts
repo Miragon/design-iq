@@ -426,6 +426,21 @@ test("zoomStepLevel: − and + walk the guide's fixed steps (§5.8) from the nea
   assert.deepEqual([ZOOM_MIN, ZOOM_MAX, FIT_ANIMATION_MS], [0.2, 4, 250], "the shell's limits and re-fit time");
 });
 
+test("zoomStepLevel never turns a step around: a step out below 20 % stays put, a step in above 400 % too, the limits stay reachable", () => {
+  const readBack = (level: number): number => Math.round(level * 1000) / 1000;
+  assert.equal(zoomStepLevel(0.08, -1), 0.08, "a fit at 8 %: − stays at 8 % (zoomScroll would zoom in to 20 %)");
+  assert.equal(zoomStepLevel(0.18, -1), 0.18, "a fit at 18 %: − stays at 18 %");
+  assert.equal(zoomStepLevel(ZOOM_MIN, -1), ZOOM_MIN, "20 %: − stays at 20 %");
+  assert.equal(zoomStepLevel(0.21, -1), ZOOM_MIN, "21 %: − goes to the true minimum");
+  assert.equal(zoomStepLevel(5, 1), 5, "500 %: + stays at 500 %");
+  assert.equal(zoomStepLevel(3.9, 1), ZOOM_MAX, "390 %: + goes to 400 %");
+  assert.equal(readBack(zoomStepLevel(5, -1)), 3.314, "500 %: − goes down to 331 %");
+  for (let level = 0.05; level < 6; level *= 1.07) {
+    assert.ok(zoomStepLevel(level, -1) <= level, `− from ${level} never zooms in`);
+    assert.ok(zoomStepLevel(level, 1) >= level, `+ from ${level} never zooms out`);
+  }
+});
+
 test("the re-fit easing: --cd-ease, cubic-bezier(0.4, 0, 0.2, 1), endpoints exact, as designIQ's own curve gave it", () => {
   assert.equal(easeStandard(0), 0);
   assert.equal(easeStandard(1), 1);

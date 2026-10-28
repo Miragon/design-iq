@@ -3,14 +3,13 @@
  * widget document (chrome/keys.ts) asks keyCommand what a key means. The
  * text-field guard lives here too: a modeler's own text (a label being
  * edited, a DMN cell, the add-on form) keeps every key; a chrome field (the
- * todo form) keeps ⇧1 (it types "!") but still answers Escape, which closes
- * the inline form — the topmost layer while one is open. ⌘S is honoured
- * everywhere: it has no meaning inside text, and the browser's own "save
- * page" is never what someone in a modeler wants.
- * The zoom keys and ⇧1 of the Miragon notations (chromeKeyAction) follow the
- * modeler shell's keymap (`decideKey`, host "embedded"), so they act exactly
- * as in the Miragon modelers' own chrome; bpmn-js and dmn-js keep their own
- * zoom keys on the focused canvas, and ⇧1 there stays keyCommand's.
+ * todo form) still answers Escape, which closes the inline form — the
+ * topmost layer while one is open. ⌘S is honoured everywhere: it has no
+ * meaning inside text, and the browser's own "save page" is never what
+ * someone in a modeler wants.
+ * The zoom keys and ⇧1 (chromeKeyAction) follow the modeler shell's keymap
+ * (`decideKey`, host "embedded"), so they act exactly as in the Miragon
+ * modelers' own chrome, on the whole document of every widget (guide §5.8).
  * Plus the WAI-ARIA menu-button keys of the trigger (§3).
  * DOM-free (`.ts` relative imports): node --test loads it.
  */
@@ -18,7 +17,7 @@ import { type ChromeKey, decideKey, type KeyLike, matchChromeKey } from "@mirago
 
 export type { ChromeKey, KeyLike };
 
-export type KeyCommand = "save" | "fit" | "escape";
+export type KeyCommand = "save" | "escape";
 
 /** where the key landed: not in text / in a chrome text field / in the canvas's own text */
 export type KeyTarget = "plain" | "chrome-text" | "canvas-text";
@@ -30,13 +29,13 @@ export function keyCommand(e: KeyLike, target: KeyTarget): KeyCommand | undefine
   if (mod && !e.altKey && !e.shiftKey && (e.key.toLowerCase() === "s" || e.code === "KeyS")) return "save";
   if (target === "canvas-text") return undefined;
   if (e.key === "Escape" && !mod && !e.altKey) return "escape";
-  if (target === "plain" && matchChromeKey(e) === "fit") return "fit";
   return undefined;
 }
 
 /** what the zoom keys and ⇧1 depend on besides the key itself */
 export interface ChromeKeyState {
-  /** the key landed in a text field (TEXT_FIELD_SELECTOR, or contenteditable) */
+  /** the key landed in a text field: the modeler shell's isTextField, which
+   *  also counts an EditContext editor and anything inside Monaco */
   inTextField: boolean;
   menuOpen: boolean;
   /** a popover or dialog (`[role="dialog"]`, `<dialog open>`) shows */
@@ -48,7 +47,7 @@ export interface ChromeKeyState {
 }
 
 /**
- * Cmd/Ctrl + `+` / `-` / `0` and ⇧1 for a Miragon canvas: the shell's
+ * Cmd/Ctrl + `+` / `-` / `0` and ⇧1 for a canvas: the shell's
  * decision for an embedded modeler, so an IME composition, a text field and
  * an open modal keep the key, and a widget without a diagram (a state card)
  * leaves it to the browser. undefined = not acted on, nothing prevented.

@@ -14,7 +14,7 @@
  *   chrome/state-card.ts  MountStateCards  the centred dead ends (§5.3)
  *   chrome/zoom.ts        MountZoom        the zoom group, bound to engine.view
  *   chrome/panel.ts       MountPanels      the Todos / Checks card shell (sheet when compact)
- *   chrome/keys.ts        MountKeys        ⌘S, ⇧1, the Miragon zoom keys, Escape layering
+ *   chrome/keys.ts        MountKeys        ⌘S, ⇧1, the zoom keys, Escape layering
  *
  * Plus chrome/mode-chip.ts (the Workshop chip-switch), chrome/view-switch.ts
  * (the DMN DRD | Table switch), chrome/focus.ts (the focus hand-back around a
@@ -324,9 +324,9 @@ export type MountZoom = (deps: {
   els: Pick<ChromeElements, "zoom" | "zoomOut" | "zoomPct" | "zoomIn" | "zoomFit">;
   /** the Fit button: layout.refit(true) */
   fit(): void;
-  /** the Miragon widgets, whose zoom keys the chrome binds (KeyDeps.chromeKeys):
-   *  the buttons name their keys for this keyboard */
-  keys?: { platform: Platform };
+  /** the keyboard the buttons name their keys for: the chrome binds the zoom
+   *  keys on the whole document (KeyDeps.chromeKeys) */
+  keys: { platform: Platform };
 }) => ZoomChrome;
 
 // ── chrome/panel.ts ─────────────────────────────────────────────────────────
@@ -388,12 +388,11 @@ export type MountPanels = (deps: {
 export interface KeyDeps {
   /** ⌘S / Ctrl+S — false = not handled (read-only: the browser default) */
   save(): boolean;
-  /** ⇧1 where `chromeKeys` is absent */
-  fit(): boolean;
-  /** the Miragon widgets: Cmd/Ctrl + `+` / `-` / `0` and ⇧1 by the shell's
-   *  keymap (core/keymap.ts chromeKeyAction): their renderers bind no zoom
-   *  keys, bpmn-js and dmn-js do */
-  chromeKeys?: ChromeKeyDeps;
+  /** Cmd/Ctrl + `+` / `-` / `0` and ⇧1 by the shell's keymap
+   *  (core/keymap.ts chromeKeyAction) on the whole document (guide §5.8); a
+   *  bpmn-js or DMN DRD canvas runs the same deps first, on itself
+   *  (WidgetChrome.canvasKeys), and prevents what it ran */
+  chromeKeys: ChromeKeyDeps;
   /** topmost first: menu → popover → compact palette → panel (its form first);
    *  never a decision card */
   escape: Array<() => boolean>;
@@ -470,6 +469,9 @@ export interface ChromeOptions {
 export interface WidgetChrome extends ChromePort {
   readonly els: ChromeElements;
   readonly kind: WidgetKind;
+  /** EngineOptions.chromeKeys: the zoom keys and ⇧1 on a bpmn-js or DMN DRD
+   *  canvas, the deps the document's keys run too (KeyDeps.chromeKeys) */
+  readonly canvasKeys: ChromeKeyDeps;
   /** a Todos / Checks panel (main.ts / dmn-main.ts) */
   registerPanel(spec: PanelSpec): PanelHandle;
   /** bpmn editable: the Workshop chip; undefined removes it */

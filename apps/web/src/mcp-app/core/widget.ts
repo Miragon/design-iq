@@ -192,6 +192,7 @@ export function bootWidget<E extends WidgetEngine>(spec: WidgetSpec<E>): void {
     mountEngine: (readonly) =>
       spec.engine(chrome.els.canvas, readonly, {
         insets: () => chrome.fitInsets(),
+        chromeKeys: chrome.canvasKeys,
         menuHost: {
           trigger: chrome.els.trigger,
           fileStem: () => {

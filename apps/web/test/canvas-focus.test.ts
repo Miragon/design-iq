@@ -1,9 +1,10 @@
 /**
  * Where the focus goes after the editor's chrome acted on the canvas
  * (src/lib/canvas-focus.ts, guide §5.4 and §5.8): a click on the view
- * switch's canvas side or on a Model action of the ⋯ menu hands the canvas
- * the focus, Enter and Space leave it where the guide keeps it, and every
- * other close of the menu stays radix's. The real canvases: test/canvas-focus-dom.test.ts.
+ * switch's canvas side, on a Model action of the ⋯ menu or on a document
+ * mode in the toolbar (BPMN's Workshop switch) hands the canvas the focus,
+ * Enter and Space leave it where the guide keeps it, and every other close
+ * of the menu stays radix's. The real canvases: test/canvas-focus-dom.test.ts.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -13,6 +14,7 @@ import {
   focusCanvasIn,
   isPointerClick,
   menuCloseFocus,
+  modeSwitchFocus,
   viewSwitchFocus,
 } from "../src/lib/canvas-focus.ts";
 
@@ -162,6 +164,21 @@ test("⋯ menu: the trigger takes the focus where the canvas cannot: behind the 
 
   menu.actedOnCanvas(CLICK);
   assert.equal(menu.closing(undefined), false);
+});
+
+test("a document mode in the toolbar (the Workshop switch): a click hands the canvas the focus, Enter or Space keep it on the switch", () => {
+  const shown = fakeCanvas(true);
+  assert.equal(modeSwitchFocus({ detail: 1 }, shown.canvas), true);
+  assert.equal(shown.state.focused, 1);
+  assert.equal(modeSwitchFocus({ detail: 0 }, shown.canvas), false, "Enter or Space");
+  assert.equal(shown.state.focused, 1, "the canvas is not asked");
+
+  const hidden = fakeCanvas(false);
+  assert.equal(modeSwitchFocus({ detail: 1 }, hidden.canvas), false, "behind the source");
+  assert.equal(hidden.state.focused, 0);
+  const refusing = fakeCanvas(true, false);
+  assert.equal(modeSwitchFocus({ detail: 1 }, refusing.canvas), false, "the editor took no focus");
+  assert.equal(modeSwitchFocus({ detail: 1 }, undefined), false, "no canvas");
 });
 
 test("focusCanvasIn: true only when the editor's focus landed in the canvas host", () => {

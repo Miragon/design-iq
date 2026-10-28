@@ -8,8 +8,10 @@
  * the canvas keys waited for a second click (#298). A click on a Model action
  * that opens no dialog hands the canvas the focus as the menu closes, also
  * after a press on the trigger dragged onto it, and Enter leaves the focus to
- * the trigger. The view switch tells a click from Enter or Space. The rules:
- * test/canvas-focus.test.ts; the real canvases: test/canvas-focus-dom.test.ts.
+ * the trigger. The view switch tells a click from Enter or Space, and a click
+ * on a document mode (BPMN's Workshop switch) hands the canvas the focus,
+ * where Enter keeps it on the switch. The rules: test/canvas-focus.test.ts;
+ * the real canvases: test/canvas-focus-dom.test.ts.
  */
 import assert from "node:assert/strict";
 import { after, afterEach, test } from "node:test";
@@ -199,4 +201,41 @@ test("view switch: a click on the canvas side says it was a pointer, Enter and S
     ["canvas", true],
     ["canvas", false],
   ]);
+});
+
+test("a document mode (the Workshop switch): a click switches it and hands the canvas the focus, Enter keeps the focus on the switch", async () => {
+  let workshop = false;
+  const listeners = new Set<() => void>();
+  const { toolbar, focused } = await mount({
+    modeActions: [
+      {
+        id: "tbpm",
+        label: "Workshop",
+        buttonTitle: "Workshop mode (t.BPM)",
+        isActive: () => workshop,
+        onChanged: (cb) => {
+          listeners.add(cb);
+          return () => listeners.delete(cb);
+        },
+        run: () => {
+          workshop = !workshop;
+          for (const cb of listeners) cb();
+        },
+      },
+    ],
+  });
+  const toggle = toolbar.querySelector<HTMLElement>('button[role="switch"]');
+  assert.ok(toggle, "the switch");
+  toggle.focus();
+  click(toggle, 1);
+  await settle();
+  assert.equal(workshop, true);
+  assert.equal(toggle.getAttribute("aria-checked"), "true");
+  assert.equal(focused(), "canvas", "the click hands the canvas the focus (guide §5.8)");
+
+  toggle.focus();
+  click(toggle, 0);
+  await settle();
+  assert.equal(workshop, false);
+  assert.equal(focused(), "button", "Enter or Space keep the focus on the switch");
 });

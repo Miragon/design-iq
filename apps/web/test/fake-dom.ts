@@ -43,7 +43,7 @@ export class FakeElement {
   readonly tagName: string;
   parentElement: FakeElement | null = null;
   children: Array<FakeElement | string> = [];
-  onclick: (() => void) | null = null;
+  onclick: ((event: { detail: number }) => void) | null = null;
   inert = false;
   /** what a stylesheet hides (display:none) — getClientRects() is empty */
   cssHidden = false;
@@ -227,9 +227,10 @@ export class FakeElement {
     was.dispatch({ type: "focusout", relatedTarget: this });
     this.dispatch({ type: "focusin", relatedTarget: was });
   }
-  click(): void {
+  /** `detail` 0 is Enter or Space on a button (and `click()` itself), ≥ 1 a pointer's click */
+  click(detail = 0): void {
     if (this._disabled) return;
-    this.onclick?.();
+    this.onclick?.({ detail });
     this.dispatch({ type: "click" });
   }
   addEventListener(type: string, cb: Listener): void {
