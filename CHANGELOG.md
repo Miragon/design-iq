@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.12.0](https://github.com/Miragon/design-iq/compare/v5.11.1...v5.12.0) (2026-10-28)
+
+
+### Features
+
+* **notations,live-host:** use the canvas ids of Wardley components and refuse unknown todo anchors ([#356](https://github.com/Miragon/design-iq/issues/356)) ([2c15d04](https://github.com/Miragon/design-iq/commit/2c15d049ad456a23d26e92d0ae7c8ea671f53f39))
+* **web,live-host,notations:** open Value Chain models in the visual modeler and as an MCP-App widget ([#357](https://github.com/Miragon/design-iq/issues/357)) ([df18c5e](https://github.com/Miragon/design-iq/commit/df18c5e77f5f8893947e1bb112769651aa7f6f5b))
+* **web:** give Team Topologies its menu, dialogs and legend ([#355](https://github.com/Miragon/design-iq/issues/355)) ([6081a6d](https://github.com/Miragon/design-iq/commit/6081a6d6398ef087f598f89748ecc4bff77c0bc3))
+
+
+### Bug Fixes
+
+* **web,validator:** move to the contract 1.4 Miragon renderer releases ([#352](https://github.com/Miragon/design-iq/issues/352)) ([42659dc](https://github.com/Miragon/design-iq/commit/42659dcad66190f391fb2e6bbc09495df3b0c0ce))
+* **web:** drop the key hold for the Miragon notations ([#358](https://github.com/Miragon/design-iq/issues/358)) ([54b2f2b](https://github.com/Miragon/design-iq/commit/54b2f2b112f1e419c75617e772c97f4699455997))
+* **web:** route the zoom keys of the BPMN and DMN views through the shared chrome keys ([#351](https://github.com/Miragon/design-iq/issues/351)) ([c4cfac0](https://github.com/Miragon/design-iq/commit/c4cfac074a27c28f6ba233686aa7d034b5c2f65b))
+
 ## [5.11.1](https://github.com/Miragon/design-iq/compare/v5.11.0...v5.11.1) (2026-10-25)
 
 
