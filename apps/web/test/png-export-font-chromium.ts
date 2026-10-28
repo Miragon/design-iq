@@ -13,9 +13,9 @@
  *
  * It starts a Live Host of its own (LIVE_AUTH=none, on PORT, 8393 unless
  * set) on a generated content repo with a Wardley map, an Event Storming
- * board and a Context Map, each with one label to measure (it holds figures,
- * where Geist and the system sans differ most) and a latin-ext text beside
- * it, so two subsets go in. It exports each as PNG and as SVG from the SPA's
+ * board, a Context Map and a Team Topology, each with one label to measure
+ * (it holds figures, where Geist and the system sans differ most) and a
+ * latin-ext text beside it, so two subsets go in. It exports each as PNG and as SVG from the SPA's
  * ⋯ menu, and from the notation's widget behind a minimal MCP-Apps host that
  * serves it under the MCP Apps default CSP, whose font-src (default-src
  * 'none') blocks every data: font of the widget's own document. Then it draws
@@ -147,6 +147,40 @@ const MODELS: Model[] = [
     )}\n`,
     widget: "mcp-app-context-map.html",
     label: "Gate 11 Check-in",
+    paper: "#F9F7F7",
+  },
+  {
+    notation: "team-topology",
+    file: "squads.tt",
+    text: `${JSON.stringify(
+      {
+        version: 3,
+        title: "Squads",
+        nodes: [
+          {
+            id: "team_payments",
+            type: "stream-aligned",
+            label: "Squad 11 Payments",
+            position: { x: 40, y: 40 },
+            size: { width: 280, height: 96 },
+          },
+          {
+            id: "team_platform",
+            type: "platform",
+            label: "Łódź Platform",
+            position: { x: 40, y: 220 },
+            size: { width: 280, height: 96 },
+          },
+        ],
+        interactions: [],
+        flows: [],
+      },
+      null,
+      2,
+    )}\n`,
+    widget: "mcp-app-team-topology.html",
+    label: "Squad 11 Payments",
+    // the renderer's SVG lays a white sheet of its own over this ground (Miragon/modeler-suite#234)
     paper: "#F9F7F7",
   },
 ];

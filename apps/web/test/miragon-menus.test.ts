@@ -2,11 +2,11 @@
  * What the Miragon renderers bring to designIQ's chrome, for real (under
  * jsdom, test/renderer-dom.ts), through the specs both hosts mount them with:
  * their own menu content (Wardley mapMenu, Event Storming boardMenu, Context
- * Maps contextMapMenu) in the widget engine and the SPA editor, the dialogs
- * and popovers it opens inside the mount's host, the edits they make (one
- * undoable step each), the exports a host hands to the user, the document
- * title as the menu header's display name, and the zoom keys and ⇧1 of the
- * SPA's editors on a real canvas.
+ * Maps contextMapMenu, Team Topologies diagramMenu) in the widget engine and
+ * the SPA editor, the dialogs and popovers it opens inside the mount's host,
+ * the edits they make (one undoable step each), the exports a host hands to
+ * the user, the document title as the menu header's display name, and the
+ * zoom keys and ⇧1 of the SPA's editors on a real canvas.
  */
 import assert from "node:assert/strict";
 import { after, mock, test } from "node:test";
@@ -174,9 +174,14 @@ const EXPECTED = {
     export: ["export-png", "export-svg", "export-cml"],
     help: ["keyboard-shortcuts"],
   },
+  "team-topology": {
+    model: ["diagram-title"],
+    export: ["export-png", "export-svg"],
+    help: ["keyboard-shortcuts"],
+  },
 };
 
-test("each renderer's own entries reach both hosts as its package names them; Team Topologies brings none", async () => {
+test("each renderer's own entries reach both hosts as its package names them", async () => {
   for (const [id, expected] of Object.entries(EXPECTED)) {
     const widget = await widgetOf(id);
     assert.deepEqual(ids(widget.engine.menu), expected, `${id}: the widget`);
@@ -192,12 +197,6 @@ test("each renderer's own entries reach both hosts as its package names them; Te
     viewer.engine.destroy();
     spa.editor.destroy();
   }
-  const teams = await widgetOf("team-topology");
-  assert.equal(teams.engine.menu, undefined, "designIQ mounts no Team Topologies menu content yet");
-  teams.engine.destroy();
-  const spaTeams = await editorOf("team-topology");
-  assert.equal(spaTeams.editor.menu, undefined);
-  spaTeams.editor.destroy();
 });
 
 test("Keyboard shortcuts…: the dialog opens inside the mount's host — the canvas host — and gives the focus back to the trigger", async () => {
@@ -217,6 +216,12 @@ test("Keyboard shortcuts…: the dialog opens inside the mount's host — the ca
               trigger: s.trigger,
               destroy: () => s.editor.destroy(),
             }));
+      // where each menu leaves the focus as it opens a dialog: the widget's on
+      // its trigger, the SPA's nowhere (radix must not take it back from the
+      // dialog), so a dialog that returns the focus to its opener (Team
+      // Topologies) falls back to the trigger there
+      if (where === "widget") mounted.trigger.focus();
+      else (document.activeElement as HTMLElement | null)?.blur();
       assert.ok(runModelerItem(mounted.menu!, "modeler:keyboard-shortcuts"));
       const dialog = mounted.container.querySelector<HTMLDialogElement>("dialog[open]");
       assert.ok(dialog, `${id} in the ${where}: a dialog in the canvas host`);
@@ -234,13 +239,18 @@ test("Keyboard shortcuts…: the dialog opens inside the mount's host — the ca
   }
 });
 
-test("Map title…: the dialog writes the title as one undoable step, and the menu header names it", async () => {
-  for (const id of ["wardley", "context-map"]) {
+test("Map title… and Diagram title…: the dialog writes the title as one undoable step, and the menu header names it", async () => {
+  const titleEntries: Array<[id: string, entry: string]> = [
+    ["wardley", "map-title"],
+    ["context-map", "map-title"],
+    ["team-topology", "diagram-title"],
+  ];
+  for (const [id, entry] of titleEntries) {
     const { engine, container } = await widgetOf(id);
     let dirty = 0;
     engine.onDirty(() => dirty++);
     assert.equal(engine.displayName?.(), DOCUMENT[id]![1]);
-    runModelerItem(engine.menu!, "modeler:map-title");
+    runModelerItem(engine.menu!, `modeler:${entry}`);
     const dialog = container.querySelector<HTMLDialogElement>("dialog[open]")!;
     const field = dialog.querySelector<HTMLInputElement>("input")!;
     assert.equal(field.value, DOCUMENT[id]![1], `${id}: the field holds the title`);
@@ -289,9 +299,9 @@ test("Event Storming: the Level radio is one undoable edit of the board; Type ca
   next.engine.destroy();
 });
 
-test("a read-only viewer: Type captions, Export and Help stay usable, the entries that write the document do not", async () => {
-  const { engine } = await widgetOf("event-storming", true);
-  const items = buildMenu({
+/** the widget menu's items over a read-only viewer's own entries */
+function readOnlyItems(modeler: ModelerMenu) {
+  return buildMenu({
     kind: "miragon",
     editable: false,
     live: false,
@@ -303,13 +313,28 @@ test("a read-only viewer: Type captions, Export and Help stay usable, the entrie
     fullscreenOffered: false,
     displayMode: "inline",
     deepLink: false,
-    modeler: engine.menu!,
+    modeler,
   }).flatMap((g) => g.items);
+}
+
+test("a read-only viewer: Type captions, Export and Help stay usable, the entries that write the document do not", async () => {
+  const board = await widgetOf("event-storming", true);
   assert.deepEqual(
-    items.filter((i) => i.disabled).map((i) => i.id),
+    readOnlyItems(board.engine.menu!)
+      .filter((i) => i.disabled)
+      .map((i) => i.id),
     ["modeler:level:big-picture", "modeler:level:process", "modeler:level:design"],
   );
-  engine.destroy();
+  board.engine.destroy();
+  const teams = await widgetOf("team-topology", true);
+  const items = readOnlyItems(teams.engine.menu!);
+  assert.deepEqual(
+    items.filter((i) => i.disabled).map((i) => i.id),
+    ["modeler:diagram-title"],
+    "Team Topologies: the title writes the document, the exports and the shortcuts do not",
+  );
+  assert.ok(items.some((i) => i.id === "modeler:export-png" && !i.disabled));
+  teams.engine.destroy();
 });
 
 test("Wardley: Map size… opens its popover at the menu's place in the mount's host, with the size field focused", async () => {
@@ -435,7 +460,12 @@ async function exportPng(id: string) {
 test("exports: the PNG is drawn from the SVG with Geist inside, through a data: URL, on the guide's light ground", async () => {
   const removeGeist = geistOnThePage();
   // guide §10.7: the plot's white under a map with a plot, the canvas ground's grey under the others
-  const paper: Record<string, string> = { wardley: "#FFFFFF", "event-storming": "#F9F7F7", "context-map": "#F9F7F7" };
+  const paper: Record<string, string> = {
+    wardley: "#FFFFFF",
+    "event-storming": "#F9F7F7",
+    "context-map": "#F9F7F7",
+    "team-topology": "#F9F7F7",
+  };
   try {
     for (const id of Object.keys(EXPECTED)) {
       const { files, failures, drawn } = await exportPng(id);

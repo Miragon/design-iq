@@ -1,11 +1,11 @@
 /**
  * What the renderers' menu content needs from designIQ, shared by the specs
- * that ship it (Wardley, Event Storming, Context Maps): the chrome their
- * dialogs and popovers take — a modeler-shell handle's shape, filled from
- * the shell's own messages so the shortcut tables name the zoom keys as the
- * modelers do —, dialogs built on first use and removed with the mount, the
- * image exports and the text ones. Loaded with the renderer (behind each
- * spec's `load()`).
+ * that ship it (Wardley, Event Storming, Context Maps, Team Topologies): the
+ * chrome their dialogs and popovers take (a modeler-shell handle's shape,
+ * filled from the shell's own messages so the shortcut tables name the zoom
+ * keys as the modelers do), dialogs built on first use and removed with the
+ * mount, the image exports and the text ones. Loaded with the renderer
+ * (behind each spec's `load()`).
  */
 import { defaultMessages, detectPlatform } from "@miragon/modeler-shell/core";
 

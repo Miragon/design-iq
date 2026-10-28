@@ -1,8 +1,9 @@
 /**
- * The legend of a notation that has one (context map), as a panel of the
- * widget's own (spec §7) instead of the renderer's card: the card covered
- * the diagram's lower left, the panel is a card at the right whose width the
- * fit leaves free (core/layout.ts fitInsets), or a sheet in a compact frame.
+ * The legend of a notation that has one (context map, team topology), as a
+ * panel of the widget's own (spec §7) instead of the renderer's card: the
+ * card covered the diagram's lower left, the panel is a card at the right
+ * whose width the fit leaves free (core/layout.ts fitInsets), or a sheet in
+ * a compact frame.
  * The toggle sits in the top-right cluster like Todos and Checks and the
  * menu repeats it as the Model group's Legend checkbox (guide §5.4), so the
  * keyboard reaches it both ways; the heading takes the focus on open, and

@@ -5,10 +5,11 @@
  * item ids are the contract between the two.
  *
  * A Miragon renderer brings its own Model, Export and Help entries (Wardley
- * `mapMenu`, Event Storming `boardMenu`, Context Maps `contextMapMenu`),
- * typed for the modeler shell's menu: they join designIQ's groups as
- * `modeler:` items, so a renderer release that adds or renames an entry
- * needs no change here (runModelerItem dispatches them back).
+ * `mapMenu`, Event Storming `boardMenu`, Context Maps `contextMapMenu`, Team
+ * Topologies `diagramMenu`), typed for the modeler shell's menu: they join
+ * designIQ's groups as `modeler:` items, so a renderer release that adds or
+ * renames an entry needs no change here (runModelerItem dispatches them
+ * back).
  *
  * On purpose NOT here: undo/redo (keyboard, like the SPA), Rename, Duplicate,
  * History, Notes, Diagram|Source — web-app moves one click away through Open
@@ -240,7 +241,7 @@ export interface MenuContext {
   views?: { items: DmnView[]; active?: string };
   /** a Miragon renderer's own entries */
   modeler?: ModelerMenu;
-  /** context map: the Legend panel is offered */
+  /** context map, team topology: the Legend panel is offered */
   legend?: { open: boolean };
   /** a diagram view is shown (not the DMN table) — Fit is offered */
   viewport: boolean;

@@ -364,7 +364,7 @@ the reasons behind them are in
 | Where         | What                                                                                                                                                                                                                 |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | top-left      | the document menu (name, Save now, Reload, Workshop, the panel, a Miragon renderer's Model, Export and Help entries, Fit, fullscreen); compact: **Tools**; the Workshop chip (bpmn) or the DRD \| Table switch (dmn) |
-| top-right     | the panel toggle (Todos with its count, Checks with its verdict, Legend for a context map), fullscreen, **Open in designIQ** — the one blue button                                                                   |
+| top-right     | the panel toggle (Todos with its count, Checks with its verdict, Legend for a context map or a team topology), fullscreen, **Open in designIQ**, the one blue button                                                 |
 | bottom-left   | the sync pill: Live (+ avatars), Saved, Unsaved changes, Not saved + Retry, Autosave paused, Read-only, Inactive; a click opens the details                                                                          |
 | bottom-right  | zoom − / % / + / fit, beside the bpmn.io watermark (never covered)                                                                                                                                                   |
 | bottom-centre | toasts and the decision cards (CAS conflict, live interrupted, superseded) — beside an open card, never over a panel; a sheet ends above them                                                                        |
@@ -462,7 +462,8 @@ through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
 **PNG exports in Geist.** Export as PNG draws the renderer's standalone SVG as an image
 (`lib/export-image.ts`, the same for every Miragon renderer, in the SPA and in the widget) on
 the design guide's light export ground (§10.7): the plot's white under a Wardley map, the canvas
-grey under the others. An SVG drawn as an image cannot reach the page's fonts. So before it is
+grey under the others (a Team Topologies SVG still lays a white sheet of its own over it,
+Miragon/modeler-suite#234). An SVG drawn as an image cannot reach the page's fonts. So before it is
 drawn, `lib/export-font.ts` puts the page's own `'Geist Variable'` faces into the SVG's `<style>`,
 their files inline: the subsets whose `unicode-range` holds a character of the diagram's text
 (the SPA has latin, latin-ext, cyrillic, cyrillic-ext and vietnamese; the widget only latin and
@@ -538,7 +539,9 @@ sized by `miragon-styles.css`) and removes it with the engine.
    helpers in `menu-content.ts` inside the mount's host, its exports with
    `imageExports` and `textExport` there, its PNG drawn by
    `lib/export-image.ts`, not a rasterizer of the package's own) and, with
-   `hasLegend`, `legend` (the rows of the Legend panel both hosts show).
+   `hasLegend`, `legend` (the rows of the Legend panel both hosts show,
+   laid out by `lib/miragon-legend.css`: the SPA's panel lies outside the
+   canvas class that scopes the renderer's own rules for them).
    Then its line in
    `src/notations/miragon/index.ts` — the SPA editor plugin, the widget engine,
    the CSS scoping and the widget bundle derive from it. The scoping is

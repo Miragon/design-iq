@@ -1,9 +1,9 @@
 /**
  * A diagram's standalone SVG as a PNG, for the Export as PNG entries of the
- * Miragon renderers (Wardley, Event Storming, Context Maps), its labels in
- * Geist (lib/export-font.ts). The SVG loads as a data URL: a widget's content
- * security policy may refuse blob: images, which Wardley's own `svgToPng`
- * would load.
+ * Miragon renderers (Wardley, Event Storming, Context Maps, Team
+ * Topologies), its labels in Geist (lib/export-font.ts). The SVG loads as a
+ * data URL: a widget's content security policy may refuse blob: images,
+ * which Wardley's own `svgToPng` would load.
  */
 import { CD } from "@designiq/ui-kit/lib/tokens";
 
