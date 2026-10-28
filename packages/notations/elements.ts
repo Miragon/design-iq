@@ -5,10 +5,22 @@
  * A process: every BPMN element outside the diagram interchange. bpmn-js
  * draws lanes, pools, artifacts and associations under their own ids too,
  * which the ModelGraph leaves out, and an id the XML has is no unknown id
- * even where nothing draws it. Every other notation: its ModelGraph's nodes
- * and edges, whose ids extract.ts derives the way the canvas does.
+ * even where nothing draws it. Every other notation: the elements of its
+ * ModelGraph that its canvas addresses, under the ids extract.ts derives the
+ * way the canvas does. A Wardley link and an Event Storming note, drawing or
+ * arrow take their id from the line order, so an edit above one hands its id
+ * to another element, and no canvas selects, reveals or badges them: a todo
+ * anchored to one would show no badge or point at the wrong element.
  */
-import { extractModelGraph, parseXml, XMLValidator } from "./extract.ts";
+import { STORM_STICKY_KINDS } from "./derive.ts";
+import {
+  extractModelGraph,
+  type ModelEdge,
+  type ModelGraph,
+  type ModelNode,
+  parseXml,
+  XMLValidator,
+} from "./extract.ts";
 import { byExtension, byId } from "./index.ts";
 
 export interface ModelElement {
@@ -43,6 +55,20 @@ function bpmnElements(raw: string): ModelElement[] {
   return elements;
 }
 
+const ADDRESSED_BY_CANVAS: Record<string, (graph: ModelGraph) => Array<ModelNode | ModelEdge>> = {
+  wardley: (graph) => graph.nodes,
+  "event-storming": (graph) => graph.nodes.filter((node) => STORM_STICKY_KINDS.has(node.type)),
+};
+
+const addressedByCanvas = (graph: ModelGraph): Array<ModelNode | ModelEdge> =>
+  ADDRESSED_BY_CANVAS[graph.notation]?.(graph) ?? [...graph.nodes, ...graph.edges];
+
+/** a document that misses its schema can carry any JSON where an id or a name belongs */
+function asModelElement({ id, name }: { id: unknown; name?: unknown }): ModelElement[] {
+  if (typeof id !== "string" || id === "") return [];
+  return [typeof name === "string" && name !== "" ? { id, name } : { id }];
+}
+
 /**
  * The elements of a model, first occurrence of an id wins; undefined for a
  * notation without element ids (a Markdown document). Throws when the text
@@ -57,7 +83,7 @@ export function modelElements(notationOrPath: string, raw: string): ModelElement
   } else {
     const graph = extractModelGraph(notation.id, raw);
     if (!graph) return undefined;
-    elements = [...graph.nodes, ...graph.edges].map(({ id, name }) => (name ? { id, name } : { id }));
+    elements = addressedByCanvas(graph).flatMap(asModelElement);
   }
   const seen = new Set<string>();
   return elements.filter(({ id }) => !seen.has(id) && seen.add(id));

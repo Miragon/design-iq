@@ -83,13 +83,16 @@ flow labels and the annotation texts.
 
 A Wardley Map is read with `@miragon/wardley-dsl`, the parser its canvas reads it with (pinned
 to the release `@miragon/wardley-renderer` depends on), so a node's id is the canvas's element
-id: `cmp_<name>` for a component (`cmp_cup_of_tea`), `anchor_`, `pipeline_`, `submap_` and
-`accel_` for the other named elements, with the name in `name`. Notes, annotations, regions and
+id: `cmp_` and the name's slug for a component (lowercase, every other run of characters one
+`_`, `_2` on a clash: `cmp_cup_of_tea`), `anchor_`, `pipeline_`, `submap_` and `accel_` for the
+other named elements, with the name in `name`. Read an id from `get_view`, never build it by hand
+(`Größe` is `cmp_gr_e`, `茶` is `cmp_x`). Notes, annotations, regions and
 drawings are no nodes: the parser takes their ids from the line order, so an edit above them
 moves the id to another element. A link is an edge of kind `dependency` (`A -> B`) or `flow`
-(`A +> B`) between those ids. `get_view` counts `components` and `dependencies` in `stats` and
-lists the nodes in `detail.elements` (`id`, `type`, `name`, the position) and the links in
-`detail.links` (`id`, `from`, `to`, `kind`, `label`).
+(`A +> B`) between those ids, numbered `dep_1`, `flow_1` by line order in `get_model`. `get_view`
+counts `components` and `dependencies` in `stats` and lists the nodes in `detail.elements` (`id`,
+`type`, `name`, the position) and the links in `detail.links` (`from`, `to`, `kind`, `label`,
+with no id: no canvas addresses a link, so a todo cannot anchor to one).
 
 All tools carry `readOnlyHint` annotations, so clients may auto-approve them, and a short display
 `title` ("List models", "Get BPMN process view") that clients show people instead of the tool
@@ -397,9 +400,11 @@ file stems, unique per notation but not across them, so the label names the nota
 `create_todo` and `list_todos` take a model as the generic tools do (`id` or `path`, `notation`
 for a stem shared across notations; without it a process wins). Element ids are the ones the
 canvas reports: a process's from `get_process` (any element of the BPMN counts, a lane or a pool
-too), a canvas model's the ids `get_view` lists in `detail` (a Wardley component's is
-`cmp_<name>`, its name is in `name`). `create_todo` and `POST …/todos` hold every id against the
-model's live text and refuse one it does not have (`todos/unknown-element`, a 400) with the
+too), a canvas model's the ids `get_view` lists in `detail` (a Wardley component's is `cmp_` and
+its name's slug, `detail.elements` has it, its name is in `name`). Only what the canvas addresses
+is an anchor: a Wardley link, an Event Storming note, drawing or arrow takes its id from the line
+order and is refused like an unknown id. `create_todo` and `POST …/todos` hold every id against
+the model's live text and refuse one it does not have (`todos/unknown-element`, a 400) with the
 closest ids it has, ranked by edit distance over the model's ids and names, so a component asked
 for by its name answers with its id. A text that does not parse at that moment (a peer mid-edit
 in the source) is not checked. A todo anchored to a Wardley component's name before that check

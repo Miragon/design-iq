@@ -626,6 +626,106 @@ test("todos on other notations: a Wardley Map takes them, the same id of a proce
   assert.deepEqual(issues.created.at(-1)?.input.anchor.elements, [{ id: "team-1", name: null }]);
 });
 
+const STORM_PATH = "processes/board.storm";
+const STORM = [
+  "title Checkout",
+  "actor Customer [80, 300]",
+  "command Place Order [240, 300]",
+  "event Order Placed [620, 300]",
+  "note Remember this [80, 80]",
+  "line [[0, 0], [40, 40]]",
+  "Customer -> Place Order",
+  "",
+].join("\n");
+
+const CM_PATH = "processes/landscape.cm.json";
+const CM = JSON.stringify({
+  version: 1,
+  title: "Landscape",
+  contexts: [
+    { id: "ctx_auth", label: "User Access", position: { x: 0, y: 0 }, size: { width: 200, height: 110 } },
+    { id: "ctx_cfp", label: "CfP Management", position: { x: 300, y: 0 }, size: { width: 200, height: 110 } },
+  ],
+  relationships: [{ id: "rel_auth_cfp", from: "ctx_auth", to: "ctx_cfp", pattern: "partnership" }],
+});
+
+const TT_PATH = "processes/shop.tt";
+const TT = JSON.stringify({
+  version: 3,
+  title: "Shop",
+  nodes: [
+    {
+      id: "team_checkout",
+      type: "stream-aligned",
+      label: "Checkout",
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 96 },
+    },
+  ],
+});
+
+test("todos: an anchor must be an element its canvas addresses, on every notation with element ids", async () => {
+  const issues = fakeIssues();
+  const d = deps({ issues });
+  const { call, callJson } = await connect(d);
+  const ws = await d.workspaces.ensure(REPO);
+  writeFileSync(join(ws, STORM_PATH), STORM);
+  writeFileSync(join(ws, CM_PATH), CM);
+  writeFileSync(join(ws, TT_PATH), TT);
+  const anchored = (path: string, ids: string[]) =>
+    call("create_todo", { repo: REPO.fullName, path, title: "x", elements: ids.map((id) => ({ id })) });
+
+  // a sticky of the board is an element, a note, a drawing and an arrow are not: their ids come from the
+  // line order, no canvas selects them, and an edit above one hands its id to another element
+  for (const id of ["cmd_place_order", "event_order_placed", "actor_customer"]) {
+    assert.ok(!(await anchored(STORM_PATH, [id])).isError, `${id} is a sticky`);
+  }
+  for (const id of ["note_remember_this", "draw_line", "arrow_1"]) {
+    const refused = await anchored(STORM_PATH, [id]);
+    assert.ok(refused.isError, `${id} is no element the board's canvas addresses`);
+    assert.match(refused.text, /^The Event Storming board 'board' has no element with this id:\n/);
+  }
+  const closest = await anchored(STORM_PATH, ["cmd_place_orders"]);
+  assert.match(closest.text, /- cmd_place_orders: closest cmd_place_order \(Place Order\), /);
+
+  // a context and a relationship are elements of a Context Map
+  assert.ok(!(await anchored(CM_PATH, ["ctx_auth", "rel_auth_cfp"])).isError);
+  const context = await anchored(CM_PATH, ["ctx_auht"]);
+  assert.ok(context.isError);
+  assert.match(
+    context.text,
+    /^The Context Map 'landscape' has no element with this id:\n- ctx_auht: closest ctx_auth \(User Access\), /,
+  );
+
+  // a team of a Team Topology is an element
+  assert.ok(!(await anchored(TT_PATH, ["team_checkout"])).isError);
+  const team = await anchored(TT_PATH, ["Checkout"]);
+  assert.ok(team.isError);
+  assert.match(team.text, /- Checkout: closest team_checkout \(Checkout\)/);
+
+  // a Wardley link is numbered by its line: no canvas addresses it
+  for (const id of ["dep_1", "flow_1"]) {
+    const refused = await anchored(OWM_PATH, [id]);
+    assert.ok(refused.isError, `${id} is a link`);
+    assert.match(
+      refused.text,
+      new RegExp(`^The Wardley Map 'strategy' has no element with this id:\\n- ${id}: closest cmp_`),
+    );
+  }
+  const view = await callJson("get_view", { repo: REPO.fullName, id: "strategy" });
+  assert.deepEqual(view.detail.links, [{ from: "cmp_checkout", to: "cmp_platform", kind: "dependency", label: null }]);
+
+  // a document that misses its schema (a team without a string id or label) neither throws nor hides the error
+  writeFileSync(
+    join(ws, "processes", "draft.tt"),
+    '{"version":3,"nodes":[{"id":"team_a","label":42},{"id":7,"label":"B"}]}',
+  );
+  const malformed = await anchored("processes/draft.tt", ["team_b"]);
+  assert.ok(malformed.isError);
+  assert.match(malformed.text, /^The Team Topology 'draft' has no element with this id:\n- team_b: closest team_a\n/);
+  assert.equal(issues.created.length, 5, "only the anchors the canvas addresses were filed");
+});
+
 const BUG_TYPE: TodoType = {
   id: "bug",
   name: "Bug report",

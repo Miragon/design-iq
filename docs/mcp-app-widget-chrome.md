@@ -564,7 +564,7 @@ The card is the same in both widget kinds; only the canvas controller differs: b
   - **Body visible** with a 2-line clamp (no tooltip); a todo filed with a template shows its type as the first chip instead.
   - Anchor chips are buttons that reveal and select the element (retitled "… — no longer in this diagram" when gone). Unanchored rows show a dashed "Whole <noun>" chip.
   - "#id · @author" (age in `title`); [send Implement] in `--link`; [check Done] ghost (spinner while closing, row at 50%).
-- **Canvas badges** unchanged; a badge click opens the card (or sheet) filtered. On a Miragon canvas the badge stands on the element's top-right corner and keeps its screen size when zoomed out; a todo anchored by a Wardley component's name (the Live Host's `get_view` id) badges that component.
+- **Canvas badges** unchanged; a badge click opens the card (or sheet) filtered. On a Miragon canvas the badge stands on the element's top-right corner and keeps its screen size when zoomed out; a todo anchored by a Wardley component's name (what agents anchored with before the Live Host's `get_view` reported the canvas's `cmp_*` ids, #275) still badges that component.
 - **Implement** names the notation's tools: a process `get_bpmn_xml` / `validate_bpmn` / `save_bpmn_xml`, any other model `get_model_content` / `validate_model` / `save_model_content`.
 - **Read-only:** foot line "Read-only here: filing and closing todos is disabled." Add, Implement and Done are absent.
 - **Discovery:**
