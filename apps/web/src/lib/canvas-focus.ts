@@ -18,6 +18,9 @@
  *   the canvas closes it and acts there too, as a click outside should; a
  *   checkbox or radio entry keeps the menu open (§5.4), and that click is
  *   how the canvas gets the focus back after one.
+ * - A document mode in the toolbar (BPMN's Workshop switch): it changes the
+ *   canvas, so a click hands the canvas the focus; Enter or Space leave it
+ *   on the switch.
  *
  * Pure, the canvas a parameter (test/canvas-focus.test.ts); the editors'
  * MountedEditor.focus() and these rules on the real canvases under jsdom in
@@ -50,6 +53,12 @@ export function focusCanvasIn(host: Element | null, editor: { focus?(): void } |
   if (!host || !editor?.focus) return false;
   editor.focus();
   return host.contains(host.ownerDocument.activeElement);
+}
+
+/** a document mode was switched in the toolbar (MountedEditor.actions):
+ *  true when a click handed the canvas the focus */
+export function modeSwitchFocus(click: Pick<MouseEvent, "detail">, canvas: FocusableCanvas | undefined): boolean {
+  return isPointerClick(click) && canvas !== undefined && canvas.shown() && canvas.focus();
 }
 
 /** the view switch's hand-back */

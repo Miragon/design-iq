@@ -79,7 +79,13 @@ import {
 } from "lucide-react";
 import { type ComponentType, type ReactNode, type Ref, useEffect, useReducer, useRef, useState } from "react";
 
-import { type FocusableCanvas, isPointerClick, type MenuCloseFocus, menuCloseFocus } from "@/lib/canvas-focus";
+import {
+  type FocusableCanvas,
+  isPointerClick,
+  type MenuCloseFocus,
+  menuCloseFocus,
+  modeSwitchFocus,
+} from "@/lib/canvas-focus";
 import type { EditorView } from "@/lib/editor-view";
 import { safeAvatarUrl, safePresenceColor } from "@/lib/presence-format";
 import { addTodoTitle } from "@/lib/todo-view";
@@ -238,7 +244,7 @@ export function EditorToolbar({
         ) : null}
         <ConnectionState status={status} />
         {modeActions.map((action) => (
-          <ModeAction key={action.id} action={action} />
+          <ModeAction key={action.id} action={action} canvas={canvas} />
         ))}
       </div>
 
@@ -697,8 +703,9 @@ function ViewSwitch({ canvas = DIAGRAM_VIEW, sourceLabel, shown, split, onChange
  *  the engine holds state and behavior, this only mirrors isActive(). The whole
  *  chip is the switch — the previous label sat OUTSIDE the control and clicking
  *  it did nothing — and it tints when on, because t.BPM changes the canvas for
- *  every participant. Actions without state render as a plain button. */
-function ModeAction({ action }: { action: EditorToolbarAction }) {
+ *  every participant, so a click on it hands the canvas the focus (guide
+ *  §5.8). Actions without state render as a plain button. */
+function ModeAction({ action, canvas }: { action: EditorToolbarAction; canvas: FocusableCanvas | undefined }) {
   const [active, setActive] = useState(action.isActive?.() ?? false);
   useEffect(() => action.onChanged?.(() => setActive(action.isActive?.() ?? false)), [action]);
   if (!action.isActive) {
@@ -714,7 +721,10 @@ function ModeAction({ action }: { action: EditorToolbarAction }) {
       role="switch"
       aria-checked={active}
       title={action.buttonTitle}
-      onClick={() => action.run()}
+      onClick={(event) => {
+        action.run();
+        modeSwitchFocus(event, canvas);
+      }}
       className={cn(
         "flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors",
         focusRing,

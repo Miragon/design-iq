@@ -14,7 +14,7 @@
  *   chrome/state-card.ts  MountStateCards  the centred dead ends (§5.3)
  *   chrome/zoom.ts        MountZoom        the zoom group, bound to engine.view
  *   chrome/panel.ts       MountPanels      the Todos / Checks card shell (sheet when compact)
- *   chrome/keys.ts        MountKeys        ⌘S, ⇧1, the Miragon zoom keys, Escape layering
+ *   chrome/keys.ts        MountKeys        ⌘S, ⇧1, the zoom keys, Escape layering
  *
  * Plus chrome/mode-chip.ts (the Workshop chip-switch), chrome/view-switch.ts
  * (the DMN DRD | Table switch), chrome/focus.ts (the focus hand-back around a
@@ -391,8 +391,9 @@ export interface KeyDeps {
   /** ⇧1 where `chromeKeys` is absent */
   fit(): boolean;
   /** the Miragon widgets: Cmd/Ctrl + `+` / `-` / `0` and ⇧1 by the shell's
-   *  keymap (core/keymap.ts chromeKeyAction): their renderers bind no zoom
-   *  keys, bpmn-js and dmn-js do */
+   *  keymap (core/keymap.ts chromeKeyAction) on the whole document: their
+   *  renderers bind no keys; bpmn-js and the DMN DRD take the same keys on
+   *  their focused canvas (WidgetChrome.canvasKeys) */
   chromeKeys?: ChromeKeyDeps;
   /** topmost first: menu → popover → compact palette → panel (its form first);
    *  never a decision card */
@@ -470,6 +471,9 @@ export interface ChromeOptions {
 export interface WidgetChrome extends ChromePort {
   readonly els: ChromeElements;
   readonly kind: WidgetKind;
+  /** EngineOptions.chromeKeys: the zoom keys and ⇧1 on a focused bpmn-js or
+   *  DMN DRD canvas, run as the zoom group and the Miragon widgets' keys run them */
+  readonly canvasKeys: ChromeKeyDeps;
   /** a Todos / Checks panel (main.ts / dmn-main.ts) */
   registerPanel(spec: PanelSpec): PanelHandle;
   /** bpmn editable: the Workshop chip; undefined removes it */

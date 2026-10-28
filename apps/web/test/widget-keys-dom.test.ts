@@ -5,14 +5,17 @@
  * Miragon widget Cmd/Ctrl + `+` / `-` / `0` and ⇧1 run the view and keep
  * the page from zooming, a text field, an open modal dialog, a composition
  * and a widget without a diagram keep the key, and Escape leaves a modal
- * dialog's layers alone. The bpmn and dmn widgets keep their keys: ⇧1 is
- * the chrome's fit, the zoom keys pass to the focused canvas untouched.
+ * dialog's layers alone. In the bpmn and dmn widgets ⇧1 is the chrome's fit
+ * on the whole document, and the zoom keys pass to the focused canvas, where
+ * the engine routes them (test/canvas-zoom-keys-dom.test.ts). Monaco and an
+ * EditContext editor are text fields, as for the shell.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { JSDOM } from "jsdom";
 
+import { isTextField } from "../src/lib/chrome-keys.ts";
 import { mountKeys } from "../src/mcp-app/chrome/keys.ts";
 import type { ChromeKey } from "../src/mcp-app/core/keymap.ts";
 
@@ -138,14 +141,39 @@ test("a Miragon widget: a text field, an open modal, a composition, a handled ke
   assert.deepEqual(w.ran, ["escape", "save"], "Escape and ⌘S stay designIQ's");
 });
 
-test("the bpmn and dmn widgets keep their own zoom keys; ⇧1 is the chrome's fit there", () => {
+test("the bpmn and dmn widgets: the document leaves the zoom keys to the focused canvas; ⇧1 is the chrome's fit there", () => {
   const w = widget({ miragon: false });
   assert.equal(w.press(undefined, "=", "Equal", { metaKey: true }).defaultPrevented, false);
   assert.equal(w.press(undefined, "0", "Digit0", { ctrlKey: true }).defaultPrevented, false);
-  assert.deepEqual(w.ran, [], "the diagram-js keyboard on the focused canvas takes them");
+  assert.deepEqual(w.ran, [], "the engine routes them on the focused canvas (EngineOptions.chromeKeys)");
   assert.equal(w.press(undefined, "!", "Digit1", { shiftKey: true }).defaultPrevented, true);
   assert.deepEqual(w.ran, ["fit (bpmn)"]);
   w.unbind();
   w.press(undefined, "!", "Digit1", { shiftKey: true });
   assert.deepEqual(w.ran, ["fit (bpmn)"], "unbound");
+});
+
+test("isTextField: every input, select list and editable text, an EditContext editor and all of Monaco; never a button or the page", () => {
+  const { window } = new JSDOM(
+    `<!doctype html><body>
+      <input id="input"><textarea id="textarea"></textarea><select id="select"></select>
+      <div contenteditable="true"><span id="label">Check order</span></div>
+      <div contenteditable="false" id="locked"></div>
+      <div class="monaco-editor"><div class="find-widget"><button id="find-next"></button></div></div>
+      <div id="edit-context"></div>
+      <button id="button"></button>
+    </body>`,
+  );
+  const { document } = window;
+  const byId = (id: string) => document.getElementById(id)!;
+  // Chromium's EditContext (Monaco types into one); jsdom has none
+  Object.defineProperty(byId("edit-context"), "editContext", { value: {} });
+  // jsdom computes no isContentEditable: the label inherits it from its editor
+  Object.defineProperty(byId("label"), "isContentEditable", { value: true });
+  for (const id of ["input", "textarea", "select", "label", "find-next", "edit-context"]) {
+    assert.equal(isTextField(byId(id)), true, id);
+  }
+  for (const target of [byId("button"), byId("locked"), document.body, document, window, null]) {
+    assert.equal(isTextField(target as EventTarget | null), false, String((target as Element | null)?.id ?? target));
+  }
 });

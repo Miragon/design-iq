@@ -5,7 +5,8 @@
  * decision table and the matching rows light up. It evaluates with `feelin`,
  * as does @designiq/decisions in the Checks panel and on the server — one
  * semantics, three places. The DRD wears the CI (lib/canvas-theme.ts) and
- * waits for its font before the first import.
+ * waits for its font before the first import. Its zoom keys and ⇧1 are the
+ * chrome's (bpmn-io-keys.ts).
  */
 import { bindDmn } from "@designiq/live-client/dmn-sync";
 import type Canvas from "diagram-js/lib/core/Canvas";
@@ -14,12 +15,25 @@ import DmnModeler from "dmn-js/lib/Modeler";
 import { canvasFontReady, withDrdCanvasTheme } from "@/lib/canvas-theme";
 import { dmnSimulationViews } from "@/lib/dmn-simulation";
 
+import { bindBpmnIoChromeKeys } from "./bpmn-io-keys";
 import type { EditorContext, MountedEditor } from "./registry";
 
 export async function mountDmnEditor(container: HTMLElement, ctx: EditorContext): Promise<MountedEditor> {
   // bindDmn imports right away — DRD labels must be measured in Geist
   await canvasFontReady();
   const modeler = new DmnModeler({ container, ...withDrdCanvasTheme(dmnSimulationViews) });
+  // dmn-js keeps one DRD viewer per modeler: its keys are bound once it shows
+  const drdKeys = new Map<unknown, () => void>();
+  const onViews = (): void => {
+    if (modeler.getActiveView()?.type !== "drd") return;
+    const viewer = modeler.getActiveViewer();
+    if (!viewer || drdKeys.has(viewer)) return;
+    drdKeys.set(
+      viewer,
+      bindBpmnIoChromeKeys(viewer as never, container, ctx, () => modeler.getActiveViewer() === viewer),
+    );
+  };
+  modeler.on("views.changed", onViews);
   const unbind = bindDmn(
     modeler as never,
     ctx.ytext,
@@ -38,6 +52,9 @@ export async function mountDmnEditor(container: HTMLElement, ctx: EditorContext)
     },
     destroy: () => {
       unbind();
+      modeler.off("views.changed", onViews);
+      for (const unbindKeys of drdKeys.values()) unbindKeys();
+      drdKeys.clear();
       modeler.destroy();
     },
   };

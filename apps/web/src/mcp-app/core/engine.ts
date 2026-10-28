@@ -26,6 +26,7 @@
 import type { SyncOptions } from "@designiq/live-client";
 import type * as Y from "yjs";
 
+import type { ChromeKeyDeps } from "../../lib/chrome-keys.ts";
 import type { PresenceSurface } from "../../lib/presence-canvas.ts";
 import type { ModelerMenu } from "./menu-model.ts";
 
@@ -140,6 +141,10 @@ export type LiveEngine = WidgetEngine & Required<Pick<WidgetEngine, "bindLive">>
 export interface EngineOptions {
   /** the layout's current fit insets (core/layout.ts fitInsets), read at every fit */
   insets(): Insets;
+  /** the chrome's zoom keys and ⇧1, for a canvas that hears its keys only
+   *  while it has the focus: bpmn-js and the DMN DRD route them here
+   *  (lib/chrome-keys.ts routeCanvasChromeKeys) instead of to their own zoom */
+  chromeKeys?: ChromeKeyDeps;
   /** for a renderer that brings menu content (WidgetEngine.menu) */
   menuHost?: MenuHost;
 }

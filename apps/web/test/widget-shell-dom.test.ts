@@ -4,7 +4,8 @@
  * composition decides. A Miragon widget binds the zoom keys and ⇧1 to the
  * view, keeps them off behind a state card and names them on the zoom
  * buttons, the tooltip's chip and aria-keyshortcuts alike, for the US and the
- * German layout; the bpmn widget leaves them to its canvas. The menu's Legend
+ * German layout; the bpmn widget hands them to its engine for the focused
+ * canvas (WidgetChrome.canvasKeys), off behind a state card too. The menu's Legend
  * toggles the registered panel, and a renderer's web link in the canvas
  * goes through the host instead of the sandbox's blocked new window.
  */
@@ -168,11 +169,17 @@ test("a Miragon widget on a Mac: the zoom buttons name ⌘ and Meta, each chip t
   w.close();
 });
 
-test("the bpmn widget: its canvas keeps the zoom keys, and its buttons stay as they were", async () => {
+test("the bpmn widget: its focused canvas takes the zoom keys through the chrome, the page does not, and its buttons stay as they were", async () => {
   const w = await chromeOf("bpmn");
   assert.equal(w.press("=", "Equal", { ctrlKey: true }), false);
   assert.equal(w.press("0", "Digit0", { ctrlKey: true }), false);
-  assert.deepEqual(w.zoomed, [], "bpmn-js binds them on the focused canvas");
+  assert.deepEqual(w.zoomed, [], "off the canvas the browser keeps them");
+  const keys = w.chrome.canvasKeys;
+  assert.equal(keys.viewport(), true);
+  for (const key of ["zoomIn", "zoomOut", "zoomToActual", "fit"] as const) keys.run(key);
+  assert.deepEqual(w.zoomed, ["in", "out", "to 1", "fit"], "the engine's canvas runs them as the zoom group does");
+  w.chrome.showState({ kind: "read-failed", error: "gone" });
+  assert.equal(keys.viewport(), false, "a state card hides the diagram: the browser keeps them");
   assert.equal(w.document.getElementById("zoom-in")!.hasAttribute("aria-keyshortcuts"), false);
   assert.equal(w.document.getElementById("zoom-fit")!.title, "Fit diagram (Shift+1)");
   w.close();

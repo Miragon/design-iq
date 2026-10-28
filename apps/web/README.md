@@ -383,22 +383,27 @@ diagram clear of the clusters, the palette and an open card, and re-fits it on
 resize, on a panel toggle and on a live re-import until the user zooms or
 pans; a display-mode change always re-fits. The view math and the readout are
 `@miragon/modeler-shell/core`'s (`fitViewbox`, `sameView`,
-`interpolateViewbox`, `zoomReadout`), and so are the Miragon widgets' zoom keys
-and ⇧1 (`decideKey`, `chrome/keys.ts` through `src/lib/chrome-keys.ts`, which
-the SPA's Miragon editors bind too): the renderers bind no zoom keys, bpmn-js
-and dmn-js keep their own. The −/+ buttons and the zoom keys step on the
-design guide's fixed zoom steps (22, 30, 41, 55, 74, 100, 135, 182, 246 and
-331 %, `zoomStepLevel` in `engines/fit.ts`), the raster of diagram-js's
-`zoomScroll.stepZoom` that bpmn-js's and dmn-js's own keys take. The −
-button and the Miragon zoom-out keys stop at a fit below 20 % instead of
-zooming in to 20 %; bpmn-js's and dmn-js's own Ctrl/⌘ − still clamps up to
-20 % there. The widget's geometry (the 36px corners, the 12/16px insets)
+`interpolateViewbox`, `zoomReadout`), and so are the zoom keys and ⇧1
+(`decideKey`, through `src/lib/chrome-keys.ts`, which the SPA's editors bind
+too): the Miragon widgets take them on the whole document (`chrome/keys.ts`),
+the bpmn and dmn widgets on their focused canvas, where the engine routes them
+from the diagram-js keyboard ahead of bpmn-js's and dmn-js's own zoom
+(`routeCanvasChromeKeys`, `EngineOptions.chromeKeys`). The −/+ buttons and the
+zoom keys step on the design guide's fixed zoom steps (22, 30, 41, 55, 74, 100,
+135, 182, 246 and 331 %, `zoomStepLevel` in `engines/fit.ts`), the raster of
+diagram-js's `zoomScroll.stepZoom`. The − button and every zoom-out key stop at
+a fit below 20 % instead of zooming in to 20 %, as `zoomScroll.stepZoom`, which
+clamps, would. The widget's geometry (the 36px corners, the 12/16px insets)
 stays designIQ's; the full shell is not mounted.
 In the SPA a Miragon editor's ⇧1 fits 24px clear of the renderer's palette as
 measured, of the canvas's sides and bottom, and of an open side panel (the
 panels dock over the canvas's right edge, `src/lib/side-panel-room.ts`);
 opening or closing a side panel re-fits a view nobody moved since the import
-or the last fit, as the widget does with its cards. The first view is that
+or the last fit, as the widget does with its cards. The SPA's BPMN and DMN
+editors take the same keys while their canvas has the focus, as bpmn-js and
+dmn-js hear every other key (`src/notations/bpmn-io-keys.ts`); there ⇧1 fits
+24px clear of the palette column, the DRD's name card, its simulation card and
+an open side panel. The first view of a Miragon editor is that
 fit too: the editor mounts the renderer with `fitOnImport: false`, because
 the renderer's own import fit leaves no room for the palette over the canvas,
 and fits the first import itself (`firstFit` in `diagramView`); a peer's
@@ -426,7 +431,8 @@ page has it. A toolbar control that kept the focus after a click took Delete, th
 away from the canvas, so the SPA hands the canvas the focus back after a click, as the widget does
 after a zoom click (guide §5.8, `src/lib/canvas-focus.ts`): a click on the view switch's Diagram
 side focuses the canvas once it shows, and so does a click on a Model action of the ⋯ menu that
-opens no dialog (no renderer ships one yet). Enter and Space keep the focus on the switch; on a
+opens no dialog (no renderer ships one yet) or on BPMN's Workshop switch in the toolbar, which
+changes the canvas for every participant. Enter and Space keep the focus on the switch; on a
 menu entry they, like Escape, give it to the menu's trigger (§5.4). The ⋯ menu is not modal: a
 click on the canvas closes it and acts there, so after a toggle that keeps the menu open (Type
 captions, Legend) that one click gives the canvas the focus. `test/canvas-focus.test.ts` holds the

@@ -7,10 +7,11 @@
  * the inline form — the topmost layer while one is open. ⌘S is honoured
  * everywhere: it has no meaning inside text, and the browser's own "save
  * page" is never what someone in a modeler wants.
- * The zoom keys and ⇧1 of the Miragon notations (chromeKeyAction) follow the
- * modeler shell's keymap (`decideKey`, host "embedded"), so they act exactly
- * as in the Miragon modelers' own chrome; bpmn-js and dmn-js keep their own
- * zoom keys on the focused canvas, and ⇧1 there stays keyCommand's.
+ * The zoom keys and ⇧1 (chromeKeyAction) follow the modeler shell's keymap
+ * (`decideKey`, host "embedded"), so they act exactly as in the Miragon
+ * modelers' own chrome: on the whole document of a Miragon widget, on the
+ * focused canvas of bpmn and the DMN DRD, where ⇧1 elsewhere in the widget
+ * stays keyCommand's.
  * Plus the WAI-ARIA menu-button keys of the trigger (§3).
  * DOM-free (`.ts` relative imports): node --test loads it.
  */

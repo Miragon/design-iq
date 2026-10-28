@@ -7,9 +7,10 @@
  * layout's forced re-fit, which resets "touched". The readout and its limits
  * are the modeler shell's (`zoomReadout`), so it reads and speaks like the
  * Miragon modelers' own zoom panel. Keyboard zoom (Ctrl/⌘ + / − / 0) and ⇧1
- * are chrome/keys.ts: the widget's own keymap in the Miragon widgets, whose
- * buttons then name their keys (`keys`), the diagram-js keyboard on the
- * focused canvas in bpmn and the DMN DRD view.
+ * are chrome/keys.ts: the widget's own keymap on the whole document in the
+ * Miragon widgets, whose buttons then name their keys (`keys`), and the same
+ * keymap on the focused canvas in bpmn and the DMN DRD view
+ * (EngineOptions.chromeKeys), where a step goes the way it points as here.
  * Touch undo/redo is phase 2.
  */
 import {

@@ -9,7 +9,9 @@
  * checkbox runs the same ModeChip.toggle (one tbpmToggleAction behind both).
  * Switched OFF from the keyboard there, the focused chip vanishes: the focus
  * moves to the menu trigger (where the switch lives now) and #announce says
- * the new state the vanished switch can no longer say itself.
+ * the new state the vanished switch can no longer say itself. A click hands
+ * the canvas the focus, since the switch changes what the canvas offers
+ * (guide §5.8, as the zoom group's `thenCanvas`); Enter or Space keep it.
  */
 import { icon } from "../icons.ts";
 import type { ModeChip } from "./contracts.ts";
@@ -25,6 +27,8 @@ export function mountModeChip(
     /** where the focus goes when the focused chip leaves the row (the menu trigger) */
     fallbackFocus?: () => HTMLElement | null;
     announce?: (text: string) => void;
+    /** after a click: the canvas takes the focus (view.focus) */
+    focusCanvas?: () => void;
   } = {},
 ): () => void {
   const button = h("button", {
@@ -39,7 +43,10 @@ export function mountModeChip(
     h("span", { class: "track", "aria-hidden": "true" }),
     h("span", { class: "label" }, chip.label),
   );
-  button.onclick = () => chip.toggle();
+  button.onclick = (event) => {
+    chip.toggle();
+    if (event.detail > 0) opts.focusCanvas?.();
+  };
   // onChanged fires on EVERY command (the action listens to the command
   // stack) — only a flip may re-lay the clusters
   let on: boolean | undefined;

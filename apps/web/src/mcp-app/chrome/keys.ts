@@ -6,26 +6,29 @@
  * keep their keys — is core/keymap.ts; this binds it and calls
  * preventDefault only for a key that was handled (read-only ⌘S stays the
  * browser's).
- * bpmn-js and dmn-js bind their own keyboard (undo/redo, zoom, select all,
- * delete) to the focused canvas, so in their widgets the zoom keys stay
- * theirs. The Miragon renderers bind no zoom keys: `chromeKeys` gives their
- * widgets the modeler shell's (lib/chrome-keys.ts, as in the SPA).
+ * bpmn-js and dmn-js bind their own keyboard (undo/redo, select all,
+ * delete) to the focused canvas, and their zoom keys and ⇧1 act there too:
+ * their engines route them to the same `chromeKeyDeps`
+ * (EngineOptions.chromeKeys, lib/chrome-keys.ts routeCanvasChromeKeys), so
+ * they step as the −/+ buttons do. The Miragon renderers bind no zoom keys:
+ * `chromeKeys` gives their widgets the modeler shell's on the whole widget
+ * document (lib/chrome-keys.ts, as in the SPA).
  */
 import { type ChromeKeyDeps, handleChromeKey, isTextField, openDialogs } from "../../lib/chrome-keys.ts";
 import { type ChromeKey, keyCommand, type KeyTarget } from "../core/keymap.ts";
-import type { WidgetKind } from "../core/layout.ts";
 import type { MountKeys } from "./contracts.ts";
 
 /**
- * The zoom keys and ⇧1 of a widget (KeyDeps.chromeKeys): only a Miragon
- * widget binds them, since bpmn-js and dmn-js keep their own keys on the
- * focused canvas; a state card hides the diagram, so the browser keeps them.
+ * The zoom keys and ⇧1 of a widget: KeyDeps.chromeKeys in a Miragon widget,
+ * EngineOptions.chromeKeys for the focused canvas of bpmn and the DMN DRD; a
+ * state card hides the diagram, so the browser keeps them.
  */
-export function chromeKeysFor(
-  kind: WidgetKind,
-  state: { menuOpen(): boolean; hasViewport(): boolean; stateCardShown(): boolean; run(key: ChromeKey): void },
-): ChromeKeyDeps | undefined {
-  if (kind !== "miragon") return undefined;
+export function chromeKeyDeps(state: {
+  menuOpen(): boolean;
+  hasViewport(): boolean;
+  stateCardShown(): boolean;
+  run(key: ChromeKey): void;
+}): ChromeKeyDeps {
   return {
     menuOpen: () => state.menuOpen(),
     viewport: () => state.hasViewport() && !state.stateCardShown(),

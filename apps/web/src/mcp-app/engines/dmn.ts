@@ -27,7 +27,8 @@
  * active table wrapped for the widget-owned "Try a scenario" form (the
  * add-on's own form is hidden by CSS, never reparented), `revealMatch()` for
  * a replayed rule — and a `view` that is the DRD's canvas (the table view has
- * no viewport: it scrolls).
+ * no viewport: it scrolls). The zoom keys and ⇧1 on the DRD's focused canvas
+ * are the chrome's (EngineOptions.chromeKeys), never dmn-js's own zoom.
  *
  * Both value crossings go through `variableOf` from the shared library rather
  * than a local guess, because the two sides do NOT hold the same thing: the
@@ -47,6 +48,7 @@ import DmnModeler from "dmn-js/lib/Modeler";
 import DmnViewer from "dmn-js/lib/Viewer";
 
 import { withDrdCanvasTheme } from "@/lib/canvas-theme";
+import { routeCanvasChromeKeys } from "@/lib/chrome-keys";
 import { dmnSimulationViews } from "@/lib/dmn-simulation";
 
 import type {
@@ -287,7 +289,16 @@ export const mountDmnEngine: EngineFactory<DmnEngine> = (container, readonly, op
     unbindStore?.();
     unbindStore = scenarioSubs.size > 0 ? store()?.subscribe(notifyScenario) : undefined;
   };
+  // dmn-js keeps one DRD viewer per instance: its keys are routed once it shows
+  const routedKeys = new Map<unknown, () => void>();
+  const routeDrdKeys = (): void => {
+    if (!opts?.chromeKeys || instance.getActiveView()?.type !== "drd") return;
+    const viewer = instance.getActiveViewer();
+    if (!viewer || routedKeys.has(viewer)) return;
+    routedKeys.set(viewer, routeCanvasChromeKeys(viewer as never, container.ownerDocument, opts.chromeKeys));
+  };
   const onViews = (): void => {
+    routeDrdKeys();
     bindStore();
     notifyView();
     notifyScenario();
@@ -430,6 +441,8 @@ export const mountDmnEngine: EngineFactory<DmnEngine> = (container, readonly, op
       scenarioSubs.clear();
       drd?.off();
       drd?.view.destroy();
+      for (const unroute of routedKeys.values()) unroute();
+      routedKeys.clear();
       viewListeners.clear();
       instance.destroy();
     },
