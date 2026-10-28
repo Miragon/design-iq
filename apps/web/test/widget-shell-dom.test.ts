@@ -113,7 +113,6 @@ async function chromeOf(kind: keyof typeof ENTRIES, platform?: string) {
     p.document.body.dispatchEvent(event);
     return event.defaultPrevented;
   };
-  /** each zoom button's tooltip and the keys it names to assistive tech */
   const zoomNames = (): Array<[string, string | null]> =>
     ["zoom-out", "zoom-pct", "zoom-in", "zoom-fit"].map((id) => {
       const button = p.document.getElementById(id)!;
@@ -122,7 +121,6 @@ async function chromeOf(kind: keyof typeof ENTRIES, platform?: string) {
   return { ...p, chrome, zoomed, press, zoomNames };
 }
 
-/** the chip a tooltip ends in: "Zoom in (Ctrl+Plus)" → "Ctrl+Plus" */
 const chipOf = (title: string): string => /\(([^()]+)\)$/.exec(title)?.[1] ?? "";
 
 /** guide §5.6: aria-keyshortcuts names the keys that type the chip's character

@@ -193,7 +193,7 @@ test("each renderer's own entries reach both hosts as its package names them; Te
     spa.editor.destroy();
   }
   const teams = await widgetOf("team-topology");
-  assert.equal(teams.engine.menu, undefined, "team-topologies-renderer 0.12 ships no menu content");
+  assert.equal(teams.engine.menu, undefined, "designIQ mounts no Team Topologies menu content yet");
   teams.engine.destroy();
   const spaTeams = await editorOf("team-topology");
   assert.equal(spaTeams.editor.menu, undefined);

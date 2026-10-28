@@ -7,9 +7,8 @@
  * menu repeats it as the Model group's Legend checkbox (guide §5.4), so the
  * keyboard reaches it both ways; the heading takes the focus on open, and
  * every row's meaning is part of its text for a screen reader.
- * It starts closed: the widget's inline frame is never taller than the
- * guide's threshold for an open legend (`legendStartsOpen`, 820px), and an
- * open on load would pull the focus into the widget.
+ * It starts closed, as the guide's legend does in every container (§5.10),
+ * and an open on load would pull the focus into the widget.
  */
 import type { WidgetChrome } from "./chrome/contracts.ts";
 import { h } from "./chrome/dom.ts";

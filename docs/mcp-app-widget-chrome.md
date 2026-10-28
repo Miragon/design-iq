@@ -252,7 +252,7 @@ Header (`role="presentation"`, selectable text; the one place the full identity 
 | Wardley (`mapMenu`)             | Map title…, Map size… and X-axis labels… (popovers at the dropdown's place) | Export as PNG, Export as SVG                | Keyboard shortcuts… |
 | Event Storming (`boardMenu`)    | the radio group "Level" under its heading, the checkbox "Type captions"     | Export as PNG, Export as SVG                | Keyboard shortcuts… |
 | Context Maps (`contextMapMenu`) | Map title… (`createTitleDialog`, one undoable `cmModeling.setTitle`)        | Export as PNG, Export as SVG, Export as CML | Keyboard shortcuts… |
-| Team Topologies 0.12            | none: the package ships no menu content                                     |                                             |                     |
+| Team Topologies                 | none yet: designIQ does not mount the package's menu content                |                                             |                     |
 
 - Every entry that writes the document is one undoable step, and a read-only viewer shows it disabled with the hint "Read-only" (guide §13.5). Type captions is a view preference: usable read-only, and the next board on the page keeps the choice.
 - A radio or checkbox entry toggles and keeps the menu open. A dialog entry (`aria-haspopup="dialog"`) closes the menu, leaves the focus on the trigger, then opens; its dialog or popover gives the focus back to the trigger when it closes.
@@ -605,7 +605,7 @@ The Context Maps legend (subdomain types, integration roles, relationship patter
 - **Head:** book-open "Legend", [×] "Close legend". **Body:** the renderer's `renderLegend` rows, laid out as guide §5.10 does (`lib/miragon-legend.css`, shared with the SPA's Legend side panel): a 24px preview, the label, groups named for a screen reader, a rule between them. Each row's meaning is its tooltip and, visually hidden, part of its text.
 - **Room:** a card like Todos and Checks, so an untouched diagram re-fits beside it with the card's right inset (§2.5). Measured: at 1000x640 (a 360 card) and at 720x520 (a 320 card) the fitted context map ends 12px left of the card; compact frames get the sheet.
 - **Keyboard and screen reader:** the toggle and the menu entry reach it, the heading takes the focus on open, the scroller is focusable (`role="region"`, named by the heading) so the arrow keys scroll it, the close button and Escape give the focus back to the toggle.
-- It starts closed: the inline frame is never taller than the guide's 820px for an open legend (`legendStartsOpen`), and an open on load would pull the focus into the widget.
+- It starts closed, as the guide's legend does in every container (§5.10), and an open on load would pull the focus into the widget.
 
 ---
 

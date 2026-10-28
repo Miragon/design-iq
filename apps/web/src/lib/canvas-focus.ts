@@ -2,9 +2,9 @@
  * Where the focus goes after the editor's chrome acted on the canvas (guide
  * §5.4, §5.8 "Focus after a click"). A canvas acts on keys only while it has
  * the focus: diagram-js 15 binds its keyboard to the canvas, and the Miragon
- * renderers hear only keys aimed at their canvas or at the page itself
- * (lib/canvas-keys.ts). After a click on a toolbar control, Delete, the
- * arrows and ⌘Z went to that control until a second click into the canvas.
+ * renderers hear only keys aimed at their own canvas. After a click on a
+ * toolbar control, Delete, the arrows and ⌘Z went to that control until a
+ * second click into the canvas.
  *
  * - The view switch: a click with a mouse, pen or finger on the canvas view
  *   hands the canvas the focus once its layer shows. Enter or Space leave it

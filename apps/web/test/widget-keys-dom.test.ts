@@ -21,6 +21,7 @@ function widget(opts: { miragon: boolean; viewport?: boolean }) {
     `<!doctype html><html><body><div id="app">
       <div id="canvas"><div class="wardley-canvas"><svg tabindex="0"></svg><input id="label"></div></div>
       <input id="chrome-field">
+      <div class="monaco-editor"><div id="monaco" class="native-edit-context" tabindex="0"></div></div>
       <div id="popover" role="dialog" hidden></div>
       <div id="modal" role="dialog" aria-modal="true" hidden></div>
     </div></body></html>`,
@@ -97,7 +98,7 @@ test("a Miragon widget: each zoom key and ⇧1 runs once and keeps the page from
 
 test("a Miragon widget: a text field, an open modal, a composition, a handled key and a missing diagram keep the key", () => {
   const w = widget({ miragon: true });
-  for (const field of ["label", "chrome-field"]) {
+  for (const field of ["label", "chrome-field", "monaco"]) {
     const event = w.press(field, "=", "Equal", { metaKey: true });
     assert.equal(event.defaultPrevented, false, `${field}: the browser zooms the page`);
     w.press(field, "!", "Digit1", { shiftKey: true });
