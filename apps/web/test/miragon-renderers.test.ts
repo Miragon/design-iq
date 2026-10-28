@@ -664,7 +664,7 @@ test("Wardley: a resize preview never reaches the shared text, the size it commi
   engine.destroy();
 });
 
-test("presence on a Wardley map, in both hosts: the selection travels as document ids, a peer's component NAME (the Live Host's) is outlined", async () => {
+test("presence on a Wardley map, in both hosts: the selection travels as document ids, a peer's component NAME (the Live Host's before #275) is outlined", async () => {
   const raf = globalThis.requestAnimationFrame;
   globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0) as unknown as number;
   // a pipeline carries its component's name
@@ -1250,7 +1250,7 @@ test("todos on every Miragon renderer in the SPA editor: badges, selection, reve
   }
 });
 
-test("todos on a Wardley map: an anchor by component NAME (the Live Host's ids) badges, filters and reveals its component", async () => {
+test("todos on a Wardley map: an anchor by component NAME (the Live Host's ids before #275) badges, filters and reveals its component", async () => {
   const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
   const [spec, renderer] = await load("wardley");
   const doc = new Y.Doc();

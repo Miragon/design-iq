@@ -439,7 +439,7 @@ test("todos: create anchors to the open process, list filters by it, close compl
     id: "order",
     title: "  Check the credit limit  ",
     body: "The threshold looks stale.",
-    elements: [{ id: "Task_CheckCredit", name: "Bonität prüfen" }],
+    elements: [{ id: "StartEvent_1", name: "Process started" }],
   });
   assert.equal(created.todo.title, "Check the credit limit", "title is trimmed");
   assert.equal(created.todo.author, "petra", "attribution is the CALLER's login, not an argument");
@@ -447,7 +447,7 @@ test("todos: create anchors to the open process, list filters by it, close compl
     notation: "bpmn",
     model: "order",
     file: PATH,
-    elements: [{ id: "Task_CheckCredit", name: "Bonität prüfen" }],
+    elements: [{ id: "StartEvent_1", name: "Process started" }],
     processVersion: null,
   });
 
@@ -489,25 +489,78 @@ test("todos: create anchors to the open process, list filters by it, close compl
   assert.equal(issues.created.length, 2);
 });
 
+test("todos: an element id the process does not have is refused with its closest ids, any element of the XML is one", async () => {
+  const issues = fakeIssues();
+  const { call, callJson } = await connect(deps({ issues }));
+
+  const unknown = await call("create_todo", {
+    repo: REPO.fullName,
+    id: "order",
+    title: "x",
+    elements: [{ id: "StartEvent_1" }, { id: "StartEvent_2" }, { id: "StartEvent_1_di" }],
+  });
+  assert.ok(unknown.isError);
+  assert.equal(
+    unknown.text,
+    "The process 'order' has no element with these ids:\n" +
+      "- StartEvent_2: closest StartEvent_1 (Process started), EndEvent_1 (Process completed), Participant_order (Order)\n" +
+      "- StartEvent_1_di: closest StartEvent_1 (Process started), EndEvent_1 (Process completed), Participant_order (Order)\n" +
+      "Anchor the todo to ids get_view reports, or omit `elements` for a todo on the whole process.",
+    "the diagram interchange's ids are no elements",
+  );
+  assert.equal(issues.created.length, 0);
+
+  // the pool is no node of the process graph, yet the canvas selects it
+  await callJson("create_todo", {
+    repo: REPO.fullName,
+    id: "order",
+    title: "x",
+    elements: [{ id: "Participant_order" }],
+  });
+  assert.deepEqual(issues.created[0]?.input.anchor.elements, [{ id: "Participant_order", name: null }]);
+});
+
 test("todos on other notations: a Wardley Map takes them, the same id of a process stays apart, a decision has none", async () => {
   const issues = fakeIssues();
   const d = deps({ issues });
   const { call, callJson } = await connect(d);
 
-  // the id alone finds the map (no process of that id)
+  // the id alone finds the map (no process of that id); a component is
+  // anchored by the id its canvas gives it, the one get_view reports
+  const view = await callJson("get_view", { repo: REPO.fullName, id: "strategy" });
+  assert.deepEqual(
+    view.detail.elements.map((e: { id: string; name: string }) => [e.id, e.name]),
+    [
+      ["cmp_platform", "Platform"],
+      ["cmp_checkout", "Checkout"],
+    ],
+  );
   const created = await callJson("create_todo", {
     repo: REPO.fullName,
     id: "strategy",
     title: "Platform is a commodity now",
-    elements: [{ id: "Platform", name: "Platform" }],
+    elements: [{ id: "cmp_platform", name: "Platform" }],
   });
   assert.deepEqual(created.todo.anchor, {
     notation: "wardley",
     model: "strategy",
     file: OWM_PATH,
-    elements: [{ id: "Platform", name: "Platform" }],
+    elements: [{ id: "cmp_platform", name: "Platform" }],
     processVersion: null,
   });
+  // a name is no id: the error leads with the component's id
+  const byName = await call("create_todo", {
+    repo: REPO.fullName,
+    id: "strategy",
+    title: "x",
+    elements: [{ id: "Platform" }],
+  });
+  assert.ok(byName.isError);
+  assert.match(
+    byName.text,
+    /^The Wardley Map 'strategy' has no element with this id:\n- Platform: closest cmp_platform \(Platform\), /,
+  );
+  assert.equal(issues.created.length, 1);
   // a path names its model, notation included
   await callJson("create_todo", { repo: REPO.fullName, path: OWM_PATH, title: "Map-level note" });
   assert.equal(issues.created[1]?.input.anchor.notation, "wardley");
@@ -550,6 +603,27 @@ test("todos on other notations: a Wardley Map takes them, the same id of a proce
   assert.match(decision.text, /not filed on decisions/);
   assert.match(decision.text, /bpmn, wardley/);
   assert.equal(issues.created.length, 4);
+
+  // a document has no element ids to anchor to
+  writeFileSync(join(ws, "processes", "notes.md"), "# Notes\n");
+  const onDocument = await call("create_todo", {
+    repo: REPO.fullName,
+    path: "processes/notes.md",
+    title: "x",
+    elements: [{ id: "notes" }],
+  });
+  assert.ok(onDocument.isError);
+  assert.equal(onDocument.text, "a document takes todos on the whole document only: omit `elements`");
+
+  // a text that does not parse right now has no ids to check: the anchor is kept
+  writeFileSync(join(ws, "processes", "draft.tt"), "{");
+  await callJson("create_todo", {
+    repo: REPO.fullName,
+    path: "processes/draft.tt",
+    title: "x",
+    elements: [{ id: "team-1" }],
+  });
+  assert.deepEqual(issues.created.at(-1)?.input.anchor.elements, [{ id: "team-1", name: null }]);
 });
 
 const BUG_TYPE: TodoType = {
@@ -1144,7 +1218,7 @@ test("agent presence: reads announce the caller's agent in the room, a save adds
     baseVersion: owm.baseVersion,
   });
   assert.equal(touches.at(-1)!.room, `${REPO.fullName}/${OWM_PATH}`);
-  assert.deepEqual(touches.at(-1)!.selection, ["Checkout"]);
+  assert.deepEqual(touches.at(-1)!.selection, ["cmp_checkout"], "the id the canvas outlines");
 
   // list/validate tools touch no room
   const before = touches.length;

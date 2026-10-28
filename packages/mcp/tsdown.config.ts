@@ -14,9 +14,9 @@ export default defineConfig({
   dts: false,
   // @designiq/notations, @designiq/contracts, @designiq/http-kit and @designiq/mcp-kit are
   // workspace-only (never published) — inline them into the bundle; every
-  // other dependency stays external and installs from npm (fast-xml-parser is
-  // declared as a dependency here because the inlined notations/extract
-  // imports it at runtime; @modelcontextprotocol/node because the inlined
-  // mcp-kit/mount does).
+  // other dependency stays external and installs from npm (fast-xml-parser and
+  // @miragon/wardley-dsl are declared as dependencies here because the inlined
+  // notations/extract imports them at runtime; @modelcontextprotocol/node
+  // because the inlined mcp-kit/mount does).
   deps: { alwaysBundle: [/^@designiq\/(notations|contracts|http-kit|mcp-kit|github-app)/] },
 });

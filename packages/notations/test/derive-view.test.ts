@@ -125,6 +125,34 @@ test("deriveView(wardley/tt/vc): node/edge stats from the shipped fixtures", () 
   const wardley = deriveView(extractModelGraph("maps/tea.owm", fixture("tea.owm")) as ModelGraph);
   assert.deepEqual(wardley?.stats, { components: 7, dependencies: 8 });
   assert.equal(wardley?.summary, "Wardley Map with 7 components, 8 dependencies");
+  const { elements, links } = wardley?.detail as {
+    elements: Array<{ id: string; type: string; name: string | null }>;
+    links: Array<{ id: string; from: string; to: string; kind: string; label: string | null }>;
+  };
+  assert.deepEqual(elements[0], {
+    id: "cmp_cup_of_tea",
+    type: "component",
+    name: "Cup of Tea",
+    visibility: 0.79,
+    evolution: 0.61,
+    stage: "product",
+  });
+  assert.deepEqual(
+    elements.slice(-3).map((e) => [e.id, e.type, e.name]),
+    [
+      ["anchor_business", "anchor", "Business"],
+      ["anchor_public", "anchor", "Public"],
+      ["pipeline_kettle", "pipeline", "Kettle"],
+    ],
+    "the canvas's ids, the names beside them",
+  );
+  assert.deepEqual(links[0], {
+    id: "dep_1",
+    from: "anchor_business",
+    to: "cmp_cup_of_tea",
+    kind: "dependency",
+    label: null,
+  });
 
   const tt = deriveView(extractModelGraph("teams/sample.tt", fixture("sample.tt")) as ModelGraph);
   assert.equal(tt?.name, "Online shop — team topology", "the document title is the model's own name");

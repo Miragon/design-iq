@@ -158,7 +158,7 @@ echo "$STAT" | grep -qE "^ processes/" && bad "B: bogus top-level processes/ in 
 
 # ═══ Case C: model-anchored todos (HTTP route → adapter → stub issue tracker) ═══
 T=$(curl -s --max-time 60 -X POST -H "Content-Type: application/json" \
-  -d '{"title":"Verify credit rule","body":"Threshold looks stale.","anchor":{"notation":"bpmn","model":"two-pool","elements":[{"id":"Task_SendOffer","name":"Send offer"}]}}' \
+  -d '{"title":"Verify credit rule","body":"Threshold looks stale.","anchor":{"notation":"bpmn","model":"two-pool","elements":[{"id":"Task_send_offer","name":"Send revised offer"}]}}' \
   "http://localhost:$PORT_A/api/repos/acme/bpm-processes/todos")
 echo "$T" | grep -q '"id": *"1"' && ok "C: todo created via HTTP (tracker issue #1)" || bad "C: todo create failed: $T"
 echo "$T" | grep -q '"author": *"petra"' && ok "C: author attributed from the session" || bad "C: wrong author: $T"
@@ -172,6 +172,11 @@ echo "$L2" | grep -q '"id": *"1"' && bad "C: closed todo still listed: $L2" || o
 BADREQ=$(curl -s --max-time 60 -X POST -d '{"title":"  "}' \
   "http://localhost:$PORT_A/api/repos/acme/bpm-processes/todos")
 echo "$BADREQ" | grep -q "title must be" && ok "C: blank title rejected (400)" || bad "C: expected title validation, got: $BADREQ"
+BADELEM=$(curl -s --max-time 60 -X POST -H "Content-Type: application/json" \
+  -d '{"title":"x","anchor":{"notation":"bpmn","model":"two-pool","elements":[{"id":"Task_SendOffer"}]}}' \
+  "http://localhost:$PORT_A/api/repos/acme/bpm-processes/todos")
+echo "$BADELEM" | grep -q '"code": *"todos/unknown-element"' && echo "$BADELEM" | grep -q "closest Task_send_offer" &&
+  ok "C: unknown element id rejected (400) with the closest id" || bad "C: expected the unknown element refused, got: $BADELEM"
 
 # ═══ Case D: folder + process creation (repo view create endpoints) ═══
 F=$(curl -s --max-time 60 -X POST -H "Content-Type: application/json" \

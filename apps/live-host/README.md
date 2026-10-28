@@ -59,7 +59,8 @@ embedded modeler widget file and complete the same items humans see in the web a
 `GET /api/repos/:fullName/todo-types` lists the types a todo is filed with: the repo's issue
 templates (`.github/ISSUE_TEMPLATE/`, read through the contents API, cached five minutes) and/or
 the built-in `Todo`. `POST …/todos` takes `type` + `fields`; a missing required field is a 400
-`todos/fields-required` naming every field. Reads
+`todos/fields-required` naming every field. An anchored element id the model's live text does
+not have is a 400 `todos/unknown-element` naming the closest ids it has. Reads
 return the author's own text (`body`) with that platform markup stripped again — it is what
 the modeler widget's "Implement" prompt hands to the assistant.
 Issue bodies deep-link every anchored element straight into the web app's process editor

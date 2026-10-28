@@ -44,11 +44,12 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts"
   },
-  "//": "fast-xml-parser stays a RUNTIME dependency although src/ no longer imports it directly: tsdown inlines @designiq/notations (whose extract.ts imports it) but keeps npm deps external, so the published dist/ resolves it from here. Removing it breaks the npm artifact at import time while the workspace keeps working. zod is a RUNTIME dependency for the same reason: src/ never imports it, but the team-topologies, context-maps and value-chain schema models take it as a peer, and the published package is what provides it.",
+  "//": "fast-xml-parser stays a RUNTIME dependency although src/ no longer imports it directly: tsdown inlines @designiq/notations (whose extract.ts imports it) but keeps npm deps external, so the published dist/ resolves it from here. Removing it breaks the npm artifact at import time while the workspace keeps working. @miragon/wardley-dsl is one for the same reason (extract.ts reads a Wardley Map with it). zod is a RUNTIME dependency too: src/ never imports it, but the wardley-dsl and the team-topologies, context-maps and value-chain schema models take it as a peer, and the published package is what provides it.",
   "dependencies": {
     "@miragon/context-maps-schema-model": "0.5.0",
     "@miragon/team-topologies-schema-model": "0.15.0",
     "@miragon/value-chain-schema-model": "0.7.1",
+    "@miragon/wardley-dsl": "0.7.1",
     "fast-xml-parser": "5.11.2",
     "yaml": "2.9.1",
     "zod": "4.6.7"

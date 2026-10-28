@@ -12,9 +12,11 @@
  *
  * Deliberately pinned quirks (documenting gaps, not endorsing them):
  *
- *  - wardley: only `component` lines become nodes — `anchor`/`pipeline`/
- *    `evolve`/`title` are ignored, so edges may reference ids with NO node
- *    (Business/Public below), and the `(outsource)` suffix is dropped;
+ *  - wardley: read by @miragon/wardley-dsl, so the ids are the canvas's
+ *    (`cmp_<name>`, `anchor_<name>`, `pipeline_<name>`) and the names ride in
+ *    `name`; only the elements the canvas addresses become nodes (components,
+ *    anchors, pipelines, submaps, accelerators), `evolve` and the
+ *    `(outsource)` suffix are dropped;
  *  - team-topology: relations are spatial, so a .tt yields ZERO edges: an
  *    interaction is a placed shape between its teams and becomes a node of
  *    type "interaction" (its `mode` in extra), and so do a flow of change
@@ -42,44 +44,100 @@ test("extractWardley: the shipped tea.owm example is pinned", () => {
     notation: "wardley",
     nodes: [
       {
-        id: "Cup of Tea",
+        id: "cmp_cup_of_tea",
         type: "component",
         name: "Cup of Tea",
         extra: { visibility: 0.79, evolution: 0.61, stage: "product" },
       },
-      { id: "Cup", type: "component", name: "Cup", extra: { visibility: 0.73, evolution: 0.78, stage: "commodity" } },
-      { id: "Tea", type: "component", name: "Tea", extra: { visibility: 0.63, evolution: 0.81, stage: "commodity" } },
       {
-        id: "Hot Water",
+        id: "cmp_cup",
+        type: "component",
+        name: "Cup",
+        extra: { visibility: 0.73, evolution: 0.78, stage: "commodity" },
+      },
+      {
+        id: "cmp_tea",
+        type: "component",
+        name: "Tea",
+        extra: { visibility: 0.63, evolution: 0.81, stage: "commodity" },
+      },
+      {
+        id: "cmp_hot_water",
         type: "component",
         name: "Hot Water",
         extra: { visibility: 0.52, evolution: 0.8, stage: "commodity" },
       },
       {
-        id: "Water",
+        id: "cmp_water",
         type: "component",
         name: "Water",
         extra: { visibility: 0.38, evolution: 0.82, stage: "commodity" },
       },
       {
-        id: "Kettle",
+        id: "cmp_kettle",
         type: "component",
         name: "Kettle",
         extra: { visibility: 0.43, evolution: 0.35, stage: "custom-built" },
       },
-      { id: "Power", type: "component", name: "Power", extra: { visibility: 0.1, evolution: 0.71, stage: "product" } },
+      {
+        id: "cmp_power",
+        type: "component",
+        name: "Power",
+        extra: { visibility: 0.1, evolution: 0.71, stage: "product" },
+      },
+      { id: "anchor_business", type: "anchor", name: "Business", extra: { visibility: 0.95, evolution: 0.63 } },
+      { id: "anchor_public", type: "anchor", name: "Public", extra: { visibility: 0.95, evolution: 0.78 } },
+      {
+        id: "pipeline_kettle",
+        type: "pipeline",
+        name: "Kettle",
+        extra: { visibility: 0.43, evolutionStart: 0.3, evolutionEnd: 0.65 },
+      },
     ],
     edges: [
-      { id: "dep-0", from: "Business", to: "Cup of Tea", kind: "dependency" },
-      { id: "dep-1", from: "Public", to: "Cup of Tea", kind: "dependency" },
-      { id: "dep-2", from: "Cup of Tea", to: "Cup", kind: "dependency" },
-      { id: "dep-3", from: "Cup of Tea", to: "Tea", kind: "dependency" },
-      { id: "dep-4", from: "Cup of Tea", to: "Hot Water", kind: "dependency" },
-      { id: "dep-5", from: "Hot Water", to: "Water", kind: "dependency" },
-      { id: "dep-6", from: "Hot Water", to: "Kettle", kind: "dependency" },
-      { id: "dep-7", from: "Kettle", to: "Power", kind: "dependency" },
+      { id: "dep_1", from: "anchor_business", to: "cmp_cup_of_tea", kind: "dependency" },
+      { id: "dep_2", from: "anchor_public", to: "cmp_cup_of_tea", kind: "dependency" },
+      { id: "dep_3", from: "cmp_cup_of_tea", to: "cmp_cup", kind: "dependency" },
+      { id: "dep_4", from: "cmp_cup_of_tea", to: "cmp_tea", kind: "dependency" },
+      { id: "dep_5", from: "cmp_cup_of_tea", to: "cmp_hot_water", kind: "dependency" },
+      { id: "dep_6", from: "cmp_hot_water", to: "cmp_water", kind: "dependency" },
+      { id: "dep_7", from: "cmp_hot_water", to: "cmp_kettle", kind: "dependency" },
+      { id: "dep_8", from: "cmp_kettle", to: "cmp_power", kind: "dependency" },
     ],
   });
+});
+
+test("extractWardley: submaps, accelerators and pipeline members are nodes, notes and regions are not, flows are edges", () => {
+  const owm = [
+    "title Platform",
+    "component Checkout [0.8, 0.6]",
+    "submap Payments [0.6, 0.5] url(payments)",
+    "url payments [https://example.com/payments.owm]",
+    "pipeline Checkout [0.4, 0.8]",
+    "{",
+    "  component Hosted Checkout [0.7]",
+    "}",
+    "accelerator Open Source [0.3, 0.2]",
+    "note Watch the fees [0.2, 0.9]",
+    "pioneers [0.9, 0.1, 0.7, 0.3]",
+    "Checkout -> Payments",
+    "Checkout +'2s'> Hosted Checkout; slow",
+  ].join("\n");
+  const graph = extractModelGraph("maps/platform.owm", owm);
+  assert.deepEqual(
+    graph?.nodes.map((n) => [n.id, n.type, n.name]),
+    [
+      ["cmp_checkout", "component", "Checkout"],
+      ["submap_payments", "submap", "Payments"],
+      ["accel_open_source", "accelerator", "Open Source"],
+      ["pipeline_checkout", "pipeline", "Checkout"],
+      ["cmp_hosted_checkout", "component", "Hosted Checkout"],
+    ],
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(graph?.edges)), [
+    { id: "dep_1", from: "cmp_checkout", to: "submap_payments", kind: "dependency" },
+    { id: "flow_1", from: "cmp_checkout", to: "cmp_hosted_checkout", kind: "flow", name: "slow" },
+  ]);
 });
 
 test("extractTeamTopology: the shipped sample.tt example is pinned — interactions, flows and annotations are nodes, real .tt files yield NO edges", () => {
@@ -596,7 +654,7 @@ test("extractWardley: DIRECTIVE lines containing '->' are never dependency edges
   assert.ok(graph, "wardley extractor resolved");
   assert.deepEqual(
     JSON.parse(JSON.stringify(graph.edges)),
-    [{ id: "dep-0", from: "A", to: "B", kind: "dependency" }],
+    [{ id: "dep_1", from: "cmp_a", to: "cmp_b", kind: "dependency" }],
     "only the real dependency line survives",
   );
 });

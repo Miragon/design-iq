@@ -373,8 +373,21 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
     };
   },
   wardley: (graph) => {
-    const stats = { components: graph.nodes.length, dependencies: graph.edges.length };
-    return { notation: "wardley", name: null, summary: `Wardley Map with ${counted(stats)}`, stats };
+    const stats = {
+      components: graph.nodes.filter((n) => n.type === "component").length,
+      dependencies: graph.edges.filter((e) => e.kind === "dependency").length,
+    };
+    return {
+      notation: "wardley",
+      name: null,
+      summary: `Wardley Map with ${counted(stats)}`,
+      stats,
+      // the canvas's own element ids (`cmp_tea`), the ids a todo anchors to
+      detail: {
+        elements: graph.nodes.map((n) => ({ id: n.id, type: n.type, name: n.name ?? null, ...n.extra })),
+        links: graph.edges.map((e) => ({ id: e.id, from: e.from, to: e.to, kind: e.kind, label: e.name ?? null })),
+      },
+    };
   },
   "team-topology": (graph) => {
     // interactions, flows and annotations are placed shapes, so nodes of

@@ -21,9 +21,10 @@
  *    below its screen size: these boards are read zoomed out. A renderer without `bounds` gets no badges — the panel
  *    still lists every todo
  *  - an anchor id this canvas does not know is looked up as an element NAME:
- *    the Live Host names a Wardley map's components (get_view), the canvas
- *    ids them `component_<name>` — a todo an agent anchored by name lands on
- *    its component (the presence-canvas rule)
+ *    until #275 the Live Host reported a Wardley map's components by name
+ *    (get_view) and agents anchored todos with those names, while the canvas
+ *    ids them `cmp_<name>`; such a todo still lands on its component (the
+ *    presence-canvas rule)
  *  - selection → TodoElementWire[] (`onSelection`), so a new todo anchors to it
  *  - reveal / revealOnce, as on BPMN; the one-shot waits for the first import
  */
