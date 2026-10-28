@@ -736,9 +736,11 @@ function extractContextMap(raw: string): ModelGraph {
 // `orgUnit` element is labelled by its `name`, the schema has no other label.
 
 function extractValueChain(raw: string): ModelGraph {
-  const data = JSON.parse(raw) as { elements?: any[]; connections?: any[] };
+  const data = JSON.parse(raw) as { meta?: { name?: unknown }; elements?: any[]; connections?: any[] };
+  const name = data.meta?.name;
   return {
     notation: "value-chain",
+    meta: { name: typeof name === "string" && name.trim() !== "" ? name : null },
     nodes: (data.elements ?? []).map((el) => ({
       id: el.id,
       type: el.elementType ?? "element",

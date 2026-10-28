@@ -508,7 +508,18 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
   },
   "value-chain": (graph) => {
     const stats = { elements: graph.nodes.length, connections: graph.edges.length };
-    return { notation: "value-chain", name: null, summary: `Value Chain with ${counted(stats)}`, stats };
+    const name = graph.meta?.name;
+    return {
+      notation: "value-chain",
+      name: typeof name === "string" ? name : null,
+      summary: `Value Chain with ${counted(stats)}`,
+      stats,
+      // the document's own ids, which its canvas selects and a todo anchors to
+      detail: {
+        elements: graph.nodes.map((n) => ({ id: n.id, type: n.type, name: n.name ?? null })),
+        connections: graph.edges.map((e) => ({ id: e.id, from: e.from, to: e.to, type: e.kind })),
+      },
+    };
   },
 };
 

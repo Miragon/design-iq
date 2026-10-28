@@ -69,6 +69,11 @@ definitions live in `packages/mcp/tools.ts`, shared by two entry points:
 | `which_models_use(id)`       | Impact, across EVERY notation       | the repo-wide reference index (typed cross-model refs: calls, decides, …), incl. dangling references                                                                |
 | `list_todos(id?, notation?)` | What work is open (opt-in)?         | the content repo's issue tracker (label `todo` + `<notation>:<id>`), anchors parsed from issue bodies                                                               |
 
+A Value Chain (`.vc.json`) is read from the document's own ids: `get_view` reports its `meta.name` as
+the model's `name`, counts `elements` and `connections` in `stats` and lists them in `detail`
+(`elements` with `id`, `type` and `name`, `connections` with `id`, `from`, `to` and `type`). Those
+are the ids its canvas selects and a todo anchors to.
+
 A Team Topology's graph has no edges: its teams, interactions, flows of change and annotations
 are all placed shapes, so each is a node (a team keeps its team type, the others are of type
 `interaction`, `flow` and `annotation`). A flow is named by its label and an annotation by its

@@ -1570,12 +1570,13 @@ export function createLiveMcpServer(
           description:
             `File a todo on a model (${TODO_NOTATION_IDS}) into the repository's issue tracker. Anchor it to ` +
             "concrete elements via `elements`, by the ids the canvas uses: a process's from get_process or " +
-            "get_bpmn_xml, a canvas model's (Wardley Map, Event Storming board, Context Map, Team Topology) " +
-            "from get_view's `detail` (a Wardley component's id is `cmp_` and its name in lowercase with " +
-            "other characters as `_`, e.g. `cmp_cup_of_tea`: take it from `detail.elements`, never build it; " +
-            "its name is in `name`). The modeler shows a badge on each one. An id the model does not have is " +
-            "refused, and the error names the closest ids it has. Omit `elements` for a todo on the whole " +
-            "model (a Markdown document takes none). The item is bot-authored, you stay attributed. " +
+            "get_bpmn_xml, a canvas model's (Wardley Map, Event Storming board, Context Map, Team Topology, " +
+            "Value Chain) from get_view's `detail` (a Wardley component's id is `cmp_` and its name in " +
+            "lowercase with other characters as `_`, e.g. `cmp_cup_of_tea`: take it from `detail.elements`, " +
+            "never build it; its name is in `name`). The modeler shows a badge on each one. An id the model " +
+            "does not have is refused, and the error names the closest ids it has. Omit `elements` for a todo " +
+            "on the whole model (a Markdown document takes none). The item is bot-authored, you stay " +
+            "attributed. " +
             "Pick a `type` from list_todo_types and pass its `fields` by id: input and textarea take a string, " +
             "dropdown an option label (a list when it allows several), checkboxes the list of checked labels. " +
             "A missing required field fails with the list of what is missing.",
