@@ -20,6 +20,7 @@
 import { assertContract, bindMiragon, EMPTY_DOCUMENT, isBlank } from "@designiq/live-client/miragon-sync";
 import type * as Y from "yjs";
 
+import { routeCanvasChromeKeys } from "../../lib/chrome-keys.ts";
 import { attachPresenceCanvas } from "../../lib/presence-canvas.ts";
 import type {
   LoadedMiragonRenderer,
@@ -84,7 +85,13 @@ export function mountMiragonEngine(
     throw error;
   }
   modeler.attachTo(container);
+  const detach = renderer.attached?.(modeler, container);
   const view = miragonView(modeler, opts ? { insets: opts.insets } : {});
+  // Value Chain's diagram-js keeps its own zoom keys on the focused canvas: the
+  // chrome's run there first, and the document's listener skips a prevented key
+  const unrouteKeys = opts?.chromeKeys
+    ? routeCanvasChromeKeys(modeler.diagram, container.ownerDocument, opts.chromeKeys)
+    : undefined;
   const menu =
     opts?.menuHost && renderer.menu
       ? renderer.menu(modeler, menuHostIn(opts.menuHost, container, readonly))
@@ -134,6 +141,8 @@ export function mountMiragonEngine(
     },
     destroy(): void {
       menu?.destroy();
+      unrouteKeys?.();
+      detach?.();
       view.destroy();
       modeler.destroy();
     },

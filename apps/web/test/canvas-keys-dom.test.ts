@@ -65,6 +65,15 @@ const DOCUMENTS: Record<string, string> = {
     interactions: [],
     flows: [],
   }),
+  "value-chain": JSON.stringify({
+    schemaVersion: 1,
+    meta: { name: "Order to Cash" },
+    elements: [
+      { id: "step_order", elementType: "step", name: "Order", bounds: { x: 40, y: 40, width: 200, height: 80 } },
+      { id: "step_invoice", elementType: "step", name: "Invoice", bounds: { x: 500, y: 40, width: 200, height: 80 } },
+    ],
+    connections: [],
+  }),
 };
 
 interface Shape {
@@ -146,7 +155,7 @@ function press(target: Element, key: string, init: KeyboardEventInit = {}): Keyb
   return event;
 }
 
-/** undo, delete, the arrows, select all and the single-key tools of the four renderers */
+/** undo, delete, the arrows, select all and the single-key tools of the five renderers */
 const CANVAS_KEYS: Array<[key: string, init?: KeyboardEventInit]> = [
   ["z", { ctrlKey: true, code: "KeyZ" }],
   ["z", { metaKey: true, code: "KeyZ" }],

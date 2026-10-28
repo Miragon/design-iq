@@ -10,8 +10,8 @@ surfaces below, `list_models` covers every notation and `get_view` every one but
 read-only server adds graph analysis across notations (`get_model`, `enumerate_paths`,
 `find_cycles`, `which_models_use`); the Live Host reads, validates and saves any model's source
 text (`get_model_content`, `validate_model`, `save_model_content`, `create_model`) and renders
-six of the notations as modelers inline in the chat. Todos are filed on the models of every
-notation but decisions and Value Chains, optionally anchored to their elements. BPMN and DMN
+seven of the notations as modelers inline in the chat. Todos are filed on the models of every
+notation but decisions, optionally anchored to their elements. BPMN and DMN
 have extra tools on top: the derived process and decision views, the XML round-trip, roles from
 lanes, decision simulation, analysis and tests.
 
@@ -68,6 +68,13 @@ definitions live in `packages/mcp/tools.ts`, shared by two entry points:
 | `which_processes_use(query)` | Impact: what references this?       | each process's id, derived name, role names, step names, and `callActivity` `calledElement`                                                                         |
 | `which_models_use(id)`       | Impact, across EVERY notation       | the repo-wide reference index (typed cross-model refs: calls, decides, …), incl. dangling references                                                                |
 | `list_todos(id?, notation?)` | What work is open (opt-in)?         | the content repo's issue tracker (label `todo` + `<notation>:<id>`), anchors parsed from issue bodies                                                               |
+
+A Value Chain (`.vc.json`) is read from the document's own ids: `get_view` reports its `meta.name` as
+the model's `name`, counts `elements` and `connections` in `stats` and lists them in `detail`
+(`elements` with `id`, `type` and `name`, `connections` with `id`, `from`, `to` and `type`). Those
+are the ids its canvas selects and a todo anchors to: both kinds are anchors, and `create_todo`
+refuses any other id (`todos/unknown-element`) with the closest ones, as it does on every canvas
+model.
 
 A Team Topology's graph has no edges: its teams, interactions, flows of change and annotations
 are all placed shapes, so each is a node (a team keeps its team type, the others are of type
@@ -196,6 +203,7 @@ call is gated by the caller's per-repo permission.
 | `open_team_topology_modeler`  | read  | Open the embedded Team Topology modeler widget.                                          |
 | `open_event_storming_modeler` | read  | Open the embedded Event Storming board widget.                                           |
 | `open_context_map_modeler`    | read  | Open the embedded Context Map modeler widget.                                            |
+| `open_value_chain_modeler`    | read  | Open the embedded Value Chain modeler widget.                                            |
 | `create_model`                | write | Scaffold a model of ANY template-capable notation from its blank template.               |
 | `save_model_content`          | write | Validated, conflict-guarded save of ANY model's text into the live document.             |
 | `create_process`              | write | Scaffold a new process `.bpmn` in the live workspace.                                    |
@@ -244,10 +252,10 @@ strategic-DDD rules (`protect-or-conform`, `endpoints-on-map`, …)
 are WARNs, `context-map/semantics`: the canvas opens such a map and marks the finding. Some rules
 only run once the file's shape is valid, so `validate_model` can report further errors after a
 fix: check again until it answers `ok`.
-`create_model` scaffolds every notation with a template (bpmn, dmn, wardley, team-topology,
-event-storming, context-map, markdown); a notation without one (value-chain) arrives via git only.
+`create_model` scaffolds every notation from its template (bpmn, dmn, wardley, team-topology,
+event-storming, context-map, value-chain, markdown).
 `LIVE_MCP_READONLY=1` keeps the two read tools and drops the writes. The embedded modelers'
-`mint_ws_ticket` takes the same ref, so the Wardley, Team Topology, Event Storming and Context Map widgets
+`mint_ws_ticket` takes the same ref, so the Wardley, Team Topology, Event Storming, Context Map and Value Chain widgets
 (below) upgrade to live co-editing exactly like the BPMN one. (`mint_ws_ticket` itself is
 app-visible, hidden from agents, and registered when at least one live-capable widget is
 served AND the host is not read-only, bound to the first such widget's resource; absent under
@@ -393,8 +401,8 @@ file, element ids with a name snapshot) rides invisibly in the item body, so an 
 on exactly that shape.
 
 Todos are filed on processes, Wardley Maps, Event Storming boards, Context Maps, Team
-Topologies and Markdown documents (the notation descriptor's `todos` flag in
-`@designiq/notations`); a decision or a Value Chain takes none yet (a typed 400). Model ids are
+Topologies, Value Chains and Markdown documents (the notation descriptor's `todos` flag in
+`@designiq/notations`); a decision takes none yet (a typed 400). Model ids are
 file stems, unique per notation but not across them, so the label names the notation:
 `<notation>:<id>` (`bpmn:order-to-cash`, `wardley:tea-shop`).
 `create_todo` and `list_todos` take a model as the generic tools do (`id` or `path`, `notation`
@@ -443,12 +451,12 @@ five minutes per repo.
 
 Every `open_*` tool is an [MCP App](https://modelcontextprotocol.io/specification/2026-01-26)
 (`io.modelcontextprotocol/ui`): in apps-capable clients (claude.ai, Claude Desktop) it
-renders the notation's modeler inline in the conversation. There are six single-file
+renders the notation's modeler inline in the conversation. There are seven single-file
 bundles (`apps/web/dist/mcp-app*.html`, built by `apps/web/scripts/build-widgets.ts`),
 one per modeler, and ONE widget core behind all of them (`apps/web/src/mcp-app/core/`):
 every widget shares the load → autosave → conflict → live-upgrade lifecycle and the
 same chrome, and differs only in its engine adapter (the DMN engine, multi-view +
-simulator, has no live binding and stays on autosave). The four Miragon-renderer
+simulator, has no live binding and stays on autosave). The five Miragon-renderer
 widgets are one template + one entry built once per renderer spec
 (`apps/web/src/notations/miragon/`). A widget = engine adapter (or a renderer spec) +
 one registry row in the Live Host; a web dist that lacks a bundle simply lacks its tool.
@@ -542,7 +550,7 @@ fit still work), and says so in an info card ("This model is open in a newer wid
 pill _Inactive_) whose one action is Open in designIQ.
 
 The widget also carries the **todos** of the open process (as do the Wardley, Team Topology,
-Event Storming and Context Map widgets for their models): the **Todos** toggle (top-right,
+Event Storming, Context Map and Value Chain widgets for their models): the **Todos** toggle (top-right,
 with the open count) opens a card listing them, count badges sit on every anchored
 element (a badge click opens the card filtered to it, a chip click reveals the element
 on the canvas), **Add todo** files one against the current canvas selection (or the whole
@@ -638,16 +646,16 @@ highlighted row, and one click on Save as test case keeps it.
 Both sides run the same engine, so a run clicked here and one simulated by an agent
 cannot disagree.
 
-### MCP Apps: Wardley Maps, Team Topologies, Event Storming boards and Context Maps
+### MCP Apps: Wardley Maps, Team Topologies, Event Storming boards, Context Maps and Value Chains
 
-`open_wardley_modeler`, `open_team_topology_modeler`, `open_event_storming_modeler` and
-`open_context_map_modeler` are generated from the notation registry (their names come from
+`open_wardley_modeler`, `open_team_topology_modeler`, `open_event_storming_modeler`,
+`open_context_map_modeler` and `open_value_chain_modeler` are generated from the notation registry (their names come from
 `@designiq/contracts/mcp-app`, the same derivation the web app's "Analyse with AI" prompt
 uses). Each takes `{repo, id | path}` and forces its notation: a stem shared with a
 `.bpmn` twin opens THIS notation's file, and a `path` of another notation fails in the
 tool rather than inside the iframe. The widgets run the shared core on the Miragon
 renderers (`@miragon/wardley-renderer`, `team-topologies-renderer`,
-`event-storming-renderer`, `context-maps-renderer`): the same CAS autosave through `save_model_content`, the same
+`event-storming-renderer`, `context-maps-renderer`, `value-chain-renderer`): the same CAS autosave through `save_model_content`, the same
 conflict card and chrome, the same live upgrade through `mint_ws_ticket`, a read-only viewer under
 `LIVE_MCP_READONLY=1`, and the same Todos card as the BPMN widget (above). What they do not
 have: stickies (BPMN-only). Their "Open in designIQ" link is the file route (`/f/<path>`),

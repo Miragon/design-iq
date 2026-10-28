@@ -26,14 +26,15 @@ Registered in `packages/notations/index.ts` (id = the `notation` argument of the
 
 Every notation gets live sync, the generic MCP model tools, validation and release-as-PR.
 In the web client a notation's plugin (`apps/web/src/notations/registry.ts`) decides what a
-model opens in: a visual modeler (BPMN, DMN, the Miragon renderers), a rendered, live read
-view (Markdown, `apps/web/src/notations/markdown/`, its `mermaid` fences drawn as diagrams) or
-Monaco alone (Value Chain). The Monaco source is one click away for every one of them.
+model opens in: a visual modeler (BPMN, DMN, the Miragon renderers: Wardley Map, Team Topology,
+Event Storming, Context Map, Value Chain) or a rendered, live read view (Markdown,
+`apps/web/src/notations/markdown/`, its `mermaid` fences drawn as diagrams); a notation without
+a plugin opens in Monaco alone. The Monaco source is one click away for every one of them.
 A diagram-as-code is no notation of its own: it is a `mermaid` fence in a Markdown document,
 next to the prose that explains it (`.mmd`/`.mermaid` files are plain repository files), and
 the validator checks each fence's diagram type (a WARN, `mermaid/diagram-type`).
 Todos (work items in the repo's issue tracker, anchored to a model and optionally its
-elements) are filed on every notation but DMN and Value Chain (the descriptor's `todos` flag).
+elements) are filed on every notation but DMN (the descriptor's `todos` flag).
 BPMN and DMN have the deepest tooling (derived process and decision views, decision
 simulation and tests) and the BPMN/DMN hard rules below.
 
@@ -119,7 +120,11 @@ https://raw.githubusercontent.com/Miragon/corporate-identity/main/plugins/mirago
 - **Geist / Geist Mono** everywhere, canvas text included; **Lucide** is the only icon set
   (no emoji or unicode glyphs as icons, no sparkles/wand/robot for AI).
 - The Miragon renderers (`@miragon/*-renderer`) bring their own CI styling — don't restyle
-  them. The Live Host's own HTML pages (editor sign-in landing, `create-app`) cannot load
+  them. The one exception is Value Chain's palette: value-chain-renderer 0.8.0 lays it out
+  and makes it reachable by keyboard only inside the modeler shell's chrome, so
+  `apps/web/src/lib/value-chain-palette.css` and `.ts` do what the shell does until a release
+  ships it (`test/vendor-css.test.ts` and `test/value-chain-palette-dom.test.ts` fail then, and
+  both files go). The Live Host's own HTML pages (editor sign-in landing, `create-app`) cannot load
   the SPA sheet: they share the inline CI shell in `apps/live-host/src/http/brand-page.ts`.
 - **brand-lint** (the miragon-brand PostToolUse hook, active via `.miragon/brand.json`) flags
   colours outside the CI palette in every edit, in CSS also a raw brand hex instead of its

@@ -214,6 +214,25 @@ test("deriveView(wardley/tt/vc): node/edge stats from the shipped fixtures", () 
   const vc = deriveView(extractModelGraph("chains/porter.vc.json", fixture("porter.vc.json")) as ModelGraph);
   assert.deepEqual(vc?.stats, { elements: 8, connections: 7 });
   assert.equal(vc?.summary, "Value Chain with 8 elements, 7 connections");
+  assert.equal(vc?.name, "Porter Value Chain", "the document's name is the model's own name");
+  const detail = vc?.detail as {
+    elements: Array<{ id: string; type: string; name: string | null }>;
+    connections: Array<{ id: string; from: string; to: string; type: string }>;
+  };
+  assert.deepEqual(detail.elements[1], { id: "step-assembly", type: "step", name: "Assembly" });
+  assert.deepEqual(detail.connections[0], {
+    id: "assign-1",
+    from: "step-testing",
+    to: "org-development",
+    type: "assignment",
+  });
+  assert.equal(detail.elements.length, 8);
+  assert.equal(detail.connections.length, 7);
+  const unnamed = extractModelGraph(
+    "chains/blank.vc.json",
+    JSON.stringify({ schemaVersion: 1, meta: { name: " " }, elements: [], connections: [] }),
+  ) as ModelGraph;
+  assert.equal(deriveView(unnamed)?.name, null, "a blank name is no name");
 });
 
 test("deriveView(context-map): title as name, per-subdomain + per-pattern stats, contexts + relationships in detail", () => {

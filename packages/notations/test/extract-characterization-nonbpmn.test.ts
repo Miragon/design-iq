@@ -603,6 +603,7 @@ test("extractValueChain: the shipped porter.vc.json example is pinned — ids an
   const graph = extractModelGraph("chains/porter.vc.json", fixture("porter.vc.json"));
   assert.deepEqual(JSON.parse(JSON.stringify(graph)), {
     notation: "value-chain",
+    meta: { name: "Porter Value Chain" },
     nodes: [
       { id: "org-development", type: "orgUnit", name: "Entwicklung" },
       { id: "step-assembly", type: "step", name: "Assembly" },
@@ -635,6 +636,7 @@ test("extractValueChain: lenient on what the schema requires — type and id def
   );
   assert.deepEqual(JSON.parse(JSON.stringify(graph)), {
     notation: "value-chain",
+    meta: { name: null },
     nodes: [{ id: "a", type: "element", name: "A" }],
     edges: [{ id: "conn-0", from: "a", to: "a", kind: "connection" }],
   });

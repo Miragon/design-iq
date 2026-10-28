@@ -161,6 +161,17 @@ export function newCmJson(_id: string, name: string): string {
 `;
 }
 
+/**
+ * The initial content of a new Value Chain: EXACTLY the schema-model's
+ * canonical file text (schema version 1, every key sorted, 2-space indent, a
+ * trailing newline): the modeler's first save re-serializes canonically, and
+ * a byte-identical template keeps that save from showing up as a phantom
+ * diff (the team-topology rule). The keys are written in sorted order here.
+ */
+export function newVcJson(_id: string, name: string): string {
+  return `${JSON.stringify({ connections: [], elements: [], meta: { name: oneLine(name) }, schemaVersion: 1 }, null, 2)}\n`;
+}
+
 /** the initial content of a new markdown document — a heading with the title */
 export function newMarkdownText(_id: string, name: string): string {
   return `# ${oneLine(name)}\n`;
@@ -173,6 +184,7 @@ const TEMPLATES: Record<string, (id: string, name: string) => string> = {
   "team-topology": newTtJson,
   "event-storming": newStormText,
   "context-map": newCmJson,
+  "value-chain": newVcJson,
   markdown: newMarkdownText,
 };
 

@@ -57,7 +57,7 @@ export interface NotationDescriptor {
   graphHints?: { flowEdgeKinds: string[]; entryNodeTypes: string[] };
   /** todos are filed on its models: work items in the repo's own issue
    *  tracker, anchored to one model and optionally to elements of it. Absent
-   *  = not offered (a decision and a Value Chain have no todos yet) */
+   *  = not offered (a decision has no todos yet) */
   todos?: true;
 }
 
@@ -139,6 +139,7 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
     mediaKind: "json",
     docShape: "text",
     monacoLanguage: "json",
+    todos: true,
   },
   {
     // a document, and the home of every diagram-as-code: a ```mermaid fence

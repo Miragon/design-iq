@@ -8,7 +8,7 @@
  * are the modeler shell's (`zoomReadout`), so it reads and speaks like the
  * Miragon modelers' own zoom panel. Keyboard zoom (Ctrl/⌘ + / − / 0) and ⇧1
  * are chrome/keys.ts: the widget's own keymap on the whole document, run on
- * the canvas of bpmn and the DMN DRD view first (EngineOptions.chromeKeys),
+ * the canvas of bpmn, the DMN DRD view and Value Chain first (EngineOptions.chromeKeys),
  * where a step goes the way it points as here; the buttons name the keys.
  * Touch undo/redo is phase 2.
  */

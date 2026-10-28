@@ -1,8 +1,9 @@
 /**
- * The validator checks a Team Topology or a Context Map with the schema model
- * its canvas parses it with. The renderer apps/web draws with pins its schema
- * model exactly, so a renderer bump without the validator's pin would let the
- * save gate pass files the new canvas refuses (#266): both move in one PR.
+ * The validator checks a Team Topology, a Context Map or a Value Chain with
+ * the schema model its canvas parses it with. The renderer apps/web draws
+ * with pins its schema model exactly, so a renderer bump without the
+ * validator's pin would let the save gate pass files the new canvas refuses
+ * (#266): both move in one PR.
  * The CML serializer apps/web exports a Context Map with (#284) moves with
  * them: on a schema model of its own it would write a map by other patterns
  * and roles than the canvas draws. Read from the lockfile, whatever apps/web
@@ -38,6 +39,7 @@ function schemaModelOf(pkg: string, schemaModel: string): string {
 for (const [renderer, schemaModel] of [
   ["@miragon/team-topologies-renderer", "@miragon/team-topologies-schema-model"],
   ["@miragon/context-maps-renderer", "@miragon/context-maps-schema-model"],
+  ["@miragon/value-chain-renderer", "@miragon/value-chain-schema-model"],
 ] as const) {
   test(`the validator pins the ${schemaModel} that apps/web's ${renderer} draws with`, () => {
     assert.equal(validator.dependencies[schemaModel], schemaModelOf(renderer, schemaModel));

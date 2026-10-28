@@ -13,10 +13,11 @@
  *
  * It starts a Live Host of its own (LIVE_AUTH=none, on PORT, 8393 unless
  * set) on a generated content repo with a Wardley map, an Event Storming
- * board, a Context Map and a Team Topology, each with one label to measure
- * (it holds figures, where Geist and the system sans differ most) and a
- * latin-ext text beside it, so two subsets go in. It exports each as PNG and as SVG from the SPA's
- * ⋯ menu, and from the notation's widget behind a minimal MCP-Apps host that
+ * board, a Context Map, a Team Topology and a Value Chain, each with one label
+ * to measure (it holds figures, where Geist and the system sans differ most)
+ * and a latin-ext text beside it, so two subsets go in. It exports each as PNG
+ * and as SVG from the SPA's ⋯ menu, and from the notation's widget behind a
+ * minimal MCP-Apps host that
  * serves it under the MCP Apps default CSP, whose font-src (default-src
  * 'none') blocks every data: font of the widget's own document. Then it draws
  * the exported SVG itself, with Geist from @fontsource-variable/geist and in
@@ -182,6 +183,37 @@ const MODELS: Model[] = [
     )}\n`,
     widget: "mcp-app-team-topology.html",
     label: "Squad 11 Payments",
+    paper: "#F9F7F7",
+    paperAtCorner: true,
+  },
+  {
+    notation: "value-chain",
+    file: "harbour.vc.json",
+    text: `${JSON.stringify(
+      {
+        connections: [],
+        elements: [
+          {
+            bounds: { height: 80, width: 320, x: 40, y: 40 },
+            elementType: "step",
+            id: "step_berth",
+            name: "Berth 11 Unloading",
+          },
+          {
+            bounds: { height: 80, width: 320, x: 40, y: 220 },
+            elementType: "step",
+            id: "step_desk",
+            name: "Łódź Customs",
+          },
+        ],
+        meta: { name: "Harbour" },
+        schemaVersion: 1,
+      },
+      null,
+      2,
+    )}\n`,
+    widget: "mcp-app-value-chain.html",
+    label: "Berth 11 Unloading",
     paper: "#F9F7F7",
     paperAtCorner: true,
   },

@@ -1,8 +1,8 @@
 /**
  * The Miragon renderer spec — the ONE object per notation whose editor is a
  * Miragon modeler (the diagram-js renderers built from the modeler template:
- * Wardley Maps, Team Topologies, Event Storming, Context Maps). Everything
- * the platform needs to host such a renderer derives from it:
+ * Wardley Maps, Team Topologies, Event Storming, Context Maps, Value Chain).
+ * Everything the platform needs to host such a renderer derives from it:
  *
  *   ./plugin.ts               → the web editor plugin (WebNotationPlugin)
  *   ../../mcp-app/engines/miragon.ts → the MCP-App widget engine
@@ -89,6 +89,10 @@ export interface LoadedMiragonRenderer {
   createViewer(options?: MiragonMountOptions): MiragonModeler;
   /** the document's own title, for the menu header; undefined = none set */
   title?(modeler: MiragonModeler): string | undefined;
+  /** what a mount adds to the renderer's own DOM once it sits in the canvas
+   *  host (the keyboard side of a palette the renderer leaves to the shell);
+   *  returns what takes it off again */
+  attached?(modeler: MiragonModeler, host: HTMLElement): () => void;
   /** the renderer's own menu content (Model, Export, Help), where its
    *  package ships it */
   menu?(modeler: MiragonModeler, host: MiragonMenuHost): MiragonMenu;

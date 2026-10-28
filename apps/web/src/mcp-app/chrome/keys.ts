@@ -6,9 +6,9 @@
  * is core/keymap.ts; this binds it and calls preventDefault only for a key
  * that was handled (read-only ⌘S stays the browser's).
  * The zoom keys and ⇧1 act on the whole widget document (guide §5.8), by the
- * modeler shell's keymap (lib/chrome-keys.ts, as in the SPA). bpmn-js and
- * dmn-js bind their own keyboard (undo/redo, select all, delete, and a zoom
- * of their own) to the focused canvas: their engines run the same
+ * modeler shell's keymap (lib/chrome-keys.ts, as in the SPA). bpmn-js,
+ * dmn-js and Value Chain bind their own keyboard (undo/redo, select all,
+ * delete, and a zoom of their own) to the focused canvas: their engines run the same
  * `chromeKeyDeps` there first (EngineOptions.chromeKeys, lib/chrome-keys.ts
  * routeCanvasChromeKeys) and prevent the key, so this listener skips it and
  * each press acts once.
@@ -19,7 +19,8 @@ import type { MountKeys } from "./contracts.ts";
 
 /**
  * The zoom keys and ⇧1 of a widget: KeyDeps.chromeKeys on the document, and
- * EngineOptions.chromeKeys on the canvas of bpmn and the DMN DRD; a state
+ * EngineOptions.chromeKeys on the canvas of bpmn, the DMN DRD and the Miragon
+ * renderers; a state
  * card hides the diagram, so the browser keeps them.
  */
 export function chromeKeyDeps(state: {

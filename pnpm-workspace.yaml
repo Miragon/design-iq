@@ -19,6 +19,7 @@ minimumReleaseAgeExclude:
   - "@miragon/context-maps-renderer@0.7.0"
   - "@miragon/context-maps-schema-model@0.5.0"
   - "@miragon/context-maps-cml@0.1.7"
+  - "@miragon/value-chain-renderer@0.8.0"
 overrides:
   # vitepress 1.6.4 (docs/) is the latest release and still requests vite
   # ^5.4.14, which is stuck below the dev-server fixes; 6.4.5 also closes the

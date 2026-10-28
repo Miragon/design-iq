@@ -2,11 +2,11 @@
  * What the Miragon renderers bring to designIQ's chrome, for real (under
  * jsdom, test/renderer-dom.ts), through the specs both hosts mount them with:
  * their own menu content (Wardley mapMenu, Event Storming boardMenu, Context
- * Maps contextMapMenu, Team Topologies diagramMenu) in the widget engine and
- * the SPA editor, the dialogs and popovers it opens inside the mount's host,
- * the edits they make (one undoable step each), the exports a host hands to
- * the user, the document title as the menu header's display name, and the
- * zoom keys and ⇧1 of the SPA's editors on a real canvas.
+ * Maps contextMapMenu, Team Topologies diagramMenu, Value Chain diagramMenu)
+ * in the widget engine and the SPA editor, the dialogs and popovers it opens
+ * inside the mount's host, the edits they make (one undoable step each), the
+ * exports a host hands to the user, the document title as the menu header's
+ * display name, and the zoom keys and ⇧1 of the SPA's editors on a real canvas.
  */
 import assert from "node:assert/strict";
 import { after, mock, test } from "node:test";
@@ -57,11 +57,20 @@ const TEAMS = JSON.stringify({
   interactions: [],
   flows: [],
 });
+const VALUE_CHAIN = JSON.stringify({
+  schemaVersion: 1,
+  meta: { name: "Order to Cash" },
+  elements: [
+    { id: "step_order", elementType: "step", name: "Order", bounds: { x: 40, y: 40, width: 200, height: 80 } },
+  ],
+  connections: [],
+});
 const DOCUMENT: Record<string, [text: string, title: string]> = {
   wardley: [MAP, "Tea Shop"],
   "event-storming": [BOARD, "Checkout"],
   "context-map": [CONTEXT_MAP, "Conference"],
   "team-topology": [TEAMS, "Online Shop"],
+  "value-chain": [VALUE_CHAIN, "Order to Cash"],
 };
 
 /** the chrome around a mount: a menu trigger in the page, a download that records */
@@ -176,6 +185,12 @@ const EXPECTED = {
   },
   "team-topology": {
     model: ["diagram-title"],
+    export: ["export-png", "export-svg"],
+    help: ["keyboard-shortcuts"],
+  },
+  // no title dialog in the package: the document's name is edited as JSON
+  "value-chain": {
+    model: [],
     export: ["export-png", "export-svg"],
     help: ["keyboard-shortcuts"],
   },
@@ -465,6 +480,7 @@ test("exports: the PNG is drawn from the SVG with Geist inside, through a data: 
     "event-storming": "#F9F7F7",
     "context-map": "#F9F7F7",
     "team-topology": "#F9F7F7",
+    "value-chain": "#F9F7F7",
   };
   try {
     for (const id of Object.keys(EXPECTED)) {
@@ -518,10 +534,11 @@ test("displayName: every renderer's document title", async () => {
   }
 });
 
-test("displayName: a map or board without a title line has none, not the parser's placeholder", async () => {
+test("displayName: a map or board without a title line, or a value chain without a name, has none, not a placeholder", async () => {
   const untitled: Record<string, string> = {
     wardley: MAP.replace(/^title .*\n/, ""),
     "event-storming": BOARD.replace(/^title .*\n/, ""),
+    "value-chain": VALUE_CHAIN.replace('"name":"Order to Cash"', '"name":" "'),
   };
   for (const [id, text] of Object.entries(untitled)) {
     const [spec, renderer] = await load(id);
@@ -565,6 +582,84 @@ test("the SPA's Miragon editors: the zoom keys and ⇧1 drive the canvas, a text
   assert.equal(scale(), Math.round(fitted.scale * 1000) / 1000);
   editor.destroy();
   assert.equal(press("=", "Equal", { ctrlKey: true }).defaultPrevented, false, "gone with the editor");
+});
+
+/** Value Chain's diagram-js keeps its own zoom on the focused canvas: a step it clamps to 20 %, so from a fit below it a step out zooms in */
+async function valueChainKeys(
+  mountChrome: () => Promise<{ container: HTMLElement; diagram: MiragonModeler["diagram"] }>,
+) {
+  const { container, diagram } = await mountChrome();
+  const canvas = diagram.get("canvas") as {
+    viewbox(): { scale: number; outer: { width: number; height: number } };
+    viewbox(box: { x: number; y: number; width: number; height: number }): void;
+  };
+  const zoomScroll = diagram.get("zoomScroll") as { stepZoom(direction: number): void };
+  const own: number[] = [];
+  const stepZoom = zoomScroll.stepZoom.bind(zoomScroll);
+  zoomScroll.stepZoom = (direction) => {
+    own.push(direction);
+    stepZoom(direction);
+  };
+  const svg = container.querySelector<SVGSVGElement>(".djs-container > svg");
+  assert.ok(svg, "the canvas");
+  const level = (): number => Math.round(canvas.viewbox().scale * 1000) / 1000;
+  // a viewbox write, not canvas.zoom: jsdom keeps no CTM (renderer-dom.ts)
+  const viewAt = (scale: number): void => {
+    const { outer } = canvas.viewbox();
+    canvas.viewbox({ x: 0, y: 0, width: outer.width / scale, height: outer.height / scale });
+  };
+  const press = (key: string, code: string, mods: Partial<KeyboardEventInit>): KeyboardEvent => {
+    const event = new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true, ...mods });
+    svg.dispatchEvent(event);
+    return event;
+  };
+  return { svg, own, level, viewAt, press };
+}
+
+test("the SPA's Value Chain editor: a zoom key on the focused canvas is the chrome's, never diagram-js's own, which zooms in below 20 %", async () => {
+  const { editor, container, modeler } = await editorOf("value-chain");
+  const { svg, own, level, viewAt, press } = await valueChainKeys(async () => ({
+    container,
+    diagram: modeler.diagram,
+  }));
+  editor.focus?.();
+  assert.equal(document.activeElement, svg, "the canvas has the focus");
+  viewAt(0.12);
+  assert.equal(press("-", "Minus", { ctrlKey: true }).defaultPrevented, true, "the page does not zoom");
+  assert.equal(level(), 0.12, "from a fit below 20 % a step out stays put");
+  press("+", "NumpadAdd", { ctrlKey: true });
+  assert.equal(level(), 0.2, "a step in goes to 20 %");
+  press("0", "Digit0", { ctrlKey: true });
+  assert.equal(level(), 1, "Ctrl+0: 100 %");
+  press("=", "Equal", { metaKey: true });
+  assert.equal(level(), 1.349, "one step in, to the guide's 135 %, once");
+  press("-", "Minus", { metaKey: true });
+  assert.equal(level(), 1, "and one step out");
+  assert.deepEqual(own, [], "diagram-js's own zoom never acts");
+  press("=", "Equal", { ctrlKey: true, isComposing: true });
+  assert.equal(level(), 1, "an IME composition keeps the key");
+  editor.destroy();
+  assert.equal(press("=", "Equal", { ctrlKey: true }).defaultPrevented, false, "gone with the editor");
+});
+
+test("the widget's Value Chain engine: a zoom key on the focused canvas runs the chrome's deps first and prevents the key", async () => {
+  const [spec, renderer] = await load("value-chain");
+  const container = host(spec.canvasClassName);
+  const ran: string[] = [];
+  const engine = mountMiragonEngine(spec, renderer, container, false, {
+    insets: () => ({ top: 56, right: 16, bottom: 56, left: 16 }),
+    chromeKeys: { menuOpen: () => false, viewport: () => true, run: (key) => void ran.push(key) },
+  });
+  await engine.importText(DOCUMENT["value-chain"]![0]);
+  const { svg, own, press } = await valueChainKeys(async () => ({ container, diagram: engine.modeler.diagram }));
+  svg.focus();
+  assert.equal(press("-", "Minus", { ctrlKey: true }).defaultPrevented, true);
+  assert.equal(press("=", "Equal", { ctrlKey: true }).defaultPrevented, true);
+  assert.equal(press("0", "Digit0", { metaKey: true }).defaultPrevented, true);
+  assert.equal(press("!", "Digit1", { shiftKey: true }).defaultPrevented, true);
+  assert.deepEqual(ran, ["zoomOut", "zoomIn", "zoomToActual", "fit"], "each press acts once");
+  assert.deepEqual(own, [], "diagram-js's own zoom never acts");
+  engine.destroy();
 });
 
 test("the SPA's fit: 24px clear of the measured palette, the sides, the bottom and an open side panel", async () => {

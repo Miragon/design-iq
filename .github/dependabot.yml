@@ -96,8 +96,9 @@ updates:
       miragon-team-topologies:
         applies-to: version-updates
         patterns: ["@miragon/team-topologies-*"]
-      # no value-chain renderer yet, but the validator checks .vc.json files
-      # with the schema model (#266): a 0.x minor can change what a save refuses
+      # the renderer apps/web draws .vc.json files with (#287) and the schema
+      # model the validator checks them with (#266): a 0.x minor can change
+      # what the canvas opens and what a save refuses
       miragon-value-chain:
         applies-to: version-updates
         patterns: ["@miragon/value-chain-*"]

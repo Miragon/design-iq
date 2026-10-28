@@ -71,10 +71,10 @@ test("processIdFromName: collapses punctuation, keeps digits, trims dashes", () 
 });
 
 test("hasTodos: todos are filed on the notations whose descriptor offers them", () => {
-  for (const id of ["bpmn", "wardley", "team-topology", "event-storming", "context-map", "markdown"]) {
+  for (const id of ["bpmn", "wardley", "team-topology", "event-storming", "context-map", "value-chain", "markdown"]) {
     assert.ok(hasTodos(id), id);
   }
-  for (const id of ["dmn", "value-chain", "nope", undefined]) assert.ok(!hasTodos(id), String(id));
+  for (const id of ["dmn", "nope", undefined]) assert.ok(!hasTodos(id), String(id));
 });
 
 test("movedModelPath: a moved model is found again by its notation and stem", () => {

@@ -349,6 +349,19 @@ test("the Miragon renderers: a gesture in the SPA editor or the widget holds the
       }),
       ["team_checkout", "team_platform"],
     ],
+    [
+      "value-chain",
+      JSON.stringify({
+        schemaVersion: 1,
+        meta: { name: "Order to Cash" },
+        elements: [
+          { name: "Ship", id: "step_ship", elementType: "step", bounds: { x: 400, y: 40, width: 200, height: 80 } },
+          { name: "Order", id: "step_order", elementType: "step", bounds: { x: 40, y: 40, width: 200, height: 80 } },
+        ],
+        connections: [],
+      }),
+      ["step_order", "step_ship"],
+    ],
   ];
   assert.deepEqual(files.map(([id]) => id).sort(), MIRAGON_RENDERERS.map((spec) => spec.id).sort(), "every renderer");
   for (const [id, text, moved] of files) {

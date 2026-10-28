@@ -23,6 +23,7 @@ import type { TodoType } from "@designiq/contracts/todo-types";
 import { DIAGRAMS_IN_DOCUMENTS } from "@designiq/mcp-kit";
 import { toolNamesIn, toolText } from "@designiq/mcp-kit/testing";
 import { NOTATIONS } from "@designiq/notations";
+import { templateFor } from "@designiq/notations/templates";
 import { Server as HocuspocusServer } from "@hocuspocus/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
@@ -264,6 +265,7 @@ test("registration: every tool; read-only mode drops the write tools AND the ws 
     "open_event_storming_modeler",
     "open_modeler",
     "open_team_topology_modeler",
+    "open_value_chain_modeler",
     "open_wardley_modeler",
     "release_process",
     "run_decision_tests",
@@ -298,6 +300,7 @@ test("registration: every tool; read-only mode drops the write tools AND the ws 
     "open_event_storming_modeler",
     "open_modeler",
     "open_team_topology_modeler",
+    "open_value_chain_modeler",
     "open_wardley_modeler",
     "run_decision_tests",
     "simulate_decision",
@@ -664,6 +667,28 @@ const TT = JSON.stringify({
   ],
 });
 
+const VC_PATH = "processes/chain.vc.json";
+const VC = JSON.stringify({
+  schemaVersion: 1,
+  meta: { name: "Order to Cash" },
+  elements: [
+    { id: "step_order", elementType: "step", name: "Order", bounds: { x: 0, y: 0, width: 200, height: 80 } },
+    { id: "step_invoice", elementType: "step", name: "Invoice", bounds: { x: 300, y: 0, width: 200, height: 80 } },
+  ],
+  connections: [
+    {
+      id: "seq_order_invoice",
+      connectionType: "sequence",
+      source: "step_order",
+      target: "step_invoice",
+      waypoints: [
+        { x: 200, y: 40 },
+        { x: 300, y: 40 },
+      ],
+    },
+  ],
+});
+
 test("todos: an anchor must be an element its canvas addresses, on every notation with element ids", async () => {
   const issues = fakeIssues();
   const d = deps({ issues });
@@ -672,6 +697,7 @@ test("todos: an anchor must be an element its canvas addresses, on every notatio
   writeFileSync(join(ws, STORM_PATH), STORM);
   writeFileSync(join(ws, CM_PATH), CM);
   writeFileSync(join(ws, TT_PATH), TT);
+  writeFileSync(join(ws, VC_PATH), VC);
   const anchored = (path: string, ids: string[]) =>
     call("create_todo", { repo: REPO.fullName, path, title: "x", elements: ids.map((id) => ({ id })) });
 
@@ -703,6 +729,15 @@ test("todos: an anchor must be an element its canvas addresses, on every notatio
   assert.ok(team.isError);
   assert.match(team.text, /- Checkout: closest team_checkout \(Checkout\)/);
 
+  // a step and a connection are elements of a Value Chain, under the ids the document writes
+  assert.ok(!(await anchored(VC_PATH, ["step_order", "seq_order_invoice"])).isError);
+  const step = await anchored(VC_PATH, ["step_ordre"]);
+  assert.ok(step.isError);
+  assert.match(
+    step.text,
+    /^The Value Chain 'chain' has no element with this id:\n- step_ordre: closest step_order \(Order\)/,
+  );
+
   // a Wardley link is numbered by its line: no canvas addresses it
   for (const id of ["dep_1", "flow_1"]) {
     const refused = await anchored(OWM_PATH, [id]);
@@ -723,7 +758,7 @@ test("todos: an anchor must be an element its canvas addresses, on every notatio
   const malformed = await anchored("processes/draft.tt", ["team_b"]);
   assert.ok(malformed.isError);
   assert.match(malformed.text, /^The Team Topology 'draft' has no element with this id:\n- team_b: closest team_a\n/);
-  assert.equal(issues.created.length, 5, "only the anchors the canvas addresses were filed");
+  assert.equal(issues.created.length, 6, "only the anchors the canvas addresses were filed");
 });
 
 const BUG_TYPE: TodoType = {
@@ -1605,7 +1640,7 @@ test("generic model tools: get/save ANY notation with CAS, validate_model, creat
   assert.equal(saved.ok, true);
   assert.equal((await callJson("get_model_content", { repo: REPO.fullName, path: OWM_PATH })).content, OWM_V2);
 
-  // create: a template-capable notation becomes a live model; git-only and unknown notations answer errors
+  // create: a template-capable notation becomes a live model; an unknown notation answers an error
   const created = await callJson("create_model", {
     repo: REPO.fullName,
     notation: "event-storming",
@@ -1622,8 +1657,12 @@ test("generic model tools: get/save ANY notation with CAS, validate_model, creat
     baseVersion: storm.baseVersion,
   });
   assert.equal(stormSaved.ok, true);
-  const gitOnly = await call("create_model", { repo: REPO.fullName, notation: "value-chain", name: "Chain" });
-  assert.ok(gitOnly.isError && /arrive via git/.test(gitOnly.text), gitOnly.text);
+  const chain = await callJson("create_model", { repo: REPO.fullName, notation: "value-chain", name: "Chain" });
+  assert.equal(chain.model.path, "processes/chain.vc.json");
+  assert.equal(
+    (await callJson("get_model_content", { repo: REPO.fullName, path: chain.model.path })).content,
+    templateFor("value-chain", "chain", "Chain"),
+  );
   const bogus = await call("create_model", { repo: REPO.fullName, notation: "nope", name: "X" });
   assert.ok(bogus.isError && /unknown notation/.test(bogus.text), bogus.text);
 
@@ -1790,6 +1829,7 @@ test("widgets: a bundle missing from the web dist drops exactly its tool; the ti
     "open_team_topology_modeler",
     "open_event_storming_modeler",
     "open_context_map_modeler",
+    "open_value_chain_modeler",
     "mint_ws_ticket",
   ]) {
     assert.ok(noWardley.includes(t), `${t} still registered`);
@@ -1824,10 +1864,11 @@ test("widgets: a bundle missing from the web dist drops exactly its tool; the ti
 
 test("widgets: the generated open_<notation>_modeler tools serve their own bundle and open the file route", async () => {
   const { client, callJson } = await connect(deps());
-  // fixtures for the two notations the workspace lacks — the create scaffolds
+  // fixtures for the notations the workspace lacks — the create scaffolds
   await callJson("create_model", { repo: REPO.fullName, notation: "team-topology", name: "Teams" });
   await callJson("create_model", { repo: REPO.fullName, notation: "event-storming", name: "Order Storm" });
   await callJson("create_model", { repo: REPO.fullName, notation: "context-map", name: "Conference" });
+  await callJson("create_model", { repo: REPO.fullName, notation: "value-chain", name: "Porter" });
   const cases = [
     { tool: "open_wardley_modeler", notation: "wardley", id: "strategy", path: OWM_PATH, text: "component Platform" },
     {
@@ -1850,6 +1891,13 @@ test("widgets: the generated open_<notation>_modeler tools serve their own bundl
       id: "conference",
       path: "processes/conference.cm.json",
       text: "version", // quote-free, and never a key of the derived stats
+    },
+    {
+      tool: "open_value_chain_modeler",
+      notation: "value-chain",
+      id: "porter",
+      path: "processes/porter.vc.json",
+      text: "schemaVersion", // quote-free, and never a key of the derived stats
     },
   ];
   const tools = (await client.listTools()).tools;
