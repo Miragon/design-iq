@@ -425,9 +425,9 @@ turns every slide, spinner and animated re-fit off. The chrome modules' focus
 rules (a keyboard user never lands on `<body>`) are tested on a small fake DOM
 (`test/fake-dom.ts`, `test/widget-chrome-dom.test.ts`).
 
-**A click on the SPA's chrome hands the canvas the focus.** bpmn-js and the DMN DRD hear their
-keys only while their canvas has the focus, the Miragon renderers only while their canvas or the
-page has it. A toolbar control that kept the focus after a click took Delete, the arrows and ⌘Z
+**A click on the SPA's chrome hands the canvas the focus.** bpmn-js, the DMN DRD and the Miragon
+renderers hear their keys only while their canvas has the focus. A toolbar control that kept the
+focus after a click took Delete, the arrows and ⌘Z
 away from the canvas, so the SPA hands the canvas the focus back after a click, as the widget does
 after a zoom click (guide §5.8, `src/lib/canvas-focus.ts`): a click on the view switch's Diagram
 side focuses the canvas once it shows, and so does a click on a Model action of the ⋯ menu that

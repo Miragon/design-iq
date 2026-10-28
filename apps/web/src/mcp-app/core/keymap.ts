@@ -34,7 +34,8 @@ export function keyCommand(e: KeyLike, target: KeyTarget): KeyCommand | undefine
 
 /** what the zoom keys and ⇧1 depend on besides the key itself */
 export interface ChromeKeyState {
-  /** the key landed in a text field (TEXT_FIELD_SELECTOR, or contenteditable) */
+  /** the key landed in a text field: the modeler shell's isTextField, which
+   *  also counts an EditContext editor and anything inside Monaco */
   inTextField: boolean;
   menuOpen: boolean;
   /** a popover or dialog (`[role="dialog"]`, `<dialog open>`) shows */
