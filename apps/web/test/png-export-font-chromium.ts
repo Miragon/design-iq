@@ -215,6 +215,7 @@ const MODELS: Model[] = [
     widget: "mcp-app-value-chain.html",
     label: "Berth 11 Unloading",
     paper: "#F9F7F7",
+    paperAtCorner: true,
   },
 ];
 

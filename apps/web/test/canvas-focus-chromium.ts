@@ -206,6 +206,21 @@ const MODELS: Model[] = [
     a: "team_checkout",
     b: "team_payments",
   },
+  {
+    notation: "value-chain",
+    fileName: "order.vc.json",
+    text: json({
+      schemaVersion: 1,
+      meta: { name: "Order to Cash" },
+      elements: [
+        { id: "step_order", elementType: "step", name: "Order", bounds: { x: 40, y: 40, width: 240, height: 80 } },
+        { id: "step_invoice", elementType: "step", name: "Invoice", bounds: { x: 500, y: 40, width: 240, height: 80 } },
+      ],
+      connections: [],
+    }),
+    a: "step_order",
+    b: "step_invoice",
+  },
 ];
 
 async function startLiveHost(content: string, data: string): Promise<ChildProcess> {
