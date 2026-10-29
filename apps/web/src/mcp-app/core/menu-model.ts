@@ -6,7 +6,7 @@
  *
  * A Miragon renderer brings its own Model, Export and Help entries (Wardley
  * `mapMenu`, Event Storming `boardMenu`, Context Maps `contextMapMenu`, Team
- * Topologies `diagramMenu`), typed for the modeler shell's menu: they join
+ * Topologies and Value Chain `diagramMenu`), typed for the modeler shell's menu: they join
  * designIQ's groups as `modeler:` items, so a renderer release that adds or
  * renames an entry needs no change here (runModelerItem dispatches them
  * back).

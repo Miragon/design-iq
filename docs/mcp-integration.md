@@ -71,10 +71,11 @@ definitions live in `packages/mcp/tools.ts`, shared by two entry points:
 
 A Value Chain (`.vc.json`) is read from the document's own ids: `get_view` reports its `meta.name` as
 the model's `name`, counts `elements` and `connections` in `stats` and lists them in `detail`
-(`elements` with `id`, `type` and `name`, `connections` with `id`, `from`, `to` and `type`). Those
-are the ids its canvas selects and a todo anchors to: both kinds are anchors, and `create_todo`
-refuses any other id (`todos/unknown-element`) with the closest ones, as it does on every canvas
-model.
+(`elements` with `id`, `type` and `name`, `connections` with `id`, `from`, `to` and `type`). An
+element's id is the one its canvas selects and a todo anchors to. The connections are listed for
+reading only: value-chain-renderer 0.8.0 neither lists, reveals nor badges a connection, so
+`create_todo` refuses a connection's id like any other id the canvas does not address
+(`todos/unknown-element`) with the closest element ids, as it does on every canvas model.
 
 A Team Topology's graph has no edges: its teams, interactions, flows of change and annotations
 are all placed shapes, so each is a node (a team keeps its team type, the others are of type
@@ -411,7 +412,8 @@ canvas reports: a process's from `get_process` (any element of the BPMN counts, 
 too), a canvas model's the ids `get_view` lists in `detail` (a Wardley component's is `cmp_` and
 its name's slug, `detail.elements` has it, its name is in `name`). Only what the canvas addresses
 is an anchor: a Wardley link, an Event Storming note, drawing or arrow takes its id from the line
-order and is refused like an unknown id. `create_todo` and `POST …/todos` hold every id against
+order and is refused like an unknown id, and so is a Value Chain connection, which its canvas does
+not address. `create_todo` and `POST …/todos` hold every id against
 the model's live text and refuse one it does not have (`todos/unknown-element`, a 400) with the
 closest ids it has, ranked by edit distance over the model's ids and names, so a component asked
 for by its name answers with its id. A text that does not parse at that moment (a peer mid-edit

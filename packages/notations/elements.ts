@@ -10,7 +10,10 @@
  * way the canvas does. A Wardley link and an Event Storming note, drawing or
  * arrow take their id from the line order, so an edit above one hands its id
  * to another element, and no canvas selects, reveals or badges them: a todo
- * anchored to one would show no badge or point at the wrong element.
+ * anchored to one would show no badge or point at the wrong element. A Value
+ * Chain connection keeps the id its document writes, but value-chain-renderer
+ * 0.8.0 lists, reveals and bounds only steps and org units: until a release
+ * puts connections into its element surface, they are no anchors.
  */
 import { STORM_STICKY_KINDS } from "./derive.ts";
 import {
@@ -58,6 +61,7 @@ function bpmnElements(raw: string): ModelElement[] {
 const ADDRESSED_BY_CANVAS: Record<string, (graph: ModelGraph) => Array<ModelNode | ModelEdge>> = {
   wardley: (graph) => graph.nodes,
   "event-storming": (graph) => graph.nodes.filter((node) => STORM_STICKY_KINDS.has(node.type)),
+  "value-chain": (graph) => graph.nodes,
 };
 
 const addressedByCanvas = (graph: ModelGraph): Array<ModelNode | ModelEdge> =>

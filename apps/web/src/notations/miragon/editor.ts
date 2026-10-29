@@ -14,7 +14,9 @@
  * Chain's diagram-js keeps its own on the focused canvas, so every canvas
  * hands them to the chrome first (routeCanvasChromeKeys). They act on the
  * whole page while the canvas is on screen; a text field, a modal dialog and
- * the source view leave them to the browser. Every other key is the
+ * the source view leave them to the browser. The wheel and a pinch zoom
+ * out no further below 20 % either (keepWheelZoomDirection, as in the
+ * widget and the BPMN and DMN editors). Every other key is the
  * renderer's, which acts only on a key aimed at its own canvas. A
  * renderer's own menu entries reach the shell's ⋯ menu (MountedEditor.menu),
  * its element surface the shell's todos (MountedEditor.elements, through
@@ -28,6 +30,7 @@ import { type ChromeKeyDeps, handleChromeKey, routeCanvasChromeKeys } from "@/li
 import { attachPresenceCanvas } from "@/lib/presence-canvas";
 import { attachSurfaceTodoCanvas } from "@/lib/todo-surface-canvas";
 import type { ExportFile, Insets } from "@/mcp-app/core/engine";
+import { keepWheelZoomDirection } from "@/mcp-app/engines/diagram-js";
 import { miragonView } from "@/mcp-app/engines/miragon";
 
 import type { EditorContext, MountedEditor } from "../registry";
@@ -140,6 +143,8 @@ export function mountMiragonEditor(
   const unrouteKeys = routeCanvasChromeKeys(modeler.diagram, doc, keys);
   const onKey = (event: KeyboardEvent): void => void handleChromeKey(event, doc, keys);
   doc.addEventListener("keydown", onKey);
+  // diagram-js's wheel zoom clamps to 20 %: from a fit below it, a zoom out would zoom in
+  const unguardWheel = keepWheelZoomDirection(modeler.diagram);
   // a side panel opening or closing over the canvas: a view nobody moved
   // since the import or the last fit re-fits beside it, as in the widget
   // (docs/mcp-app-widget-chrome.md §2.5), so the panel never covers it
@@ -170,6 +175,7 @@ export function mountMiragonEditor(
       offSidePanels?.();
       doc.removeEventListener("keydown", onKey);
       unrouteKeys();
+      unguardWheel();
       detach?.();
       view.destroy();
       todos.destroy();

@@ -7,16 +7,22 @@
  * same view: the SPA's Miragon editors (miragon-menus.test.ts presses their
  * keys), and bpmn-js and the DMN DRD in both hosts
  * (canvas-zoom-keys-dom.test.ts), where `zoomScroll.stepZoom` no longer acts.
+ * The wheel and a pinch keep the guide's direction on every Miragon canvas in
+ * both hosts too: diagram-js's wheel zoom clamps to 20 %, so from a fit below
+ * it a zoom out would zoom in (keepWheelZoomDirection).
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { after, test } from "node:test";
 
 import { newCmJson, newOwmText, newStormText, newTtJson, newVcJson } from "@designiq/notations/templates";
+import * as Y from "yjs";
 
 import type { Insets, ViewControls } from "../src/mcp-app/core/engine.ts";
 import { mountMiragonEngine } from "../src/mcp-app/engines/miragon.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
+import type { MiragonModeler } from "../src/notations/miragon/spec.ts";
+import type { EditorContext } from "../src/notations/registry.ts";
 import { closeDom, host } from "./renderer-dom.ts";
 
 after(closeDom);
@@ -142,5 +148,82 @@ test("the DMN DRD in the widget: − and + step as its zoomScroll does", async (
     engine.destroy();
   } finally {
     DmnModeler.prototype.importXML = importXML;
+  }
+});
+
+/** a view at `level`, as a fit of a large diagram leaves it */
+function viewAt(canvas: Canvas, level: number): void {
+  const { outer } = canvas.viewbox();
+  canvas.viewbox({ x: 0, y: 0, width: outer.width / level, height: outer.height / level });
+}
+
+/**
+ * One Ctrl + wheel turn out on the canvas at `level`, as a trackpad pinch
+ * sends it, and the levels diagram-js's wheel zoom set for it: recorded, not
+ * applied (jsdom keeps no CTM, renderer-dom.ts). diagram-js listens to the
+ * wheel only while the pointer is over the canvas, so the turn enables it.
+ */
+function wheelOutFrom(diagram: Diagram, container: HTMLElement, level: number): number[] {
+  const canvas = diagram.get("canvas") as Canvas;
+  const zoomScroll = diagram.get("zoomScroll") as { toggle(enabled: boolean): void };
+  viewAt(canvas, level);
+  const set: number[] = [];
+  const zoom = canvas.zoom;
+  canvas.zoom = (next) => {
+    if (next !== undefined) set.push(Math.round(next * 1000) / 1000);
+    return level;
+  };
+  zoomScroll.toggle(true);
+  try {
+    const frame = container.querySelector(".djs-container");
+    assert.ok(frame, "the canvas's frame, where diagram-js listens to the wheel");
+    frame.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, ctrlKey: true, bubbles: true, cancelable: true }));
+  } finally {
+    zoomScroll.toggle(false);
+    canvas.zoom = zoom;
+  }
+  return set;
+}
+
+test("every Miragon renderer in the widget and the SPA: a wheel zoom out below 20 % stays put, from 100 % it zooms out half a step", async () => {
+  const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
+  for (const spec of MIRAGON_RENDERERS) {
+    const renderer = await spec.load();
+    const widgetHost = host(spec.canvasClassName);
+    const engine = mountMiragonEngine(spec, renderer, widgetHost, false, { insets });
+    await engine.importText(DOCUMENTS[spec.id]!);
+    assert.deepEqual(wheelOutFrom(engine.modeler.diagram, widgetHost, 0.12), [], `${spec.id} widget: 12 %`);
+    assert.deepEqual(wheelOutFrom(engine.modeler.diagram, widgetHost, 1), [0.861], `${spec.id} widget: 100 %`);
+    const zoomScroll = engine.modeler.diagram.get("zoomScroll") as { zoom: unknown };
+    engine.destroy();
+    assert.equal(
+      zoomScroll.zoom,
+      Object.getPrototypeOf(zoomScroll).zoom,
+      `${spec.id} widget: destroy undoes the guard`,
+    );
+
+    const doc = new Y.Doc();
+    doc.getText("content").insert(0, DOCUMENTS[spec.id]!);
+    const spaHost = host(spec.canvasClassName);
+    let modeler: MiragonModeler | undefined;
+    const editor = mountMiragonEditor(
+      spec,
+      { ...renderer, create: (options) => (modeler = renderer.create(options)) },
+      spaHost,
+      {
+        ytext: doc.getText("content"),
+        doc,
+        docPath: `processes/${spec.id}.model`,
+        onSyncError: assert.fail,
+        onImportFailed: assert.fail,
+        onBadgeClick: () => {},
+        onSelectionChanged: () => {},
+      } as unknown as EditorContext,
+    );
+    await wait(50);
+    assert.ok(modeler);
+    assert.deepEqual(wheelOutFrom(modeler.diagram, spaHost, 0.12), [], `${spec.id} SPA: 12 %`);
+    assert.deepEqual(wheelOutFrom(modeler.diagram, spaHost, 1), [0.861], `${spec.id} SPA: 100 %`);
+    editor.destroy();
   }
 });

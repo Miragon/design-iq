@@ -268,6 +268,34 @@ const MODELS: Model[] = [
     tool: "lasso-tool",
     listedLast: "team_payments",
   },
+  {
+    notation: "value-chain",
+    fileName: "orders.vc.json",
+    text: `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        meta: { name: "Order to Cash" },
+        elements: [
+          { id: "step_order", elementType: "step", name: "Order", bounds: { x: 40, y: 40, width: 200, height: 80 } },
+          {
+            id: "step_invoice",
+            elementType: "step",
+            name: "Invoice",
+            bounds: { x: 500, y: 40, width: 200, height: 80 },
+          },
+        ],
+        connections: [],
+      },
+      null,
+      2,
+    )}\n`,
+    a: "step_order",
+    b: "step_invoice",
+    create: "create.step",
+    retitle: ["Order to Cash", "Order to Payment"],
+    tool: "lasso-tool",
+    listedLast: "step_invoice",
+  },
 ];
 
 async function startLiveHost(content: string, data: string): Promise<ChildProcess> {

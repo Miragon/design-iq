@@ -1,7 +1,7 @@
 /**
  * Todos on a canvas behind @miragon/modeler-api — the twin of
  * lib/todo-canvas.ts (bpmn-js) for every Miragon renderer (Wardley Maps,
- * Event Storming, Context Maps, Team Topologies), with the same contract
+ * Event Storming, Context Maps, Team Topologies, Value Chain), with the same contract
  * (TodoCanvas) and the same lifecycle: one controller per mounted modeler,
  * torn down with it. Framework-free, like its twin: the SPA's Miragon editor
  * (notations/miragon/editor.ts) and the Miragon widgets (mcp-app/todos.ts

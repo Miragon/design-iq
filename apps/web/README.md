@@ -389,14 +389,14 @@ pans; a display-mode change always re-fits. The view math and the readout are
 `interpolateViewbox`, `zoomReadout`), and so are the zoom keys and ⇧1
 (`decideKey`, through `src/lib/chrome-keys.ts`, which the SPA's editors bind
 too): every widget takes them on the whole document (`chrome/keys.ts`), and
-on a bpmn-js or DRD canvas the engine routes them from the diagram-js keyboard
-first, ahead of bpmn-js's and dmn-js's own zoom (`routeCanvasChromeKeys`,
+on a bpmn-js, DRD or Value Chain canvas the engine routes them from the
+diagram-js keyboard first, ahead of the canvas's own zoom (`routeCanvasChromeKeys`,
 `EngineOptions.chromeKeys`). The −/+ buttons and the
 zoom keys step on the design guide's fixed zoom steps (22, 30, 41, 55, 74, 100,
 135, 182, 246 and 331 %, `zoomStepLevel` in `engines/fit.ts`), the raster of
 diagram-js's `zoomScroll.stepZoom`. The − button and every zoom-out key stop at
 a fit below 20 % instead of zooming in to 20 %, as `zoomScroll.stepZoom`, which
-clamps, would; so does the wheel there (`keepWheelZoomDirection`). The widget's geometry (the 36px corners, the 12/16px insets)
+clamps, would; so does the wheel there, on every diagram-js canvas (`keepWheelZoomDirection`). The widget's geometry (the 36px corners, the 12/16px insets)
 stays designIQ's; the full shell is not mounted.
 In the SPA a Miragon editor's ⇧1 fits 24px clear of the renderer's palette as
 measured, of the canvas's sides and bottom, and of an open side panel (the
