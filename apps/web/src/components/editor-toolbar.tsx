@@ -171,7 +171,7 @@ export function EditorToolbar({
   onDuplicate?: () => void;
   /** the mounted renderer's own entries (MountedEditor.menu) */
   modelerMenu?: ModelerMenu;
-  /** the ⋯ trigger, where the renderer's dialogs give the focus back */
+  /** the ⋯ trigger, where the dialogs of the ⋯ menu give the focus back */
   menuTriggerRef?: RefObject<HTMLButtonElement | null>;
   /** the canvas a click on a Model action of the ⋯ menu or on a document mode
    *  (the Workshop switch) hands the focus to */

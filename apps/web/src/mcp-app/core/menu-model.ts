@@ -373,8 +373,8 @@ export function buildMenu(ctx: MenuContext): MenuGroup[] {
     if (ctx.viewport) {
       view.push({
         id: "fit",
-        // named as the modeler shell, the zoom group and a Miragon renderer's
-        // Keyboard shortcuts… dialog name it
+        // named as the modeler shell, the zoom group and the shell's Keyboard
+        // shortcuts… dialog name it
         label: defaultMessages.fit,
         icon: "scan",
         role: "menuitem",

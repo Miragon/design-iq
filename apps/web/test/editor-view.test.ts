@@ -2,8 +2,8 @@
  * The editor's view choice (src/lib/editor-view.ts): what a notation with the
  * split view remembers across documents and page loads, how a damaged or
  * blocked storage degrades, when Split has room (with hysteresis), what
- * shows while it has none, which layers are on screen, and that only a
- * choice is ever written.
+ * shows while it has none, which layers are on screen, how a hidden layer
+ * leaves the screen, and that only a choice is ever written.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import {
   editorLayers,
   type EditorView,
   editorViews,
+  HIDDEN_LAYER_CLASS,
   parseViewChoices,
   readViewChoice,
   rememberViewChoice,
@@ -168,6 +169,10 @@ test("a document without a visual editor shows its source, a structured one its 
     assert.equal(structured.shown, "canvas", view);
     assert.equal(structured.sourceShown, false, view);
   }
+});
+
+test("a hidden layer only turns invisible, inert keeps it out of reach: no pointer-events: none, which a modal dialog in it inherits", () => {
+  assert.deepEqual(HIDDEN_LAYER_CLASS.split(/\s+/), ["opacity-0"]);
 });
 
 test("only a choice is remembered: the fallback to the source and a reveal change the view, never the storage", () => {

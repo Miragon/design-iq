@@ -1,7 +1,7 @@
 /**
  * The page's own @font-face rules, read back from its stylesheets: the
- * widget registers its inlined fonts from them (mcp-app/font.ts), and the
- * PNG export embeds Geist from them (lib/export-font.ts).
+ * widget registers its inlined fonts from them (mcp-app/font.ts). The PNG
+ * export reads them itself (the modeler shell's `pageGeistFaces`).
  */
 
 /** every @font-face of the document, also inside @media / @supports / @layer */

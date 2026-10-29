@@ -8,8 +8,11 @@
  *  modes, the other elements) is the host's: designIQ draws `renderLegend`
  *  into a panel of its own in both hosts, as for a context map. Its menu
  *  content (`diagramMenu`) brings Diagram title… (one undoable step), the
- *  PNG and SVG exports and the shortcuts dialog; the JSON is no export, it
- *  is the model's own file in the repository. */
+ *  PNG and SVG exports and Keyboard shortcuts…, which opens the modeler
+ *  shell's dialog with the package's `diagramShortcuts`; the JSON is no
+ *  export, it is the model's own file in the repository. Its PNG goes
+ *  through the modeler shell's `svgToPng` (Geist inside) on the canvas
+ *  ground (guide §10.7). */
 import type { TtBaseViewer, TtModeling } from "@miragon/team-topologies-renderer";
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
@@ -18,9 +21,10 @@ const EXPORT_SHEET_CLASS = "tt-export-paper";
 
 /** The renderer's SVG starts with a white sheet the size of the drawing, which
  *  would hide the canvas ground of guide §10.7 that the PNG fills under the
- *  drawing. Miragon/modeler-suite#234 drops the sheet from the renderer; an
- *  SVG without it passes through untouched, so that release needs no change
- *  here. The SVG download stays the renderer's own. */
+ *  drawing. Miragon/modeler-suite#234 drops the sheet from the renderer, in a
+ *  release after 0.15.1; an SVG without it passes through untouched, so that
+ *  release needs no change here, and this goes once designIQ pins it. The SVG
+ *  download stays the renderer's own. */
 export function withoutExportSheet(svg: string): string {
   const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
   const sheet = Array.from(parsed.documentElement.children).find(
@@ -42,19 +46,21 @@ export const spec: MiragonRendererSpec = {
       {
         createCollaborativeModeler,
         createCollaborativeViewer,
-        createShortcutsDialog,
         createTitleDialog,
         diagramMenu,
+        diagramShortcuts,
         renderLegend,
       },
       ,
-      { dialogChrome, imageExports, lazily },
+      ,
+      { dialogChrome, imageExports, lazily, PNG_BACKGROUND, shortcutsDialog },
       { svgToPng },
     ] = await Promise.all([
       import("@miragon/team-topologies-renderer"),
       import("@miragon/team-topologies-renderer/assets/team-topologies.css"),
+      import("@miragon/modeler-shell/shell.css"),
       import("./menu-content.ts"),
-      import("../../lib/export-image.ts"),
+      import("@miragon/modeler-shell/export"),
     ]);
     const diagramOf = (modeler: { diagram: unknown }): TtBaseViewer => modeler.diagram as TtBaseViewer;
     return {
@@ -71,15 +77,15 @@ export const spec: MiragonRendererSpec = {
             setTitle: (next) => diagram.get<TtModeling>("ttModeling").setTitle(next),
           }),
         );
-        const shortcuts = lazily(() => createShortcutsDialog(chrome));
+        const shortcuts = shortcutsDialog(host, diagramShortcuts);
         const groups = diagramMenu({
           editTitle: () => title.get().open(),
           exports: imageExports(
             host,
             async () => diagram.saveSVG().svg,
-            (svg) => svgToPng(withoutExportSheet(svg)),
+            (svg) => svgToPng(withoutExportSheet(svg), { background: PNG_BACKGROUND.ground }),
           ),
-          showKeyboardShortcuts: () => shortcuts.get().open(),
+          showKeyboardShortcuts: () => shortcuts.open(),
         });
         return {
           groups,

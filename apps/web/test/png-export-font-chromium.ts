@@ -3,7 +3,8 @@
  * Chromium: a check run by hand, not by `pnpm test` or CI, as it needs a
  * build and a Live Host of its own, and jsdom draws no image
  * (test/miragon-menus.test.ts checks what goes into the image). Run it after
- * a renderer, fontsource or browser update, from the repository root:
+ * a renderer, modeler-shell, fontsource or browser update, from the
+ * repository root:
  *
  *   pnpm build
  *   npx -y playwright@1.56.1 install --only-shell chromium     # once
@@ -109,7 +110,7 @@ interface Model {
   widget: string;
   /** the one label measured: alone on its line, clear of every other text */
   label: string;
-  /** what lies under the SVG in the PNG (lib/export-image.ts) */
+  /** what lies under the SVG in the PNG (PNG_BACKGROUND in notations/miragon/menu-content.ts) */
   paper: string;
   /** the drawing leaves its corner bare, so the PNG's corner is the paper: nothing of the renderer's covers it */
   paperAtCorner?: boolean;
@@ -219,7 +220,7 @@ const MODELS: Model[] = [
   },
 ];
 
-/** Geist as the check's own reference, not lib/export-font.ts' output:
+/** Geist as the check's own reference, not the modeler shell's embedGeist output:
  *  fontsource's wght.css, every subset, its files inline */
 function referenceGeist(): string {
   const geist = join(ROOT, "apps/web/node_modules/@fontsource-variable/geist");
@@ -351,7 +352,8 @@ async function measureLabel(input: {
       return context.getImageData(0, 0, width, height).data;
     };
     // the reference's own subsets may still be loading at the first paint
-    // (lib/export-font.ts): it is painted again until it holds still
+    // (it lacks the hidden text per face that embedGeist puts into the
+    // export): it is painted again until it holds still
     let last = paint();
     for (let tries = 0; tries < 20; tries++) {
       await new Promise((resolve) => setTimeout(resolve, 100));

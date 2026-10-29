@@ -1,5 +1,5 @@
 /* The Value Chain palette in both hosts (src/index.css and the widgets'
- * mcp-app/miragon-styles.css import it). value-chain-renderer 0.8.0 lays its
+ * mcp-app/miragon-styles.css import it). value-chain-renderer 0.8.1 lays its
  * palette out only inside the modeler shell's chrome (`data-chrome="palette"`),
  * which designIQ does not mount, so its canvas would show diagram-js's
  * vertical palette. These rules give it the horizontal palette at the top

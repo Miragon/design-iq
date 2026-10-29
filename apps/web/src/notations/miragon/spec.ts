@@ -67,8 +67,9 @@ export function contractOptions({ insets, fitOnImport }: MiragonMountOptions = {
 
 /** what a mount's menu content gets from its host */
 export interface MiragonMenuHost extends MenuHost {
-  /** where the renderer's dialogs and popovers live: inside the canvas
-   *  host, whose class scopes the renderer's stylesheet in the SPA */
+  /** where the dialogs and popovers live: inside the canvas host, whose
+   *  class scopes the renderer's stylesheet in the SPA, and over which the
+   *  shell's Keyboard shortcuts… dialog is centred */
   readonly root: HTMLElement;
   /** a viewer: the entries that change the document stay disabled */
   readonly readOnly: boolean;

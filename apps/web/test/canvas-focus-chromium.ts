@@ -48,23 +48,30 @@
  *     single-key tools change nothing, and Cmd/Ctrl+= is not prevented (the
  *     browser zooms the page) and leaves the view. A click on the canvas
  *     side, then Cmd/Ctrl+Z, undoes the delete.
- *  5. The page behind a modal dialog (Release → PR, Rename…), a native
+ *  5. The page behind a modal dialog (Release → PR, Rename…, and for a
+ *     Miragon notation the modeler shell's Keyboard shortcuts…), a native
  *     <dialog> shown with showModal(): the dialog takes the focus as it
  *     opens, and Tab and Shift+Tab never leave it for the toolbar, the
  *     source or the canvas. Over the canvas, with an element selected,
  *     Cmd/Ctrl+A, Delete and an arrow change nothing, wherever the focus
- *     went; over the source view, typing changes no text there. Escape
- *     gives the focus back to the ⋯ trigger, and once the dialog is gone a
- *     click on the canvas acts.
+ *     went, and the shortcuts dialog leaves Cmd/Ctrl+= to the browser and
+ *     the canvas's view as it is; over the source view, typing changes no
+ *     text there. Escape gives the focus back to the ⋯ trigger, and once
+ *     the dialog is gone a click on the canvas acts.
  *  6. BPMN's Workshop switch, the toolbar button that changes the canvas for
  *     every participant: a click hands the canvas the focus, Delete deletes
  *     the selected element and Cmd/Ctrl+Z brings it back.
- *  7. A Miragon renderer's dialogs in the ⋯ menu (its title dialog,
- *     Keyboard shortcuts…): Escape pressed as soon as one shows closes it,
- *     and the menu, which radix keeps mounted while it fades out, takes none
- *     of it. With the source view shown, where the canvas layer takes no
- *     pointer, a click on a dialog's Close closes it, and the title dialog's
- *     Apply writes the new title into the source.
+ *  7. A Miragon notation's dialogs in the ⋯ menu (the renderer's title
+ *     dialog, the modeler shell's Keyboard shortcuts…): Escape pressed as
+ *     soon as one shows closes it, and the menu, which radix keeps mounted
+ *     while it fades out, takes none of it. With the source view shown, where
+ *     the canvas layer is hidden and inert, a click on a dialog's Close
+ *     closes it, and the title dialog's Apply writes the new title into the
+ *     source.
+ *  8. The source view over the hidden canvas layer: a click on the source
+ *     lands in Monaco. A Miragon notation's Keyboard shortcuts… dialog, which
+ *     lives in that hidden layer, takes the mouse: a click on its Close
+ *     button closes it, and so does one on its backdrop.
  *
  * No page error and no console error on the way. Exits 1 on any failure.
  */
@@ -564,12 +571,22 @@ async function run(page: Page, model: Model): Promise<void> {
   check(await exists(page, model.a), `${name}: ... and ${MOD}+Z undoes the delete from before the source view`);
 
   // 5. behind a modal dialog the page is out of reach: no Tab leaves it, and no key edits the canvas or the source
+  const shortcuts = "Keyboard shortcuts…";
+  const miragon = !["bpmn", "dmn"].includes(model.notation);
+  const dialogEntries = [...DIALOG_ENTRIES, ...(miragon ? [shortcuts] : [])];
   const openDialog = async (entry: string, over: string): Promise<void> => {
     await page.click('button[aria-label="More"]');
     await page.click(`[role="menu"] [role="menuitem"]:has-text("${entry}")`);
     await page.waitForTimeout(SETTLE);
     check(await dialogOpen(page), `${name}: over the ${over}, ${entry} opens a modal dialog`);
     check(await focusInDialog(page), `${name}: ... which takes the focus`);
+    if (entry === shortcuts) {
+      const inShellDialog = await page.evaluate(
+        () => document.activeElement?.closest("dialog.cd-shell-dialog") != null,
+        undefined,
+      );
+      check(inShellDialog, `${name}: ... the modeler shell's ${entry} dialog`);
+    }
     const left = await tabLeavesDialog(page);
     check(left === undefined, `${name}: ... and Tab and Shift+Tab never leave it (${left ?? "they stay"})`);
   };
@@ -580,7 +597,7 @@ async function run(page: Page, model: Model): Promise<void> {
     const back = await focused(page);
     check(back === "trigger", `${name}: ... and gives the focus back to the ⋯ trigger (${back})`);
   };
-  for (const entry of DIALOG_ENTRIES) {
+  for (const entry of dialogEntries) {
     if (!(await selected(page, model.b))) {
       await clickElement(page, model.b);
       await page.waitForTimeout(SETTLE);
@@ -588,6 +605,12 @@ async function run(page: Page, model: Model): Promise<void> {
     check(await selected(page, model.b), `${name}: ${model.b} is selected`);
     const beforeDialog = await canvasState(page);
     await openDialog(entry, "canvas");
+    if (entry === shortcuts) {
+      await page.keyboard.press(`${MOD}+=`);
+      check((await lastKeyPrevented(page)) === false, `${name}: ... under it ${MOD}+= is the browser's`);
+      await page.waitForTimeout(SETTLE);
+      check((await canvasState(page)) === beforeDialog, `${name}: ... and the canvas keeps its view`);
+    }
     for (const key of [`${MOD}+a`, "Delete", "ArrowRight"]) await page.keyboard.press(key);
     await page.waitForTimeout(SETTLE);
     check(
@@ -603,7 +626,7 @@ async function run(page: Page, model: Model): Promise<void> {
   await page.waitForTimeout(SETTLE);
   const text = await sourceText(page);
   check(Boolean(text), `${name}: the source view shows the text`);
-  for (const entry of DIALOG_ENTRIES) {
+  for (const entry of dialogEntries) {
     await openDialog(entry, "source");
     // no Enter: it would submit Rename… once its field holds a new name; no
     // Backspace: Playwright's WebKit goes back in the history on one outside a field
@@ -638,7 +661,7 @@ async function run(page: Page, model: Model): Promise<void> {
     await page.waitForTimeout(SETTLE);
   }
 
-  // 7. a renderer's dialog from the ⋯ menu: the first Escape is its own, and behind the source view it takes the pointer
+  // 7. a Miragon dialog from the ⋯ menu: the first Escape is its own, and behind the source view it takes the pointer
   if (model.dialogs) {
     for (const dialog of model.dialogs) {
       await openRendererDialog(page, dialog);
@@ -673,6 +696,42 @@ async function run(page: Page, model: Model): Promise<void> {
     await page.click(CANVAS_SIDE);
     await page.waitForTimeout(SETTLE);
   }
+
+  // 8. the hidden canvas layer lets a click through to the source, and the shortcuts dialog inside it takes the mouse
+  await page.click(SOURCE_SIDE);
+  await page.waitForTimeout(SETTLE);
+  const source = await page.evaluate(() => {
+    const box = document.querySelector(".monaco-host")!.getBoundingClientRect();
+    return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  }, undefined);
+  await page.mouse.click(source.x, source.y);
+  await page.waitForTimeout(SETTLE);
+  const inSource = await page.evaluate(() => document.activeElement?.closest(".monaco-editor") != null, undefined);
+  check(inSource, `${name}: in the source view, a click on the source lands in Monaco`);
+  if (miragon) {
+    const where = { close: "the Close button", backdrop: "the backdrop" } as const;
+    for (const target of ["close", "backdrop"] as const) {
+      await page.click('button[aria-label="More"]');
+      await page.click(`[role="menu"] [role="menuitem"]:has-text("${shortcuts}")`);
+      await page.waitForTimeout(SETTLE);
+      const at = await page.evaluate((aim) => {
+        const dialog = document.querySelector<HTMLDialogElement>("dialog.cd-shell-dialog");
+        if (!dialog?.matches(":modal")) return undefined;
+        if (aim === "backdrop") return { x: 8, y: 8 };
+        const box = dialog.querySelector(".cd-shell-dialog-close")!.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }, target);
+      check(at !== undefined, `${name}: in the source view, ${shortcuts} opens a modal dialog`);
+      if (!at) continue;
+      await page.mouse.click(at.x, at.y);
+      await page.waitForTimeout(SETTLE);
+      const stillOpen = await page.evaluate(() => document.querySelector("dialog[open]") !== null, undefined);
+      check(!stillOpen, `${name}: ... a mouse click on ${where[target]} closes it`);
+      if (stillOpen) await page.keyboard.press("Escape");
+    }
+  }
+  await page.click(CANVAS_SIDE);
+  await page.waitForTimeout(SETTLE);
 }
 
 const playwright = loadPlaywright();

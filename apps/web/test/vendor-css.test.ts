@@ -108,15 +108,20 @@ const tokensIn = (layer: string): string[] => [
  *   .bio-theme-parent only, where lib/bpmn-io-theme.css sets its own. Every
  *   renderer declares the same mapping (checked below), so the order in
  *   which their chunks load never changes it.
+ * - `:root { --cdc-* }`, unlayered: the underlays of the guide's canvas
+ *   classes (cd-canvas.css, guide 1.27.0), `none` in light mode. Only the
+ *   renderers' own .cd-c-unterleger* classes read them, and every renderer
+ *   declares the same values (checked below).
  * - `:root[data-cd-kontrast=hoch] …`: high contrast for the renderer's own
  *   chrome; designIQ never sets data-cd-kontrast. Event Storming's palette
  *   rule would restyle the bpmn-js palette too if it did.
  */
 const KNOWN_GLOBAL: Record<string, string[]> = {
-  wardley: [...tokensIn("wardley-tokens"), ":root { --bio-* }"],
-  "team-topology": [...tokensIn("team-topologies-tokens"), ":root { --bio-* }"],
+  wardley: [...tokensIn("wardley-tokens"), ":root { --cdc-* }", ":root { --bio-* }"],
+  "team-topology": [...tokensIn("team-topologies-tokens"), ":root { --cdc-* }", ":root { --bio-* }"],
   "event-storming": [
     ...tokensIn("event-storming-tokens"),
+    ":root { --cdc-* }",
     ":root { --bio-* }",
     ":root[data-cd-kontrast=hoch] .djs-palette:not([data-chrome=palette])",
     ":root[data-cd-kontrast=hoch] .djs-hover-tooltip",
@@ -124,11 +129,14 @@ const KNOWN_GLOBAL: Record<string, string[]> = {
     ":root[data-cd-kontrast=hoch] .event-storming-container .event-storming-label-input",
     ":root[data-cd-kontrast=hoch] .event-storming-container .event-storming-note-toolbar",
     ":root[data-cd-kontrast=hoch] .event-storming-container .event-storming-color-picker",
+    ":root[data-cd-kontrast=hoch] .event-storming-container .event-storming-label-suggestions",
+    ":root[data-cd-kontrast=hoch] .event-storming-container .event-storming-spelling-tooltip",
     ":root[data-cd-kontrast=hoch] .event-storming-shortcuts",
     ":root[data-cd-kontrast=hoch] .event-storming-shortcuts-close:focus-visible",
   ],
   "context-map": [
     ...tokensIn("context-maps-tokens"),
+    ":root { --cdc-* }",
     ":root { --bio-* }",
     ":root[data-cd-kontrast=hoch] .cm-dialog",
     ":root[data-cd-kontrast=hoch] .cm-dialog-button",
@@ -138,6 +146,7 @@ const KNOWN_GLOBAL: Record<string, string[]> = {
   ],
   "value-chain": [
     ...tokensIn("value-chain-tokens"),
+    ":root { --cdc-* }",
     ":root { --bio-* }",
     ":root[data-cd-kontrast=hoch] .vc-container .djs-context-pad.open",
     ":root[data-cd-kontrast=hoch] .vc-container .djs-direct-editing-parent",
@@ -289,23 +298,25 @@ test("value-chain: every role and shell measure lib/value-chain-palette.css read
   );
 });
 
-/** the declarations of the unlayered `:root` rules that set --bio-* */
-async function bioMapping(spec: MiragonRendererSpec): Promise<string[]> {
+/** the declarations of the unlayered `:root` rules that set a family (--bio-, --cdc-) */
+async function rootFamily(spec: MiragonRendererSpec, family: string): Promise<string[]> {
   const declarations: string[] = [];
   (await scopedSheet(spec)).walkRules((rule) => {
     if (!rule.selectors.includes(":root") || atRulesOf(rule).some((at) => at.name === "layer")) return;
-    if (!rule.some((node) => node.type === "decl" && node.prop.startsWith("--bio-"))) return;
+    if (!rule.some((node) => node.type === "decl" && node.prop.startsWith(family))) return;
     rule.walkDecls((decl) => void declarations.push(`${decl.prop}: ${decl.value}`));
   });
   return declarations;
 }
 
-test("every renderer maps --bio-* the same way, so no load order changes it", async () => {
-  const [first, ...others] = MIRAGON_RENDERERS;
-  const mapping = await bioMapping(first!);
-  assert.ok(mapping.length > 0);
-  for (const spec of others) assert.deepEqual(await bioMapping(spec), mapping, spec.id);
-});
+for (const family of ["--bio-", "--cdc-"]) {
+  test(`every renderer sets ${family}* on :root the same way, so no load order changes it`, async () => {
+    const [first, ...others] = MIRAGON_RENDERERS;
+    const declarations = await rootFamily(first!, family);
+    assert.ok(declarations.length > 0);
+    for (const spec of others) assert.deepEqual(await rootFamily(spec, family), declarations, spec.id);
+  });
+}
 
 /**
  * One spelling per token value: the renderer sheets come minified (#fff,
@@ -408,4 +419,87 @@ test("a token sheet without its layer fails the value check: team-topologies-ren
     assert.notEqual(unlayered[name], uiKit[name], name);
   }
   assert.equal(unlayered["--cd-warning"], canonicalValue("#ffb000"));
+});
+
+/**
+ * The modeler shell's sheet, which each Miragon spec's load() brings for the
+ * shell's Keyboard shortcuts… dialog (notations/miragon/menu-content.ts). The SPA
+ * does not scope it: the dialog lies in the top layer, and every rule of the
+ * sheet keys on a class of the shell's own or on `[data-chrome=palette]`,
+ * which only the shell's chrome sets on a palette. So it reaches only the
+ * shell's dialog and the rows the renderers draw with the shell's legend
+ * classes into designIQ's own Legend panel, where lib/miragon-legend.css'
+ * more specific rules set what the shell's set.
+ */
+const SHELL_SHEET = require.resolve("@miragon/modeler-shell/shell.css");
+const shellSheet = postcss.parse(readFileSync(SHELL_SHEET, "utf8"), { from: SHELL_SHEET });
+
+/** the rules of a sheet outside @keyframes */
+function rulesOf(sheet: Root): Rule[] {
+  const rules: Rule[] = [];
+  sheet.walkRules((rule) => {
+    if (!atRulesOf(rule).some((at) => /keyframes$/i.test(at.name))) rules.push(rule);
+  });
+  return rules;
+}
+
+test("the modeler shell's sheet styles nothing but the shell's own classes", () => {
+  const foreign = rulesOf(shellSheet)
+    .flatMap((rule) => rule.selectors)
+    .filter((selector) => !/\.cd-shell(?![\w-])|\.cd-shell-[\w-]+|\[data-chrome="?palette"?\]/.test(selector));
+  assert.deepEqual(foreign, []);
+});
+
+/** the shell's legend classes the renderers' renderLegend draws, and what of
+ *  the shell's rules for them designIQ's panel may leave standing */
+const LEGEND_CLASSES: Record<string, string[]> = {
+  "cd-shell-legend-row": [],
+  // designIQ's preview is a flex box: its own align-items wins, justify-items does nothing there
+  "cd-shell-legend-preview": ["place-items"],
+  // the renderers draw the rule as a div, which has no border to take away
+  "cd-shell-legend-separator": ["border"],
+};
+
+test("the shell's rules for the legend rows set nothing designIQ's Legend panel does not set itself", () => {
+  const legendSheet = postcss.parse(readFileSync(new URL("../src/lib/miragon-legend.css", import.meta.url), "utf8"));
+  const propertiesOf = (sheet: Root, selector: string): Set<string> => {
+    const properties = new Set<string>();
+    for (const rule of rulesOf(sheet)) {
+      if (atRulesOf(rule).length > 0 || !rule.selectors.includes(selector)) continue;
+      rule.walkDecls((decl) => void properties.add(decl.prop));
+    }
+    return properties;
+  };
+  for (const [name, left] of Object.entries(LEGEND_CLASSES)) {
+    const shell = propertiesOf(shellSheet, `.${name}`);
+    assert.ok(shell.size > 0, `the shell styles .${name}`);
+    const own = propertiesOf(legendSheet, `.miragon-legend .${name}`);
+    assert.deepEqual(
+      [...shell].filter((property) => !own.has(property)),
+      left,
+      `.miragon-legend .${name}`,
+    );
+  }
+});
+
+test("every --cd-* name the shell's dialog reads is declared by each renderer's sheet or by ui-kit", () => {
+  const dialogRule = /\.cd-shell-(?:dialog|shortcuts|kbd)(?![\w-])|\.cd-shell-(?:dialog|shortcuts)-[\w-]+/;
+  const read = new Set<string>();
+  for (const rule of rulesOf(shellSheet)) {
+    if (!rule.selectors.some((selector) => dialogRule.test(selector))) continue;
+    rule.walkDecls((decl) => {
+      for (const [, name] of decl.value.matchAll(/var\(\s*(--cd-[\w-]+)/g)) read.add(name!);
+    });
+  }
+  assert.ok(read.has("--cd-ui-backdrop") && read.has("--cd-ui-flaeche-hoch"), [...read].join(", "));
+  for (const spec of MIRAGON_RENDERERS) {
+    const declared = new Set(
+      [...readFileSync(stylesheetOf(spec), "utf8").matchAll(/(--cd-[\w-]+)\s*:/g)].map((m) => m[1]!),
+    );
+    assert.deepEqual(
+      [...read].filter((name) => !declared.has(name) && !APP_TOKENS.has(name)),
+      [],
+      spec.id,
+    );
+  }
 });

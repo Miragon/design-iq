@@ -28,7 +28,7 @@
     "test": "node --test test/*.test.ts"
   },
   "dependencies": {
-    "@miragon/wardley-dsl": "0.7.1",
+    "@miragon/wardley-dsl": "0.8.0",
     "@miragon/wardley-schema-model": "0.6.0",
     "fast-xml-parser": "5.11.2",
     "yaml": "2.9.1",
@@ -36,9 +36,9 @@
   },
   "devDependencies": {
     "@miragon/context-maps-schema-model": "0.5.0",
-    "@miragon/event-storming-dsl": "0.3.2",
-    "@miragon/team-topologies-schema-model": "0.15.0",
-    "@miragon/value-chain-schema-model": "0.7.1",
+    "@miragon/event-storming-dsl": "0.3.3",
+    "@miragon/team-topologies-schema-model": "0.15.1",
+    "@miragon/value-chain-schema-model": "0.7.2",
     "@types/node": "26.6.5"
   }
 }

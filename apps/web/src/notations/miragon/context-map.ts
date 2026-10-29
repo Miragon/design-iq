@@ -6,7 +6,10 @@
  *  renderer's card over the diagram. Its menu content (`contextMapMenu`)
  *  brings Map title… (one undoable step), the PNG and SVG exports, the CML
  *  export (Context Mapper's text, `@miragon/context-maps-cml`, loaded with
- *  the renderer) and the shortcuts dialog. */
+ *  the renderer) and Keyboard shortcuts…, which opens the modeler shell's
+ *  dialog with the package's `contextMapShortcuts`. Its PNG goes through the
+ *  modeler shell's `svgToPng` (Geist inside) on the canvas ground (guide
+ *  §10.7). */
 import type { CmBaseViewer, CmModeling, MapExport } from "@miragon/context-maps-renderer";
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
@@ -41,21 +44,23 @@ export const spec: MiragonRendererSpec = {
     const [
       {
         contextMapMenu,
+        contextMapShortcuts,
         createCollaborativeModeler,
         createCollaborativeViewer,
-        createShortcutsDialog,
         createTitleDialog,
         renderLegend,
       },
       ,
-      { dialogChrome, imageExports, lazily, textExport },
+      ,
+      { dialogChrome, imageExports, lazily, PNG_BACKGROUND, shortcutsDialog, textExport },
       { svgToPng },
       { serializeCml },
     ] = await Promise.all([
       import("@miragon/context-maps-renderer"),
       import("@miragon/context-maps-renderer/assets/context-maps.css"),
+      import("@miragon/modeler-shell/shell.css"),
       import("./menu-content.ts"),
-      import("../../lib/export-image.ts"),
+      import("@miragon/modeler-shell/export"),
       import("@miragon/context-maps-cml"),
     ]);
     const mapOf = (modeler: { diagram: unknown }): CmBaseViewer => modeler.diagram as CmBaseViewer;
@@ -73,15 +78,19 @@ export const spec: MiragonRendererSpec = {
             setTitle: (next) => map.get<CmModeling>("cmModeling").setTitle(next),
           }),
         );
-        const shortcuts = lazily(() => createShortcutsDialog(chrome));
+        const shortcuts = shortcutsDialog(host, contextMapShortcuts);
         const menu = contextMapMenu({
           editTitle: () => title.get().open(),
           exports: {
-            ...imageExports(host, async () => map.saveSVG().svg, svgToPng),
+            ...imageExports(
+              host,
+              async () => map.saveSVG().svg,
+              (svg) => svgToPng(svg, { background: PNG_BACKGROUND.ground }),
+            ),
             json: NO_EXPORT,
             cml: textExport(host, "cml", () => serializeCml(map.exportDocument())),
           },
-          showKeyboardShortcuts: () => shortcuts.get().open(),
+          showKeyboardShortcuts: () => shortcuts.open(),
         });
         return {
           groups: { ...menu, export: menu.export.filter((entry) => !NOT_OFFERED.has(entry.id)) },

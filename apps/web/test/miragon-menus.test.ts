@@ -214,7 +214,10 @@ test("each renderer's own entries reach both hosts as its package names them", a
   }
 });
 
-test("Keyboard shortcuts…: the dialog opens inside the mount's host — the canvas host — and gives the focus back to the trigger", async () => {
+/** the four rows of the chrome's own keys, as the zoom panel's tooltips name and chip them */
+const CHROME_ROWS = ["zoomIn", "zoomOut", "zoomToActual", "fit"];
+
+test("Keyboard shortcuts…: the modeler shell's dialog opens inside the mount's host, the chrome's keys first, and gives the focus back to the trigger", async () => {
   for (const id of Object.keys(EXPECTED)) {
     for (const where of ["widget", "spa"] as const) {
       const mounted =
@@ -232,25 +235,64 @@ test("Keyboard shortcuts…: the dialog opens inside the mount's host — the ca
               destroy: () => s.editor.destroy(),
             }));
       // where each menu leaves the focus as it opens a dialog: the widget's on
-      // its trigger, the SPA's nowhere (radix must not take it back from the
-      // dialog), so a dialog that returns the focus to its opener (Team
-      // Topologies) falls back to the trigger there
-      if (where === "widget") mounted.trigger.focus();
-      else (document.activeElement as HTMLElement | null)?.blur();
+      // its trigger, the SPA's on its entry, which is gone once the dialog
+      // closes, so the dialog's fallback hands the focus to the trigger there
+      const entry = document.createElement("button");
+      document.body.append(entry);
+      (where === "widget" ? mounted.trigger : entry).focus();
+      const showModal = mock.method(HTMLDialogElement.prototype, "showModal");
       assert.ok(runModelerItem(mounted.menu!, "modeler:keyboard-shortcuts"));
-      const dialog = mounted.container.querySelector<HTMLDialogElement>("dialog[open]");
-      assert.ok(dialog, `${id} in the ${where}: a dialog in the canvas host`);
+      showModal.mock.restore();
+      if (where === "spa") entry.remove();
+      const dialogs = mounted.container.querySelectorAll<HTMLDialogElement>("dialog[open]");
+      assert.equal(dialogs.length, 1, `${id} in the ${where}: one dialog in the canvas host`);
+      const dialog = dialogs[0]!;
       assert.equal(dialog.parentElement, mounted.container, "a child of the host, beside the renderer's root");
-      const view = [...dialog.querySelectorAll("tr")].map((row) => row.textContent);
+      assert.ok(dialog.matches(".cd-shell-dialog.cd-shell-shortcuts"), `${id}: the shell's dialog`);
+      // modal: the page behind it is inert and the zoom keys rest (guide §5.8)
+      assert.equal(showModal.mock.callCount(), 1, `${id}: opened with showModal`);
+      assert.equal(document.getElementById(dialog.getAttribute("aria-labelledby")!)?.textContent, "Keyboard shortcuts");
+
+      const [view, ...others] = [...dialog.querySelectorAll("section")];
+      assert.equal(view!.querySelector("h3")?.textContent, "View", `${id}: View leads`);
+      const viewRows = [...view!.querySelectorAll("tr")];
+      assert.deepEqual(
+        viewRows.slice(0, 4).map((row) => row.getAttribute("data-chrome-key")),
+        CHROME_ROWS,
+        `${id}: the chrome's zoom and fit keys lead the View group`,
+      );
+      const actions = viewRows.map((row) => row.querySelector("th")?.textContent);
+      assert.equal(new Set(actions).size, actions.length, `${id}: no View row twice: ${actions.join(" / ")}`);
       // the shell's messages name the zoom keys, as the machine's keyboard has them
       const mac = /mac/i.test(navigator.platform);
-      assert.ok(view.includes(mac ? "Zoom in⌘+" : "Zoom inCtrl+Plus"), `${id}: ${view.slice(0, 4).join(" / ")}`);
-      assert.ok(view.includes(mac ? "Fit to view⇧1" : "Fit to viewShift+1"));
+      const shown = viewRows.map((row) => row.textContent);
+      assert.ok(shown.includes(mac ? "Zoom in⌘+" : "Zoom inCtrl+Plus"), `${id}: ${shown.slice(0, 4).join(" / ")}`);
+      assert.ok(shown.includes(mac ? "Fit to view⇧1" : "Fit to viewShift+1"));
+      assert.ok(others.length > 0, `${id}: the renderer's own groups follow`);
+
+      assert.ok(runModelerItem(mounted.menu!, "modeler:keyboard-shortcuts"));
+      assert.equal(mounted.container.querySelectorAll("dialog").length, 1, "a second choice opens no second dialog");
       dialog.close();
+      assert.equal(mounted.container.querySelector("dialog"), null, `${id}: built on open, removed on close`);
       assert.equal(document.activeElement, mounted.trigger, "the focus returns to the menu trigger");
+
+      assert.ok(runModelerItem(mounted.menu!, "modeler:keyboard-shortcuts"));
+      assert.ok(mounted.container.querySelector("dialog[open]"), "it opens again");
       mounted.destroy();
-      assert.equal(mounted.container.querySelector("dialog"), null, `${id}: the dialog goes with the mount`);
+      assert.equal(mounted.container.querySelector("dialog"), null, `${id}: an open dialog goes with the mount`);
+      entry.remove();
+      mounted.trigger.remove();
     }
+  }
+});
+
+test("Keyboard shortcuts…: a read-only viewer offers the dialog too", async () => {
+  for (const id of Object.keys(EXPECTED)) {
+    const viewer = await widgetOf(id, true);
+    viewer.trigger.focus();
+    assert.ok(runModelerItem(viewer.engine.menu!, "modeler:keyboard-shortcuts"), id);
+    assert.ok(viewer.container.querySelector("dialog.cd-shell-dialog[open]"), `${id}: guide §13.5`);
+    viewer.engine.destroy();
   }
 });
 
@@ -405,38 +447,50 @@ test("Context Maps: a map the CML export cannot read ends in the host's failure 
   engine.destroy();
 });
 
-/** the page's Geist as the widget's stylesheet holds it (geist.css: data: URIs);
- *  jsdom keeps no src in a parsed @font-face, so the sheet is written out */
-function geistOnThePage(): () => void {
-  const latin = "data:font/woff2;base64,R2Vpc3QgbGF0aW4=";
-  const face = Object.create(CSSFontFaceRule.prototype, {
-    style: {
-      value: {
-        getPropertyValue: (name: string) =>
-          ({
-            "font-family": '"Geist Variable"',
-            "font-weight": "100 900",
-            "unicode-range": "U+0-FF, U+131, U+152-153",
-            src: `url("${latin}") format("woff2-variations")`,
-          })[name] ?? "",
-      },
-    },
+const LATIN_DATA = "data:font/woff2;base64,R2Vpc3QgbGF0aW4=";
+
+/** a parsed @font-face as the CSSOM gives it: jsdom keeps no src or unicode-range of its own */
+function fontFace(declarations: Record<string, string>): CSSFontFaceRule {
+  return Object.create(CSSFontFaceRule.prototype, {
+    style: { value: { getPropertyValue: (name: string) => declarations[name] ?? "" } },
     parentStyleSheet: { value: null },
   }) as CSSFontFaceRule;
-  Object.defineProperty(document, "styleSheets", { configurable: true, value: [{ href: null, cssRules: [face] }] });
+}
+
+/** the page's fonts as the widget's stylesheets hold them: Geist with its
+ *  file inline (geist.css), Geist Mono for the key chips (geist-mono.css);
+ *  `src` sets Geist's file, a URL as the SPA's fontsource rules have it */
+function geistOnThePage(src = LATIN_DATA): () => void {
+  const geist = fontFace({
+    "font-family": '"Geist Variable"',
+    "font-weight": "100 900",
+    "unicode-range": "U+0-FF, U+131, U+152-153",
+    src: `url("${src}") format("woff2-variations")`,
+  });
+  const mono = fontFace({
+    "font-family": '"Geist Mono Variable"',
+    "unicode-range": "U+0-FF",
+    src: 'url("data:font/woff2;base64,bW9ubw==") format("woff2-variations")',
+  });
+  Object.defineProperty(document, "styleSheets", {
+    configurable: true,
+    value: [{ href: null, cssRules: [geist, mono] }],
+  });
   return () => void delete (document as { styleSheets?: unknown }).styleSheets;
 }
 
-/** jsdom draws no image, so while this is installed the rasterizer's image
- *  and canvas record what they are given: only during an export, because the
- *  renderers measure their labels on a canvas of their own */
+/** jsdom loads and draws no image, so while this is installed the
+ *  rasterizer's image and canvas record what they are given, and the image
+ *  loads at once: only during an export, because the renderers measure their
+ *  labels on a canvas of their own */
 function recordingRasterizer(): { drawn: { svg: string; background: unknown }[]; restore(): void } {
   const drawn: { svg: string; background: unknown }[] = [];
-  const image = HTMLImageElement.prototype as HTMLImageElement & { decode?: () => Promise<void> };
+  const image = HTMLImageElement.prototype;
   const canvas = HTMLCanvasElement.prototype;
   const serializer = XMLSerializer.prototype;
   const real = {
-    decode: image.decode,
+    src: Object.getOwnPropertyDescriptor(image, "src")!,
+    decode: Object.getOwnPropertyDescriptor(image, "decode"),
     getContext: canvas.getContext,
     toBlob: canvas.toBlob,
     serializeToString: serializer.serializeToString,
@@ -446,13 +500,20 @@ function recordingRasterizer(): { drawn: { svg: string; background: unknown }[];
   serializer.serializeToString = function (this: XMLSerializer, node: Node) {
     return real.serializeToString.call(this, node).replace(/^(<svg xmlns="[^"]*"[^>]*?) xmlns="[^"]*"/, "$1");
   };
-  image.decode = async function (this: HTMLImageElement) {
-    const [, data = ""] = /^data:image\/svg\+xml;charset=utf-8,(.*)$/.exec(this.src) ?? [];
-    drawn.push({ svg: decodeURIComponent(data), background: undefined });
-  };
+  Object.defineProperty(image, "src", {
+    configurable: true,
+    set(this: HTMLImageElement, url: string) {
+      const [, data = ""] = /^data:image\/svg\+xml;charset=utf-8,(.*)$/.exec(url) ?? [];
+      drawn.push({ svg: decodeURIComponent(data), background: undefined });
+      queueMicrotask(() => this.onload?.(new Event("load")));
+    },
+  });
+  Object.defineProperty(image, "decode", { configurable: true, value: async () => {} });
   canvas.getContext = function () {
     const context = {
       fillStyle: "" as unknown,
+      // the rasterizer asks the canvas whether the background is a colour it fills
+      createLinearGradient: () => ({}),
       fillRect: () => void (drawn.at(-1)!.background = context.fillStyle),
       drawImage: () => {},
     };
@@ -462,7 +523,9 @@ function recordingRasterizer(): { drawn: { svg: string; background: unknown }[];
   return {
     drawn,
     restore() {
-      Object.assign(image, { decode: real.decode });
+      Object.defineProperty(image, "src", real.src);
+      if (real.decode) Object.defineProperty(image, "decode", real.decode);
+      else delete (image as { decode?: unknown }).decode;
       Object.assign(canvas, { getContext: real.getContext, toBlob: real.toBlob });
       serializer.serializeToString = real.serializeToString;
     },
@@ -507,9 +570,10 @@ test("exports: the PNG is drawn from the SVG with Geist inside, through a data: 
       const { svg, background } = drawn[0]!;
       assert.match(
         svg,
-        /^<svg[^>]*><defs><style>@font-face\{font-family:'Geist Variable';[^}]*src:url\("data:font\/woff2;base64,R2Vpc3QgbGF0aW4="\);\}<\/style><\/defs><g visibility="hidden"><text font-family="'Geist Variable'">\S<\/text><\/g>/,
+        /^<svg[^>]*><defs><style>@font-face\{font-family:'Geist Variable';[^}]*src:url\("data:font\/woff2;base64,R2Vpc3QgbGF0aW4="\)[^}]*\}<\/style><\/defs><g visibility="hidden"><text style="font-family:'Geist Variable'">\S<\/text><\/g>/,
         `${id}: the face goes in ahead of the drawing, with its hidden text`,
       );
+      assert.equal(svg.match(/@font-face/g)?.length, 1, `${id}: Geist alone, not the key chips' Geist Mono`);
       assert.match(svg, /<text[^>]*font-family[^>]*Geist Variable/, `${id}: and its text asks for it`);
       assert.equal(background, paper[id], `${id}: the paper under the drawing`);
       assert.doesNotMatch(svg, /tt-export-paper/, `${id}: no sheet of the renderer's over that paper`);
@@ -517,13 +581,25 @@ test("exports: the PNG is drawn from the SVG with Geist inside, through a data: 
   } finally {
     removeGeist();
   }
-  // a page without Geist still gets its PNG, in the system sans
+  // a Geist file that cannot be read: the PNG still comes, in the system sans
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(null, { status: 404 })) as typeof fetch;
+  const removeUnreadable = geistOnThePage("/assets/geist-latin-wght-normal.woff2");
   const warned = mock.method(console, "warn", () => {});
+  try {
+    const { files, drawn } = await exportPng("event-storming");
+    assert.equal(files[0]?.name, "tea-shop.png");
+    assert.doesNotMatch(drawn[0]?.svg ?? "", /@font-face/);
+    assert.equal(warned.mock.callCount(), 1, "the fallback is no secret");
+  } finally {
+    warned.mock.restore();
+    removeUnreadable();
+    globalThis.fetch = realFetch;
+  }
+  // a page without Geist: the PNG still comes, in the system sans
   const { files, drawn } = await exportPng("event-storming");
-  warned.mock.restore();
   assert.equal(files[0]?.name, "tea-shop.png");
   assert.doesNotMatch(drawn[0]?.svg ?? "", /@font-face/);
-  assert.equal(warned.mock.callCount(), 1, "the fallback is no secret");
 });
 
 /** an element of each document, for a peer to select */

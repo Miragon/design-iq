@@ -10,9 +10,10 @@
  * into and, in the split view, over the canvas beside the source. The
  * headless Chromium check test/source-layers-chromium.ts shows all of it in
  * the built app; this one holds the sources and the pinned Monaco's frame to
- * it. Behind the source view the canvas layer takes no pointer, so the sheet
- * gives a Miragon renderer's open dialog in it the pointer back
- * (test/canvas-focus-chromium.ts clicks one there).
+ * it. Behind the source view the canvas layer is inert and invisible but
+ * keeps its pointer-events (HIDDEN_LAYER_CLASS), which a Miragon dialog open
+ * in it inherits, and the sheet gives such a dialog the pointer itself as
+ * well (test/canvas-focus-chromium.ts clicks one there).
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -22,6 +23,7 @@ import { fileURLToPath } from "node:url";
 
 import postcss, { type Rule } from "postcss";
 
+import { HIDDEN_LAYER_CLASS } from "../src/lib/editor-view.ts";
 import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
 
 const require = createRequire(import.meta.url);
@@ -87,7 +89,7 @@ test("the pinned Monaco still names its frame overflow-guard and draws its scrol
   assert.match(view, /this\.domNode\.appendChild\(this\._contentWidgets\.overflowingContentWidgetsDomNode\)/);
 });
 
-test("a Miragon renderer's open dialog takes the pointer in its canvas host, which takes none behind the source view", () => {
+test("a Miragon dialog takes the pointer in its canvas host, which behind the source view keeps its pointer-events", () => {
   const taking = indexRules()
     .filter((rule) =>
       rule.some((node) => node.type === "decl" && node.prop === "pointer-events" && node.value === "auto"),
@@ -98,7 +100,10 @@ test("a Miragon renderer's open dialog takes the pointer in its canvas host, whi
   }
   assert.match(
     readFileSync(LIVE_EDITOR, "utf8"),
-    /plugin\?\.canvasClassName, "absolute inset-0", !canvasShown && "pointer-events-none opacity-0"/,
+    /plugin\?\.canvasClassName, "absolute inset-0", !canvasShown && HIDDEN_LAYER_CLASS\)/,
     "the hidden canvas layer, whose pointer-events its dialogs inherit",
   );
+  for (const utility of HIDDEN_LAYER_CLASS.split(/\s+/)) {
+    assert.doesNotMatch(utility, /pointer-events/, "a hidden layer keeps its pointer-events");
+  }
 });
