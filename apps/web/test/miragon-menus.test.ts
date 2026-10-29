@@ -427,11 +427,10 @@ function geistOnThePage(): () => void {
   return () => void delete (document as { styleSheets?: unknown }).styleSheets;
 }
 
-/** Export as PNG on a mounted widget. jsdom draws no image, so the
- *  rasterizer's image and canvas record what they are given — only while the
- *  export runs: the renderers measure their labels on a canvas of their own */
-async function exportPng(id: string) {
-  const { engine, files, failures } = await widgetOf(id);
+/** jsdom draws no image, so while this is installed the rasterizer's image
+ *  and canvas record what they are given: only during an export, because the
+ *  renderers measure their labels on a canvas of their own */
+function recordingRasterizer(): { drawn: { svg: string; background: unknown }[]; restore(): void } {
   const drawn: { svg: string; background: unknown }[] = [];
   const image = HTMLImageElement.prototype as HTMLImageElement & { decode?: () => Promise<void> };
   const canvas = HTMLCanvasElement.prototype;
@@ -460,16 +459,33 @@ async function exportPng(id: string) {
     return context;
   } as unknown as typeof canvas.getContext;
   canvas.toBlob = (done: BlobCallback) => done(new Blob(["png"], { type: "image/png" }));
+  return {
+    drawn,
+    restore() {
+      Object.assign(image, { decode: real.decode });
+      Object.assign(canvas, { getContext: real.getContext, toBlob: real.toBlob });
+      serializer.serializeToString = real.serializeToString;
+    },
+  };
+}
+
+/** until the host's download has `count` files or a failure */
+async function downloaded(files: ExportFile[], failures: string[], count = 1): Promise<void> {
+  for (let waited = 0; files.length < count && failures.length === 0 && waited < 2000; waited += 10) await wait(10);
+}
+
+/** Export as PNG on a mounted widget */
+async function exportPng(id: string) {
+  const { engine, files, failures } = await widgetOf(id);
+  const rasterizer = recordingRasterizer();
   try {
     runModelerItem(engine.menu!, "modeler:export-png");
-    for (let waited = 0; files.length + failures.length === 0 && waited < 2000; waited += 10) await wait(10);
+    await downloaded(files, failures);
   } finally {
-    Object.assign(image, { decode: real.decode });
-    Object.assign(canvas, { getContext: real.getContext, toBlob: real.toBlob });
-    serializer.serializeToString = real.serializeToString;
+    rasterizer.restore();
     engine.destroy();
   }
-  return { files, failures, drawn };
+  return { files, failures, drawn: rasterizer.drawn };
 }
 
 test("exports: the PNG is drawn from the SVG with Geist inside, through a data: URL, on the guide's light ground", async () => {
@@ -508,6 +524,107 @@ test("exports: the PNG is drawn from the SVG with Geist inside, through a data: 
   assert.equal(files[0]?.name, "tea-shop.png");
   assert.doesNotMatch(drawn[0]?.svg ?? "", /@font-face/);
   assert.equal(warned.mock.callCount(), 1, "the fallback is no secret");
+});
+
+/** an element of each document, for a peer to select */
+const SELECTED: Record<string, string> = {
+  wardley: "cmp_cup_of_tea",
+  "event-storming": "cmd_place_order",
+  "context-map": "ctx_cfp",
+  "team-topology": "team_checkout",
+  "value-chain": "step_order",
+};
+
+test("exports: the SVG and the PNG leave out the live canvas's presence: no peer's cursor, outline or name", async () => {
+  const raf = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(0), 0) as unknown as number;
+  const PEERS = ["Ada Lovelace", "Claude"];
+  const removeGeist = geistOnThePage();
+  try {
+    for (const id of Object.keys(EXPECTED)) {
+      const [spec, renderer] = await load(id);
+      const container = host(spec.canvasClassName);
+      const { files, failures, menuHost } = chrome();
+      const engine = mountMiragonEngine(spec, renderer, container, false, {
+        insets: () => ({ top: 56, right: 16, bottom: 56, left: 16 }),
+        menuHost,
+      });
+      const doc = new Y.Doc();
+      doc.getText("content").insert(0, DOCUMENT[id]![0]);
+      const unbind = engine.bindLive!(doc.getText("content"), doc, {
+        onConflict: assert.fail,
+        onImportError: assert.fail,
+        presence: {
+          setLocal: () => {},
+          onRemote(callback) {
+            callback([
+              {
+                clientId: 8,
+                user: { name: PEERS[0]!, color: "#1D4ED8", kind: "human" },
+                canvas: { cursor: { x: 120, y: 90 }, selection: [SELECTED[id]!] },
+              },
+              {
+                clientId: 7,
+                user: { name: PEERS[1]!, color: "#1D4ED8", kind: "agent" },
+                canvas: { cursor: null, selection: [SELECTED[id]!] },
+              },
+            ]);
+            return () => {};
+          },
+        },
+      });
+      await wait(50);
+      const diagram = engine.modeler.diagram as unknown as {
+        get(name: "canvas"): { getLayer(name: string): SVGElement };
+        saveSVG(): { svg: string } | Promise<{ svg: string }>;
+      };
+      const layer = diagram.get("canvas").getLayer("designiq-presence");
+      assert.equal(layer.querySelectorAll("rect[stroke]").length, 2, `${id}: both peers outline the element`);
+      assert.equal(layer.querySelectorAll("rect[stroke-dasharray]").length, 1, `${id}: the agent's outline dashed`);
+      const rasterizer = recordingRasterizer();
+      try {
+        const raw = (await diagram.saveSVG()).svg;
+        for (const name of PEERS) assert.ok(raw.includes(name), `${id}: the renderer's own SVG copies ${name}'s pill`);
+        runModelerItem(engine.menu!, "modeler:export-svg");
+        await downloaded(files, failures);
+        runModelerItem(engine.menu!, "modeler:export-png");
+        await downloaded(files, failures, 2);
+      } finally {
+        rasterizer.restore();
+      }
+      assert.deepEqual(failures, [], id);
+      assert.deepEqual(
+        files.map((file) => file.mimeType),
+        ["image/svg+xml", "image/png"],
+      );
+      assert.equal(rasterizer.drawn.length, 1, `${id}: the PNG drawn once`);
+      for (const [what, svg] of [
+        ["the SVG", String(files[0]!.data)],
+        ["the PNG's SVG", rasterizer.drawn[0]!.svg],
+      ] as const) {
+        assert.match(svg, /<svg[\s>]/, `${id}: ${what} is still the diagram`);
+        assert.doesNotMatch(svg, /layer-designiq-presence/, `${id}: ${what} holds no presence layer`);
+        for (const name of PEERS) assert.ok(!svg.includes(name), `${id}: ${what} names no ${name}`);
+      }
+      for (const name of PEERS) assert.ok(layer.textContent?.includes(name), `${id}: the canvas still shows ${name}`);
+      unbind();
+      engine.destroy();
+    }
+  } finally {
+    removeGeist();
+    globalThis.requestAnimationFrame = raf;
+  }
+});
+
+test("withoutPresence: an SVG without the layer comes back as it was, one that cannot be read is refused", async () => {
+  const { withoutPresence } = await import("../src/lib/presence-canvas.ts");
+  const drawing =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><g class="viewport"><g class="layer-base"><rect width="10" height="10"/></g></g></svg>';
+  assert.equal(withoutPresence(drawing), drawing);
+  assert.throws(
+    () => withoutPresence('<svg><g class="layer-designiq-presence"><text>Ada</svg>'),
+    /the diagram's SVG could not be read/,
+  );
 });
 
 test("Team Topologies: the PNG's SVG loses the renderer's white sheet and nothing else", async () => {

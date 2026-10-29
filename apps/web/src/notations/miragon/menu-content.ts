@@ -4,11 +4,12 @@
  * Chain): the chrome their dialogs and popovers take (a modeler-shell handle's
  * shape, filled from the shell's own messages so the shortcut tables name the
  * zoom keys as the modelers do), dialogs built on first use and removed with the
- * mount, the image exports and the text ones. Loaded with the renderer
- * (behind each spec's `load()`).
+ * mount, the image exports (without the presence layer) and the text ones.
+ * Loaded with the renderer (behind each spec's `load()`).
  */
 import { defaultMessages, detectPlatform } from "@miragon/modeler-shell/core";
 
+import { withoutPresence } from "../../lib/presence-canvas.ts";
 import type { ExportFile } from "../../mcp-app/core/engine.ts";
 import type { MiragonMenuHost } from "./spec.ts";
 
@@ -61,17 +62,19 @@ function exportFile(host: MiragonMenuHost, extension: string, mimeType: string, 
   return { name: `${host.fileStem()}.${extension}`, mimeType, data };
 }
 
-/** the Export group's PNG and SVG of a diagram, named after the model's file */
+/** the Export group's PNG and SVG of a diagram, named after the model's file,
+ *  both without the peers the live canvas shows */
 export function imageExports(
   host: MiragonMenuHost,
   svg: () => Promise<string>,
   png: (svg: string) => Promise<Blob>,
 ): { png: { onSelect(): void }; svg: { onSelect(): void } } {
+  const diagram = async (): Promise<string> => withoutPresence(await svg());
   return {
     png: {
-      onSelect: () => void host.download(async () => exportFile(host, "png", "image/png", await png(await svg()))),
+      onSelect: () => void host.download(async () => exportFile(host, "png", "image/png", await png(await diagram()))),
     },
-    svg: { onSelect: () => void host.download(async () => exportFile(host, "svg", "image/svg+xml", await svg())) },
+    svg: { onSelect: () => void host.download(async () => exportFile(host, "svg", "image/svg+xml", await diagram())) },
   };
 }
 

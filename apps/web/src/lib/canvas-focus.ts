@@ -14,10 +14,13 @@
  *   it where the canvas cannot (behind the source). Everything else keeps
  *   radix's close: Enter or Space, Escape, Export and Help give the focus to
  *   the trigger, a dialog entry leaves it to its dialog, and a click outside
- *   leaves it where the click put it. The menu is not modal, so a click on
- *   the canvas closes it and acts there too, as a click outside should; a
- *   checkbox or radio entry keeps the menu open (§5.4), and that click is
- *   how the canvas gets the focus back after one.
+ *   leaves it where the click put it. A dialog opens once the menu is gone:
+ *   radix keeps a closing menu mounted for its exit animation, and its
+ *   dismissable layer takes every Escape until then, the dialog's first one
+ *   included. The menu is not modal, so a click on the canvas closes it and
+ *   acts there too, as a click outside should; a checkbox or radio entry
+ *   keeps the menu open (§5.4), and that click is how the canvas gets the
+ *   focus back after one.
  * - A document mode in the toolbar (BPMN's Workshop switch): it changes the
  *   canvas, so a click hands the canvas the focus; Enter or Space leave it
  *   on the switch.
@@ -88,28 +91,40 @@ export function viewSwitchFocus(canvas: FocusableCanvas): ViewSwitchFocus {
   };
 }
 
-/** the ⋯ menu's focus as it closes */
+/** the ⋯ menu's focus as it closes, and the dialog an entry opens then */
 export interface MenuCloseFocus {
-  /** an entry that opens a dialog was chosen: the dialog takes the focus */
-  openingDialog(): void;
+  /** the menu opened: a dialog chosen while it was still closing opens no more */
+  opened(): void;
+  /** an entry that opens a dialog was chosen: `open` runs once the menu is
+   *  gone, and the dialog takes the focus */
+  openingDialog(open: () => void): void;
   /** a pointer was released on an action entry of the Model group */
   pointerReleased(): void;
   /** an action entry of the Model group that opens no dialog was clicked,
    *  with a pointer or by Enter or Space */
   actedOnCanvas(click: Pick<MouseEvent, "detail">): void;
-  /** the menu closes: true when the focus is settled here, so radix must
-   *  leave it alone (preventDefault); false leaves it to radix */
+  /** the menu is gone (radix's onCloseAutoFocus): opens the dialog an
+   *  entry chose; true when the focus is settled here, so radix must leave
+   *  it alone (preventDefault); false leaves it to radix */
   closing(canvas: FocusableCanvas | undefined): boolean;
 }
 
 export function menuCloseFocus(): MenuCloseFocus {
   let chosen: "dialog" | "canvas" | undefined;
+  let dialog: (() => void) | undefined;
   // radix clicks an entry itself, with no detail, on Enter and Space and also
   // when a press on the trigger is dragged onto the entry and released there
   let released = false;
+  const forget = (): void => {
+    chosen = undefined;
+    dialog = undefined;
+    released = false;
+  };
   return {
-    openingDialog() {
+    opened: forget,
+    openingDialog(open) {
       chosen = "dialog";
+      dialog = open;
     },
     pointerReleased() {
       released = true;
@@ -120,9 +135,12 @@ export function menuCloseFocus(): MenuCloseFocus {
     },
     closing(canvas) {
       const last = chosen;
-      chosen = undefined;
-      released = false;
-      if (last === "dialog") return true;
+      const open = dialog;
+      forget();
+      if (last === "dialog") {
+        open?.();
+        return true;
+      }
       return last === "canvas" && canvas !== undefined && canvas.shown() && canvas.focus();
     },
   };

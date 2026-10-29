@@ -10,7 +10,9 @@
  * into and, in the split view, over the canvas beside the source. The
  * headless Chromium check test/source-layers-chromium.ts shows all of it in
  * the built app; this one holds the sources and the pinned Monaco's frame to
- * it.
+ * it. Behind the source view the canvas layer takes no pointer, so the sheet
+ * gives a Miragon renderer's open dialog in it the pointer back
+ * (test/canvas-focus-chromium.ts clicks one there).
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -19,6 +21,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import postcss, { type Rule } from "postcss";
+
+import { MIRAGON_RENDERERS } from "../src/notations/miragon/index.ts";
 
 const require = createRequire(import.meta.url);
 const INDEX_CSS = fileURLToPath(new URL("../src/index.css", import.meta.url));
@@ -81,4 +85,20 @@ test("the pinned Monaco still names its frame overflow-guard and draws its scrol
   assert.match(view, /_overflowGuardContainer\.setClassName\('overflow-guard'\)/);
   assert.match(view, /_overflowGuardContainer\.appendChild\(this\._scrollbar\.getDomNode\(\)\)/);
   assert.match(view, /this\.domNode\.appendChild\(this\._contentWidgets\.overflowingContentWidgetsDomNode\)/);
+});
+
+test("a Miragon renderer's open dialog takes the pointer in its canvas host, which takes none behind the source view", () => {
+  const taking = indexRules()
+    .filter((rule) =>
+      rule.some((node) => node.type === "decl" && node.prop === "pointer-events" && node.value === "auto"),
+    )
+    .flatMap((rule) => rule.selectors);
+  for (const { canvasClassName } of MIRAGON_RENDERERS) {
+    assert.ok(taking.includes(`.${canvasClassName} > dialog[open]`), `${canvasClassName}: ${taking.join(", ")}`);
+  }
+  assert.match(
+    readFileSync(LIVE_EDITOR, "utf8"),
+    /plugin\?\.canvasClassName, "absolute inset-0", !canvasShown && "pointer-events-none opacity-0"/,
+    "the hidden canvas layer, whose pointer-events its dialogs inherit",
+  );
 });

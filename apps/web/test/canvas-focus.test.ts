@@ -141,13 +141,33 @@ test("⋯ menu: Enter or Space on a Model action, Escape and a click outside lea
 test("⋯ menu: a dialog entry leaves the focus to its dialog, whatever chose it", () => {
   const { canvas, state } = fakeCanvas(true);
   const menu = menuCloseFocus();
-  menu.openingDialog();
+  const opened: string[] = [];
+  menu.openingDialog(() => opened.push("title"));
+  assert.equal(opened.length, 0, "not while the menu is still there: it would take the dialog's first Escape");
   assert.equal(menu.closing(canvas), true, "radix must not steal the dialog field's focus");
+  assert.deepEqual(opened, ["title"], "the dialog opens once the menu is gone");
   assert.equal(state.focused, 0);
   menu.actedOnCanvas(CLICK);
-  menu.openingDialog();
+  menu.openingDialog(() => opened.push("shortcuts"));
   assert.equal(menu.closing(canvas), true, "the last choice counts");
+  assert.deepEqual(opened, ["title", "shortcuts"]);
   assert.equal(state.focused, 0);
+  assert.equal(menu.closing(canvas), false, "the next close is radix's again");
+  assert.deepEqual(opened, ["title", "shortcuts"], "and opens nothing");
+});
+
+test("⋯ menu: an action chosen after a dialog entry wins, and a menu opened again before it was gone opens no dialog", () => {
+  const { canvas, state } = fakeCanvas(true);
+  const menu = menuCloseFocus();
+  const opened: string[] = [];
+  menu.openingDialog(() => opened.push("title"));
+  menu.actedOnCanvas(CLICK);
+  assert.equal(menu.closing(canvas), true);
+  assert.equal(state.focused, 1, "the action's hand-back");
+  menu.openingDialog(() => opened.push("title"));
+  menu.opened();
+  assert.equal(menu.closing(canvas), false, "Escape on the menu opened again: radix's close");
+  assert.equal(opened.length, 0);
 });
 
 test("⋯ menu: the trigger takes the focus where the canvas cannot: behind the source, no editor, none at all", () => {
