@@ -82,9 +82,11 @@ updates:
         update-types: ["minor", "patch"]
       # a renderer and its schema model move together (the renderer pins the
       # schema model exactly; packages/notations pins it as a devDependency to
-      # hold the new-file templates to it, and reads a Wardley Map with the
-      # renderer's @miragon/wardley-dsl), so one PR per family, its majors
-      # included
+      # hold the new-file templates to it, reads a Wardley Map with the
+      # renderer's @miragon/wardley-dsl and its stages with the renderer's
+      # @miragon/wardley-schema-model, and compares its .storm reader with the
+      # renderer's @miragon/event-storming-dsl), so one PR per family, its
+      # majors included
       miragon-wardley:
         applies-to: version-updates
         patterns: ["@miragon/wardley-*"]

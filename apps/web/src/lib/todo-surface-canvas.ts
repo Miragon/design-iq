@@ -25,10 +25,13 @@
  *    (get_view) and agents anchored todos with those names, while the canvas
  *    ids them `cmp_<name>`; such a todo still lands on its component (the
  *    presence-canvas rule)
- *  - selection → TodoElementWire[] (`onSelection`), so a new todo anchors to it
+ *  - selection → TodoElementWire[] (`onSelection`), so a new todo anchors to it;
+ *    read again after every command and import: a Wardley component's id is
+ *    its name's, and naming or renaming it commits without selecting again,
+ *    so the selection a todo anchors to would keep the id the text no longer has
  *  - reveal / revealOnce, as on BPMN; the one-shot waits for the first import
  */
-import type { TodoWire } from "@designiq/contracts/live-host";
+import type { TodoElementWire, TodoWire } from "@designiq/contracts/live-host";
 
 import type { TodoCanvas, TodoCanvasHooks } from "./todo-canvas.ts";
 
@@ -44,6 +47,7 @@ interface Box {
 export interface TodoElementSurface {
   list(): Array<{ id: string; name?: string }>;
   reveal(id: string): boolean;
+  selection(): string[];
   onSelection(cb: (ids: string[]) => void): () => void;
   bounds?(id: string): Box | undefined;
 }
@@ -162,8 +166,28 @@ export function attachSurfaceTodoCanvas(
     }
   };
 
+  const selectionOf = (ids: string[]): TodoElementWire[] => {
+    const names = new Map(surface.list().map((e) => [e.id, e.name]));
+    return ids.map((id) => ({ id, name: names.get(id) || null }));
+  };
+  let selected: TodoElementWire[] = [];
+  const deliverSelection = (ids: string[]): void => {
+    selected = selectionOf(ids);
+    hooks.onSelectionChanged(selected);
+  };
+  const refreshSelection = (): void => {
+    const current = selectionOf(surface.selection());
+    const unchanged =
+      current.length === selected.length &&
+      current.every((element, index) => element.id === selected[index]!.id && element.name === selected[index]!.name);
+    if (unchanged) return;
+    selected = current;
+    hooks.onSelectionChanged(current);
+  };
+
   const onImportDone = (): void => {
     imported = true;
+    refreshSelection();
     render();
     if (pendingReveal !== null) {
       const id = pendingReveal;
@@ -172,11 +196,9 @@ export function attachSurfaceTodoCanvas(
     }
   };
 
-  const offSelection = surface.onSelection((ids) => {
-    const names = new Map(surface.list().map((e) => [e.id, e.name]));
-    hooks.onSelectionChanged(ids.map((id) => ({ id, name: names.get(id) || null })));
-  });
+  const offSelection = surface.onSelection(deliverSelection);
   diagram.on("import.done", onImportDone);
+  diagram.on("commandStack.changed", refreshSelection);
   diagram.on("elements.changed", scheduleRender);
   diagram.on("canvas.viewbox.changed", place);
 
@@ -198,6 +220,7 @@ export function attachSurfaceTodoCanvas(
       if (frame !== 0) win?.cancelAnimationFrame(frame);
       offSelection();
       diagram.off("import.done", onImportDone);
+      diagram.off("commandStack.changed", refreshSelection);
       diagram.off("elements.changed", scheduleRender);
       diagram.off("canvas.viewbox.changed", place);
       layer.remove();

@@ -54,6 +54,7 @@
   },
   "dependencies": {
     "@miragon/wardley-dsl": "0.7.1",
+    "@miragon/wardley-schema-model": "0.6.0",
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.1",
     "fast-xml-parser": "5.11.2",

@@ -59,7 +59,8 @@ const spaContext = (ctx: Partial<EditorContext>): EditorContext =>
 /**
  * A notation's editing mount bound to a shared Y.Text the way a host does
  * it: the SPA's editor, or the widget's engine with the chrome's insets (so
- * the widget fits the view itself after every import).
+ * the widget fits the view itself after every import) and, given a todo
+ * selection hook, the todo controller miragon-main.ts attaches to it.
  */
 async function mountLive(
   where: (typeof HOSTS)[number],
@@ -67,6 +68,7 @@ async function mountLive(
   ytext: Y.Text,
   doc: Y.Doc,
   presence?: PresenceSurface,
+  onSelectionChanged?: (elements: TodoElementWire[]) => void,
 ): Promise<{ container: HTMLElement; modeler: MiragonModeler; destroy(): void }> {
   const [spec, renderer] = await load(id);
   const container = host(spec.canvasClassName);
@@ -74,12 +76,20 @@ async function mountLive(
     const engine = mountMiragonEngine(spec, renderer, container, false, {
       insets: () => ({ top: 56, right: 0, bottom: 0, left: 0 }),
     });
+    const { attachSurfaceTodoCanvas } = await import("../src/lib/todo-surface-canvas.ts");
+    const todos = onSelectionChanged
+      ? attachSurfaceTodoCanvas(engine.modeler.diagram, engine.modeler.elements, {
+          onBadgeClick: () => {},
+          onSelectionChanged,
+        })
+      : undefined;
     const unbind = engine.bindLive!(ytext, doc, { onConflict: assert.fail, onImportError: assert.fail, presence });
     return {
       container,
       modeler: engine.modeler,
       destroy: () => {
         unbind();
+        todos?.destroy();
         engine.destroy();
       },
     };
@@ -90,7 +100,14 @@ async function mountLive(
     spec,
     { ...renderer, create: (options) => (modeler = renderer.create(options)) },
     container,
-    spaContext({ ytext, doc, onSyncError: assert.fail, onImportFailed: assert.fail, presence }),
+    spaContext({
+      ytext,
+      doc,
+      onSyncError: assert.fail,
+      onImportFailed: assert.fail,
+      presence,
+      ...(onSelectionChanged ? { onSelectionChanged } : {}),
+    }),
   );
   assert.ok(modeler, id);
   return { container, modeler, destroy: () => editor.destroy() };
@@ -1322,6 +1339,53 @@ test("todos on every Miragon renderer in the SPA editor: badges, selection, reve
     assert.equal(todos.reveal("gone"), false, `${id}: an anchor gone from the canvas reveals nothing`);
     editor.destroy();
     assert.equal(container.querySelector(".designiq-todo-layer"), null, `${id}: the layer goes with the editor`);
+  }
+});
+
+interface WardleyEditingServices {
+  get(name: "elementRegistry"): { get(id: string): unknown };
+  get(name: "selection"): { select(element: unknown): void };
+  get(name: "wardleyModeling"): { updateLabel(element: unknown, label: string): void };
+  get(name: "wardleyPaletteProvider"): { createAtFreeCenter(action: string): unknown };
+}
+
+test("todos on a Wardley map, in both hosts: naming a new component or renaming one hands a new todo the id the text has now", async () => {
+  for (const where of HOSTS) {
+    const doc = new Y.Doc();
+    const ytext = doc.getText("content");
+    ytext.insert(0, MAP);
+    const selected: TodoElementWire[][] = [];
+    const { container, modeler, destroy } = await mountLive(where, "wardley", ytext, doc, undefined, (elements) =>
+      selected.push(elements),
+    );
+    await wait(50);
+    const diagram = modeler.diagram as unknown as WardleyEditingServices;
+    const cup = diagram.get("elementRegistry").get("cmp_cup_of_tea");
+    diagram.get("selection").select(cup);
+    assert.deepEqual(selected.at(-1), [{ id: "cmp_cup_of_tea", name: "Cup of Tea" }], where);
+    // the rename commits without selecting again
+    diagram.get("wardleyModeling").updateLabel(cup, "Pot of Tea");
+    assert.deepEqual(selected.at(-1), [{ id: "cmp_pot_of_tea", name: "Pot of Tea" }], `${where}: renamed`);
+    assert.deepEqual(modeler.elements.selection(), ["cmp_pot_of_tea"], where);
+
+    // a palette create selects the component under its first label, then opens its label editor
+    diagram.get("wardleyPaletteProvider").createAtFreeCenter("create.component");
+    assert.deepEqual(selected.at(-1), [{ id: "cmp_component", name: "Component" }], `${where}: created`);
+    const field = openLabelEditor(container);
+    typeInto(field, "Kettle");
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
+    assert.deepEqual(selected.at(-1), [{ id: "cmp_kettle", name: "Kettle" }], `${where}: named`);
+    assert.deepEqual(
+      selected.at(-1)?.map((element) => element.id),
+      modeler.elements.selection(),
+      `${where}: what a new todo anchors to is the canvas's selection`,
+    );
+    await wait(20);
+    assert.match(ytext.toString(), /^component Kettle /m, `${where}: the id is the one the text has`);
+    const count = selected.length;
+    diagram.get("wardleyModeling").updateLabel(diagram.get("elementRegistry").get("cmp_hot_water"), "Boiling Water");
+    assert.equal(selected.length, count, `${where}: an edit elsewhere leaves the delivered selection alone`);
+    destroy();
   }
 });
 

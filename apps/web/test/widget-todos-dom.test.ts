@@ -250,7 +250,12 @@ test("a Miragon widget carries the card: its toggle and words, badges and the se
     assignees: [],
     createdAt: "2026-10-23T00:00:00Z",
   });
-  let select: (ids: string[]) => void = () => {};
+  let deliver: (ids: string[]) => void = () => {};
+  let current: string[] = [];
+  const select = (ids: string[]): void => {
+    current = ids;
+    deliver(ids);
+  };
   const { attachSurfaceTodoCanvas } = await import("../src/lib/todo-surface-canvas.ts");
   const w = await widget([BUILT_IN_TODO_TYPE], {
     skeleton: "mcp-app-miragon.html",
@@ -273,8 +278,9 @@ test("a Miragon widget carries the card: its toggle and words, badges and the se
             { id: "cmp_tea", name: "Tea" },
           ],
           reveal: () => true,
+          selection: () => current,
           onSelection(cb) {
-            select = cb;
+            deliver = cb;
             return () => {};
           },
           bounds: (id) => (id === "cmp_kettle" ? { x: 100, y: 50, width: 30, height: 30 } : undefined),
