@@ -12,9 +12,9 @@ import { isBuiltInTodoType, type TodoField, type TodoFieldValues } from "@design
 import { Badge } from "@designiq/ui-kit/components/badge";
 import { Button } from "@designiq/ui-kit/components/button";
 import { cn } from "@designiq/ui-kit/lib/utils";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 
-import { dialogBackdrop, dialogPanel, fieldClass } from "@/components/dialog-shell";
+import { dialogPanel, fieldClass, ModalDialog } from "@/components/dialog-shell";
 import type { TodoElementWire, TodoModelRef } from "@/lib/api";
 import { useCreateTodo, useTodoTypes } from "@/lib/queries";
 import {
@@ -178,14 +178,6 @@ export function TodoCreateDialog({
   const flags = submitted && type ? fieldFlags(type, values) : {};
   const fieldId = (field: TodoField) => `${idPrefix}-${field.id}`;
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
   const chooseType = (id: string) => {
     create.reset();
     setTypeId(id);
@@ -221,16 +213,8 @@ export function TodoCreateDialog({
   };
 
   return (
-    <div className={dialogBackdrop} onClick={onClose}>
-      <form
-        noValidate
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className={cn(dialogPanel, "flex max-h-[85vh] max-w-md flex-col")}
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={submit}
-      >
+    <ModalDialog labelledBy={titleId} onDismiss={onClose}>
+      <form noValidate className={cn(dialogPanel, "flex max-h-[85vh] max-w-md flex-col")} onSubmit={submit}>
         <h2 id={titleId} className="text-base font-semibold">
           Create todo
         </h2>
@@ -280,7 +264,7 @@ export function TodoCreateDialog({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="What needs to be done?"
-            autoFocus
+            data-autofocus
             required
           />
           {types.isPending && <p className="text-muted-foreground mt-3 text-sm">Loading the todo types…</p>}
@@ -310,6 +294,6 @@ export function TodoCreateDialog({
           </Button>
         </div>
       </form>
-    </div>
+    </ModalDialog>
   );
 }

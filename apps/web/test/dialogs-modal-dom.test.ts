@@ -1,14 +1,16 @@
 /**
- * The live editor's dialogs are modal to the keys: the zoom keys stay the
- * browser's under one (guide §5.8 takes a dialog for `aria-modal="true"`),
- * and Team Topology hears no key at all while one is open. Each dialog the
- * editor mounts (Release → PR, Create todo, the history diff, and Rename
- * and Duplicate through DialogShell) rendered with React under jsdom
- * (test/component-dom.ts), with the Monaco diff stubbed out: one
- * `role="dialog"` that is `aria-modal` and named by its title through
- * `aria-labelledby`. The canvas behind a dialog is out of reach in the
- * live editor itself (canvasInert, test/editor-view.test.ts), checked in the
- * built app by test/canvas-focus-chromium.ts.
+ * The live editor's dialogs are modal: the zoom keys stay the browser's
+ * under one (guide §5.8 takes a dialog for a modal one), and Team Topology
+ * hears no key at all while one is open. Each dialog the editor mounts
+ * (Release → PR, Create todo, the history diff, and Rename and Duplicate
+ * through DialogShell) rendered with React under jsdom (test/component-dom.ts),
+ * with the Monaco diff stubbed out: one native <dialog> shown with
+ * showModal(), so the page behind it is inert in a browser, `aria-modal` for
+ * the checks that cannot ask for `:modal`, named by its title through
+ * `aria-labelledby`, and holding the focus as it opens. That the toolbar,
+ * the source and the canvas are out of reach behind one, and the focus goes
+ * back as it closes, is checked in the built app by
+ * test/canvas-focus-chromium.ts.
  */
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
@@ -31,7 +33,16 @@ registerHooks({
   },
 });
 
+// test/renderer-dom.ts opens a dialog on showModal() as on show(): only this tells the two apart
+const shownModal = new WeakSet<Element>();
+const { showModal } = HTMLDialogElement.prototype;
+HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+  shownModal.add(this);
+  showModal.call(this);
+};
+
 const { createElement } = await import("react");
+const { flushSync } = await import("react-dom");
 const { createRoot } = await import("react-dom/client");
 const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
 const { DialogShell } = await import("../src/components/dialog-shell.tsx");
@@ -48,14 +59,14 @@ afterEach(async () => {
   await settle();
 });
 
-/** the dialog rendered into the document, the way the live editor mounts it */
-async function render(dialog: ReturnType<typeof createElement>): Promise<HTMLElement> {
+/** the dialog rendered into the document, the way the live editor mounts it, and committed */
+function render(dialog: ReturnType<typeof createElement>): HTMLElement {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  root.render(createElement(QueryClientProvider, { client }, dialog));
-  await settle();
+  // no garbage collection timers: the default five minutes keep node running long after the last case
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  flushSync(() => root.render(createElement(QueryClientProvider, { client }, dialog)));
   cleanups.push(() => {
     root.unmount();
     client.clear();
@@ -64,26 +75,32 @@ async function render(dialog: ReturnType<typeof createElement>): Promise<HTMLEle
   return host;
 }
 
-function assertModalDialog(host: HTMLElement, title: string): void {
-  const dialogs = host.querySelectorAll('[role="dialog"]');
+/** `focused` picks, from the dialog, what holds the focus as it opens */
+function assertModalDialog(host: HTMLElement, title: string, focused: (dialog: Element) => Element | null): void {
+  const dialogs = host.querySelectorAll("dialog");
   assert.equal(dialogs.length, 1, "one dialog");
   const dialog = dialogs[0]!;
+  assert.ok(shownModal.has(dialog), "shown with showModal()");
   assert.equal(dialog.getAttribute("aria-modal"), "true", "aria-modal");
   const labelId = dialog.getAttribute("aria-labelledby");
   assert.ok(labelId, "aria-labelledby");
   assert.equal(document.getElementById(labelId)?.textContent, title, "named by its title");
+  const target = focused(dialog);
+  assert.ok(target, "the element to focus is there");
+  assert.equal(document.activeElement, target, "takes the focus as it opens");
 }
 
-test("Release → PR is a modal dialog named by its title", async () => {
+test("Release → PR is a modal dialog named by its title, which takes the focus itself", () => {
   assertModalDialog(
-    await render(createElement(ReleaseDialog, { repo: "acme/models", preselect: [], onClose: noop })),
+    render(createElement(ReleaseDialog, { repo: "acme/models", preselect: [], onClose: noop })),
     "Release → PR",
+    (dialog) => dialog,
   );
 });
 
-test("Create todo is a modal dialog named by its title", async () => {
+test("Create todo is a modal dialog named by its title, which opens on the title field", () => {
   assertModalDialog(
-    await render(
+    render(
       createElement(TodoCreateDialog, {
         repo: "acme/models",
         model: { notation: "wardley", id: "tea" },
@@ -94,12 +111,13 @@ test("Create todo is a modal dialog named by its title", async () => {
       }),
     ),
     "Create todo",
+    (dialog) => dialog.querySelector("#todo-title"),
   );
 });
 
-test("the history diff is a modal dialog named by its commit", async () => {
+test("the history diff is a modal dialog named by its commit, which opens on Close", () => {
   assertModalDialog(
-    await render(
+    render(
       createElement(HistoryDiffDialog, {
         commit: { sha: "0123456789abcdef", subject: "Rename the kettle" },
         historical: "title Tea\n",
@@ -111,21 +129,92 @@ test("the history diff is a modal dialog named by its commit", async () => {
       } as never),
     ),
     "0123456 · Rename the kettle",
+    (dialog) => dialog.querySelector('button[title="Close"]'),
   );
 });
 
-test("Rename and Duplicate, which DialogShell draws, are modal dialogs named by their title", async () => {
+test("Rename and Duplicate, which DialogShell draws, are modal dialogs named by their title, on their field", () => {
   assertModalDialog(
-    await render(
+    render(
+      createElement(
+        DialogShell,
+        {
+          title: "Rename model",
+          pending: false,
+          submitLabel: "Rename",
+          pendingLabel: "Renaming…",
+          onSubmit: noop,
+          onClose: noop,
+        },
+        createElement("input", { id: "rename-model-name", "data-autofocus": true }),
+      ),
+    ),
+    "Rename model",
+    (dialog) => dialog.querySelector("#rename-model-name"),
+  );
+});
+
+test("a destructive dialog DialogShell draws opens on Cancel (guide §8)", () => {
+  assertModalDialog(
+    render(
       createElement(DialogShell, {
-        title: "Rename model",
+        title: "Delete model?",
         pending: false,
-        submitLabel: "Rename",
-        pendingLabel: "Renaming…",
+        destructive: true,
+        submitLabel: "Delete",
+        pendingLabel: "Deleting…",
         onSubmit: noop,
         onClose: noop,
       }),
     ),
-    "Rename model",
+    "Delete model?",
+    (dialog) => [...dialog.querySelectorAll("button")].find((button) => button.textContent === "Cancel") ?? null,
   );
+});
+
+test("Escape and a click on the backdrop dismiss a dialog, a click in its panel does not, and the browser never closes it", () => {
+  const dismissed: string[] = [];
+  const host = render(
+    createElement(DialogShell, {
+      title: "Rename model",
+      pending: false,
+      submitLabel: "Rename",
+      pendingLabel: "Renaming…",
+      onSubmit: noop,
+      onClose: () => dismissed.push("close"),
+    }),
+  );
+  const dialog = host.querySelector("dialog")!;
+  dialog.querySelector("form")!.click();
+  assert.deepEqual(dismissed, [], "a click in the panel");
+  dialog.click();
+  assert.deepEqual(dismissed, ["close"], "a click on the backdrop");
+  const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  dialog.dispatchEvent(escape);
+  assert.deepEqual(dismissed, ["close", "close"], "Escape");
+  assert.equal(escape.defaultPrevented, true, "Escape is not left to the browser, which would close the dialog itself");
+  const cancel = new Event("cancel", { cancelable: true });
+  dialog.dispatchEvent(cancel);
+  assert.equal(cancel.defaultPrevented, true, "the browser's cancel is held");
+  assert.equal(dialog.hasAttribute("open"), true, "it stays open until the editor unmounts it");
+});
+
+test("while the action runs, neither Escape nor the backdrop dismisses a dialog", () => {
+  const dismissed: string[] = [];
+  const host = render(
+    createElement(DialogShell, {
+      title: "Rename model",
+      pending: true,
+      submitLabel: "Rename",
+      pendingLabel: "Renaming…",
+      onSubmit: noop,
+      onClose: () => dismissed.push("close"),
+    }),
+  );
+  const dialog = host.querySelector("dialog")!;
+  dialog.click();
+  const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  dialog.dispatchEvent(escape);
+  assert.deepEqual(dismissed, []);
+  assert.equal(escape.defaultPrevented, true, "and the browser does not close it either");
 });

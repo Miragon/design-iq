@@ -20,9 +20,9 @@ import { Badge } from "@designiq/ui-kit/components/badge";
 import { Button } from "@designiq/ui-kit/components/button";
 import { cn } from "@designiq/ui-kit/lib/utils";
 import { Link2 } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
-import { dialogBackdrop, dialogPanel, fieldClass } from "@/components/dialog-shell";
+import { dialogPanel, fieldClass, ModalDialog } from "@/components/dialog-shell";
 import { type ChangedFileWire } from "@/lib/api";
 import { useChanges, useReferences, useReleaseFiles, useRepos, useResolveConflict } from "@/lib/queries";
 
@@ -68,13 +68,6 @@ export function ReleaseDialog({
   const close = () => {
     if (!release.isPending) onClose();
   };
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !release.isPending) onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, release.isPending]);
 
   const pool = useMemo(() => changes.data ?? [], [changes.data]);
   const units = useMemo(() => moveUnits(pool), [pool]);
@@ -123,15 +116,8 @@ export function ReleaseDialog({
   };
 
   return (
-    <div className={dialogBackdrop} onClick={close}>
-      <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className={cn(dialogPanel, "flex max-h-[85vh] max-w-lg flex-col")}
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={submit}
-      >
+    <ModalDialog labelledBy={titleId} onDismiss={close}>
+      <form className={cn(dialogPanel, "flex max-h-[85vh] max-w-lg flex-col")} onSubmit={submit}>
         <h2 id={titleId} className="text-base font-semibold">
           Release → PR
         </h2>
@@ -234,7 +220,7 @@ export function ReleaseDialog({
           </Button>
         </div>
       </form>
-    </div>
+    </ModalDialog>
   );
 }
 

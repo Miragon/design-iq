@@ -22,7 +22,7 @@ import { GitCompare, RotateCcw, X } from "lucide-react";
 import * as monaco from "monaco-editor";
 import { Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 
-import { dialogBackdrop } from "@/components/dialog-shell";
+import { ModalDialog } from "@/components/dialog-shell";
 import type { FileCommitWire } from "@/lib/api";
 import { installMonacoLanguages } from "@/lib/monaco-languages";
 import { installMonacoTheme, MONACO_OPTIONS } from "@/lib/monaco-theme";
@@ -62,14 +62,6 @@ export function HistoryDiffDialog({
   // restore overwrites live edits for everyone — same two-click confirm as the panel
   const [confirmRestore, setConfirmRestore] = useState(false);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
   // text view — Monaco diff of the document source
   useEffect(() => {
     if (view !== "text" || !monacoHostRef.current) return;
@@ -94,14 +86,8 @@ export function HistoryDiffDialog({
 
   const showDiagram = view === "diagram";
   return (
-    <div className={dialogBackdrop} onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="bg-popover text-popover-foreground flex h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalDialog labelledBy={titleId} onDismiss={onClose}>
+      <div className="bg-popover text-popover-foreground flex h-[85vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border shadow-lg">
         <div className="flex items-center gap-2 border-b px-4 py-2">
           <GitCompare className="text-muted-foreground size-4 shrink-0" />
           <span id={titleId} className="truncate text-sm font-medium">
@@ -145,7 +131,8 @@ export function HistoryDiffDialog({
             <RotateCcw />
             {restorePending ? "Restoring…" : confirmRestore ? "Really restore?" : "Restore this version"}
           </Button>
-          <Button variant="ghost" size="icon" className="size-7" title="Close" onClick={onClose}>
+          {/* the dialog opens on Close: the first control would be a view toggle or Restore */}
+          <Button variant="ghost" size="icon" className="size-7" title="Close" onClick={onClose} data-autofocus>
             <X />
           </Button>
         </div>
@@ -179,6 +166,6 @@ export function HistoryDiffDialog({
           <div ref={monacoHostRef} className="min-h-0 flex-1" />
         )}
       </div>
-    </div>
+    </ModalDialog>
   );
 }

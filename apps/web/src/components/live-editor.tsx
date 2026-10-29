@@ -51,7 +51,6 @@ import {
 } from "@/lib/api";
 import { type FocusableCanvas, focusCanvasIn, viewSwitchFocus } from "@/lib/canvas-focus";
 import {
-  canvasInert,
   editorLayers,
   type EditorView,
   editorViews,
@@ -644,7 +643,6 @@ export function LiveEditor({
   const splitAvailable = splitView && room.fits;
   const layers = editorLayers(view, { visual: isVisual, structured: structuredDoc, splitAvailable });
   const { shown, split, sourceShown, canvasShown } = layers;
-  const dialogOpen = diff !== null || todoCreateOpen || releaseOpen || renameOpen || duplicateOpen;
   const bounds = ratioBounds(room.width, room.rem);
   const shownRatio = clampRatio(ratio, bounds);
   const ActivePanel = activePanelSpec?.component;
@@ -782,7 +780,7 @@ export function LiveEditor({
         )}
         <div
           ref={canvasRef}
-          inert={canvasInert(layers, dialogOpen)}
+          inert={!canvasShown}
           className={cn(plugin?.canvasClassName, "absolute inset-0", !canvasShown && "pointer-events-none opacity-0")}
           style={split ? SPLIT_PANES.canvas : undefined}
         />
