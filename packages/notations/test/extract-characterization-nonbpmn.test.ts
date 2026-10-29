@@ -83,7 +83,7 @@ test("extractWardley: the shipped tea.owm example is pinned", () => {
         id: "cmp_power",
         type: "component",
         name: "Power",
-        extra: { visibility: 0.1, evolution: 0.71, stage: "product" },
+        extra: { visibility: 0.1, evolution: 0.71, stage: "commodity" },
       },
       { id: "anchor_business", type: "anchor", name: "Business", extra: { visibility: 0.95, evolution: 0.63 } },
       { id: "anchor_public", type: "anchor", name: "Public", extra: { visibility: 0.95, evolution: 0.78 } },
@@ -105,6 +105,26 @@ test("extractWardley: the shipped tea.owm example is pinned", () => {
       { id: "dep_8", from: "cmp_kettle", to: "cmp_power", kind: "dependency" },
     ],
   });
+});
+
+test("extractWardley: a component's stage is the one the canvas's evolution grid draws it in", () => {
+  const owm = [
+    "component Idea [0.5, 0.16]",
+    "component Tea [0.6, 0.2]",
+    "component Hosting [0.4, 0.45]",
+    "component Kettle [0.5, 0.72]",
+    "component Power [0.1, 0.7]",
+  ].join("\n");
+  assert.deepEqual(
+    extractModelGraph("maps/stages.owm", owm)?.nodes.map((n) => [n.name, n.extra?.stage]),
+    [
+      ["Idea", "genesis"],
+      ["Tea", "custom-built"],
+      ["Hosting", "product"],
+      ["Kettle", "commodity"],
+      ["Power", "commodity"],
+    ],
+  );
 });
 
 test("extractWardley: submaps, accelerators and pipeline members are nodes, notes and regions are not, flows are edges", () => {

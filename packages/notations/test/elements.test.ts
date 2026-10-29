@@ -9,6 +9,9 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { closestElements, type ModelElement, modelElements } from "../elements.ts";
+import { extractModelGraph } from "../extract.ts";
+import { hasTodos, NOTATIONS } from "../index.ts";
+import { templateFor } from "../templates.ts";
 
 const fixture = (name: string): string => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 
@@ -17,25 +20,53 @@ const ids = (elements: ModelElement[] | undefined): string[] => (elements ?? [])
 const BPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" id="Definitions_1">
   <bpmn:collaboration id="Collaboration_1"><bpmn:participant id="Pool_1" name="Sales" processRef="Process_1"/></bpmn:collaboration>
+  <bpmn:message id="Message_customer_inquiry" name="customer-inquiry"/>
   <bpmn:process id="Process_1">
     <bpmn:laneSet id="LaneSet_1"><bpmn:lane id="Lane_1" name="Clerk"><bpmn:flowNodeRef>Task_1</bpmn:flowNodeRef></bpmn:lane></bpmn:laneSet>
+    <bpmn:startEvent id="StartEvent_customer_inquiry" name="Customer inquiry"><bpmn:messageEventDefinition id="MessageEventDefinition_customer_inquiry" messageRef="Message_customer_inquiry"/></bpmn:startEvent>
     <bpmn:task id="Task_1" name="Check"/>
     <bpmn:task id="Task_1" name="Check again"/>
+    <bpmn:task id="Task_hidden" name="Not drawn"/>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_customer_inquiry" targetRef="Task_1"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1"><bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+    <bpmndi:BPMNShape id="Pool_1_di" bpmnElement="Pool_1"/>
+    <bpmndi:BPMNShape id="Lane_1_di" bpmnElement="Lane_1"/>
+    <bpmndi:BPMNShape id="StartEvent_customer_inquiry_di" bpmnElement="StartEvent_customer_inquiry"><bpmndi:BPMNLabel/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1"/>
+    <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1"/>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
-test("modelElements(bpmn): every semantic element, the diagram interchange is none, the first of a duplicated id wins", () => {
+test("modelElements(bpmn): the elements its diagram interchange draws, in model order, the first of a duplicated id wins", () => {
   assert.deepEqual(modelElements("order.bpmn", BPMN), [
-    { id: "Definitions_1" },
     { id: "Collaboration_1" },
     { id: "Pool_1", name: "Sales" },
-    { id: "Process_1" },
-    { id: "LaneSet_1" },
     { id: "Lane_1", name: "Clerk" },
+    { id: "StartEvent_customer_inquiry", name: "Customer inquiry" },
     { id: "Task_1", name: "Check" },
+    { id: "Flow_1" },
+  ]);
+});
+
+test("modelElements(bpmn): no definition, lane set, message or event definition ranks ahead of the drawn element", () => {
+  const elements = modelElements("order.bpmn", BPMN) ?? [];
+  assert.deepEqual(closestElements(elements, "customer_inquiry", 1), [
+    { id: "StartEvent_customer_inquiry", name: "Customer inquiry" },
+  ]);
+});
+
+test("modelElements(bpmn): without a diagram interchange, the semantic elements minus the kinds bpmn-js never draws", () => {
+  const withoutDiagram = BPMN.replace(/<bpmndi:BPMNDiagram[\s\S]*<\/bpmndi:BPMNDiagram>/, "");
+  assert.deepEqual(ids(modelElements("order.bpmn", withoutDiagram)), [
+    "Collaboration_1",
+    "Pool_1",
+    "Process_1",
+    "Lane_1",
+    "StartEvent_customer_inquiry",
+    "Task_1",
+    "Task_hidden",
+    "Flow_1",
   ]);
 });
 
@@ -44,6 +75,19 @@ test("modelElements: a text that does not parse throws, a document has no elemen
   assert.throws(() => modelElements("map.tt", "{"));
   assert.equal(modelElements("notes.md", "# Notes\n"), undefined);
   assert.equal(modelElements("notes.unknown", "x"), undefined);
+});
+
+test("modelElements: every notation that takes todos and has a graph declares the elements its canvas addresses", () => {
+  for (const notation of NOTATIONS.filter((n) => hasTodos(n.id) && n.id !== "bpmn")) {
+    const template = templateFor(notation.id, "model", "Model");
+    assert.ok(template !== undefined, notation.id);
+    const graph = extractModelGraph(notation.id, template);
+    assert.equal(
+      modelElements(notation.id, template) !== undefined,
+      graph !== undefined,
+      `${notation.id}: a graph without a declaration would take any of its ids as an anchor`,
+    );
+  }
 });
 
 test("modelElements(wardley): the elements the canvas addresses, under their cmp_* ids; a link is none", () => {
@@ -103,6 +147,7 @@ test("modelElements(value-chain): the steps and org units under the ids the docu
     (JSON.parse(raw) as { elements: Array<{ id: string }> }).elements.map(({ id }) => id),
     "the canvas lists, reveals and badges no connection",
   );
+  assert.equal(new Set(ids(elements)).size, elements?.length, "an id is listed once");
   assert.deepEqual(ids(closestElements(elements ?? [], "assign-1")), ["step-assembly", "step-testing", "step-service"]);
 });
 

@@ -7,9 +7,11 @@
  * instead of one parser per tool per notation.
  *
  * Node-safe: fast-xml-parser, JSON, regex and the DOM-free Wardley DSL parser
- * (@miragon/wardley-dsl) only, no DOM, no editor libraries.
+ * and schema model (@miragon/wardley-dsl, @miragon/wardley-schema-model)
+ * only, no DOM, no editor libraries.
  */
 import { parseDSL as parseWardleyDsl } from "@miragon/wardley-dsl";
+import { evolutionStage } from "@miragon/wardley-schema-model";
 import { XMLParser } from "fast-xml-parser";
 
 // re-exported so the validator's raw well-formedness check needs no direct
@@ -414,11 +416,14 @@ const WARDLEY_ADDRESSABLE_TYPES: ReadonlySet<string> = new Set([
   "accelerator",
 ]);
 
-const wardleyStage = (evolution: number): string =>
-  evolution < 0.25 ? "genesis" : evolution < 0.5 ? "custom-built" : evolution < 0.75 ? "product" : "commodity";
+// the stage the canvas's evolution grid draws a component in, from the
+// schema model's boundaries the renderer reads (test/wardley-dsl-pin.test.ts)
+const WARDLEY_STAGES = ["genesis", "custom-built", "product", "commodity"] as const;
 
 function extractWardley(raw: string): ModelGraph {
   const map = parseWardleyDsl(raw);
+  const wardleyStage = (evolution: number): string =>
+    WARDLEY_STAGES[evolutionStage(evolution, map.config.stageBoundaries)];
   const nodes: ModelNode[] = [];
   for (const element of map.elements) {
     if (!WARDLEY_ADDRESSABLE_TYPES.has(element.elementType)) continue;
@@ -507,10 +512,11 @@ function extractTeamTopology(raw: string): ModelGraph {
 // `<kind> <Label> [x, y] (suffixes)` stickies (kinds: event command actor
 // aggregate policy readmodel external hotspot), `note <Text> [x, y]`,
 // `line [[x, y], …]` freeform drawings and `A -> B; label` arrows that
-// reference stickies by NAME or `#id`; `//` and `/* */` comments. Ids mirror
-// the DSL parser's allocation (`<prefix>_<slug>`, `_2` on collision, an
-// explicit `(id …)` suffix wins) so ModelGraph ids equal the renderer's
-// element ids. Lenient like the DSL itself: an uninterpretable line is
+// reference stickies by NAME or `#id`; `//` and `/* */` comments, cut where
+// the DSL cuts them (an apostrophe quotes a marker). Ids mirror the DSL
+// parser's allocation (`<prefix>_<slug>`, `_2` on collision, an explicit
+// `(id …)` suffix wins unless the board's own ids reserve it) so ModelGraph
+// ids equal the renderer's element ids (test/storm-ids.test.ts). Lenient like the DSL itself: an uninterpretable line is
 // skipped and an unresolved arrow dropped — the canvas has no such edge.
 
 const STORM_ID_PREFIX: Record<string, string> = {
@@ -528,6 +534,63 @@ const STORM_HOST_KINDS = new Set(["event", "command", "aggregate", "policy", "re
 const STORM_ATTACHABLE_KINDS = new Set(["actor", "hotspot", "note"]);
 const STORM_COORDS = /\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]/;
 const STORM_POINTS = /\[\s*(\[[^[\]]*\](?:\s*,\s*\[[^[\]]*\])+)\s*\]/;
+
+/** ids the canvas keeps for the board itself: an explicit `(id …)` naming one gets a new id */
+const STORM_ENGINE_ID = /^(?:event-storming-root$|__implicitroot)/;
+
+/**
+ * The first `needle` outside a quote, as the DSL finds a comment marker: an
+ * apostrophe opens and closes a quote, so `Don't // stop` is no comment.
+ */
+function stormIndexOutsideQuotes(line: string, needle: string): number {
+  let inQuote = false;
+  for (let i = 0; i + needle.length <= line.length; i++) {
+    if (line[i] === "'") {
+      inQuote = !inQuote;
+      continue;
+    }
+    if (!inQuote && line.startsWith(needle, i)) return i;
+  }
+  return -1;
+}
+
+/** a line without its `//` comment, which a URL's `://` does not start */
+function stormWithoutLineComment(line: string): string {
+  let inQuote = false;
+  for (let i = 0; i < line.length - 1; i++) {
+    if (line[i] === "'") inQuote = !inQuote;
+    else if (!inQuote && line[i] === "/" && line[i + 1] === "/" && line[i - 1] !== ":") return line.slice(0, i);
+  }
+  return line;
+}
+
+/** the board's lines without their comments, cut the way the DSL cuts them */
+function stormCodeLines(raw: string): string[] {
+  const lines: string[] = [];
+  let inBlockComment = false;
+  for (const source of raw.split(/\r?\n/)) {
+    let working = source;
+    if (inBlockComment) {
+      const close = working.indexOf("*/");
+      if (close < 0) continue;
+      working = working.slice(close + 2);
+      inBlockComment = false;
+    }
+    let open = stormIndexOutsideQuotes(working, "/*");
+    while (open >= 0) {
+      const close = working.indexOf("*/", open + 2);
+      if (close < 0) {
+        working = working.slice(0, open);
+        inBlockComment = true;
+        break;
+      }
+      working = `${working.slice(0, open)} ${working.slice(close + 2)}`;
+      open = stormIndexOutsideQuotes(working, "/*");
+    }
+    lines.push(stormWithoutLineComment(working).trim());
+  }
+  return lines;
+}
 
 const stormSlug = (label: string): string =>
   label
@@ -566,7 +629,7 @@ function extractEventStorming(raw: string): ModelGraph {
   const used = new Set<string>();
   const nameToId = new Map<string, string>();
   const claim = (id: string | undefined): string | undefined => {
-    if (!id || used.has(id)) return undefined;
+    if (!id || used.has(id) || STORM_ENGINE_ID.test(id)) return undefined;
     used.add(id);
     return id;
   };
@@ -581,8 +644,7 @@ function extractEventStorming(raw: string): ModelGraph {
   const arrows: Array<{ from: string; to: string; label?: string }> = [];
   const pins: Array<{ node: ModelNode; host: string }> = [];
 
-  for (const source of raw.replace(/\/\*[\s\S]*?\*\//g, " ").split(/\r?\n/)) {
-    const line = source.replace(/(?<!:)\/\/.*$/, "").trim();
+  for (const line of stormCodeLines(raw)) {
     if (!line) continue;
     const kw = (/^[A-Za-z][\w-]*/.exec(line)?.[0] ?? "").toLowerCase();
     const after = line.slice(kw.length).trim();

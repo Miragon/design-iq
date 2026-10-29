@@ -408,8 +408,9 @@ file stems, unique per notation but not across them, so the label names the nota
 `<notation>:<id>` (`bpmn:order-to-cash`, `wardley:tea-shop`).
 `create_todo` and `list_todos` take a model as the generic tools do (`id` or `path`, `notation`
 for a stem shared across notations; without it a process wins). Element ids are the ones the
-canvas reports: a process's from `get_process` (any element of the BPMN counts, a lane or a pool
-too), a canvas model's the ids `get_view` lists in `detail` (a Wardley component's is `cmp_` and
+canvas reports: a process's from `get_process` (any element the BPMN's diagram interchange draws
+counts, a lane or a pool too; a definition, a lane set, a message or an event definition has no
+shape and is none), a canvas model's the ids `get_view` lists in `detail` (a Wardley component's is `cmp_` and
 its name's slug, `detail.elements` has it, its name is in `name`). Only what the canvas addresses
 is an anchor: a Wardley link, an Event Storming note, drawing or arrow takes its id from the line
 order and is refused like an unknown id, and so is a Value Chain connection, which its canvas does

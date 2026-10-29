@@ -151,10 +151,11 @@ function unknownElementsMessage(noun: string, modelId: string, unknown: string[]
     return closest.length > 0 ? `- ${shown(id)}: closest ${closest.map(label).join(", ")}` : `- ${shown(id)}`;
   });
   if (unknown.length > RANKED_UNKNOWN_IDS) lines.push(`- and ${unknown.length - RANKED_UNKNOWN_IDS} more`);
+  // REST (the SPA's dialog) and MCP (agents, the widget's form) share this text: one line for each reader
   const next =
     known.length > 0
-      ? `Anchor the todo to ids get_view reports, or omit \`elements\` for a todo on the whole ${noun}.`
-      : `It has no elements yet: omit \`elements\` for a todo on the whole ${noun}.`;
+      ? `Select the elements again, or file the todo on the whole ${noun}. An agent anchors it to ids get_view reports, or omits \`elements\`.`
+      : `It has no elements yet: file the todo on the whole ${noun}. An agent omits \`elements\`.`;
   return `The ${noun} '${modelId}' has no element with ${unknown.length === 1 ? "this id" : "these ids"}:\n${lines.join("\n")}\n${next}`;
 }
 

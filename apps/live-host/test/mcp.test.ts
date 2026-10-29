@@ -492,7 +492,7 @@ test("todos: create anchors to the open process, list filters by it, close compl
   assert.equal(issues.created.length, 2);
 });
 
-test("todos: an element id the process does not have is refused with its closest ids, any element of the XML is one", async () => {
+test("todos: an element id the process does not have is refused with its closest ids, any element its diagram draws is one", async () => {
   const issues = fakeIssues();
   const { call, callJson } = await connect(deps({ issues }));
 
@@ -508,7 +508,7 @@ test("todos: an element id the process does not have is refused with its closest
     "The process 'order' has no element with these ids:\n" +
       "- StartEvent_2: closest StartEvent_1 (Process started), EndEvent_1 (Process completed), Participant_order (Order)\n" +
       "- StartEvent_1_di: closest StartEvent_1 (Process started), EndEvent_1 (Process completed), Participant_order (Order)\n" +
-      "Anchor the todo to ids get_view reports, or omit `elements` for a todo on the whole process.",
+      "Select the elements again, or file the todo on the whole process. An agent anchors it to ids get_view reports, or omits `elements`.",
     "the diagram interchange's ids are no elements",
   );
   assert.equal(issues.created.length, 0);
