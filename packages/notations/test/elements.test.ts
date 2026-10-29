@@ -93,12 +93,17 @@ test("modelElements(team-topology): an id or a label that is no string names not
   assert.deepEqual(elements, [{ id: "team_a" }]);
 });
 
-test("modelElements(value-chain): the elements and the connections, under the ids the document writes", () => {
-  const elements = modelElements("porter.vc.json", fixture("porter.vc.json"));
+test("modelElements(value-chain): the steps and org units under the ids the document writes, no connection", () => {
+  const raw = fixture("porter.vc.json");
+  const elements = modelElements("porter.vc.json", raw);
   assert.deepEqual(elements?.[1], { id: "step-assembly", name: "Assembly" });
   assert.ok(ids(elements).includes("org-development"));
-  assert.ok(ids(elements).includes("assign-1"), "a connection is selected on the canvas too");
-  assert.equal(new Set(ids(elements)).size, elements?.length, "an id is listed once");
+  assert.deepEqual(
+    ids(elements),
+    (JSON.parse(raw) as { elements: Array<{ id: string }> }).elements.map(({ id }) => id),
+    "the canvas lists, reveals and badges no connection",
+  );
+  assert.deepEqual(ids(closestElements(elements ?? [], "assign-1")), ["step-assembly", "step-testing", "step-service"]);
 });
 
 test("closestElements: a name counts as much as an id, so a component asked for by its name ranks its id first", () => {

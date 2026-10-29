@@ -329,8 +329,9 @@ interface ZoomScrollLike {
  * to 20 to 400 %, so from a fit below 20 % a zoom out zooms in to 20 %, and
  * above 400 % a zoom in zooms out (guide §5.8: zooming out never zooms in).
  * There the level stays as it is, as the view's `stepZoom` keeps it for the
- * buttons and keys. For bpmn-js and the DMN DRD; a diagram without
- * `zoomScroll` (dmn-js's read-only DRD) has no wheel zoom. Returns the undo.
+ * buttons and keys. For bpmn-js, the DMN DRD and every Miragon renderer (all
+ * five load diagram-js's zoomScroll); a diagram without `zoomScroll` (dmn-js's
+ * read-only DRD) has no wheel zoom. Returns the undo.
  */
 export function keepWheelZoomDirection(instance: Pick<DiagramLike, "get">): () => void {
   let zoomScroll: ZoomScrollLike;

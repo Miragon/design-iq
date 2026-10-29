@@ -514,7 +514,8 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
       name: typeof name === "string" ? name : null,
       summary: `Value Chain with ${counted(stats)}`,
       stats,
-      // the document's own ids, which its canvas selects and a todo anchors to
+      // the document's own ids: an element's is the one its canvas selects and a todo anchors to; the
+      // canvas (value-chain-renderer 0.8.0) addresses no connection, so those are listed for reading only
       detail: {
         elements: graph.nodes.map((n) => ({ id: n.id, type: n.type, name: n.name ?? null })),
         connections: graph.edges.map((e) => ({ id: e.id, from: e.from, to: e.to, type: e.kind })),

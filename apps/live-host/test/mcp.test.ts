@@ -729,8 +729,15 @@ test("todos: an anchor must be an element its canvas addresses, on every notatio
   assert.ok(team.isError);
   assert.match(team.text, /- Checkout: closest team_checkout \(Checkout\)/);
 
-  // a step and a connection are elements of a Value Chain, under the ids the document writes
-  assert.ok(!(await anchored(VC_PATH, ["step_order", "seq_order_invoice"])).isError);
+  // a step is an element of a Value Chain, under the id the document writes; a connection keeps its id
+  // too, but value-chain-renderer 0.8.0 neither lists, reveals nor badges it
+  assert.ok(!(await anchored(VC_PATH, ["step_order"])).isError);
+  const connection = await anchored(VC_PATH, ["seq_order_invoice"]);
+  assert.ok(connection.isError, "a connection is no element the chain's canvas addresses");
+  assert.match(
+    connection.text,
+    /^The Value Chain 'chain' has no element with this id:\n- seq_order_invoice: closest step_invoice \(Invoice\), step_order \(Order\)\n/,
+  );
   const step = await anchored(VC_PATH, ["step_ordre"]);
   assert.ok(step.isError);
   assert.match(

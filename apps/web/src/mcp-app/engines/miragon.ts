@@ -29,7 +29,7 @@ import type {
   MiragonRendererSpec,
 } from "../../notations/miragon/spec.ts";
 import type { EngineOptions, Insets, LiveBindHooks, MenuHost, WidgetEngine } from "../core/engine.ts";
-import { type DiagramView, diagramView } from "./diagram-js.ts";
+import { type DiagramView, diagramView, keepWheelZoomDirection } from "./diagram-js.ts";
 
 export interface MiragonEngine extends WidgetEngine {
   /** the mounted contract instance — for tests and future extras */
@@ -92,6 +92,8 @@ export function mountMiragonEngine(
   const unrouteKeys = opts?.chromeKeys
     ? routeCanvasChromeKeys(modeler.diagram, container.ownerDocument, opts.chromeKeys)
     : undefined;
+  // diagram-js's wheel zoom clamps to 20 %: from a fit below it, a zoom out would zoom in
+  const unguardWheel = keepWheelZoomDirection(modeler.diagram);
   const menu =
     opts?.menuHost && renderer.menu
       ? renderer.menu(modeler, menuHostIn(opts.menuHost, container, readonly))
@@ -142,6 +144,7 @@ export function mountMiragonEngine(
     destroy(): void {
       menu?.destroy();
       unrouteKeys?.();
+      unguardWheel();
       detach?.();
       view.destroy();
       modeler.destroy();
