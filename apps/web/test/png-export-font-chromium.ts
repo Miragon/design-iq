@@ -1,9 +1,9 @@
 /**
  * The PNG exports' labels in Geist (issue 285), in the built app, in headless
- * Chromium: a check run by hand, not by `pnpm test`, because CI has no
- * browser and jsdom draws no image (test/miragon-menus.test.ts checks what
- * goes into the image). Run it after a renderer, fontsource or browser
- * update, from the repository root:
+ * Chromium: a check run by hand, not by `pnpm test` or CI, as it needs a
+ * build and a Live Host of its own, and jsdom draws no image
+ * (test/miragon-menus.test.ts checks what goes into the image). Run it after
+ * a renderer, fontsource or browser update, from the repository root:
  *
  *   pnpm build
  *   npx -y playwright@1.56.1 install --only-shell chromium     # once

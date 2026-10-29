@@ -35,6 +35,11 @@ A PR is expected green on all seven. If you edit **content** — the models unde
 `process-documentation/` — `pnpm validate` must pass before you finish; incomplete BPMNDI, a
 dangling `callActivity` or a failing decision test are caught here (hard rule 1 in `CLAUDE.md`).
 
+For a change that moves a Miragon package, the code that mounts one or a dependency of apps/web,
+CI also runs `pnpm --filter @designiq/web test:browser`: the modeler contract's conformance kit
+against the Miragon renderers in headless Chromium (`apps/web/README.md`). Run it too, after
+installing Chromium once with `pnpm --filter @designiq/web exec playwright install --only-shell chromium`.
+
 ## Architecture rules (ADR 0003)
 
 `domain/` is pure. `application/` never imports adapter implementations — they are injected
@@ -51,4 +56,5 @@ Contributing a connector? Start at [docs/extending/connectors.md](docs/extending
   commit with `git commit -s`.
 - Keep PRs small and single-purpose — one connector, one fix, one refactor. Large PRs that
   mix concerns will be asked to split.
-- Green gate before review: run the local gates above; CI runs the same list.
+- Green gate before review: run the local gates above, and `test:browser` where it applies;
+  CI runs the same list.

@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "title": "Online shop — order fulfilment",
+  "contexts": [
+    {
+      "id": "ctx_catalog",
+      "label": "Product Catalog",
+      "position": {
+        "x": 80,
+        "y": 80
+      },
+      "size": {
+        "width": 200,
+        "height": 110
+      },
+      "subdomainType": "supporting",
+      "team": "Catalog Team",
+      "description": "Products, prices and availability shown in the shop."
+    },
+    {
+      "id": "ctx_legacy_erp",
+      "label": "Legacy ERP",
+      "position": {
+        "x": 760,
+        "y": 340
+      },
+      "size": {
+        "width": 200,
+        "height": 110
+      },
+      "fill": "#EEEEEE",
+      "stroke": "#888888"
+    },
+    {
+      "id": "ctx_ordering",
+      "label": "Ordering",
+      "position": {
+        "x": 420,
+        "y": 80
+      },
+      "size": {
+        "width": 200,
+        "height": 110
+      },
+      "subdomainType": "core",
+      "team": "Checkout Team",
+      "description": "Carts, checkout and the order lifecycle."
+    },
+    {
+      "id": "ctx_payment",
+      "label": "Payment",
+      "position": {
+        "x": 420,
+        "y": 340
+      },
+      "size": {
+        "width": 200,
+        "height": 110
+      },
+      "subdomainType": "generic",
+      "team": "Payments Team"
+    },
+    {
+      "id": "ctx_shipping",
+      "label": "Shipping",
+      "position": {
+        "x": 760,
+        "y": 80
+      },
+      "size": {
+        "width": 200,
+        "height": 110
+      },
+      "subdomainType": "supporting"
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel_catalog_ordering",
+      "from": "ctx_catalog",
+      "to": "ctx_ordering",
+      "pattern": "upstream-downstream",
+      "upstreamRoles": [
+        "OHS",
+        "PL"
+      ],
+      "downstreamRoles": [
+        "CF"
+      ],
+      "label": "product data"
+    },
+    {
+      "id": "rel_erp_payment",
+      "from": "ctx_payment",
+      "to": "ctx_legacy_erp",
+      "pattern": "separate-ways"
+    },
+    {
+      "id": "rel_ordering_payment",
+      "from": "ctx_ordering",
+      "to": "ctx_payment",
+      "pattern": "customer-supplier",
+      "downstreamRoles": [
+        "ACL"
+      ],
+      "label": "payments",
+      "implementationTechnology": "REST"
+    },
+    {
+      "id": "rel_ordering_shipping",
+      "from": "ctx_ordering",
+      "to": "ctx_shipping",
+      "pattern": "partnership",
+      "description": "Both teams plan delivery slots together."
+    },
+    {
+      "id": "rel_shipping_erp",
+      "from": "ctx_legacy_erp",
+      "to": "ctx_shipping",
+      "pattern": "upstream-downstream",
+      "downstreamRoles": [
+        "ACL"
+      ],
+      "implementationTechnology": "SOAP"
+    }
+  ]
+}

@@ -1,0 +1,228 @@
+{
+  "connections": [
+    {
+      "connectionType": "assignment",
+      "id": "assign-1",
+      "source": "step-capture",
+      "target": "org-sales",
+      "waypoints": [
+        {
+          "x": 120,
+          "y": 260
+        },
+        {
+          "x": 120,
+          "y": 300
+        }
+      ]
+    },
+    {
+      "connectionType": "assignment",
+      "id": "assign-2",
+      "source": "step-invoice",
+      "target": "org-finance",
+      "waypoints": [
+        {
+          "x": 680,
+          "y": 140
+        },
+        {
+          "x": 680,
+          "y": 200
+        }
+      ]
+    },
+    {
+      "connectionType": "hierarchy",
+      "id": "hier-1",
+      "source": "step-order",
+      "target": "step-capture",
+      "waypoints": [
+        {
+          "x": 130,
+          "y": 140
+        },
+        {
+          "x": 130,
+          "y": 170
+        },
+        {
+          "x": 120,
+          "y": 170
+        },
+        {
+          "x": 120,
+          "y": 200
+        }
+      ]
+    },
+    {
+      "connectionType": "hierarchy",
+      "id": "hier-2",
+      "source": "step-order",
+      "target": "step-stock",
+      "waypoints": [
+        {
+          "x": 130,
+          "y": 140
+        },
+        {
+          "x": 130,
+          "y": 170
+        },
+        {
+          "x": 300,
+          "y": 170
+        },
+        {
+          "x": 300,
+          "y": 200
+        }
+      ]
+    },
+    {
+      "connectionType": "sequence",
+      "id": "seq-1",
+      "source": "step-order",
+      "target": "step-credit",
+      "waypoints": [
+        {
+          "x": 220,
+          "y": 110
+        },
+        {
+          "x": 252.5,
+          "y": 110
+        }
+      ]
+    },
+    {
+      "connectionType": "sequence",
+      "id": "seq-2",
+      "source": "step-credit",
+      "target": "step-delivery",
+      "waypoints": [
+        {
+          "x": 400,
+          "y": 110
+        },
+        {
+          "x": 432.5,
+          "y": 110
+        }
+      ]
+    },
+    {
+      "connectionType": "sequence",
+      "id": "seq-3",
+      "source": "step-delivery",
+      "target": "step-invoice",
+      "waypoints": [
+        {
+          "x": 580,
+          "y": 110
+        },
+        {
+          "x": 612.5,
+          "y": 110
+        }
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "bounds": {
+        "height": 60,
+        "width": 130,
+        "x": 615,
+        "y": 200
+      },
+      "elementType": "orgUnit",
+      "id": "org-finance",
+      "name": "Finance"
+    },
+    {
+      "bounds": {
+        "height": 60,
+        "width": 130,
+        "x": 55,
+        "y": 300
+      },
+      "elementType": "orgUnit",
+      "id": "org-sales",
+      "name": "Sales"
+    },
+    {
+      "bounds": {
+        "height": 60,
+        "width": 160,
+        "x": 40,
+        "y": 200
+      },
+      "elementType": "step",
+      "id": "step-capture",
+      "name": "Capture order"
+    },
+    {
+      "bounds": {
+        "height": 60,
+        "width": 160,
+        "x": 240,
+        "y": 80
+      },
+      "elementType": "step",
+      "id": "step-credit",
+      "name": "Credit check"
+    },
+    {
+      "bounds": {
+        "height": 60,
+        "width": 160,
+        "x": 420,
+        "y": 80
+      },
+      "elementType": "step",
+      "id": "step-delivery",
+      "name": "Delivery"
+    },
+    {
+      "bounds": {
+        "height": 60,
+        "width": 160,
+        "x": 600,
+        "y": 80
+      },
+      "color": "hsl(150, 86%, 34%)",
+      "elementType": "step",
+      "id": "step-invoice",
+      "link": "billing-details",
+      "name": "Invoicing"
+    },
+    {
+      "bounds": {
+        "height": 60,
+        "width": 180,
+        "x": 40,
+        "y": 80
+      },
+      "elementType": "step",
+      "id": "step-order",
+      "name": "Order handling"
+    },
+    {
+      "bounds": {
+        "height": 60,
+        "width": 160,
+        "x": 220,
+        "y": 200
+      },
+      "elementType": "step",
+      "id": "step-stock",
+      "name": "Check stock"
+    }
+  ],
+  "meta": {
+    "name": "Order to Cash"
+  },
+  "schemaVersion": 1
+}

@@ -1,0 +1,15 @@
+title Warehouse Big Picture
+style dark
+level big-picture
+event Goods Received [200, 300]
+event Goods Stored [420, 300]
+event Order Picked [640, 300] (id event_order_picked)
+event Order Shipped [860, 300]
+actor Warehouse Clerk [420, 120]
+external Carrier [860, 520]
+hotspot Who books the carrier? [860, 120]
+event Order Picked [1080, 300] (id event_order_picked_again)
+Goods Received -> Goods Stored
+Goods Stored -> #event_order_picked
+#event_order_picked -> Order Shipped
+Order Shipped -> #event_order_picked_again

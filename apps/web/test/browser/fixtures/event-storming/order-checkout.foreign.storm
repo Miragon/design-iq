@@ -1,0 +1,6 @@
+title Order Checkout
+x-vendor: keep-me
+command Place Order [300, 320]
+owner team-checkout
+event Order Placed [660, 320]
+Place Order -> Order Placed

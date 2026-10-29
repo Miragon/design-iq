@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "title": "Online shop — order fulfilment",
+  "x-vendor": { "owner": "team-checkout", "reviewed": true },
+  "contexts": [
+    {
+      "id": "ctx_ordering",
+      "label": "Ordering",
+      "subdomainType": "core",
+      "position": { "x": 420, "y": 80 },
+      "size": { "width": 200, "height": 110 },
+      "x-repository": "git@example.com:shop/ordering.git"
+    },
+    {
+      "id": "ctx_payment",
+      "label": "Payment",
+      "subdomainType": "generic",
+      "position": { "x": 420, "y": 340 },
+      "size": { "width": 200, "height": 110 }
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel_ordering_payment",
+      "from": "ctx_ordering",
+      "to": "ctx_payment",
+      "pattern": "customer-supplier",
+      "x-weight": 3
+    }
+  ]
+}

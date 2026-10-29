@@ -1,0 +1,183 @@
+{
+  "version": 3,
+  "title": "Ride-hailing team topology",
+  "nodes": [
+    {
+      "id": "team_booking",
+      "type": "stream-aligned",
+      "label": "Booking & Dispatch",
+      "position": {
+        "x": 220,
+        "y": 276
+      },
+      "size": {
+        "width": 600,
+        "height": 96
+      },
+      "description": "Owns booking a ride and matching it to a driver."
+    },
+    {
+      "id": "team_onboarding",
+      "type": "stream-aligned",
+      "label": "Driver Onboarding",
+      "position": {
+        "x": 220,
+        "y": 150
+      },
+      "size": {
+        "width": 600,
+        "height": 96
+      },
+      "description": "Owns the journey from driver sign-up to first ride."
+    },
+    {
+      "id": "team_payments",
+      "type": "stream-aligned",
+      "label": "Payments",
+      "position": {
+        "x": 220,
+        "y": 402
+      },
+      "size": {
+        "width": 600,
+        "height": 96
+      },
+      "description": "Owns fares, payouts and invoices."
+    },
+    {
+      "id": "team_platform",
+      "type": "platform",
+      "label": "Mobility Platform",
+      "position": {
+        "x": 220,
+        "y": 552
+      },
+      "size": {
+        "width": 600,
+        "height": 110
+      },
+      "description": "Self-service runtime, CI/CD, maps and observability."
+    },
+    {
+      "id": "team_pricing",
+      "type": "complicated-subsystem",
+      "label": "Pricing Engine",
+      "position": {
+        "x": 880,
+        "y": 249
+      },
+      "size": {
+        "width": 170,
+        "height": 150
+      },
+      "description": "Specialists for the dynamic pricing model."
+    },
+    {
+      "id": "team_security",
+      "type": "enabling",
+      "label": "Security Enablement",
+      "position": {
+        "x": 40,
+        "y": 150
+      },
+      "size": {
+        "width": 120,
+        "height": 222
+      },
+      "description": "Coaches teams on threat modelling and KYC compliance, then steps back."
+    }
+  ],
+  "interactions": [
+    {
+      "id": "int_booking_pricing",
+      "mode": "collaboration",
+      "position": {
+        "x": 794,
+        "y": 288
+      },
+      "size": {
+        "width": 112,
+        "height": 72
+      },
+      "label": "surge pricing"
+    },
+    {
+      "id": "int_platform_payments",
+      "mode": "x-as-a-service",
+      "position": {
+        "x": 476,
+        "y": 486
+      },
+      "size": {
+        "width": 88,
+        "height": 78
+      }
+    },
+    {
+      "id": "int_security_booking",
+      "mode": "facilitating",
+      "position": {
+        "x": 148,
+        "y": 282
+      },
+      "size": {
+        "width": 84,
+        "height": 84
+      }
+    },
+    {
+      "id": "int_security_onboarding",
+      "mode": "facilitating",
+      "position": {
+        "x": 148,
+        "y": 156
+      },
+      "size": {
+        "width": 84,
+        "height": 84
+      }
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow_main",
+      "position": {
+        "x": 40,
+        "y": 40
+      },
+      "size": {
+        "width": 1010,
+        "height": 56
+      },
+      "label": "Flow of change"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "ann_pricing_handover",
+      "text": "Collaboration until surge pricing ships (Q2), then X-as-a-Service",
+      "position": {
+        "x": 880,
+        "y": 423
+      },
+      "size": {
+        "width": 200,
+        "height": 64
+      },
+      "attachedTo": "int_booking_pricing"
+    },
+    {
+      "id": "ann_security_timebox",
+      "text": "Facilitating until both teams model their own threats (Q3), then it ends",
+      "position": {
+        "x": 40,
+        "y": 396
+      },
+      "size": {
+        "width": 156,
+        "height": 72
+      },
+      "attachedTo": "team_security"
+    }
+  ]
+}

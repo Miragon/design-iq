@@ -1,10 +1,10 @@
 /**
- * Monaco's layers against the editor's side panels (issue 288) in the built
- * SPA, in headless Chromium: a check run by hand, not by `pnpm test`, because
- * CI has no browser (test/source-layers.test.ts and test/side-panel-room.test.ts
- * hold the stylesheet and the layout to it).
- * Run it after a monaco-editor bump or a change to the editor's layers, from
- * the repository root:
+ * Monaco's layers against the editor's side panels (issue 288) in the built SPA,
+ * in headless Chromium: a check run by hand, not by `pnpm test` or CI, as it
+ * needs a build and a Live Host of its own (test/source-layers.test.ts and
+ * test/side-panel-room.test.ts hold the stylesheet and the layout to it). Run it
+ * after a monaco-editor bump or a change to the editor's layers, from the
+ * repository root:
  *
  *   pnpm build
  *   npx -y playwright@1.56.1 install --only-shell chromium     # once

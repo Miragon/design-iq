@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "name": "Order to Cash",
+    "x-vendor": "keep-me-meta"
+  },
+  "elements": [
+    {
+      "id": "step-order",
+      "elementType": "step",
+      "name": "Order handling",
+      "bounds": {
+        "x": 40,
+        "y": 80,
+        "width": 180,
+        "height": 60
+      },
+      "x-vendor": "keep-me-element"
+    },
+    {
+      "id": "step-credit",
+      "elementType": "step",
+      "name": "Credit check",
+      "bounds": {
+        "x": 240,
+        "y": 80,
+        "width": 160,
+        "height": 60
+      }
+    },
+    {
+      "id": "step-delivery",
+      "elementType": "step",
+      "name": "Delivery",
+      "bounds": {
+        "x": 420,
+        "y": 80,
+        "width": 160,
+        "height": 60
+      }
+    },
+    {
+      "id": "step-invoice",
+      "elementType": "step",
+      "name": "Invoicing",
+      "bounds": {
+        "x": 600,
+        "y": 80,
+        "width": 160,
+        "height": 60
+      },
+      "color": "hsl(150, 86%, 34%)",
+      "link": "billing-details"
+    },
+    {
+      "id": "step-capture",
+      "elementType": "step",
+      "name": "Capture order",
+      "bounds": {
+        "x": 40,
+        "y": 200,
+        "width": 160,
+        "height": 60
+      }
+    },
+    {
+      "id": "step-stock",
+      "elementType": "step",
+      "name": "Check stock",
+      "bounds": {
+        "x": 220,
+        "y": 200,
+        "width": 160,
+        "height": 60
+      }
+    },
+    {
+      "id": "org-sales",
+      "elementType": "orgUnit",
+      "name": "Sales",
+      "bounds": {
+        "x": 55,
+        "y": 300,
+        "width": 130,
+        "height": 60
+      }
+    },
+    {
+      "id": "org-finance",
+      "elementType": "orgUnit",
+      "name": "Finance",
+      "bounds": {
+        "x": 615,
+        "y": 200,
+        "width": 130,
+        "height": 60
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "seq-1",
+      "connectionType": "sequence",
+      "source": "step-order",
+      "target": "step-credit",
+      "waypoints": [
+        {
+          "x": 220,
+          "y": 110
+        },
+        {
+          "x": 252.5,
+          "y": 110
+        }
+      ],
+      "x-vendor": {
+        "note": "keep-me-connection",
+        "weight": 1.23456789
+      }
+    },
+    {
+      "id": "seq-2",
+      "connectionType": "sequence",
+      "source": "step-credit",
+      "target": "step-delivery",
+      "waypoints": [
+        {
+          "x": 400,
+          "y": 110
+        },
+        {
+          "x": 432.5,
+          "y": 110
+        }
+      ]
+    },
+    {
+      "id": "seq-3",
+      "connectionType": "sequence",
+      "source": "step-delivery",
+      "target": "step-invoice",
+      "waypoints": [
+        {
+          "x": 580,
+          "y": 110
+        },
+        {
+          "x": 612.5,
+          "y": 110
+        }
+      ]
+    },
+    {
+      "id": "hier-1",
+      "connectionType": "hierarchy",
+      "source": "step-order",
+      "target": "step-capture",
+      "waypoints": [
+        {
+          "x": 130,
+          "y": 140
+        },
+        {
+          "x": 130,
+          "y": 170
+        },
+        {
+          "x": 120,
+          "y": 170
+        },
+        {
+          "x": 120,
+          "y": 200
+        }
+      ]
+    },
+    {
+      "id": "hier-2",
+      "connectionType": "hierarchy",
+      "source": "step-order",
+      "target": "step-stock",
+      "waypoints": [
+        {
+          "x": 130,
+          "y": 140
+        },
+        {
+          "x": 130,
+          "y": 170
+        },
+        {
+          "x": 300,
+          "y": 170
+        },
+        {
+          "x": 300,
+          "y": 200
+        }
+      ]
+    },
+    {
+      "id": "assign-1",
+      "connectionType": "assignment",
+      "source": "step-capture",
+      "target": "org-sales",
+      "waypoints": [
+        {
+          "x": 120,
+          "y": 260
+        },
+        {
+          "x": 120,
+          "y": 300
+        }
+      ]
+    },
+    {
+      "id": "assign-2",
+      "connectionType": "assignment",
+      "source": "step-invoice",
+      "target": "org-finance",
+      "waypoints": [
+        {
+          "x": 680,
+          "y": 140
+        },
+        {
+          "x": 680,
+          "y": 200
+        }
+      ]
+    }
+  ],
+  "x-vendor": "keep-me-document"
+}

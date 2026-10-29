@@ -1,0 +1,77 @@
+{
+  "version": 2,
+  "title": "Online shop team topology, version 2",
+  "nodes": [
+    {
+      "id": "team_checkout",
+      "type": "stream-aligned",
+      "label": "Checkout & Payments",
+      "position": {
+        "x": 220,
+        "y": 276
+      },
+      "size": {
+        "width": 600,
+        "height": 96
+      },
+      "description": "Owns the checkout and payment journey end-to-end."
+    },
+    {
+      "id": "team_discovery",
+      "type": "stream-aligned",
+      "label": "Product Discovery",
+      "position": {
+        "x": 220,
+        "y": 150
+      },
+      "size": {
+        "width": 600,
+        "height": 96
+      },
+      "description": "Owns search, browsing and product pages end-to-end."
+    },
+    {
+      "id": "team_fraud",
+      "type": "complicated-subsystem",
+      "label": "Fraud Detection",
+      "position": {
+        "x": 880,
+        "y": 249
+      },
+      "size": {
+        "width": 170,
+        "height": 150
+      },
+      "description": "Specialists for the real-time fraud scoring model."
+    }
+  ],
+  "interactions": [
+    {
+      "id": "int_checkout_fraud",
+      "mode": "collaboration",
+      "position": {
+        "x": 794,
+        "y": 288
+      },
+      "size": {
+        "width": 112,
+        "height": 72
+      },
+      "label": "fraud rules"
+    }
+  ],
+  "flows": [
+    {
+      "id": "flow_main",
+      "position": {
+        "x": 40,
+        "y": 40
+      },
+      "size": {
+        "width": 1010,
+        "height": 56
+      },
+      "label": "Flow of change"
+    }
+  ]
+}

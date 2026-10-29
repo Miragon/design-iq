@@ -1,0 +1,18 @@
+title Order Checkout
+level design
+line [[40, 200], [1100, 200], [1100, 440], [40, 440]] (closed) (dashed)
+actor Customer [120, 320]
+command Place Order [300, 320]
+aggregate Order [480, 320]
+event Order Placed [660, 320]
+policy When order placed, reserve stock [860, 320]
+readmodel Order Summary [660, 120]
+external Payment Provider [480, 560] (color #4fc3f7)
+hotspot Double payment on retry? [690, 300] (on Order Placed)
+note **Checkout flow**\n- reviewed with the team [960, 100] (size 240x120) (align center middle)
+Customer -> Place Order
+Place Order -> Order
+Order -> Order Placed
+Order Placed -> When order placed, reserve stock; async
+Order Placed -> Order Summary
+// Design-level session, reviewed fixture
