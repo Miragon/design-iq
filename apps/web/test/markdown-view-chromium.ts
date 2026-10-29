@@ -1,10 +1,11 @@
 /**
  * Reading a Markdown document while a colleague writes it (issue 289), in
- * headless Chromium: a check run by hand, not by `pnpm test`, because CI has
- * no browser. markdown-view.test.ts pins under jsdom which blocks a render
- * keeps; jsdom lays nothing out, so the scroll position, and what a browser
- * does with the selection and the focus, are checked here. Run it after a
- * change to the Markdown view or its fences, from the repository root:
+ * headless Chromium: a check run by hand, not by `pnpm test` or CI, as it
+ * needs a build and a Live Host of its own. markdown-view.test.ts pins under
+ * jsdom which blocks a render keeps; jsdom lays nothing out, so the scroll
+ * position, and what a browser does with the selection and the focus, are
+ * checked here. Run it after a change to the Markdown view or its fences,
+ * from the repository root:
  *
  *   pnpm build
  *   npx -y playwright@1.56.1 install --only-shell chromium     # once

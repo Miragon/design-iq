@@ -1,10 +1,10 @@
 /**
  * The live merge repair and its notice (issue 296) with real peers, in
- * headless Chromium: a check run by hand, not by `pnpm test`, because CI has
- * no browser. The live-client suites pin the engine on Y.Docs; this one shows
- * what two SPA tabs, a Live Host and a modeler widget make of it. Run it after
- * a change to the canvas sync, the live session or the notice, from the
- * repository root:
+ * headless Chromium: a check run by hand, not by `pnpm test` or CI, as it
+ * needs a build and a Live Host of its own. The live-client suites pin the
+ * engine on Y.Docs; this one shows what two SPA tabs, a Live Host and a
+ * modeler widget make of it. Run it after a change to the canvas sync, the
+ * live session or the notice, from the repository root:
  *
  *   pnpm build
  *   npx -y playwright@1.56.1 install --only-shell chromium     # once

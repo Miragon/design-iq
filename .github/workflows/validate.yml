@@ -38,9 +38,11 @@ jobs:
         run: pnpm test
       # The conformance kit of @miragon/modeler-api against the Miragon renderers as
       # designIQ mounts them (#301), in headless Chromium: only for a change that moves a
-      # Miragon package (a bump changes its lines in the lockfile) or the code that mounts
-      # one. In this job, so the required check holds it.
-      - name: Does the change move a Miragon renderer or the code that mounts one?
+      # Miragon package (a bump changes its lines in the lockfile), the code that mounts
+      # one or a dependency of apps/web, which pins the renderers' peers, the Vite plugins
+      # its config loads and the suite's own runner. In this job, so the required check
+      # holds it.
+      - name: Does the change move a Miragon renderer, the code that mounts one or the suite's runner?
         id: miragon
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -53,6 +55,7 @@ jobs:
             apps/web/src/mcp-app/core/layout.ts
             apps/web/src/lib/value-chain-palette.ts
             apps/web/src/lib/value-chain-palette.css
+            apps/web/package.json
             apps/web/vite.config.ts
             apps/web/vitest.browser.config.ts
             apps/web/test/browser

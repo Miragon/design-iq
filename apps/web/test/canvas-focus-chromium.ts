@@ -2,12 +2,12 @@
  * The focus after a click on the SPA's chrome (issue 298, guide §5.4 and
  * §5.8) and the keys of a hidden canvas, in the built app, in headless
  * Chromium or WebKit, with the real modelers: bpmn-js, the dmn-js DRD and
- * every Miragon renderer. A check run by hand, not by `pnpm test`, because
- * CI has no browser. The jsdom suites run the rules on the real canvases
- * (test/canvas-focus-dom.test.ts, test/canvas-keys-dom.test.ts) and the
- * toolbar with radix's menu beside a stand-in canvas
- * (test/toolbar-focus-dom.test.ts), never the two together in the live
- * editor. Run it after a change to the editor's toolbar, radix or a
+ * every Miragon renderer. A check run by hand, not by `pnpm test` or CI, as
+ * it needs a build and a Live Host of its own. The jsdom suites run the rules
+ * on the real canvases (test/canvas-focus-dom.test.ts,
+ * test/canvas-keys-dom.test.ts) and the toolbar with radix's menu beside a
+ * stand-in canvas (test/toolbar-focus-dom.test.ts), never the two together in
+ * the live editor. Run it after a change to the editor's toolbar, radix or a
  * renderer, from the repository root, in both engines:
  *
  *   pnpm build

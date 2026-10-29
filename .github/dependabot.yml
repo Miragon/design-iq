@@ -69,9 +69,10 @@ updates:
           # error codes and results agents see — each bump is its own PR
           - "@miragon/bpmn-cli"
           # the Miragon modelers are 0.x too: a minor can change the canvas, its
-          # stylesheet or its text lane at runtime, which no CI job renders (#252
-          # took a Team Topologies minor in this group). Each family is its own PR
-          # (the groups below), reviewed with the canvas open.
+          # stylesheet or its text lane at runtime. CI checks such a bump against
+          # the contract only (the conformance kit in validate, #301), not how the
+          # canvas looks (#252 took a Team Topologies minor in this group). Each
+          # family is its own PR (the groups below), reviewed with the canvas open.
           - "@miragon/wardley-*"
           - "@miragon/event-storming-*"
           - "@miragon/context-maps-*"

@@ -1,10 +1,10 @@
 /**
  * Hostile Mermaid sources (issue 293) in the built app, in headless Chromium:
- * a check run by hand, not by `pnpm test`, because CI has no browser. The
- * jsdom suites cannot show what a browser does with these sources: that it
- * enforces the Mermaid frame's policy, and that the page's document neither
- * holds nor loads anything of a hostile diagram. Run it after a mermaid or a
- * browser update, from the repository root:
+ * a check run by hand, not by `pnpm test` or CI, as it needs a build and a
+ * Live Host of its own. The jsdom suites cannot show what a browser does with
+ * these sources: that it enforces the Mermaid frame's policy, and that the
+ * page's document neither holds nor loads anything of a hostile diagram. Run
+ * it after a mermaid or a browser update, from the repository root:
  *
  *   pnpm build
  *   npx -y playwright@1.56.1 install --only-shell chromium     # once

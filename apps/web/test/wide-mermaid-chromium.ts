@@ -1,10 +1,10 @@
 /**
  * Wide Mermaid diagrams in the Markdown view (issue 292), in headless
- * Chromium: a check run by hand, not by `pnpm test`, because CI has no
- * browser. markdown-diagram-scale.test.ts pins the scale computation under
- * jsdom; jsdom lays nothing out, so what a reader gets is checked here. Run
- * it after a change to the Markdown view, its fences or a mermaid update,
- * from the repository root:
+ * Chromium: a check run by hand, not by `pnpm test` or CI, as it needs a
+ * build and a Live Host of its own. markdown-diagram-scale.test.ts pins the
+ * scale computation under jsdom; jsdom lays nothing out, so what a reader
+ * gets is checked here. Run it after a change to the Markdown view, its
+ * fences or a mermaid update, from the repository root:
  *
  *   pnpm build
  *   npx -y playwright@1.56.1 install --only-shell chromium     # once

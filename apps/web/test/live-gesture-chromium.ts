@@ -1,11 +1,11 @@
 /**
  * A drag that spans a peer's change (issue 295) in the built SPA, in headless
  * Chromium, with the real modelers: bpmn-js, dmn-js's DRD and every Miragon
- * renderer. A check run by hand, not by `pnpm test`, because CI has no
- * browser; the jsdom suites cannot drag with a pointer
- * (test/live-gesture.test.ts runs diagram-js's dragging without one). Run it
- * after a renderer, diagram-js or live-client change, from the repository
- * root:
+ * renderer. A check run by hand, not by `pnpm test` or CI, as it needs a
+ * build and a Live Host of its own; the jsdom suites cannot drag with a
+ * pointer (test/live-gesture.test.ts runs diagram-js's dragging without one).
+ * Run it after a renderer, diagram-js or live-client change, from the
+ * repository root:
  *
  *   pnpm build
  *   npx -y playwright@1.56.1 install --only-shell chromium     # once

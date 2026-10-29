@@ -8,10 +8,13 @@
  * (miragon-renderers.test.ts) cannot lay a canvas out; the kit needs the browser's layout for the
  * view state, the boxes and the fit.
  *
- * Both hosts fit the view themselves after an import, and the kit's L5 cases expect a fit after
- * every import, so an import here ends with the host's fit into its insets (miragonView). The
- * widget's deferred re-fit of a view nobody moved stays out: the kit would read it as a view
- * change of the modeler's own.
+ * Both hosts pass `fitOnImport: false` and set the view after an import themselves: the widget
+ * fits only a view nobody moved, the SPA only its first import. The kit's L5 cases expect a fitted
+ * view after every import, so an import here first has to leave the view as it was (a renderer
+ * that fits anyway, or a mount that lost the option, fails the case) and then ends with a fit
+ * into the host's insets (miragonView). That fit stands in for the hosts' own view handling, which
+ * a pass says nothing about. The free area is not observable here, as no kit case reads it:
+ * miragon-renderers.test.ts checks that each renderer gets the widget's insets.
  *
  * The harnesses follow the renderers' own (packages/renderer/test/browser in
  * Miragon/modeler-suite), their fixtures copied from the releases designIQ pins. A skip or an
@@ -29,7 +32,7 @@ import type {
   EventStormingLabelEditing,
   EventStormingModeling,
 } from "@miragon/event-storming-renderer";
-import type { CollaborativeModeler } from "@miragon/modeler-api";
+import type { CollaborativeModeler, ImportResult } from "@miragon/modeler-api";
 import {
   attachedHost,
   type ConformanceHarness,
@@ -585,9 +588,15 @@ const HOSTS: readonly DesignIqHost[] = [
 ];
 
 const hostWrappers: HTMLElement[] = [];
+const mountsWhoseImportMovedTheView = new Set<string>();
 
 afterEach(() => {
   for (const wrapper of hostWrappers.splice(0)) wrapper.remove();
+  const moved = [...mountsWhoseImportMovedTheView];
+  mountsWhoseImportMovedTheView.clear();
+  if (moved.length > 0) {
+    throw new Error(`an import moved the view itself, so fitOnImport: false did not reach ${moved.join(", ")}`);
+  }
 });
 
 async function mountAsDesignIq(
@@ -604,11 +613,20 @@ async function mountAsDesignIq(
   modeler.attachTo(container);
   const detach = renderer.attached?.(modeler, container);
   const view = miragonView(modeler);
+  const mountName = `${spec.pkg}${readonly ? " (viewer)" : ""} as ${host.name} mounts it`;
+  const importLeavingTheView = async (text: string): Promise<ImportResult> => {
+    const viewBefore = JSON.stringify(modeler.getViewState());
+    try {
+      return await modeler.importText(text);
+    } finally {
+      if (JSON.stringify(modeler.getViewState()) !== viewBefore) mountsWhoseImportMovedTheView.add(mountName);
+    }
+  };
   return new Proxy(modeler, {
     get(target, property) {
       if (property === "importText") {
         return async (text: string) => {
-          const result = await target.importText(text);
+          const result = await importLeavingTheView(text);
           view.fit(host.fitInsets(container), false);
           return result;
         };
