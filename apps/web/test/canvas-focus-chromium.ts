@@ -34,8 +34,8 @@
  *     focus, Delete deletes it and Cmd/Ctrl+Z brings it back.
  *  2. Escape closes the ⋯ menu and gives its trigger the focus; a click on
  *     Rename… leaves the focus to the dialog's field. Under the modal
- *     Release → PR dialog Cmd/Ctrl+= is not prevented (the browser zooms the
- *     page) and leaves the canvas's view.
+ *     Release → PR dialog, which takes the focus, Cmd/Ctrl+= is not
+ *     prevented (the browser zooms the page) and leaves the canvas's view.
  *  3. The view switch: Enter on the source side and then on the canvas side
  *     keeps the focus on the switch, and Delete deletes nothing; a click on
  *     the source side and then on the canvas side hands the canvas the
@@ -48,10 +48,14 @@
  *     single-key tools change nothing, and Cmd/Ctrl+= is not prevented (the
  *     browser zooms the page) and leaves the view. A click on the canvas
  *     side, then Cmd/Ctrl+Z, undoes the delete.
- *  5. The canvas behind a modal dialog (Release → PR, Rename…): with an
- *     element selected, Tab and Shift+Tab never land on the canvas, and
+ *  5. The page behind a modal dialog (Release → PR, Rename…), a native
+ *     <dialog> shown with showModal(): the dialog takes the focus as it
+ *     opens, and Tab and Shift+Tab never leave it for the toolbar, the
+ *     source or the canvas. Over the canvas, with an element selected,
  *     Cmd/Ctrl+A, Delete and an arrow change nothing, wherever the focus
- *     went. Once the dialog is gone a click on the canvas acts.
+ *     went; over the source view, typing changes no text there. Escape
+ *     gives the focus back to the ⋯ trigger, and once the dialog is gone a
+ *     click on the canvas acts.
  *  6. BPMN's Workshop switch, the toolbar button that changes the canvas for
  *     every participant: a click hands the canvas the focus, Delete deletes
  *     the selected element and Cmd/Ctrl+Z brings it back.
@@ -347,19 +351,38 @@ const CANVAS_KEYS = [`${MOD}+z`, "Delete", "ArrowRight", `${MOD}+a`, "c", "e", "
   engine === "webkit" ? [] : ["Backspace"],
 );
 
-/** how far Tab and Shift+Tab are tried each way: the longest way from a dialog's field to the canvas is 16 presses */
+/** how far Tab and Shift+Tab are tried each way: round every dialog's controls more than once */
 const TAB_PRESSES = 40;
 
-/** whether Tab or Shift+Tab, pressed from where the focus is, ever lands on a canvas */
-async function tabReachesCanvas(page: Page): Promise<boolean> {
+/** the open modal dialog holds the focus: on it or in it */
+const focusInDialog = (page: Page): Promise<boolean> =>
+  page.evaluate(() => document.activeElement?.closest("dialog:modal") != null, undefined);
+
+/**
+ * where Tab or Shift+Tab, pressed from where the focus is, first lands
+ * outside the open modal dialog, if anywhere. The page itself, which has the
+ * focus between the dialog's last control and its first, does not count.
+ */
+async function tabLeavesDialog(page: Page): Promise<string | undefined> {
   for (const key of ["Tab", "Shift+Tab"]) {
     for (let press = 0; press < TAB_PRESSES; press++) {
       await page.keyboard.press(key);
-      if ((await focused(page)) === "canvas") return true;
+      if (await focusInDialog(page)) continue;
+      const where = await focused(page);
+      if (where !== "body") return where;
     }
   }
-  return false;
+  return undefined;
 }
+
+const dialogOpen = (page: Page): Promise<boolean> =>
+  page.evaluate(() => document.querySelector("dialog:modal") !== null, undefined);
+
+/** the text the source view shows */
+const sourceText = (page: Page): Promise<string | null> =>
+  page.evaluate(() => document.querySelector(".monaco-host .view-lines")?.textContent ?? null, undefined);
+
+const DIALOG_ENTRIES = ["Release → PR", "Rename…"];
 
 async function run(page: Page, model: Model): Promise<void> {
   const name = model.notation;
@@ -411,10 +434,7 @@ async function run(page: Page, model: Model): Promise<void> {
   await page.click('button[aria-label="More"]');
   await page.click('[role="menu"] [role="menuitem"]:has-text("Rename…")');
   await page.waitForTimeout(SETTLE);
-  const inDialog = await page.evaluate(
-    () => document.activeElement?.matches('[role="dialog"] input') ?? false,
-    undefined,
-  );
+  const inDialog = await page.evaluate(() => document.activeElement?.matches("dialog:modal input") ?? false, undefined);
   check(inDialog, `${name}: a click on Rename… leaves the focus to the dialog's field`);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(SETTLE);
@@ -422,11 +442,8 @@ async function run(page: Page, model: Model): Promise<void> {
   await page.click('button[aria-label="More"]');
   await page.click('[role="menu"] [role="menuitem"]:has-text("Release → PR")');
   await page.waitForTimeout(SETTLE);
-  const modal = await page.evaluate(
-    () => document.querySelector('[role="dialog"][aria-modal="true"]') !== null,
-    undefined,
-  );
-  check(modal, `${name}: Release → PR opens a modal dialog`);
+  check(await dialogOpen(page), `${name}: Release → PR opens a modal dialog`);
+  check(await focusInDialog(page), `${name}: ... which takes the focus`);
   await page.keyboard.press(`${MOD}+=`);
   check((await lastKeyPrevented(page)) === false, `${name}: ... under it ${MOD}+= is the browser's`);
   await page.waitForTimeout(SETTLE);
@@ -498,39 +515,57 @@ async function run(page: Page, model: Model): Promise<void> {
   await page.waitForTimeout(SETTLE);
   check(await exists(page, model.a), `${name}: ... and ${MOD}+Z undoes the delete from before the source view`);
 
-  // 5. behind a modal dialog the canvas is out of reach, and no key edits it
-  for (const entry of ["Release → PR", "Rename…"]) {
+  // 5. behind a modal dialog the page is out of reach: no Tab leaves it, and no key edits the canvas or the source
+  const openDialog = async (entry: string, over: string): Promise<void> => {
+    await page.click('button[aria-label="More"]');
+    await page.click(`[role="menu"] [role="menuitem"]:has-text("${entry}")`);
+    await page.waitForTimeout(SETTLE);
+    check(await dialogOpen(page), `${name}: over the ${over}, ${entry} opens a modal dialog`);
+    check(await focusInDialog(page), `${name}: ... which takes the focus`);
+    const left = await tabLeavesDialog(page);
+    check(left === undefined, `${name}: ... and Tab and Shift+Tab never leave it (${left ?? "they stay"})`);
+  };
+  const closeDialog = async (entry: string): Promise<void> => {
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(SETTLE);
+    check(!(await dialogOpen(page)), `${name}: Escape closes ${entry}`);
+    const back = await focused(page);
+    check(back === "trigger", `${name}: ... and gives the focus back to the ⋯ trigger (${back})`);
+  };
+  for (const entry of DIALOG_ENTRIES) {
     if (!(await selected(page, model.b))) {
       await clickElement(page, model.b);
       await page.waitForTimeout(SETTLE);
     }
     check(await selected(page, model.b), `${name}: ${model.b} is selected`);
     const beforeDialog = await canvasState(page);
-    await page.click('button[aria-label="More"]');
-    await page.click(`[role="menu"] [role="menuitem"]:has-text("${entry}")`);
-    await page.waitForTimeout(SETTLE);
-    const open = await page.evaluate(
-      () => document.querySelector('[role="dialog"][aria-modal="true"]') !== null,
-      undefined,
-    );
-    check(open, `${name}: ${entry} opens a modal dialog`);
-    check(!(await tabReachesCanvas(page)), `${name}: behind ${entry}, Tab and Shift+Tab never reach the canvas`);
+    await openDialog(entry, "canvas");
     for (const key of [`${MOD}+a`, "Delete", "ArrowRight"]) await page.keyboard.press(key);
     await page.waitForTimeout(SETTLE);
     check(
       (await canvasState(page)) === beforeDialog && (await exists(page, model.b)),
       `${name}: behind ${entry}, ${MOD}+A, Delete and an arrow change nothing`,
     );
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(SETTLE);
-    check(
-      !(await page.evaluate(() => document.querySelector('[role="dialog"]') !== null, undefined)),
-      `${name}: Escape closes ${entry}`,
-    );
+    await closeDialog(entry);
     await clickElement(page, model.a);
     await page.waitForTimeout(SETTLE);
     check(await selected(page, model.a), `${name}: once ${entry} is gone, a click on the canvas acts again`);
   }
+  await page.click(SOURCE_SIDE);
+  await page.waitForTimeout(SETTLE);
+  const text = await sourceText(page);
+  check(Boolean(text), `${name}: the source view shows the text`);
+  for (const entry of DIALOG_ENTRIES) {
+    await openDialog(entry, "source");
+    // no Enter: it would submit Rename… once its field holds a new name; no
+    // Backspace: Playwright's WebKit goes back in the history on one outside a field
+    for (const key of ["x", `${MOD}+a`, "Delete"]) await page.keyboard.press(key);
+    await page.waitForTimeout(SETTLE);
+    check((await sourceText(page)) === text, `${name}: behind ${entry}, typing changes nothing in the source`);
+    await closeDialog(entry);
+  }
+  await page.click(CANVAS_SIDE);
+  await page.waitForTimeout(SETTLE);
 
   // 6. BPMN's Workshop switch changes the canvas for every participant, so a click on it hands the canvas the focus
   if (model.notation === "bpmn") {
@@ -611,5 +646,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  `\nIn ${engine}, clicking as Safari does: a click on the canvas or the view switch's canvas side left every canvas the focus, Enter and Escape kept the guide's, and no key reached a canvas behind the source view or a modal dialog.`,
+  `\nIn ${engine}, clicking as Safari does: a click on the canvas or the view switch's canvas side left every canvas the focus, Enter and Escape kept the guide's, no key reached a canvas behind the source view, and a modal dialog held the focus until it gave it back.`,
 );

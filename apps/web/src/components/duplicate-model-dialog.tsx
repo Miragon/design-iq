@@ -67,7 +67,7 @@ export function DuplicateModelDialog({
         value={name}
         onChange={(e) => setName(e.target.value)}
         onFocus={(e) => e.currentTarget.select()}
-        autoFocus
+        data-autofocus
         required
         spellCheck={false}
       />

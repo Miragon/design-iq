@@ -446,21 +446,26 @@ and `test/toolbar-focus-dom.test.ts` renders the toolbar with React under jsdom
 switch tell a click from Enter. `test/canvas-focus-chromium.ts` runs the built SPA by hand (its
 header says how), in Chromium and with `BROWSER=webkit` in WebKit, clicking as Safari does; the
 live editor's few lines that pass the view switch's choice to the canvas run only there. The
-other toolbar buttons (the panel toggles, Add todo) hand nothing back, as the guide lists none: after a
-click on one the focus is on the button or on the page, and Delete and ⌘Z reach the canvas again once
-a click on it has the focus.
+panel toggles hand nothing back, as the guide lists none: after a click on one the focus is on the
+button or on the page, and Delete and ⌘Z reach the canvas again once a click on it has the focus.
+Add todo opens Create todo, whose title field takes the focus; after that dialog closes, Delete and
+⌘Z wait for a click on the canvas too.
 
 **The live editor holds no keys from its canvas.** Every renderer acts only on a key aimed at its
 own focused canvas, so a key typed in the source view, a dialog or on the toolbar reaches no
 canvas, also while it stays mounted behind them (`test/canvas-keys-dom.test.ts` holds each Miragon
-renderer to that). The canvas layer is also `inert` behind the source view and behind a dialog
-(`canvasInert` in `lib/editor-view.ts`): the dialogs do not keep the focus inside them, and a Tab out
-of one would otherwise land on the canvas behind it, where a renderer acts on Delete and ⌘Z.
-`test/canvas-focus-chromium.ts` presses Tab and the canvas keys under the Release and Rename
-dialogs in both engines. The zoom keys of the SPA's Miragon editors act on the whole page, so they
-check what is on screen themselves: behind the source view (`EditorContext.visibility`), in a text
-field and under a modal dialog (the SPA's dialogs are `aria-modal`, `test/dialogs-modal-dom.test.ts`)
-the browser zooms the page.
+renderer to that). The canvas layer is also `inert` behind the source view. The editor's dialogs
+(Release → PR, Create todo, the history diff, Rename and Duplicate) are native `<dialog>`s shown
+with `showModal()` (`ModalDialog` in `src/components/dialog-shell.tsx`), so the page behind one is
+inert: no Tab, click or key from it reaches the toolbar, the source or the canvas, where it would
+edit the shared document. A dialog takes the focus as it opens (its field, Cancel in a destructive
+one, Close in the history diff, else the dialog itself), and the browser gives it back as it
+closes, to the ⋯ trigger after an entry of the ⋯ menu (guide §5.4, §8).
+`test/canvas-focus-chromium.ts` opens Release and Rename over the canvas and over the source in
+both engines and presses Tab, Shift+Tab and the canvas keys under them. The zoom keys of the SPA's
+Miragon editors act on the whole page, so they check what is on screen themselves: behind the
+source view (`EditorContext.visibility`), in a text field and under a modal dialog (the SPA's
+dialogs are modal, `test/dialogs-modal-dom.test.ts`) the browser zooms the page.
 
 **One spec per Miragon renderer.** The five Miragon widgets are not five
 entries: `src/notations/miragon/<id>.ts` holds ONE `MiragonRendererSpec` per

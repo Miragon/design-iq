@@ -6,10 +6,17 @@
  * state resets by unmounting (create-dialog convention). Its backdrop, panel
  * and field classes are every dialog's — the create, release, sync and todo
  * dialogs keep their own markup, not their own look.
+ *
+ * ModalDialog is the modal frame of this shell and of the release, todo and
+ * history diff dialogs: a native <dialog> shown with showModal(), so the page
+ * behind it is inert. A Tab, a click or a key from it reaches neither the
+ * editor's toolbar nor its source nor its canvas, where a key would edit the
+ * shared document under an open dialog (guide §8: the focus stays in the
+ * dialog and goes back afterwards).
  */
 import { Button } from "@designiq/ui-kit/components/button";
 import { cn } from "@designiq/ui-kit/lib/utils";
-import { type ReactNode, useEffect, useId } from "react";
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef } from "react";
 
 /** every dialog's backdrop (CI §8): --cd-schwarz dimmed, the page softly blurred behind it */
 export const dialogBackdrop = "bg-overlay fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm";
@@ -20,6 +27,71 @@ export const dialogPanel = "bg-popover text-popover-foreground w-full rounded-lg
 /** a dialog's native text field — the kit Input's look: kontur frame, focus = blue frame + blue-soft halo */
 export const fieldClass =
   "border-input bg-background placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-accent mt-1 w-full rounded-md border px-3 py-2 text-sm shadow-xs transition-[color,border-color,box-shadow] outline-none focus-visible:ring-[3px]";
+
+/** the <dialog> is the backdrop itself, so the browser's own ::backdrop stays
+ *  clear, and a closed one shows nothing (`flex` outranks the browser's
+ *  display: none) */
+const modalBackdrop = cn(
+  dialogBackdrop,
+  "m-0 h-full max-h-none w-full max-w-none outline-none not-open:hidden backdrop:bg-transparent",
+);
+
+/**
+ * A modal dialog named by `labelledBy`. It takes the focus as it opens: the
+ * element marked `data-autofocus`, else the dialog itself (React's autoFocus
+ * would run while the <dialog> is still closed, and the browser's own choice
+ * is whatever control comes first). As it closes the browser gives the focus
+ * back to the element that had it before. `onDismiss` runs on Escape and on a
+ * click on the backdrop; the parent closes the dialog by unmounting it.
+ */
+export function ModalDialog({
+  labelledBy,
+  onDismiss,
+  children,
+}: {
+  labelledBy: string;
+  onDismiss: () => void;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useLayoutEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return undefined;
+    dialog.showModal();
+    (dialog.querySelector<HTMLElement>("[data-autofocus]") ?? dialog).focus();
+    return () => dialog.close();
+  }, []);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      // the browser's own Escape would close the dialog behind React's back,
+      // also while the action runs, when onDismiss keeps it open
+      event.preventDefault();
+      onDismiss();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onDismiss]);
+
+  return (
+    <dialog
+      ref={ref}
+      tabIndex={-1}
+      aria-modal="true"
+      aria-labelledby={labelledBy}
+      className={modalBackdrop}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onDismiss();
+      }}
+      onCancel={(event) => {
+        event.preventDefault();
+        onDismiss();
+      }}
+    >
+      {children}
+    </dialog>
+  );
+}
 
 export function DialogShell({
   title,
@@ -53,22 +125,11 @@ export function DialogShell({
   const close = () => {
     if (!pending) onClose();
   };
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !pending) onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, pending]);
 
   return (
-    <div className={dialogBackdrop} onClick={close}>
+    <ModalDialog labelledBy={titleId} onDismiss={close}>
       <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
         className={cn(dialogPanel, "flex max-h-[85vh] flex-col", wide ? "max-w-lg" : "max-w-md")}
-        onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
           if (!pending && !submitDisabled) onSubmit();
@@ -85,7 +146,15 @@ export function DialogShell({
           </p>
         )}
         <div className="mt-6 flex justify-end gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={pending}>
+          {/* a destructive dialog opens on Cancel (guide §8) */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            disabled={pending}
+            data-autofocus={destructive || undefined}
+          >
             Cancel
           </Button>
           <Button
@@ -98,7 +167,7 @@ export function DialogShell({
           </Button>
         </div>
       </form>
-    </div>
+    </ModalDialog>
   );
 }
 

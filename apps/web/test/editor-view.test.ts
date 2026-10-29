@@ -2,14 +2,13 @@
  * The editor's view choice (src/lib/editor-view.ts): what a notation with the
  * split view remembers across documents and page loads, how a damaged or
  * blocked storage degrades, when Split has room (with hysteresis), what
- * shows while it has none, which layers are on screen, when the canvas is
- * out of reach, and that only a choice is ever written.
+ * shows while it has none, which layers are on screen, and that only a
+ * choice is ever written.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  canvasInert,
   editorLayers,
   type EditorView,
   editorViews,
@@ -168,15 +167,6 @@ test("a document without a visual editor shows its source, a structured one its 
     const structured = editorLayers(view, { visual: true, structured: true, splitAvailable: true });
     assert.equal(structured.shown, "canvas", view);
     assert.equal(structured.sourceShown, false, view);
-  }
-});
-
-test("the canvas is out of reach behind the source view and behind a dialog, in front of everything else", () => {
-  assert.equal(canvasInert(editorLayers("canvas", MARKDOWN), false), false, "in front alone");
-  assert.equal(canvasInert(editorLayers("split", MARKDOWN), false), false, "in front beside the source");
-  assert.equal(canvasInert(editorLayers("source", MARKDOWN), false), true, "behind the source");
-  for (const view of ["canvas", "split", "source"] as const) {
-    assert.equal(canvasInert(editorLayers(view, MARKDOWN), true), true, `behind a dialog, in the ${view} view`);
   }
 });
 

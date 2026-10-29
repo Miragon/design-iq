@@ -77,7 +77,7 @@ import {
   Pencil,
   Shapes,
 } from "lucide-react";
-import { type ComponentType, type ReactNode, type Ref, useEffect, useReducer, useRef, useState } from "react";
+import { type ComponentType, type ReactNode, type RefObject, useEffect, useReducer, useRef, useState } from "react";
 
 import {
   type FocusableCanvas,
@@ -172,18 +172,25 @@ export function EditorToolbar({
   /** the mounted renderer's own entries (MountedEditor.menu) */
   modelerMenu?: ModelerMenu;
   /** the ⋯ trigger, where the renderer's dialogs give the focus back */
-  menuTriggerRef?: Ref<HTMLButtonElement>;
+  menuTriggerRef?: RefObject<HTMLButtonElement | null>;
   /** the canvas a click on a Model action of the ⋯ menu or on a document mode
    *  (the Workshop switch) hands the focus to */
   canvas?: FocusableCanvas;
 }) {
   const [owner = "", name = ""] = repo.split("/");
   const [closeFocus] = useState(menuCloseFocus);
+  const ownTrigger = useRef<HTMLButtonElement>(null);
+  const trigger = menuTriggerRef ?? ownTrigger;
   // a menu item that opens a DIALOG must not have radix hand the focus back
-  // to the ⋯ trigger — it would steal the dialog field's autoFocus
+  // to the ⋯ trigger: it would steal the focus of a renderer's dialog. The
+  // trigger takes it just before the dialog opens instead, so a modal dialog
+  // gives it back there as it closes (guide §5.4)
   const openDialog = (open: () => void) => () => {
     closeFocus.openingDialog();
-    setTimeout(open, 0);
+    setTimeout(() => {
+      trigger.current?.focus();
+      open();
+    }, 0);
   };
   const modelPanels = panels.filter((p) => p.modelMenu);
   const shownPeers = presence.slice(0, MAX_AVATARS);
@@ -330,7 +337,7 @@ export function EditorToolbar({
             its target too) */}
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
-            <Button ref={menuTriggerRef} variant="ghost" size="icon" className="size-8" aria-label="More" title="More">
+            <Button ref={trigger} variant="ghost" size="icon" className="size-8" aria-label="More" title="More">
               <Ellipsis />
             </Button>
           </DropdownMenuTrigger>
@@ -376,8 +383,9 @@ export function EditorToolbar({
               </>
             )}
             {/* inset: the icon lines up with the panel entries' icons above.
-                Rename/Duplicate open DIALOGS — mounted a tick after radix
-                finished its close handling (the New menu's convention) */}
+                Rename/Duplicate (and Release below) open DIALOGS, mounted a
+                tick after radix finished its close handling (the New menu's
+                convention) */}
             {onRename && (
               <DropdownMenuItem inset onSelect={openDialog(onRename)}>
                 <Pencil />
@@ -397,7 +405,7 @@ export function EditorToolbar({
                 <DropdownMenuSeparator />
               </>
             )}
-            <DropdownMenuItem inset onSelect={onRelease}>
+            <DropdownMenuItem inset onSelect={openDialog(onRelease)}>
               <GitPullRequest />
               Release → PR
             </DropdownMenuItem>
