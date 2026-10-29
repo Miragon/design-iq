@@ -33,6 +33,18 @@
 .vc-canvas {
   isolation: isolate;
 }
+/* a renderer's modal dialog (Diagram title…, Keyboard shortcuts…) opens in
+   its canvas host, which behind the source view is inert and takes no
+   pointer (live-editor.tsx). The top layer lifts the dialog out of the
+   host's inertness and its opacity, but pointer-events is inherited: every
+   click would pass through it, and only Escape would close it */
+.wardley-canvas > dialog[open],
+.tt-canvas > dialog[open],
+.es-canvas > dialog[open],
+.cm-canvas > dialog[open],
+.vc-canvas > dialog[open] {
+  pointer-events: auto;
+}
 /* a renderer's popover (Wardley: Map size…, X-axis labels…) opens at the
    canvas's top left, as the guide places it (§5.4: left 12px), there with no
    menu row above it: an open side panel docks over the right edge and paints

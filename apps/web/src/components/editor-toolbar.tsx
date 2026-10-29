@@ -183,15 +183,15 @@ export function EditorToolbar({
   const trigger = menuTriggerRef ?? ownTrigger;
   // a menu item that opens a DIALOG must not have radix hand the focus back
   // to the ⋯ trigger: it would steal the focus of a renderer's dialog. The
-  // trigger takes it just before the dialog opens instead, so a modal dialog
-  // gives it back there as it closes (guide §5.4)
-  const openDialog = (open: () => void) => () => {
-    closeFocus.openingDialog();
-    setTimeout(() => {
+  // dialog waits until the menu is gone, since radix's closing menu would
+  // take its first Escape (lib/canvas-focus.ts), and the trigger takes the
+  // focus just before it opens, so a modal dialog gives it back there as it
+  // closes (guide §5.4)
+  const openDialog = (open: () => void) => () =>
+    closeFocus.openingDialog(() => {
       trigger.current?.focus();
       open();
-    }, 0);
-  };
+    });
   const modelPanels = panels.filter((p) => p.modelMenu);
   const shownPeers = presence.slice(0, MAX_AVATARS);
   const hiddenPeers = presence.slice(MAX_AVATARS);
@@ -335,7 +335,12 @@ export function EditorToolbar({
             closed it and gave the trigger the focus, so the canvas keys
             waited for a second click (guide §5.4: a click outside acts on
             its target too) */}
-        <DropdownMenu modal={false}>
+        <DropdownMenu
+          modal={false}
+          onOpenChange={(open) => {
+            if (open) closeFocus.opened();
+          }}
+        >
           <DropdownMenuTrigger asChild>
             <Button ref={trigger} variant="ghost" size="icon" className="size-8" aria-label="More" title="More">
               <Ellipsis />
@@ -383,9 +388,8 @@ export function EditorToolbar({
               </>
             )}
             {/* inset: the icon lines up with the panel entries' icons above.
-                Rename/Duplicate (and Release below) open DIALOGS, mounted a
-                tick after radix finished its close handling (the New menu's
-                convention) */}
+                Rename/Duplicate (and Release below) open DIALOGS, once the
+                menu is gone (openDialog) */}
             {onRename && (
               <DropdownMenuItem inset onSelect={openDialog(onRename)}>
                 <Pencil />
@@ -431,7 +435,7 @@ const MODELER_ICONS: Record<ModelerMenuIcon, LucideIcon> = {
 /** A renderer's menu entries in the ⋯ menu. Rendered inside the open menu,
  *  so a checkbox or a radio group reads the canvas's state as the menu
  *  opens; both stay open on a toggle (guide §5.4) and re-read it. A dialog
- *  entry opens a tick after radix let go of the focus, as Rename… does. An
+ *  entry opens once the menu is gone, as Rename… does. An
  *  action entry of the Model group (`closeFocus`) tells how it was chosen:
  *  after a click the canvas takes the focus (guide §5.8). */
 function ModelerEntries({

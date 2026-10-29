@@ -98,8 +98,27 @@ interface ModelerLike {
   off(event: string, callback: (event?: unknown) => void): void;
 }
 
-const LAYER = "designiq-presence";
+/** the named diagram-js layer the peers are drawn on; diagram-js gives its
+ *  group the class `layer-<name>` */
+export const PRESENCE_LAYER = "designiq-presence";
+const PRESENCE_LAYER_CLASS = `layer-${PRESENCE_LAYER}`;
 const SVG_NS = "http://www.w3.org/2000/svg";
+
+/**
+ * A diagram's standalone SVG without the presence layer. The Miragon
+ * renderers' saveSVG copies the whole live canvas, this layer included, and
+ * an export is the diagram: no peer's cursor, outline or name belongs in
+ * it. An SVG without the layer comes back as it was; one that cannot be
+ * read is refused rather than exported with the peers in it.
+ */
+export function withoutPresence(drawing: string): string {
+  if (!drawing.includes(PRESENCE_LAYER_CLASS)) return drawing;
+  const parsed = new DOMParser().parseFromString(drawing, "image/svg+xml");
+  if (parsed.getElementsByTagName("parsererror").length > 0) throw new Error("the diagram's SVG could not be read");
+  for (const layer of parsed.querySelectorAll(`[class~="${PRESENCE_LAYER_CLASS}"]`)) layer.remove();
+  return new XMLSerializer().serializeToString(parsed);
+}
+
 /** publish cadence for pointer moves — awareness is a broadcast, not a stream */
 const PUBLISH_MS = 33;
 /** outline cap per peer — a hostile select-all must not freeze the canvas */
@@ -230,7 +249,7 @@ export function attachPresenceCanvas(
   };
 
   const render = (): void => {
-    const layer = canvas.getLayer(LAYER);
+    const layer = canvas.getLayer(PRESENCE_LAYER);
     while (layer.firstChild) layer.firstChild.remove();
     let vb;
     try {
@@ -341,7 +360,7 @@ export function attachPresenceCanvas(
       if (raf !== 0) cancelAnimationFrame(raf);
       clearTimeout(trailing);
       try {
-        const layer = canvas.getLayer(LAYER);
+        const layer = canvas.getLayer(PRESENCE_LAYER);
         while (layer.firstChild) layer.firstChild.remove();
       } catch {
         /* canvas already destroyed with the modeler */

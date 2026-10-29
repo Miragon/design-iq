@@ -59,6 +59,12 @@
  *  6. BPMN's Workshop switch, the toolbar button that changes the canvas for
  *     every participant: a click hands the canvas the focus, Delete deletes
  *     the selected element and Cmd/Ctrl+Z brings it back.
+ *  7. A Miragon renderer's dialogs in the ⋯ menu (its title dialog,
+ *     Keyboard shortcuts…): Escape pressed as soon as one shows closes it,
+ *     and the menu, which radix keeps mounted while it fades out, takes none
+ *     of it. With the source view shown, where the canvas layer takes no
+ *     pointer, a click on a dialog's Close closes it, and the title dialog's
+ *     Apply writes the new title into the source.
  *
  * No page error and no console error on the way. Exits 1 on any failure.
  */
@@ -76,7 +82,7 @@ interface Page {
   focus(selector: string): Promise<void>;
   close(): Promise<void>;
   mouse: { click(x: number, y: number): Promise<void> };
-  keyboard: { press(key: string): Promise<void> };
+  keyboard: { press(key: string): Promise<void>; type(text: string): Promise<void> };
   evaluate<R, A>(fn: (arg: A) => R, arg: A): Promise<Awaited<R>>;
   waitForFunction<A>(fn: (arg: A) => unknown, arg: A, options: { timeout: number; polling?: number }): Promise<unknown>;
   waitForTimeout(ms: number): Promise<void>;
@@ -123,6 +129,10 @@ interface Model {
   b: string;
   /** a Model entry of the ⋯ menu that keeps the menu open on a toggle */
   toggle?: string;
+  /** the renderer's dialog entries in the ⋯ menu */
+  dialogs?: string[];
+  /** of them, the title dialog, whose Apply writes the document */
+  title?: string;
 }
 
 const BPMN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -157,6 +167,8 @@ const MODELS: Model[] = [
     text: "title Tea Shop\ncomponent Cup of Tea [0.79, 0.61]\ncomponent Kettle [0.43, 0.35]\n",
     a: "cmp_cup_of_tea",
     b: "cmp_kettle",
+    dialogs: ["Map title…", "Keyboard shortcuts…"],
+    title: "Map title…",
   },
   {
     notation: "event-storming",
@@ -165,6 +177,7 @@ const MODELS: Model[] = [
     a: "cmd_place_order",
     b: "event_order_placed",
     toggle: "Type captions",
+    dialogs: ["Keyboard shortcuts…"],
   },
   {
     notation: "context-map",
@@ -181,6 +194,8 @@ const MODELS: Model[] = [
     a: "ctx_cfp",
     b: "ctx_agenda",
     toggle: "Legend",
+    dialogs: ["Map title…", "Keyboard shortcuts…"],
+    title: "Map title…",
   },
   {
     notation: "team-topology",
@@ -209,6 +224,8 @@ const MODELS: Model[] = [
     }),
     a: "team_checkout",
     b: "team_payments",
+    dialogs: ["Diagram title…", "Keyboard shortcuts…"],
+    title: "Diagram title…",
   },
   {
     notation: "value-chain",
@@ -224,6 +241,7 @@ const MODELS: Model[] = [
     }),
     a: "step_order",
     b: "step_invoice",
+    dialogs: ["Keyboard shortcuts…"],
   },
 ];
 
@@ -351,6 +369,40 @@ const CANVAS_KEYS = [`${MOD}+z`, "Delete", "ArrowRight", `${MOD}+a`, "c", "e", "
   engine === "webkit" ? [] : ["Backspace"],
 );
 
+const dialogShown = (page: Page): Promise<boolean> =>
+  page.evaluate(() => document.querySelector("dialog[open]") !== null, undefined);
+
+/** chooses an entry of the ⋯ menu that opens a renderer's dialog, and waits for the dialog */
+async function openRendererDialog(page: Page, entry: string): Promise<void> {
+  await page.click('button[aria-label="More"]');
+  await page.click(`[role="menu"] [role="menuitem"]:has-text("${entry}")`);
+  await page.waitForFunction(() => document.querySelector("dialog[open]") !== null, undefined, {
+    timeout: 5_000,
+    polling: 10,
+  });
+}
+
+/** clicks the middle of the open dialog's button named `name` (its label or its text) where it
+ *  is on screen, as a person does: the page decides what takes the click */
+async function clickDialogButton(page: Page, name: string): Promise<void> {
+  const at = await page.evaluate((label) => {
+    const button = [...document.querySelectorAll("dialog[open] button")].find(
+      (candidate) => candidate.getAttribute("aria-label") === label || candidate.textContent?.trim() === label,
+    );
+    const box = button?.getBoundingClientRect();
+    return box && { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  }, name);
+  if (!at) throw new Error(`the open dialog has no button ${name}`);
+  await page.mouse.click(at.x, at.y);
+}
+
+/** the text Monaco shows in the source view */
+const sourceText = (page: Page): Promise<string> =>
+  page.evaluate(
+    () => (document.querySelector(".monaco-host .view-lines")?.textContent ?? "").replace(/\u00a0/g, " "),
+    undefined,
+  );
+
 /** how far Tab and Shift+Tab are tried each way: round every dialog's controls more than once */
 const TAB_PRESSES = 40;
 
@@ -377,10 +429,6 @@ async function tabLeavesDialog(page: Page): Promise<string | undefined> {
 
 const dialogOpen = (page: Page): Promise<boolean> =>
   page.evaluate(() => document.querySelector("dialog:modal") !== null, undefined);
-
-/** the text the source view shows */
-const sourceText = (page: Page): Promise<string | null> =>
-  page.evaluate(() => document.querySelector(".monaco-host .view-lines")?.textContent ?? null, undefined);
 
 const DIALOG_ENTRIES = ["Release → PR", "Rename…"];
 
@@ -589,6 +637,42 @@ async function run(page: Page, model: Model): Promise<void> {
     await page.click(workshop);
     await page.waitForTimeout(SETTLE);
   }
+
+  // 7. a renderer's dialog from the ⋯ menu: the first Escape is its own, and behind the source view it takes the pointer
+  if (model.dialogs) {
+    for (const dialog of model.dialogs) {
+      await openRendererDialog(page, dialog);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(SETTLE);
+      const stayed = await dialogShown(page);
+      check(!stayed, `${name}: Escape as soon as ${dialog} shows closes it`);
+      if (stayed) await page.keyboard.press("Escape");
+    }
+    await page.click(SOURCE_SIDE);
+    await page.waitForTimeout(SETTLE);
+    for (const dialog of model.dialogs) {
+      await openRendererDialog(page, dialog);
+      await clickDialogButton(page, "Close");
+      await page.waitForTimeout(SETTLE);
+      const stayed = await dialogShown(page);
+      check(!stayed, `${name}: behind the source view, a click on ${dialog}'s Close closes it`);
+      if (stayed) await page.keyboard.press("Escape");
+    }
+    if (model.title) {
+      const retitled = "Retitled behind the source";
+      await openRendererDialog(page, model.title);
+      await page.keyboard.press(`${MOD}+a`);
+      await page.keyboard.type(retitled);
+      await clickDialogButton(page, "Apply");
+      await page.waitForTimeout(SETTLE);
+      const stayed = await dialogShown(page);
+      check(!stayed, `${name}: behind the source view, a click on Apply closes ${model.title}`);
+      if (stayed) await page.keyboard.press("Escape");
+      check((await sourceText(page)).includes(retitled), `${name}: ... and the source holds the new title`);
+    }
+    await page.click(CANVAS_SIDE);
+    await page.waitForTimeout(SETTLE);
+  }
 }
 
 const playwright = loadPlaywright();
@@ -646,5 +730,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  `\nIn ${engine}, clicking as Safari does: a click on the canvas or the view switch's canvas side left every canvas the focus, Enter and Escape kept the guide's, no key reached a canvas behind the source view, and a modal dialog held the focus until it gave it back.`,
+  `\nIn ${engine}, clicking as Safari does: a click on the canvas or the view switch's canvas side left every canvas the focus, Enter and Escape kept the guide's, no key reached a canvas behind the source view, a modal dialog held the focus until it gave it back, and the renderers' dialogs took their first Escape and, behind the source view, the pointer.`,
 );

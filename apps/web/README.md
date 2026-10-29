@@ -440,7 +440,11 @@ opens no dialog (no renderer ships one yet) or on BPMN's Workshop switch in the 
 changes the canvas for every participant. Enter and Space keep the focus on the switch; on a
 menu entry they, like Escape, give it to the menu's trigger (§5.4). The ⋯ menu is not modal: a
 click on the canvas closes it and acts there, so after a toggle that keeps the menu open (Type
-captions, Legend) that one click gives the canvas the focus. `test/canvas-focus.test.ts` holds the
+captions, Legend) that one click gives the canvas the focus. A dialog entry (Rename…, Diagram
+title…, Keyboard shortcuts…) opens its dialog once the closing menu is gone: radix keeps the menu
+mounted for its exit animation, and its dismissable layer would take the dialog's first Escape. A
+renderer's dialog opens in the canvas layer, which takes no pointer behind the source view, so
+`index.css` gives an open one the pointer back. `test/canvas-focus.test.ts` holds the
 rules, `test/canvas-focus-dom.test.ts` runs them on each real canvas, also clicking as Safari does,
 and `test/toolbar-focus-dom.test.ts` renders the toolbar with React under jsdom
 (`test/component-dom.ts` loads its `.tsx`): the menu stays non-modal, and its entries and the view
@@ -498,7 +502,10 @@ goes then. The hover tooltip with the shortcut chip is the renderer's own.
 the design guide's light export ground (§10.7): the plot's white under a Wardley map, the canvas
 grey under the others (a Team Topologies SVG starts with a white sheet that would hide it, so the
 PNG is drawn without that sheet; the SVG download keeps the renderer's own until
-Miragon/modeler-suite#234 removes it there). An SVG drawn as an image cannot reach the page's fonts. So before it is
+Miragon/modeler-suite#234 removes it there). Neither export carries the peers on the canvas: the
+renderers' `saveSVG` copies the whole live canvas, designIQ's presence layer with its cursors,
+outlines and name pills included, so `imageExports` (`notations/miragon/menu-content.ts`) removes
+that layer first (`withoutPresence`, `lib/presence-canvas.ts`). An SVG drawn as an image cannot reach the page's fonts. So before it is
 drawn, `lib/export-font.ts` puts the page's own `'Geist Variable'` faces into the SVG's `<style>`,
 their files inline: the subsets whose `unicode-range` holds a character of the diagram's text
 (the SPA has latin, latin-ext, cyrillic, cyrillic-ext and vietnamese; the widget only latin and

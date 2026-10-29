@@ -8,7 +8,9 @@
  * the canvas keys waited for a second click (#298). A click on a Model action
  * that opens no dialog hands the canvas the focus as the menu closes, also
  * after a press on the trigger dragged onto it, and Enter leaves the focus to
- * the trigger. The view switch tells a click from Enter or Space, and a click
+ * the trigger. A dialog entry opens its dialog once the closing menu is gone,
+ * so no menu layer takes the dialog's first Escape. The view switch tells a
+ * click from Enter or Space, and a click
  * on a document mode (BPMN's Workshop switch) hands the canvas the focus,
  * where Enter keeps it on the switch. The rules: test/canvas-focus.test.ts;
  * the real canvases: test/canvas-focus-dom.test.ts.
@@ -186,6 +188,81 @@ test("⋯ menu: Enter on a Model action leaves the focus to the trigger (§5.4)"
   assert.deepEqual(calls, ["tidy"]);
   assert.equal(menu() === null, true, "the menu closes");
   assert.equal(focused(), "trigger");
+});
+
+/**
+ * The ⋯ menu's exit animation (ui-kit's dropdown-menu: 150 ms), which jsdom
+ * does not run: the menu's content reports an animation per state to radix's
+ * Presence, which keeps the closing menu mounted until `end()`.
+ */
+function menuExitAnimation(): { end(): void; restore(): void } {
+  const globals = globalThis as { getComputedStyle: typeof getComputedStyle };
+  const real = globals.getComputedStyle;
+  const isMenu = (element: Element): boolean => element.getAttribute("data-slot") === "dropdown-menu-content";
+  globals.getComputedStyle = (element, pseudo) => {
+    const style = real(element, pseudo);
+    if (!isMenu(element)) return style;
+    return new Proxy(style, {
+      get: (target, key) =>
+        key === "animationName"
+          ? element.getAttribute("data-state") === "closed"
+            ? "exit"
+            : "enter"
+          : Reflect.get(target, key),
+    });
+  };
+  return {
+    end() {
+      const closing = document.querySelector('[data-slot="dropdown-menu-content"][data-state="closed"]');
+      assert.ok(closing, "a menu that is closing");
+      const ended = new Event("animationend");
+      Object.defineProperty(ended, "animationName", { value: "exit" });
+      closing.dispatchEvent(ended);
+    },
+    restore() {
+      globals.getComputedStyle = real;
+    },
+  };
+}
+
+test("⋯ menu: a dialog entry opens its dialog once the closing menu is gone, and the dialog's first Escape is its own", async () => {
+  const animation = menuExitAnimation();
+  cleanups.push(() => animation.restore());
+  const dialog = document.createElement("dialog");
+  const opened: string[] = [];
+  const { canvas, open } = await mount({
+    modelerMenu: {
+      model: [],
+      export: [],
+      help: [
+        {
+          kind: "dialog",
+          id: "keyboard-shortcuts",
+          label: "Keyboard shortcuts…",
+          onSelect: () => {
+            dialog.showModal();
+            // what a person does at once: the dialog shows, Escape closes it
+            const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+            dialog.dispatchEvent(escape);
+            opened.push(menu() ? "under the menu" : escape.defaultPrevented ? "Escape taken" : "Escape its own");
+          },
+        },
+      ],
+    },
+  });
+  canvas.append(dialog);
+  await open();
+  const shortcuts = entry("Keyboard shortcuts…");
+  pointer(shortcuts, "pointerdown");
+  pointer(shortcuts, "pointerup");
+  click(shortcuts, 1);
+  await settle();
+  assert.equal(menu()?.getAttribute("data-state"), "closed", "the menu is still closing");
+  assert.deepEqual(opened, [], "and the dialog waits for it");
+  animation.end();
+  await settle();
+  assert.equal(menu(), null, "the menu is gone");
+  assert.deepEqual(opened, ["Escape its own"]);
 });
 
 test("view switch: a click on the canvas side says it was a pointer, Enter and Space say they were not", async () => {
