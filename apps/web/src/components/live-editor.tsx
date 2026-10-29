@@ -54,6 +54,7 @@ import {
   editorLayers,
   type EditorView,
   editorViews,
+  HIDDEN_LAYER_CLASS,
   readViewChoice,
   rememberViewChoice,
   type ViewChoice,
@@ -755,6 +756,8 @@ export function LiveEditor({
         {/* both layers stay mounted and laid out (the engines measure their
             host), the hidden one inert: out of the Tab order — a Tab into an
             invisible Monaco would type indentation into the shared model.
+            Inert alone also keeps it out of the pointer's way
+            (HIDDEN_LAYER_CLASS says why it has to).
             The split view only narrows the SAME two nodes: moved into another
             tree, React would make new ones, and the engines mounted once per
             session would stay on the old. The source comes first, so the Tab
@@ -763,7 +766,7 @@ export function LiveEditor({
           ref={sourceRef}
           id={sourcePaneId}
           inert={!sourceShown}
-          className={cn("monaco-host absolute inset-0", !sourceShown && "pointer-events-none opacity-0")}
+          className={cn("monaco-host absolute inset-0", !sourceShown && HIDDEN_LAYER_CLASS)}
           style={split ? SPLIT_PANES.source : undefined}
         />
         {split && (
@@ -781,7 +784,7 @@ export function LiveEditor({
         <div
           ref={canvasRef}
           inert={!canvasShown}
-          className={cn(plugin?.canvasClassName, "absolute inset-0", !canvasShown && "pointer-events-none opacity-0")}
+          className={cn(plugin?.canvasClassName, "absolute inset-0", !canvasShown && HIDDEN_LAYER_CLASS)}
           style={split ? SPLIT_PANES.canvas : undefined}
         />
         {ActivePanel && (

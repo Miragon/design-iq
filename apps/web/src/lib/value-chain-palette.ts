@@ -1,7 +1,7 @@
 /**
  * The keyboard and screen reader side of the Value Chain palette in a host
  * without the modeler shell, next to its look (lib/value-chain-palette.css).
- * value-chain-renderer 0.8.0 draws an entry as `div role="button"` with an
+ * value-chain-renderer 0.8.1 draws an entry as `div role="button"` with an
  * `aria-label` and nothing else outside the shell's chrome: no tab stop, no
  * toolbar around the entries, no pressed tool, and nothing that turns Enter
  * or Space into the click an element is created from, so a keyboard alone

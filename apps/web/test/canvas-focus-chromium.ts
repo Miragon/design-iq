@@ -61,12 +61,17 @@
  *  6. BPMN's Workshop switch, the toolbar button that changes the canvas for
  *     every participant: a click hands the canvas the focus, Delete deletes
  *     the selected element and Cmd/Ctrl+Z brings it back.
- *  7. A Miragon renderer's dialogs in the ⋯ menu (its title dialog,
- *     Keyboard shortcuts…): Escape pressed as soon as one shows closes it,
- *     and the menu, which radix keeps mounted while it fades out, takes none
- *     of it. With the source view shown, where the canvas layer takes no
- *     pointer, a click on a dialog's Close closes it, and the title dialog's
- *     Apply writes the new title into the source.
+ *  7. A Miragon notation's dialogs in the ⋯ menu (the renderer's title
+ *     dialog, the modeler shell's Keyboard shortcuts…): Escape pressed as
+ *     soon as one shows closes it, and the menu, which radix keeps mounted
+ *     while it fades out, takes none of it. With the source view shown, where
+ *     the canvas layer is hidden and inert, a click on a dialog's Close
+ *     closes it, and the title dialog's Apply writes the new title into the
+ *     source.
+ *  8. The source view over the hidden canvas layer: a click on the source
+ *     lands in Monaco. A Miragon notation's Keyboard shortcuts… dialog, which
+ *     lives in that hidden layer, takes the mouse: a click on its Close
+ *     button closes it, and so does one on its backdrop.
  *
  * No page error and no console error on the way. Exits 1 on any failure.
  */
@@ -621,7 +626,7 @@ async function run(page: Page, model: Model): Promise<void> {
   await page.waitForTimeout(SETTLE);
   const text = await sourceText(page);
   check(Boolean(text), `${name}: the source view shows the text`);
-  for (const entry of DIALOG_ENTRIES) {
+  for (const entry of dialogEntries) {
     await openDialog(entry, "source");
     // no Enter: it would submit Rename… once its field holds a new name; no
     // Backspace: Playwright's WebKit goes back in the history on one outside a field
@@ -656,7 +661,7 @@ async function run(page: Page, model: Model): Promise<void> {
     await page.waitForTimeout(SETTLE);
   }
 
-  // 7. a renderer's dialog from the ⋯ menu: the first Escape is its own, and behind the source view it takes the pointer
+  // 7. a Miragon dialog from the ⋯ menu: the first Escape is its own, and behind the source view it takes the pointer
   if (model.dialogs) {
     for (const dialog of model.dialogs) {
       await openRendererDialog(page, dialog);
@@ -691,6 +696,42 @@ async function run(page: Page, model: Model): Promise<void> {
     await page.click(CANVAS_SIDE);
     await page.waitForTimeout(SETTLE);
   }
+
+  // 8. the hidden canvas layer lets a click through to the source, and the shortcuts dialog inside it takes the mouse
+  await page.click(SOURCE_SIDE);
+  await page.waitForTimeout(SETTLE);
+  const source = await page.evaluate(() => {
+    const box = document.querySelector(".monaco-host")!.getBoundingClientRect();
+    return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  }, undefined);
+  await page.mouse.click(source.x, source.y);
+  await page.waitForTimeout(SETTLE);
+  const inSource = await page.evaluate(() => document.activeElement?.closest(".monaco-editor") != null, undefined);
+  check(inSource, `${name}: in the source view, a click on the source lands in Monaco`);
+  if (miragon) {
+    const where = { close: "the Close button", backdrop: "the backdrop" } as const;
+    for (const target of ["close", "backdrop"] as const) {
+      await page.click('button[aria-label="More"]');
+      await page.click(`[role="menu"] [role="menuitem"]:has-text("${shortcuts}")`);
+      await page.waitForTimeout(SETTLE);
+      const at = await page.evaluate((aim) => {
+        const dialog = document.querySelector<HTMLDialogElement>("dialog.cd-shell-dialog");
+        if (!dialog?.matches(":modal")) return undefined;
+        if (aim === "backdrop") return { x: 8, y: 8 };
+        const box = dialog.querySelector(".cd-shell-dialog-close")!.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }, target);
+      check(at !== undefined, `${name}: in the source view, ${shortcuts} opens a modal dialog`);
+      if (!at) continue;
+      await page.mouse.click(at.x, at.y);
+      await page.waitForTimeout(SETTLE);
+      const stillOpen = await page.evaluate(() => document.querySelector("dialog[open]") !== null, undefined);
+      check(!stillOpen, `${name}: ... a mouse click on ${where[target]} closes it`);
+      if (stillOpen) await page.keyboard.press("Escape");
+    }
+  }
+  await page.click(CANVAS_SIDE);
+  await page.waitForTimeout(SETTLE);
 }
 
 const playwright = loadPlaywright();

@@ -443,8 +443,9 @@ click on the canvas closes it and acts there, so after a toggle that keeps the m
 captions, Legend) that one click gives the canvas the focus. A dialog entry (Rename…, Diagram
 title…, Keyboard shortcuts…) opens its dialog once the closing menu is gone: radix keeps the menu
 mounted for its exit animation, and its dismissable layer would take the dialog's first Escape. A
-renderer's dialog opens in the canvas layer, which takes no pointer behind the source view, so
-`index.css` gives an open one the pointer back. `test/canvas-focus.test.ts` holds the
+Miragon dialog opens in the canvas layer, behind the source view too, where that layer is hidden
+and inert but keeps its `pointer-events` (`HIDDEN_LAYER_CLASS`, below); `index.css` also gives an
+open one the pointer itself. `test/canvas-focus.test.ts` holds the
 rules, `test/canvas-focus-dom.test.ts` runs them on each real canvas, also clicking as Safari does,
 and `test/toolbar-focus-dom.test.ts` renders the toolbar with React under jsdom
 (`test/component-dom.ts` loads its `.tsx`): the menu stays non-modal, and its entries and the view
@@ -459,18 +460,24 @@ Add todo opens Create todo, whose title field takes the focus; after that dialog
 **The live editor holds no keys from its canvas.** Every renderer acts only on a key aimed at its
 own focused canvas, so a key typed in the source view, a dialog or on the toolbar reaches no
 canvas, also while it stays mounted behind them (`test/canvas-keys-dom.test.ts` holds each Miragon
-renderer to that). The canvas layer is also `inert` behind the source view. The editor's dialogs
-(Release → PR, Create todo, the history diff, Rename and Duplicate) are native `<dialog>`s shown
-with `showModal()` (`ModalDialog` in `src/components/dialog-shell.tsx`), so the page behind one is
-inert: no Tab, click or key from it reaches the toolbar, the source or the canvas, where it would
-edit the shared document. A dialog takes the focus as it opens (its field, Cancel in a destructive
-one, Close in the history diff, else the dialog itself), and the browser gives it back as it
-closes, to the ⋯ trigger after an entry of the ⋯ menu (guide §5.4, §8).
-`test/canvas-focus-chromium.ts` opens Release and Rename over the canvas and over the source in
-both engines and presses Tab, Shift+Tab and the canvas keys under them. The zoom keys of the SPA's
-Miragon editors act on the whole page, so they check what is on screen themselves: behind the
-source view (`EditorContext.visibility`), in a text field and under a modal dialog (the SPA's
-dialogs are modal, `test/dialogs-modal-dom.test.ts`) the browser zooms the page.
+renderer to that). The canvas layer is also `inert` behind the source view, and beyond that a
+hidden layer is only made invisible (`HIDDEN_LAYER_CLASS` in `lib/editor-view.ts`), never
+`pointer-events: none`: inert already passes a click on to the source below, and a Miragon
+notation's modal dialog (Keyboard shortcuts…, the title dialogs), which the ⋯ menu opens in the
+source view too, lives in the hidden canvas layer, where it escapes `inert` but would inherit
+`pointer-events` and take no click. The editor's dialogs (Release → PR, Create todo, the history
+diff, Rename and Duplicate) are native `<dialog>`s shown with `showModal()` (`ModalDialog` in
+`src/components/dialog-shell.tsx`), so the page behind one is inert: no Tab, click or key from it
+reaches the toolbar, the source or the canvas, where it would edit the shared document. A dialog
+takes the focus as it opens (its field, Cancel in a destructive one, Close in the history diff,
+else the dialog itself), and the browser gives it back as it closes, to the ⋯ trigger after an
+entry of the ⋯ menu (guide §5.4, §8). `test/canvas-focus-chromium.ts` opens Release, Rename and,
+for a Miragon notation, the modeler shell's Keyboard shortcuts… over the canvas and over the
+source in both engines and presses Tab, Shift+Tab and the canvas keys under them, and closes the
+shortcuts dialog in the source view with a mouse click on Close and on its backdrop. The zoom keys
+of the SPA's Miragon editors act on the whole page, so they check what is on screen themselves:
+behind the source view (`EditorContext.visibility`), in a text field and under a modal dialog (the
+SPA's dialogs are modal, `test/dialogs-modal-dom.test.ts`) the browser zooms the page.
 
 **One spec per Miragon renderer.** The five Miragon widgets are not five
 entries: `src/notations/miragon/<id>.ts` holds ONE `MiragonRendererSpec` per

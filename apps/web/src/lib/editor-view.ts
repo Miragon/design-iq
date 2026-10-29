@@ -147,6 +147,17 @@ export function editorLayers(
   return { shown, sourceShown: shown !== "canvas", canvasShown: shown !== "source", split: shown === "split" };
 }
 
+/**
+ * The class of a layer that is not on screen. The layer is `inert` as well
+ * (the canvas behind the source view, the source pane behind the canvas),
+ * which keeps it out of reach and passes a click on to the layer under it.
+ * No `pointer-events: none`: the ⋯ menu opens the Miragon renderers' modal
+ * dialogs (Keyboard shortcuts…, the title dialogs) inside the canvas layer in
+ * the source view too, and a modal dialog escapes `inert` but inherits
+ * `pointer-events`, so its Close button and its backdrop would take no click.
+ */
+export const HIDDEN_LAYER_CLASS = "opacity-0";
+
 type ViewUpdate = EditorView | ((current: EditorView) => EditorView);
 
 /**

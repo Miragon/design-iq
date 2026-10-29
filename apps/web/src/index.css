@@ -33,11 +33,14 @@
 .vc-canvas {
   isolation: isolate;
 }
-/* a renderer's modal dialog (Diagram title…, Keyboard shortcuts…) opens in
-   its canvas host, which behind the source view is inert and takes no
-   pointer (live-editor.tsx). The top layer lifts the dialog out of the
-   host's inertness and its opacity, but pointer-events is inherited: every
-   click would pass through it, and only Escape would close it */
+/* a Miragon modal dialog (Diagram title…, the modeler shell's Keyboard
+   shortcuts…) opens in its canvas host, which behind the source view is
+   inert and invisible (live-editor.tsx). The top layer lifts the dialog out
+   of the host's inertness and its opacity, but pointer-events is inherited:
+   under a host that took no pointer every click would pass through it, and
+   only Escape would close it. The hidden layer sets none for that reason
+   (HIDDEN_LAYER_CLASS in lib/editor-view.ts), and an open dialog takes the
+   pointer here whatever its host sets */
 .wardley-canvas > dialog[open],
 .tt-canvas > dialog[open],
 .es-canvas > dialog[open],
