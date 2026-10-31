@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.13.2](https://github.com/Miragon/design-iq/compare/v5.13.1...v5.13.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* **live-host:** move to bpmn-cli 0.9.0 ([#378](https://github.com/Miragon/design-iq/issues/378)) ([95f55b6](https://github.com/Miragon/design-iq/commit/95f55b6b4d8c2dedab431668fb4e4cd2232408e3))
+
 ## [5.13.1](https://github.com/Miragon/design-iq/compare/v5.13.0...v5.13.1) (2026-10-31)
 
 
