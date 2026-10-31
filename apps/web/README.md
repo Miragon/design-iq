@@ -516,7 +516,7 @@ palette (Context Maps since context-maps-renderer 0.9.1). designIQ only places i
 under its corner row (`miragon-styles.css`), and the SPA, which has no chrome over its canvas, at
 the top where Wardley Maps, Event Storming, Team Topologies and Value Chain move it 64px down in a
 canvas up to 760px wide (`index.css`). `test/vendor-css.test.ts` holds that list and the 94px
-lift to the renderers' sheets.
+lift to the renderers' sheets, and keeps designIQ's own sheets free of a lift.
 
 **PNG exports in Geist.** Export as PNG draws the renderer's standalone SVG as an image with
 the modeler shell's `svgToPng` (`@miragon/modeler-shell/export`, the same for every Miragon

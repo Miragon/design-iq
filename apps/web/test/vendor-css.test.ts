@@ -287,26 +287,41 @@ test("every renderer undoes diagram-js's two-column clamp for its own palette, s
   );
 });
 
-test("the widget only places a renderer's palette: its size, its one row and its scrolling stay the renderer's (guide §5.15), but for diagram-js's two-column clamp where the renderer leaves it", () => {
-  const sheet = fileURLToPath(new URL("../src/mcp-app/miragon-styles.css", import.meta.url));
+/** a selector on a palette in diagram-js's two-column layout, with or without .open: a width there undoes the 94px clamp */
+const onTwoColumnPalette = (selector: string): boolean =>
+  /\.djs-palette.*(?<!:not\()\.two-column(?![\w-])/.test(selector);
+
+const isWidth = (node: postcss.ChildNode): boolean =>
+  node.type === "decl" && /^(min-|max-)?(width|inline-size)$/.test(node.prop);
+
+const widgetSheet = fileURLToPath(new URL("../src/mcp-app/miragon-styles.css", import.meta.url));
+
+test("the widget only places a renderer's palette: its size, its one row and its scrolling stay the renderer's (guide §5.15)", () => {
   const placed = new Set<string>();
-  const unclamped = new Set<string>();
-  postcss.parse(readFileSync(sheet, "utf8"), { from: sheet }).walkRules((rule) => {
-    for (const selector of rule.selectors.filter((each) => /\.djs-palette/.test(each))) {
-      if (!/\.two-column\.open/.test(selector)) {
-        rule.walkDecls((decl) => void placed.add(decl.prop));
-        continue;
-      }
-      rule.walkDecls((decl) => assert.equal(`${decl.prop}: ${decl.value}`, "width: max-content", selector));
-      unclamped.add(selector);
-    }
+  postcss.parse(readFileSync(widgetSheet, "utf8"), { from: widgetSheet }).walkRules((rule) => {
+    if (!rule.selectors.some((selector) => /\.djs-palette/.test(selector) && !onTwoColumnPalette(selector))) return;
+    rule.walkDecls((decl) => void placed.add(decl.prop));
   });
   assert.deepEqual([...placed].sort(), ["max-width", "top"]);
+});
+
+test("no designIQ sheet lifts diagram-js's two-column clamp, but the widget's for a renderer that leaves it", () => {
+  const lifted: string[] = [];
+  for (const file of ownStylesheets()) {
+    postcss.parse(readFileSync(file, "utf8"), { from: file }).walkRules((rule) => {
+      const selectors = rule.selectors.filter(onTwoColumnPalette);
+      if (selectors.length === 0 || !rule.some(isWidth)) return;
+      rule.walkDecls((decl) =>
+        assert.equal(`${decl.prop}: ${decl.value}`, "width: max-content", `${file}: ${rule.selector}`),
+      );
+      lifted.push(...selectors.map((selector) => `${file}: ${selector}`));
+    });
+  }
   const expected = MIRAGON_RENDERERS.filter((spec) => !liftsTwoColumnClamp(spec)).map(
     (spec) =>
-      `#app[data-kind="miragon"] #canvas .${spec.canvasClassName} .${RENDERER_ROOT[spec.id]} .djs-palette.two-column.open`,
+      `${widgetSheet}: #app[data-kind="miragon"] #canvas .${spec.canvasClassName} .${RENDERER_ROOT[spec.id]} .djs-palette.two-column.open`,
   );
-  assert.deepEqual([...unclamped].sort(), expected.sort());
+  assert.deepEqual(lifted.sort(), expected.sort());
 });
 
 /** the declarations of the unlayered `:root` rules that set a family (--bio-, --cdc-) */
