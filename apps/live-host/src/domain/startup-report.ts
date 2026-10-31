@@ -24,13 +24,33 @@ export interface StartupSettings {
   /** the local principal's login under LIVE_AUTH=none */
   localUser?: string;
   githubApp: { id?: string; privateKey?: string; slug?: string; webhookSecret?: string };
-  oidc: { issuer?: string; jwksUrl?: string; clientId?: string; authorizeUrl?: string; tokenUrl?: string };
+  oidc: {
+    issuer?: string;
+    jwksUrl?: string;
+    audience?: string;
+    loginClaim?: string;
+    clientId?: string;
+    clientSecret?: string;
+    authorizeUrl?: string;
+    tokenUrl?: string;
+    loginLabel?: string;
+  };
   /** SESSION_ENC_KEY, else CELL_TOKEN_KEY */
   sessionKey?: string;
   cell: { tenantInstallationId?: number; tokenMintUrl?: string; cellSecret?: string };
   retiredGitHubOAuth: { clientId?: string; clientSecret?: string };
   mcp: { readOnly: boolean; bpmnEdit: boolean };
 }
+
+/**
+ * What the half-configured check reads. All of it is parsed before the boot
+ * gates, unlike the repositories the boot sync finds, so a refused boot can
+ * name its warnings too.
+ */
+export type StartupConfiguration = Pick<
+  StartupSettings,
+  "auth" | "githubApp" | "oidc" | "sessionKey" | "cell" | "retiredGitHubOAuth"
+>;
 
 export interface StartupReport {
   mode: OperatingMode;
@@ -43,11 +63,10 @@ const RULE = "─".repeat(50);
 const PRIVATE_KEY_VARIABLES = "GITHUB_APP_PRIVATE_KEY, GITHUB_APP_PRIVATE_KEY_FILE or GITHUB_APP_PRIVATE_KEY_B64";
 
 export function startupReport(settings: StartupSettings): StartupReport {
-  const remoteMinting = Boolean(settings.cell.tokenMintUrl && settings.cell.cellSecret);
-  const localApp = Boolean(settings.githubApp.id && settings.githubApp.privateKey);
+  const localApp = hasLocalApp(settings);
   const mode = operatingMode(settings, localApp);
   const next = mode === "no-auth-single-repo" || mode === "no-auth-github-app" ? nextModeUp(settings) : undefined;
-  const warnings = halfConfigured(settings, remoteMinting, localApp);
+  const warnings = halfConfigured(settings);
   const { cell, mcp } = settings;
   const lines = [
     RULE,
@@ -77,10 +96,23 @@ export function startupReport(settings: StartupSettings): StartupReport {
         ]
       : []),
     `room name = <owner>/<repo>/<path>, Y.Text field 'content'`,
-    ...warnings.map((warning) => `warning   : ${warning}`),
+    ...warnings.map(warningLine),
     RULE,
   ];
   return { mode, warnings, lines };
+}
+
+/** the banner's warning lines alone, for a boot a gate refuses before the banner */
+export function startupWarningLines(configuration: StartupConfiguration): string[] {
+  return halfConfigured(configuration).map(warningLine);
+}
+
+function warningLine(warning: string): string {
+  return `warning   : ${warning}`;
+}
+
+function hasLocalApp({ githubApp: app }: StartupConfiguration): boolean {
+  return Boolean(app.id && app.privateKey);
 }
 
 function operatingMode(settings: StartupSettings, localApp: boolean): OperatingMode {
@@ -117,8 +149,10 @@ function nextModeUp(settings: StartupSettings): string {
     : "OIDC + GitHub App, every setting is in place; set LIVE_AUTH=oidc";
 }
 
-function halfConfigured(settings: StartupSettings, remoteMinting: boolean, localApp: boolean): string[] {
-  const { githubApp: app, oidc, cell, retiredGitHubOAuth: retired } = settings;
+function halfConfigured(configuration: StartupConfiguration): string[] {
+  const { githubApp: app, oidc, cell, retiredGitHubOAuth: retired } = configuration;
+  const remoteMinting = Boolean(cell.tokenMintUrl && cell.cellSecret);
+  const localApp = hasLocalApp(configuration);
   const warnings: string[] = [];
   // a cell gets its tokens and its webhooks from the control plane: the App's
   // own key, webhook secret and slug are an on-prem concern
@@ -150,13 +184,17 @@ function halfConfigured(settings: StartupSettings, remoteMinting: boolean, local
       "TENANT_INSTALLATION_ID is set but no installation token can be minted (TOKEN_MINT_URL + CELL_SECRET, or GITHUB_APP_ID + an app private key): no repository is served",
     );
   }
-  if (settings.auth === "none") {
+  if (configuration.auth === "none") {
     const ignored = setVariables({
       LIVE_OIDC_ISSUER: oidc.issuer,
       LIVE_OIDC_JWKS_URL: oidc.jwksUrl,
+      LIVE_OIDC_AUDIENCE: oidc.audience,
+      LIVE_OIDC_LOGIN_CLAIM: oidc.loginClaim,
       LIVE_OIDC_CLIENT_ID: oidc.clientId,
+      LIVE_OIDC_CLIENT_SECRET: oidc.clientSecret,
       LIVE_OIDC_AUTHORIZE_URL: oidc.authorizeUrl,
       LIVE_OIDC_TOKEN_URL: oidc.tokenUrl,
+      LIVE_OIDC_LOGIN_LABEL: oidc.loginLabel,
     });
     if (ignored.length) {
       warnings.push(
@@ -170,11 +208,13 @@ function halfConfigured(settings: StartupSettings, remoteMinting: boolean, local
       const [given, absent, endpoint] = oidc.authorizeUrl
         ? ["LIVE_OIDC_AUTHORIZE_URL", "LIVE_OIDC_TOKEN_URL", "token"]
         : ["LIVE_OIDC_TOKEN_URL", "LIVE_OIDC_AUTHORIZE_URL", "authorize"];
+      // the issuer as auth/oidc-login.ts fetches it: an Auth0 issuer ends in a slash
+      const discovery = oidc.issuer ? ` at ${oidc.issuer.replace(/\/+$/, "")}/.well-known/openid-configuration` : "";
       warnings.push(
-        `${given} is set but ${absent} is missing: the ${endpoint} endpoint still comes from OIDC discovery at ${oidc.issuer}/.well-known/openid-configuration`,
+        `${given} is set but ${absent} is missing: the ${endpoint} endpoint still comes from OIDC discovery${discovery}`,
       );
     }
-    if (!settings.sessionKey) {
+    if (!configuration.sessionKey) {
       warnings.push(
         "SESSION_ENC_KEY is not set: the login state key is random per boot, so a restart or redeploy breaks the logins in flight",
       );

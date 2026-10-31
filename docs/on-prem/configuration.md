@@ -17,7 +17,9 @@ with a single repo or with the GitHub App, `OIDC + GitHub App` (recommended), or
 Below `OIDC + GitHub App`, `next mode` lists the settings that mode still needs. Every
 `warning` names a setting that is only half there and what stays off because of it. A
 secret shows up only as set or missing, never with its value. A setting the server cannot
-run with still stops it with an error, as before.
+run with still stops it with an error, as before. When `LIVE_AUTH=oidc` refuses the start
+(no IdP, no GitHub App, or only one of `LIVE_OIDC_ISSUER` and `LIVE_OIDC_JWKS_URL`), the
+warnings print just before the error, since one of them is often the reason.
 
 ```text
 ──────────────────────────────────────────────────

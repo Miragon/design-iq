@@ -50,7 +50,7 @@ import { makeOidcVerifier } from "./auth/oidc.ts";
 import { makeOidcLogin } from "./auth/oidc-login.ts";
 import { ConnectionLimiter } from "./domain/conn-limit.ts";
 import { DocSizeGuard } from "./domain/doc-size-guard.ts";
-import { startupReport } from "./domain/startup-report.ts";
+import { type StartupConfiguration, startupReport, startupWarningLines } from "./domain/startup-report.ts";
 import { startApi } from "./http/api.ts";
 import { AccessCache } from "./repos/access.ts";
 import { hasContentConfig, loadContentConfig, notAContentRepoReason } from "./repos/content.ts";
@@ -294,8 +294,36 @@ const access = NO_AUTH ? allowAllAccess : new AccessCache(connectionSource);
 // come together; audience defaults to this host's public URL (RFC 8707).
 const OIDC_ISSUER = process.env.LIVE_OIDC_ISSUER;
 const OIDC_JWKS_URL = process.env.LIVE_OIDC_JWKS_URL;
+const OIDC_CLIENT_ID = process.env.LIVE_OIDC_CLIENT_ID;
+const OIDC_AUTHORIZE_URL = process.env.LIVE_OIDC_AUTHORIZE_URL;
+const OIDC_TOKEN_URL = process.env.LIVE_OIDC_TOKEN_URL;
+// the startup report's half-configured check (#2) reads nothing the gates below
+// decide, so a refused boot can name its warnings too: an upgrade that still
+// sets the retired GITHUB_CLIENT_* is refused by the oidc gate, and hears why
+const startupConfiguration: StartupConfiguration = {
+  auth: NO_AUTH ? "none" : "oidc",
+  githubApp: { id: process.env.GITHUB_APP_ID, privateKey: appPrivateKey, slug: appSlug, webhookSecret: WEBHOOK_SECRET },
+  oidc: {
+    issuer: OIDC_ISSUER,
+    jwksUrl: OIDC_JWKS_URL,
+    audience: process.env.LIVE_OIDC_AUDIENCE,
+    loginClaim: process.env.LIVE_OIDC_LOGIN_CLAIM,
+    clientId: OIDC_CLIENT_ID,
+    clientSecret: process.env.LIVE_OIDC_CLIENT_SECRET,
+    authorizeUrl: OIDC_AUTHORIZE_URL,
+    tokenUrl: OIDC_TOKEN_URL,
+    loginLabel: process.env.LIVE_OIDC_LOGIN_LABEL,
+  },
+  sessionKey: SESSION_ENC_KEY,
+  cell: { tenantInstallationId: TENANT_INSTALLATION_ID, tokenMintUrl: MINT_URL, cellSecret: CELL_SECRET },
+  retiredGitHubOAuth: { clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET },
+};
+function refuseStart(error: Error): Error {
+  for (const line of startupWarningLines(startupConfiguration)) console.log(line);
+  return error;
+}
 if (!NO_AUTH && Boolean(OIDC_ISSUER) !== Boolean(OIDC_JWKS_URL)) {
-  throw new Error("LIVE_OIDC_ISSUER and LIVE_OIDC_JWKS_URL must be set together");
+  throw refuseStart(new Error("LIVE_OIDC_ISSUER and LIVE_OIDC_JWKS_URL must be set together"));
 }
 // scopes advertised in the PRM (scopes_supported) and the 401 challenge; the
 // challenge value is authoritative for the client (SEP-835). Default unset — a
@@ -333,9 +361,6 @@ const oidc =
 // switches the web login to the IdP's hosted flow (code + PKCE; auth/oidc-login.ts).
 // No secret → public client. Needs the resource-server config above — the flow's
 // access token is verified by exactly that verifier (incl. the cell tenant gate).
-const OIDC_CLIENT_ID = process.env.LIVE_OIDC_CLIENT_ID;
-const OIDC_AUTHORIZE_URL = process.env.LIVE_OIDC_AUTHORIZE_URL;
-const OIDC_TOKEN_URL = process.env.LIVE_OIDC_TOKEN_URL;
 const oidcLogin = ((): ReturnType<typeof makeOidcLogin> | undefined => {
   // a client id without the verifier is caught by the oidc-mode gate below
   if (!OIDC_CLIENT_ID || NO_AUTH || !oidc) return undefined;
@@ -353,15 +378,19 @@ const oidcLogin = ((): ReturnType<typeof makeOidcLogin> | undefined => {
 // against. Missing either is a misconfiguration, never a silently open or a
 // silently read-only host (ADR 0007).
 if (!NO_AUTH && (!oidc || !oidcLogin)) {
-  throw new Error(
-    "LIVE_AUTH=oidc needs LIVE_OIDC_ISSUER + LIVE_OIDC_JWKS_URL + LIVE_OIDC_CLIENT_ID (docs/on-prem/configuration.md) — " +
-      "or LIVE_AUTH=none for an unauthenticated host (local evaluation only)",
+  throw refuseStart(
+    new Error(
+      "LIVE_AUTH=oidc needs LIVE_OIDC_ISSUER + LIVE_OIDC_JWKS_URL + LIVE_OIDC_CLIENT_ID (docs/on-prem/configuration.md) — " +
+        "or LIVE_AUTH=none for an unauthenticated host (local evaluation only)",
+    ),
   );
 }
 if (!NO_AUTH && !connectionSource?.checkUserPermission) {
-  throw new Error(
-    "LIVE_AUTH=oidc needs a GitHub App connection (GITHUB_APP_ID + private key, or a cell's token mint): " +
-      "per-repo authorization runs on installation tokens (ADR 0001) — an identity-only session can write nothing without it",
+  throw refuseStart(
+    new Error(
+      "LIVE_AUTH=oidc needs a GitHub App connection (GITHUB_APP_ID + private key, or a cell's token mint): " +
+        "per-repo authorization runs on installation tokens (ADR 0001) — an identity-only session can write nothing without it",
+    ),
   );
 }
 // every boot gate has passed — only now touch the database irreversibly: a
@@ -550,30 +579,14 @@ void (async () => {
   // tokens resolve through the synced registry — only now resume todo jobs
   todoJobs?.resume();
   const report = startupReport({
+    ...startupConfiguration,
     port: PORT,
     hostRepo: HOST_REPO,
     hostContentDir: HOST_CONTENT,
     dataDir: DATA_DIR,
     repos: registry.list().map((r) => r.fullName),
     enumeratesInstallations: Boolean(connectionSource?.canEnumerate),
-    auth: NO_AUTH ? "none" : "oidc",
     localUser: local?.user.login,
-    githubApp: {
-      id: process.env.GITHUB_APP_ID,
-      privateKey: appPrivateKey,
-      slug: appSlug,
-      webhookSecret: WEBHOOK_SECRET,
-    },
-    oidc: {
-      issuer: OIDC_ISSUER,
-      jwksUrl: OIDC_JWKS_URL,
-      clientId: OIDC_CLIENT_ID,
-      authorizeUrl: OIDC_AUTHORIZE_URL,
-      tokenUrl: OIDC_TOKEN_URL,
-    },
-    sessionKey: SESSION_ENC_KEY,
-    cell: { tenantInstallationId: TENANT_INSTALLATION_ID, tokenMintUrl: MINT_URL, cellSecret: CELL_SECRET },
-    retiredGitHubOAuth: { clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET },
     mcp: { readOnly: MCP_READONLY, bpmnEdit: MCP_BPMN_EDIT },
   });
   for (const line of report.lines) console.log(line);

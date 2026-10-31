@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { startupReport, type StartupSettings } from "../src/domain/startup-report.ts";
+import { startupReport, type StartupSettings, startupWarningLines } from "../src/domain/startup-report.ts";
 
 const PEM = "-----BEGIN RSA PRIVATE KEY-----\nMIIEsecretpemkeymaterial\n-----END RSA PRIVATE KEY-----";
 
@@ -102,6 +102,20 @@ test("a tenant installation id is cell mode, with the control plane's minting an
   assert.deepEqual(report.warnings, []);
 });
 
+test("a cell that mints remotely is not asked for the App's own key, webhook secret or slug", () => {
+  const remoteMinting = {
+    tenantInstallationId: 42,
+    tokenMintUrl: "https://control.example.com/mint",
+    cellSecret: "cell-1",
+  };
+  for (const githubApp of [{ id: "4711" }, { id: "4711", privateKey: PEM }]) {
+    const report = startupReport(recommended({ githubApp, cell: remoteMinting }));
+    assert.equal(report.mode, "cell");
+    assert.equal(line(report.lines, "minting"), "minting   : remote (control plane, tenant 42)");
+    assert.deepEqual(report.warnings, [], `GITHUB_APP_ID${githubApp.privateKey ? " + key" : ""} in a cell`);
+  }
+});
+
 test("GITHUB_APP_ID without a private key: the App connection stays off, named with the key variables", () => {
   const report = startupReport(settings({ githubApp: { id: "4711" } }));
   assert.equal(report.mode, "no-auth-single-repo");
@@ -141,6 +155,23 @@ test("LIVE_AUTH=none names the LIVE_OIDC_* settings it ignores", () => {
     "LIVE_OIDC_ISSUER and LIVE_OIDC_CLIENT_ID are set but LIVE_AUTH=none ignores them: an unauthenticated host has no login",
   ]);
   assert.match(line(report.lines, "next mode") ?? "", /missing GITHUB_APP_ID, .*LIVE_OIDC_JWKS_URL; then/);
+  assert.deepEqual(
+    startupReport(
+      settings({
+        oidc: {
+          audience: "https://designiq.example.com",
+          loginClaim: "preferred_username",
+          clientSecret: "oidc-secret",
+          loginLabel: "Acme SSO",
+        },
+      }),
+    ).warnings,
+    [
+      "LIVE_OIDC_AUDIENCE, LIVE_OIDC_LOGIN_CLAIM, LIVE_OIDC_CLIENT_SECRET and LIVE_OIDC_LOGIN_LABEL are set but " +
+        "LIVE_AUTH=none ignores them: an unauthenticated host has no login",
+    ],
+    "the variables beyond the IdP pair and the client id count too",
+  );
 });
 
 test("the retired GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET pair is named, either half alone too", () => {
@@ -169,6 +200,28 @@ test("one OIDC endpoint override without the other: discovery still runs for the
       "LIVE_OIDC_TOKEN_URL is set but LIVE_OIDC_AUTHORIZE_URL is missing: the authorize endpoint still comes from " +
         "OIDC discovery at https://idp.example.com/realms/designiq/.well-known/openid-configuration",
     ],
+  );
+});
+
+test("the discovery URL in that warning is the one the login fetches, also for an issuer ending in a slash", () => {
+  assert.deepEqual(
+    startupReport(
+      recommended({
+        oidc: { ...fullOidc, issuer: "https://acme.eu.auth0.com/", tokenUrl: "https://acme.eu.auth0.com/oauth/token" },
+      }),
+    ).warnings,
+    [
+      "LIVE_OIDC_TOKEN_URL is set but LIVE_OIDC_AUTHORIZE_URL is missing: the authorize endpoint still comes from " +
+        "OIDC discovery at https://acme.eu.auth0.com/.well-known/openid-configuration",
+    ],
+  );
+  assert.deepEqual(
+    startupWarningLines({ ...recommended(), oidc: { tokenUrl: "https://idp.example.com/token" } }),
+    [
+      "warning   : LIVE_OIDC_TOKEN_URL is set but LIVE_OIDC_AUTHORIZE_URL is missing: the authorize endpoint still " +
+        "comes from OIDC discovery",
+    ],
+    "a boot refused for a missing issuer names no discovery URL",
   );
 });
 
@@ -201,6 +254,22 @@ test("TENANT_INSTALLATION_ID without any token source: no repository is served",
   ]);
 });
 
+test("a boot the oidc gate refuses gets the banner's warning lines, without the served repositories", () => {
+  const { auth, githubApp, oidc, sessionKey, cell, retiredGitHubOAuth } = settings({
+    auth: "oidc",
+    githubApp: { id: "4711" },
+    retiredGitHubOAuth: { clientId: "Iv1.old", clientSecret: "oauth-secret" },
+  });
+  assert.deepEqual(startupWarningLines({ auth, githubApp, oidc, sessionKey, cell, retiredGitHubOAuth }), [
+    "warning   : GITHUB_APP_ID is set but no app private key was found (GITHUB_APP_PRIVATE_KEY, " +
+      "GITHUB_APP_PRIVATE_KEY_FILE or GITHUB_APP_PRIVATE_KEY_B64): the GitHub App connection stays off",
+    "warning   : SESSION_ENC_KEY is not set: the login state key is random per boot, so a restart or redeploy " +
+      "breaks the logins in flight",
+    "warning   : GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are no longer read (ADR 0007 retired the GitHub OAuth " +
+      "login): remove them, the login is LIVE_OIDC_*",
+  ]);
+});
+
 test("no secret value reaches the banner, in any mode or half-configured state", () => {
   const secrets = {
     privateKey: PEM,
@@ -208,6 +277,7 @@ test("no secret value reaches the banner, in any mode or half-configured state",
     sessionKey: "session-key-must-not-leak",
     cellSecret: "cell-secret-must-not-leak",
     oauthSecret: "oauth-secret-must-not-leak",
+    oidcClientSecret: "oidc-client-secret-must-not-leak",
   };
   const variants: StartupSettings[] = [
     settings({
@@ -215,9 +285,13 @@ test("no secret value reaches the banner, in any mode or half-configured state",
       cell: { cellSecret: secrets.cellSecret },
       retiredGitHubOAuth: { clientSecret: secrets.oauthSecret },
     }),
-    settings({ githubApp: { ...fullApp, privateKey: secrets.privateKey, webhookSecret: secrets.webhookSecret } }),
+    settings({
+      githubApp: { ...fullApp, privateKey: secrets.privateKey, webhookSecret: secrets.webhookSecret },
+      oidc: { clientSecret: secrets.oidcClientSecret },
+    }),
     recommended({
       githubApp: { ...fullApp, privateKey: secrets.privateKey, webhookSecret: secrets.webhookSecret },
+      oidc: { ...fullOidc, clientSecret: secrets.oidcClientSecret, tokenUrl: "https://idp.example.com/token" },
       sessionKey: secrets.sessionKey,
       retiredGitHubOAuth: { clientSecret: secrets.oauthSecret },
     }),
@@ -232,7 +306,7 @@ test("no secret value reaches the banner, in any mode or half-configured state",
     }),
   ];
   for (const variant of variants) {
-    const banner = startupReport(variant).lines.join("\n");
+    const banner = [...startupReport(variant).lines, ...startupWarningLines(variant)].join("\n");
     for (const value of [...Object.values(secrets), "MIIEsecretpemkeymaterial"]) {
       assert.ok(!banner.includes(value), `the banner holds a secret value:\n${banner}`);
     }
