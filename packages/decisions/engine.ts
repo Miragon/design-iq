@@ -15,8 +15,19 @@
  * It also keeps the engine swappable at one seam: an upstream `/core`
  * subexport (which would also drop the inferno import the bundle pulls in) or
  * a fork changes this file and nothing else.
+ *
+ * Why the workspace patches the package's DecisionRequirementsDiagramEvaluator
+ * (`patchedDependencies` in pnpm-workspace.yaml): since 0.4.0 it hands each
+ * table the FEEL value its input expression resolved to, no longer coerced to
+ * the column's typeRef, and an unresolved one as `undefined`. An InputData
+ * without a type, or with dmn-js's default `Any`, would then compare as a
+ * string in a number column ("x" passes `>= 500`), a boolean column would
+ * match nothing, and simulateDecision would drop an unset column instead of
+ * reporting it as null. Patched, it evaluates as 0.3 did, here and in the
+ * add-on's Simulate DRD card alike; the last two cases of
+ * test/simulate.test.ts fail without the patch.
  */
-import { evaluateDecisionRequirementsDiagram } from "@emaarco/dmn-js-simulation";
+import { DecisionRequirementsDiagramEvaluator } from "@emaarco/dmn-js-simulation";
 
 /** a value before the engine coerces it to its DMN type */
 export type RawValue = string | number | boolean | null | undefined;
@@ -109,5 +120,5 @@ export interface EngineDrdResult {
 
 /** Evaluate a whole DRD. `values` is keyed by InputData ID (not name). */
 export function evaluateDrd(model: EngineDrdModel, values: Record<string, RawValue>): EngineDrdResult {
-  return evaluateDecisionRequirementsDiagram(model, values) as EngineDrdResult;
+  return new DecisionRequirementsDiagramEvaluator(model).evaluate(values) as EngineDrdResult;
 }

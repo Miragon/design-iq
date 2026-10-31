@@ -7,10 +7,18 @@
  *
  *  - L1 silent import: importText fires no change event and erases the undo
  *    history itself, so there is no echo to suppress and no history to clear.
+ *    An import called during the user's running action (a drop, a command)
+ *    waits for its end (1.6), so a change event while an import runs is the
+ *    user's, made on the canvas the import has not replaced yet.
  *  - L2/L3 one canonical text, one change event: onContentChanged covers
  *    every user-visible change (config, title and undo included, transient
  *    previews such as a Wardley resize drag never), and exportText already
- *    returns the changed document inside the listener.
+ *    returns the changed document inside the listener, so the edit is in the
+ *    shared text before the listener returns.
+ *  - interaction (1.5): the modeler says while the user holds a gesture, so
+ *    a peer's change waits for its end without a look at the DOM, and a
+ *    gesture held past the wait ends in the modeler's own import, with no
+ *    Escape sent. A modeler without it holds nothing back.
  *  - L5 view state: snapshot before a RE-import, restore after it. The first
  *    import keeps the view it leaves: the renderer's own fit (at most 100 %,
  *    clear of the chrome the host told it about), which diagram-js's
@@ -58,13 +66,14 @@ export function bindMiragon(
   doc: Y.Doc,
   onConflict?: (message: string) => void,
   onImportError?: (message: string) => void,
-  sync?: SyncOptions,
+  sync?: Omit<SyncOptions, "canvasHost">,
 ): () => void {
   assertContract(modeler, notation);
   return bindModelSync(
     {
       importText: (text) => modeler.importText(text),
       exportText: async () => modeler.exportText(),
+      contract: { exportText: () => modeler.exportText(), interaction: modeler.interaction },
       looksRenderable: (text) => !isBlank(text),
       unrenderableReason: EMPTY_DOCUMENT,
       beforeImport(isFirstImport) {

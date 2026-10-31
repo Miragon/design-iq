@@ -129,10 +129,15 @@ export function mountMiragonEngine(
       return selected.length === 1 ? selected[0] : undefined;
     },
     bindLive(ytext: Y.Text, doc: Y.Doc, hooks: LiveBindHooks): () => void {
-      const unbind = bindMiragon(modeler, spec.contractNotation, ytext, doc, hooks.onConflict, hooks.onImportError, {
-        ...hooks.sync,
-        canvasHost: container,
-      });
+      const unbind = bindMiragon(
+        modeler,
+        spec.contractNotation,
+        ytext,
+        doc,
+        hooks.onConflict,
+        hooks.onImportError,
+        hooks.sync,
+      );
       // the SPA's presence controller, on the diagram the renderer wraps
       // (notations/miragon/editor.ts does the same)
       const presence = hooks.presence

@@ -1,7 +1,8 @@
 /**
  * The DMN fixtures the decision tests share: one table WITHOUT a DRD (how
- * decision tables are actually written in the wild), and a two-step DRD with
- * modelled InputData whose second decision reads the first one's result.
+ * decision tables are actually written in the wild), a two-step DRD with
+ * modelled InputData whose second decision reads the first one's result, and
+ * modelled InputData without a type, read by a number and a boolean column.
  */
 import { type DerivedDecision, deriveDecision } from "@designiq/notations/derive";
 import { extractModelGraph } from "@designiq/notations/extract";
@@ -80,6 +81,39 @@ export const VERSAND = `<?xml version="1.0" encoding="UTF-8"?>
         <inputEntry id="p7"><text>"eu"</text></inputEntry>
         <inputEntry id="p8"><text>-</text></inputEntry>
         <outputEntry id="p9"><text>14.90</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>`;
+
+/** modelled InputData that declare no type (read as strings), in a number and
+ *  a boolean column: each column has to read the value as its own typeRef */
+export const FREIGABE = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="Definitions_freigabe" name="Freigabe" namespace="http://bpmiq.dev/dmn/freigabe">
+  <inputData id="InputData_betrag" name="Betrag"><variable id="v1" name="betrag" /></inputData>
+  <inputData id="InputData_express" name="Express"><variable id="v2" name="express" /></inputData>
+  <decision id="freigabe" name="Freigabe">
+    <variable id="v3" name="freigabe" typeRef="string" />
+    <informationRequirement id="ir1"><requiredInput href="#InputData_betrag" /></informationRequirement>
+    <informationRequirement id="ir2"><requiredInput href="#InputData_express" /></informationRequirement>
+    <decisionTable id="DT_freigabe" hitPolicy="FIRST">
+      <input id="Input_betrag" label="Betrag"><inputExpression id="IE_betrag" typeRef="number"><text>betrag</text></inputExpression></input>
+      <input id="Input_express" label="Express"><inputExpression id="IE_express" typeRef="boolean"><text>express</text></inputExpression></input>
+      <output id="Output_freigabe" name="freigabe" typeRef="string" />
+      <rule id="Rule_express">
+        <inputEntry id="f1"><text>-</text></inputEntry>
+        <inputEntry id="f2"><text>true</text></inputEntry>
+        <outputEntry id="f3"><text>"sofort"</text></outputEntry>
+      </rule>
+      <rule id="Rule_gross">
+        <inputEntry id="f4"><text>&gt;= 500</text></inputEntry>
+        <inputEntry id="f5"><text>-</text></inputEntry>
+        <outputEntry id="f6"><text>"pruefen"</text></outputEntry>
+      </rule>
+      <rule id="Rule_klein">
+        <inputEntry id="f7"><text>&lt; 500</text></inputEntry>
+        <inputEntry id="f8"><text>-</text></inputEntry>
+        <outputEntry id="f9"><text>"automatisch"</text></outputEntry>
       </rule>
     </decisionTable>
   </decision>

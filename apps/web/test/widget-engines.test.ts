@@ -39,11 +39,7 @@ import type {
 } from "../src/notations/miragon/spec.ts";
 
 const tick = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-/** the canvas host as far as the live binding reads it: pointer events on it and its window, the drag marker in it */
-const container = Object.assign(new EventTarget(), {
-  ownerDocument: { defaultView: new EventTarget() },
-  getElementsByClassName: () => [],
-}) as unknown as HTMLElement;
+const container = {} as HTMLElement;
 const SPEC = { contractNotation: "wardley" };
 
 /** a canvas that keeps a real viewbox: the setter emits canvas.viewbox.changed

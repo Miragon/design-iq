@@ -25,7 +25,9 @@
  *     no console error and no conflict toast.
  *  2. A presses and drags again and holds for 11 s while B drops another
  *     move. At 10 s A's drag must be cancelled (the drag marker gone) and B's
- *     move imported; A's drop afterwards changes nothing and throws nothing.
+ *     move imported: in bpmn-js and the DRD by the binding's Escape, in a
+ *     Miragon renderer by its own import, with no Escape sent to A's page.
+ *     A's drop afterwards changes nothing and throws nothing.
  *  3. A clicks a palette entry, so the new element follows the pointer with
  *     no button held, while the headless session edits the title; A places
  *     the element well past the import debounce. The edit and A's new element
@@ -104,6 +106,8 @@ const REPO = "acme/gestures";
 const HOLD_PAST_DEBOUNCE = 1500;
 /** past the 10 s a re-import waits for a gesture */
 const HOLD_PAST_BOUND = 11_000;
+/** the editors without the contract's interaction surface: the binding reads their gestures from the DOM and ends one with an Escape */
+const READ_FROM_THE_DOM = new Set(["bpmn", "dmn"]);
 /** the quiet period after a drop, the import debounce and the peers' re-import */
 const SETTLE = 3000;
 
@@ -592,6 +596,11 @@ try {
       check(same(await positionIn(a, model.b), before2.b), `${model.notation}: A still waits after 1.5 s`);
       await a.page.waitForTimeout(HOLD_PAST_BOUND - HOLD_PAST_DEBOUNCE);
       check(!(await dragActive(a)), `${model.notation}: past 10 s A's drag is cancelled`);
+      const escapesAtBound = await sentEscapes(a);
+      check(
+        READ_FROM_THE_DOM.has(model.notation) ? escapesAtBound > 0 : escapesAtBound === 0,
+        `${model.notation}: ${READ_FROM_THE_DOM.has(model.notation) ? "by the binding's Escape" : "by the renderer's own import, no Escape sent"} (${escapesAtBound})`,
+      );
       const bOnB = await positionIn(b, model.b);
       check(same(await positionIn(a, model.b), bOnB), `${model.notation}: and B's move is on A's canvas`);
       const textAtBound = shared();

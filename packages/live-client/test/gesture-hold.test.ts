@@ -2,10 +2,11 @@
  * A gesture on the canvas holds back remote re-imports (#295). importText
  * replaces every shape, so a peer's change imported while a drag runs leaves
  * the drag working on shapes that are gone: its drop throws and the move is
- * lost. The engine reads the gesture from the DOM of the canvas host alone (a
- * pointer held on it, diagram-js's `djs-drag-active` marker inside it while a
- * drag preview is drawn or diagram-js's grabbing cursor is set), so it holds
- * for every diagram-js editor, Miragon renderer, bpmn-js or dmn-js.
+ * lost. For an editor without the collaborative-modeler contract (bpmn-js,
+ * dmn-js) the engine reads the gesture from the DOM of the canvas host alone
+ * (a pointer held on it, diagram-js's `djs-drag-active` marker inside it while
+ * a drag preview is drawn or diagram-js's grabbing cursor is set). A Miragon
+ * modeler reports its gestures itself: interaction.test.ts.
  *
  * Pinned: a peer's change waits while a pointer is held on the canvas or a
  * drag that carries elements runs (a create also while its preview is off
@@ -21,7 +22,9 @@
  * a gesture is reported after the notice delay as without one, and the
  * notice goes once the held import of its fix runs; and the merge safety
  * net (#274) repairs as before while a gesture runs. The real renderers in a
- * browser: apps/web/test/live-gesture-chromium.ts.
+ * browser: apps/web/test/live-gesture-chromium.ts. The cases of the line
+ * notation (one line per element) bind it without the contract's surface, as
+ * bindBpmn and bindDmn bind their editors: the DOM path.
  */
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
@@ -29,7 +32,7 @@ import { test, type TestContext } from "node:test";
 import type * as Y from "yjs";
 
 import { bindBpmn } from "../src/bpmn-sync.ts";
-import { bindMiragon } from "../src/miragon-sync.ts";
+import { bindModelSync } from "../src/model-sync.ts";
 import { updateText } from "../src/text-diff.ts";
 import {
   boundsOf,
@@ -107,6 +110,30 @@ function canvasHost(events: string[] = []) {
   };
 }
 
+/** the line notation on the engine's DOM path, the one bpmn-js and dmn-js take: no contract surface */
+function bindByTheDom(
+  modeler: ReturnType<typeof linesModeler>,
+  ytext: Y.Text,
+  doc: Y.Doc,
+  onConflict: (message: string) => void,
+  canvasHost: Element,
+): () => void {
+  return bindModelSync(
+    {
+      importText: (text) => modeler.importText(text),
+      exportText: async () => modeler.exportText(),
+      looksRenderable: (text) => text.trim() !== "",
+      beforeImport: () => () => {},
+      observeModel: (onChanged) => modeler.onContentChanged(onChanged),
+    },
+    ytext,
+    doc,
+    onConflict,
+    undefined,
+    { canvasHost },
+  );
+}
+
 /** a canvas of the line notation with a gesture host, and a peer's canvas that writes into the same room */
 function room() {
   const net = relay();
@@ -122,9 +149,7 @@ function room() {
     return importText(text);
   };
   const conflicts: string[] = [];
-  const unbind = bindMiragon(modeler, "lines", ytext, doc, (message) => conflicts.push(message), undefined, {
-    canvasHost: host.element,
-  });
+  const unbind = bindByTheDom(modeler, ytext, doc, (message) => conflicts.push(message), host.element);
   const peer = linesPeerOn(joinRoom(net, state, 100));
   return {
     ytext,
