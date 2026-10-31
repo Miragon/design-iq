@@ -25,7 +25,7 @@ services:
       # before the first `up` (`mkdir -p data && sudo chown 1000:1000 data`), or
       # Docker creates it root's; Docker Desktop on macOS maps the owner itself.
       # A named volume (`designiq-data:/data`) takes the owner from the image.
-      # A ./data written by an image up to 5.13.3 (root) is handed over once:
+      # A ./data written by an older image (those ran as root) is handed over once:
       #   docker compose run --rm --user root live-host chown -R 1000:1000 /data
       - ./data:/data
     restart: unless-stopped

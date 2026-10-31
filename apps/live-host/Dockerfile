@@ -69,6 +69,11 @@ COPY --from=build /app/packages/validator ./packages/validator
 # image, while a bind mount and a volume an older image wrote as root need it handed
 # over once (docs/on-prem/README.md; the server names the command at boot)
 RUN mkdir -p /data && chown 1000:1000 /data
+# git refuses a repository whose owner is not the user running it ("dubious
+# ownership"). The checkouts here are the Live Host's own clones and an operator's
+# bind mount, which Docker Desktop shows as root's and a Kubernetes fsGroup leaves
+# root's: only the server runs git in this container, so trust every path.
+RUN git config --system --add safe.directory '*'
 EXPOSE 8080
 # node:26-slim's `node` user, by number: Kubernetes' runAsNonRoot can only verify a
 # numeric USER. The code under /app stays root's, read-only to the server.

@@ -1,7 +1,7 @@
 /**
  * The boot check of the data directory (LIVE_DATA_DIR, #3). The image runs as an
- * unprivileged user, while a volume written by an image up to 5.13.3 (those ran as root)
- * and a bind-mount directory the Docker daemon created belong to root. SQLite opens a
+ * unprivileged user, while a volume written by an older image (those ran as root) and a
+ * bind-mount directory the Docker daemon created belong to root. SQLite opens a
  * live.db it cannot write read-only without a word: a standalone host then dies at its
  * first write during the boot, a cell boots and fails every edit. server.ts stops before
  * that, with this message.
@@ -11,6 +11,9 @@ import { dirname, join } from "node:path";
 
 /** what the Live Host writes below its data directory: SQLite with its journals, the clones */
 const WRITTEN_ENTRIES = ["live.db", "live.db-journal", "live.db-wal", "live.db-shm", "workspaces"];
+
+/** the published self-hosting guide: the operator reads this in a container log, without the repository */
+const SELF_HOSTING = "https://miragon.github.io/design-iq/on-prem/";
 
 export interface ProcessIds {
   uid: number;
@@ -42,18 +45,29 @@ export function dataDirProblem(dataDir: string, ids: ProcessIds | undefined = pr
   if (blocked.error === "EROFS") {
     return `designIQ cannot write its data directory ${dataDir}: ${blocked.path} is on a read-only file system. Mount it read-write.`;
   }
-  const { ids: ownerIds, root } = owner(blocked.path);
+  const { ids: ownerIds, uid: ownerUid } = owner(blocked.path);
+  // a chown to the ids it already has changes nothing: mode bits, an ACL or SELinux refuse the write
+  if (ids && ownerUid === ids.uid) {
+    return [
+      `designIQ cannot write its data directory ${dataDir}: ${blocked.path} belongs to ${ownerIds}, the user the Live Host runs as, and still refuses its writes.`,
+      "Give its owner write access once:",
+      `  chmod -R u+rwX ${dataDir}`,
+      "A bind mount on a host with SELinux also needs the :z option.",
+      `See ${SELF_HOSTING}#the-image`,
+    ].join("\n");
+  }
   return [
     `designIQ cannot write its data directory ${dataDir}: ${blocked.path} belongs to ${ownerIds}, and ${runsAs}.`,
-    ...(root
+    ...(ownerUid === 0
       ? [
-          "A volume written by an image up to 5.13.3 (those ran as root) and a bind-mount directory the Docker daemon created belong to root.",
+          "A volume written by an older image (those ran as root) and a bind-mount directory the Docker daemon created belong to root.",
         ]
       : []),
     "Hand the directory over once, as root, with the Live Host stopped:",
     `  chown -R ${self} ${dataDir}`,
     `With Docker Compose: docker compose run --rm --user root live-host chown -R ${self} ${dataDir}`,
-    "See docs/on-prem/README.md#upgrades",
+    `With plain Docker: docker run --rm --user root -v <volume or directory>:${dataDir} ghcr.io/miragon/designiq-live-host:<tag> chown -R ${self} ${dataDir}`,
+    `See ${SELF_HOSTING}#upgrades`,
   ].join("\n");
 }
 
@@ -70,7 +84,7 @@ function writeError(path: string): string | undefined {
   }
 }
 
-function owner(path: string): { ids: string; root: boolean } {
+function owner(path: string): { ids: string; uid: number } {
   const { uid, gid } = statSync(path);
-  return { ids: `${uid}:${gid}`, root: uid === 0 };
+  return { ids: `${uid}:${gid}`, uid };
 }

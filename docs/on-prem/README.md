@@ -60,11 +60,13 @@ Kubernetes' `runAsNonRoot` accepts it. `/data` must belong to that user:
   the directory, and to root when Docker creates it. Create it and hand it over before the
   first start: `mkdir -p data && sudo chown 1000:1000 data`. Docker Desktop on macOS maps
   the owner of a bind mount itself. Nothing to do.
-- In **Kubernetes**, `securityContext.fsGroup: 1000` makes a fresh volume writable.
+- In **Kubernetes**, `securityContext.fsGroup: 1000` makes the volume writable, a fresh one
+  and one an older image wrote, on volume types that support `fsGroup`.
 
 When the Live Host cannot write `/data`, it does not start: it names the path, the uid:gid
-it runs as and the `chown` that hands the directory over. A content checkout you bind-mount
-(`LIVE_HOST_CONTENT_DIR`) must be writable for `1000:1000` as well.
+it runs as and the command that fixes it. On Linux, a content checkout you bind-mount
+(`LIVE_HOST_CONTENT_DIR`) must be writable for `1000:1000` as well; Docker Desktop on macOS
+needs nothing. git works in the clones and the checkout whoever owns them.
 
 ## Quickstart (compose)
 
@@ -236,6 +238,8 @@ docker compose up -d
 
 With plain Docker, run the same `chown` against your volume:
 `docker run --rm --user root -v designiq-data:/data ghcr.io/miragon/designiq-live-host:<tag> chown -R 1000:1000 /data`.
+In Kubernetes, `fsGroup: 1000` hands the volume over on volume types that support it;
+on any other, run the same `chown` once as root, in a one-off Job or an init container.
 A bind mount under Docker Desktop on macOS needs nothing. A `LIVE_AUTH=none` host
 without `LIVE_LOCAL_USER` now acts as `node` instead of `root`; set `LIVE_LOCAL_USER=root`
 to keep the favorites and recently opened repositories it saved as `local:root`.
