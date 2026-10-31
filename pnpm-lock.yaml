@@ -87,8 +87,8 @@ importers:
         specifier: 4.7.1
         version: 4.7.1(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
       '@miragon/bpmn-cli':
-        specifier: 0.7.0
-        version: 0.7.0
+        specifier: 0.8.0
+        version: 0.8.0
       '@miragon/design-iq-validator':
         specifier: workspace:*
         version: link:../../packages/validator
@@ -867,6 +867,9 @@ packages:
   '@camunda/feel-builtins@1.4.1':
     resolution: {integrity: sha512-nXIVbr8JHLzuPXSYs+VUy/4X1WiY7SlXtAqsgQ9R3mbXNNyorYUiw0YBeLXMrMCcg2yJWVSasramcTCeI9A6FQ==}
 
+  '@camunda/feel-builtins@1.5.0':
+    resolution: {integrity: sha512-R8SYr228KqJ+CkrC/yNHuMikfdfZY0sZ5zPn7NKxITd/FUHIRTDnLKZx2z7Qi/n4MmPLteEHalr/JW+N4spPQQ==}
+
   '@chevrotain/cst-dts-gen@13.2.0':
     resolution: {integrity: sha512-bA9dvWlhAUcHkNwU+8w9yiUxJPlj/Lm3VqS7MD+NbIR/7LmpNLuK/AWNFdCo/T3SK5ND0/UHf3IJvl/Jn/i6yg==}
 
@@ -1439,6 +1442,9 @@ packages:
   '@lezer/common@1.5.3':
     resolution: {integrity: sha512-H0iErY4e43LpXbYDyBci5W4v/RwTgGV3YzYOlJPiGZ8RY8w51kVE+xLn1tg3Z6UmSfyETvtsUK3r7YsgDQEI7Q==}
 
+  '@lezer/common@1.5.4':
+    resolution: {integrity: sha512-xt3Q4z64xM+xhg4M7NXqw1N//1O74bUFo5kz6fwMeC4qwxSuRdwkYSmjcqCEEKYkNw5e67f2hcNqBoNERAEU0w==}
+
   '@lezer/highlight@1.2.5':
     resolution: {integrity: sha512-O1GMVKgtf5YspFaRzpmqkVgMtIk2HG9uMAbH6wdAIdNh3TVzCsch/+cRi+6l2//UGDKe6NB9BW3cvuR5ezMQ0w==}
 
@@ -1461,8 +1467,8 @@ packages:
     resolution: {integrity: sha512-j37dj/h6p6pots1L7pLPPNuABEEu9WP4OYg9pW1g+nYG331j0+3canE9OagtYdytYvdSAMG+2fKU5cxep6LgjA==}
     engines: {node: '>=22.12.0'}
 
-  '@miragon/bpmn-cli@0.7.0':
-    resolution: {integrity: sha512-Tsgx68UICFUxjj0AlhbsvU+wl/8X14R0HLQ1LEUGA2CEo6PVMqInwA6zkDIzBT8B2mccbS2vYEzQsLUay2MN7A==}
+  '@miragon/bpmn-cli@0.8.0':
+    resolution: {integrity: sha512-EeO2mMLTIx6ZXKmj0S0O1LaSyUYFJTvuTQ0yqUkusfeQFiNae3pWqUiiQjIVRMLl+5wbVFgFAkikWADnR/6CRA==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
@@ -5346,6 +5352,8 @@ snapshots:
 
   '@camunda/feel-builtins@1.4.1': {}
 
+  '@camunda/feel-builtins@1.5.0': {}
+
   '@chevrotain/cst-dts-gen@13.2.0':
     dependencies:
       '@chevrotain/gast': 13.2.0
@@ -5759,6 +5767,8 @@ snapshots:
 
   '@lezer/common@1.5.3': {}
 
+  '@lezer/common@1.5.4': {}
+
   '@lezer/highlight@1.2.5':
     dependencies:
       '@lezer/common': 1.5.3
@@ -5769,7 +5779,7 @@ snapshots:
 
   '@lezer/lr@1.4.11':
     dependencies:
-      '@lezer/common': 1.5.3
+      '@lezer/common': 1.5.4
 
   '@lifeomic/attempt@3.1.0': {}
 
@@ -5790,7 +5800,7 @@ snapshots:
     dependencies:
       '@chevrotain/types': 13.2.0
 
-  '@miragon/bpmn-cli@0.7.0':
+  '@miragon/bpmn-cli@0.8.0':
     dependencies:
       '@miragon/bpmnlint-plugin-rules': 0.12.1(bpmnlint@11.15.0)(moddle@8.2.1)
       '@resvg/resvg-wasm': 2.6.2
@@ -7109,7 +7119,7 @@ snapshots:
       '@bpmn-io/lezer-feel': 2.5.0
       '@bpmn-io/moddle-utils': 0.3.0
       '@bpmn-io/semver-compat': 0.1.0
-      '@camunda/feel-builtins': 1.4.1
+      '@camunda/feel-builtins': 1.5.0
       bpmnlint: 11.15.0
       bpmnlint-utils: 1.1.1
       min-dash: 5.1.0
