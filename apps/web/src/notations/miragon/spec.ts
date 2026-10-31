@@ -91,8 +91,8 @@ export interface LoadedMiragonRenderer {
   /** the document's own title, for the menu header; undefined = none set */
   title?(modeler: MiragonModeler): string | undefined;
   /** what a mount adds to the renderer's own DOM once it sits in the canvas
-   *  host (the keyboard side of a palette the renderer leaves to the shell);
-   *  returns what takes it off again */
+   *  host; returns what takes it off again. No spec needs it since
+   *  value-chain-renderer 0.10.0 brings its palette's keyboard side itself */
   attached?(modeler: MiragonModeler, host: HTMLElement): () => void;
   /** the renderer's own menu content (Model, Export, Help), where its
    *  package ships it */

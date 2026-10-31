@@ -8,8 +8,7 @@
  *  opens the modeler shell's dialog with the package's `diagramShortcuts`;
  *  the JSON is no export, it is the model's own file. Its PNG goes through
  *  the modeler shell's `svgToPng` (Geist inside) on the canvas ground (guide
- *  §10.7): the package's own loads a blob: URL, which the widget's content
- *  security policy refuses, where the shell's loads a data: URL. */
+ *  §10.7). */
 import type { VcBaseViewer } from "@miragon/value-chain-renderer";
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";

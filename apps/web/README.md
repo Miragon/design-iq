@@ -520,10 +520,9 @@ stay in the system sans there, as on its canvas). Each face also gets a hidden t
 set in a character that only this face draws: without it, Chromium calls the SVG image loaded
 while a subset that only a later character of a label needs is still loading, and that text
 comes out in the system sans. The image loads as a data: URL, which an MCP host's CSP allows
-where it refuses blob: (the reason Wardley and Value Chain do not use their packages' own
-`svgToPng`), and the data: fonts inside it load although the host's `font-src` blocks the
-widget's own (checked in Chromium and WebKit). A Geist file that cannot be read leaves the
-labels in the system sans, with a console warning. The shell's helper was modelled on
+where it refuses blob:, and the data: fonts inside it load although the host's `font-src`
+blocks the widget's own (checked in Chromium and WebKit). A Geist file that cannot be read
+leaves the labels in the system sans, with a console warning. The shell's helper was modelled on
 designIQ's own rasterizer (`lib/export-image.ts` and `lib/export-font.ts` until 5.12), and with
 the 2026-10-28 renderers both write byte-identical PNGs for every notation in the SPA and in
 the widget (headless Chromium); it also draws a label with a broken emoji, where
@@ -553,8 +552,8 @@ the SPA does not scope it, since every rule of it keys on the shell's own classe
 legend-row rules, which reach the rows the renderers draw into designIQ's Legend panel, set
 nothing `lib/miragon-legend.css` does not set itself (`test/vendor-css.test.ts`). The roles it
 reads (`--cd-ui-*`) come from the renderer's token layer.
-The renderers' own `createShortcutsDialog` is deprecated in the suite. The title dialogs and
-the popovers ("Map title…", "Map size…", "X-axis labels…") are still the renderers'.
+The renderers' own `createShortcutsDialog` is gone since the 2026-10-30 releases. The title
+dialogs and the popovers ("Map title…", "Map size…", "X-axis labels…") are still the renderers'.
 
 **A gesture holds the live re-imports back.** Every live binding, the SPA's editors and
 the widget engines alike, passes live-client the element it mounts the canvas in: while a
