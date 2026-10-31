@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.13.1](https://github.com/Miragon/design-iq/compare/v5.13.0...v5.13.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **decisions,web:** move to dmn-js-simulation 0.4.0 ([#375](https://github.com/Miragon/design-iq/issues/375)) ([73f0ce3](https://github.com/Miragon/design-iq/commit/73f0ce38377cd8e18fd84803358b790efc277271))
+* **live-client,web:** wait for the user's gesture through the Miragon modelers' own signal ([#376](https://github.com/Miragon/design-iq/issues/376)) ([90cea6d](https://github.com/Miragon/design-iq/commit/90cea6dace4551bdaf4b650242381df53628e6db))
+* **web,live-client,notations,validator,mcp:** move to the Miragon releases of 2026-10-30 ([#371](https://github.com/Miragon/design-iq/issues/371)) ([0f7af11](https://github.com/Miragon/design-iq/commit/0f7af1113c8aea7c46e069d21e2b39beede9a21f))
+* **web:** open Map size and X-axis labels over the diagram from the source-only view ([#374](https://github.com/Miragon/design-iq/issues/374)) ([edbf19b](https://github.com/Miragon/design-iq/commit/edbf19bd2ee4eb66fa96ac94a56394b66f80a8d7))
+
 ## [5.13.0](https://github.com/Miragon/design-iq/compare/v5.12.0...v5.13.0) (2026-10-30)
 
 
