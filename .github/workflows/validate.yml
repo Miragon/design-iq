@@ -53,8 +53,6 @@ jobs:
             apps/web/src/mcp-app/engines/diagram-js.ts
             apps/web/src/mcp-app/engines/fit.ts
             apps/web/src/mcp-app/core/layout.ts
-            apps/web/src/lib/value-chain-palette.ts
-            apps/web/src/lib/value-chain-palette.css
             apps/web/package.json
             apps/web/vite.config.ts
             apps/web/vitest.browser.config.ts

@@ -152,8 +152,9 @@ interface CanvasGesture {
  * canvas host, or diagram-js's drag marker inside it while the drag carries
  * elements (a palette create follows the pointer with no button held).
  * Contract 1.5's interaction surface would let a Miragon renderer answer
- * itself, but no release apps/web pins offers it yet
- * (apps/web/test/miragon-renderers.test.ts fails once one does).
+ * itself: every release apps/web pins offers it since the 2026-10-30
+ * releases (apps/web/test/miragon-renderers.test.ts), and this binding
+ * moves onto it in design-iq#370's second pull request.
  */
 function watchCanvasGesture(host: Element): CanvasGesture {
   const page = host.ownerDocument;

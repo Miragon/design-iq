@@ -207,19 +207,51 @@ test("each spec's factories are its renderer's: meta.notation is the spec's cont
 });
 
 /**
- * Contract 1.5 types an optional interaction surface (is a gesture running)
- * and an appearance surface (the themes a modeler draws). live-client still
- * reads a gesture from the canvas's DOM (model-sync.ts watchCanvasGesture),
- * since no pinned renderer offers the surface yet: a release that does fails
- * here, and the binding can then ask the renderer instead.
+ * Contract 1.5's optional surfaces, which every pinned renderer offers since
+ * the 2026-10-30 releases: interaction (is a gesture running) and appearance
+ * (the themes a modeler draws: light alone in all five). live-client still
+ * reads a gesture from the canvas's DOM (model-sync.ts watchCanvasGesture)
+ * until it moves onto `interaction` (design-iq#370).
  */
-test("contract 1.5: no pinned renderer offers the interaction or the appearance surface yet", async () => {
+test("contract 1.5: every pinned renderer offers the interaction and the appearance surface, light alone", async () => {
   for (const spec of MIRAGON_RENDERERS) {
     const renderer = await spec.load();
-    for (const modeler of [renderer.create(), renderer.createViewer()]) {
-      assert.deepEqual([modeler.interaction, modeler.appearance], [undefined, undefined], spec.id);
+    for (const [kind, modeler] of [
+      ["editor", renderer.create()],
+      ["viewer", renderer.createViewer()],
+    ] as const) {
+      const name = `${spec.id} ${kind}`;
+      assert.equal(typeof modeler.interaction?.active, "function", name);
+      assert.equal(typeof modeler.interaction?.onChange, "function", name);
+      assert.equal(modeler.interaction?.active(), false, name);
+      assert.deepEqual(modeler.appearance?.themes, ["light"], name);
       modeler.destroy();
     }
+  }
+});
+
+/**
+ * designIQ mounts no modeler shell, and since the 2026-10-30 releases every renderer gives its
+ * palette the shell's keyboard side without it (guide §5.5, §5.14): Value Chain's needed a module
+ * of designIQ's own before value-chain-renderer 0.10.0.
+ */
+test("every renderer's palette is a toolbar ahead of the canvas, one tab stop, its tools pressed or not", async () => {
+  for (const spec of MIRAGON_RENDERERS) {
+    const renderer = await spec.load();
+    const canvasHost = host(spec.canvasClassName);
+    const modeler = renderer.create();
+    modeler.attachTo(canvasHost);
+    const toolbar = canvasHost.querySelector('.djs-palette[role="toolbar"], .djs-palette [role="toolbar"]');
+    assert.equal(toolbar?.getAttribute("aria-label"), "Tools", spec.id);
+    const palette = toolbar!.closest(".djs-palette")!;
+    const svg = palette.parentElement!.querySelector(":scope > svg")!;
+    assert.ok(palette.compareDocumentPosition(svg) & Node.DOCUMENT_POSITION_FOLLOWING, `${spec.id}: before the canvas`);
+    const entries = [...toolbar!.querySelectorAll<HTMLElement>(".entry")];
+    assert.equal(entries.filter((entry) => entry.tabIndex === 0).length, 1, `${spec.id}: one tab stop`);
+    const lasso = entries.find((entry) => entry.getAttribute("data-action") === "lasso-tool");
+    assert.equal(lasso?.getAttribute("aria-pressed"), "false", spec.id);
+    modeler.destroy();
+    canvasHost.remove();
   }
 });
 

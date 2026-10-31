@@ -8,10 +8,7 @@
  *  opens the modeler shell's dialog with the package's `diagramShortcuts`;
  *  the JSON is no export, it is the model's own file. Its PNG goes through
  *  the modeler shell's `svgToPng` (Geist inside) on the canvas ground (guide
- *  §10.7): the package's own loads a blob: URL, which the widget's content
- *  security policy refuses, where the shell's loads a data: URL. The palette's
- *  layout and keyboard side are designIQ's own (lib/value-chain-palette.css
- *  and .ts): the package gives them only inside the modeler shell's chrome. */
+ *  §10.7). */
 import type { VcBaseViewer } from "@miragon/value-chain-renderer";
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
@@ -32,21 +29,18 @@ export const spec: MiragonRendererSpec = {
       ,
       { imageExports, ownTitle, PNG_BACKGROUND, shortcutsDialog },
       { svgToPng },
-      { enhanceValueChainPalette },
     ] = await Promise.all([
       import("@miragon/value-chain-renderer"),
       import("@miragon/value-chain-renderer/assets/value-chain.css"),
       import("@miragon/modeler-shell/shell.css"),
       import("./menu-content.ts"),
       import("@miragon/modeler-shell/export"),
-      import("../../lib/value-chain-palette.ts"),
     ]);
     // the Modeler and the viewer share this surface
     const chainOf = (modeler: { diagram: unknown }): VcBaseViewer => modeler.diagram as VcBaseViewer;
     return {
       create: (mount) => createCollaborativeModeler({ ...contractOptions(mount), undoRedoKeys: true }),
       createViewer: (mount) => createCollaborativeViewer(contractOptions(mount)),
-      attached: (modeler, host) => enhanceValueChainPalette(host, modeler.diagram),
       title: (modeler) => ownTitle(chainOf(modeler).exportDocument().meta.name, UNTITLED),
       menu(modeler, host) {
         const chain = chainOf(modeler);

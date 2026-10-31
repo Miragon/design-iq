@@ -1,13 +1,10 @@
 /* The Miragon-renderer widgets' stylesheet (miragon-main.ts): the shared
  * chrome and Todos card plus the renderer palette's slot — the renderers
- * bring their own CI styling, only the slot is ours. The one exception is
- * Value Chain's palette, which its renderer lays out only inside the modeler
- * shell's chrome: lib/value-chain-palette.css draws it. */
+ * bring their own CI styling, only the slot is ours. */
 @import "./chrome.css";
 @import "./todos.css";
 @import "./geist-mono.css";
 @import "../lib/miragon-legend.css";
-@import "../lib/value-chain-palette.css";
 
 /* top-centre (the renderer sheets centre it), under the row (tier 2) unless
    it fits between the clusters (tier 1); `max-content` lifts the leaked

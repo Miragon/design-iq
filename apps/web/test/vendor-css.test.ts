@@ -112,47 +112,18 @@ const tokensIn = (layer: string): string[] => [
  *   classes (cd-canvas.css, guide 1.27.0), `none` in light mode. Only the
  *   renderers' own .cd-c-unterleger* classes read them, and every renderer
  *   declares the same values (checked below).
- * - `:root[data-cd-kontrast=hoch] …`: high contrast for the renderer's own
- *   chrome; designIQ never sets data-cd-kontrast. Event Storming's palette
- *   rule would restyle the bpmn-js palette too if it did.
+ *
+ * The high-contrast rules of the renderers' chrome sit in
+ * `@scope ([data-cd-kontrast=hoch])` blocks, which the scoping prefixes like
+ * every other rule, so none of them is left global (designIQ never sets
+ * data-cd-kontrast).
  */
 const KNOWN_GLOBAL: Record<string, string[]> = {
   wardley: [...tokensIn("wardley-tokens"), ":root { --cdc-* }", ":root { --bio-* }"],
   "team-topology": [...tokensIn("team-topologies-tokens"), ":root { --cdc-* }", ":root { --bio-* }"],
-  "event-storming": [
-    ...tokensIn("event-storming-tokens"),
-    ":root { --cdc-* }",
-    ":root { --bio-* }",
-    ":root[data-cd-kontrast=hoch] .djs-palette:not([data-chrome=palette])",
-    ":root[data-cd-kontrast=hoch] .djs-hover-tooltip",
-    ":root[data-cd-kontrast=hoch] .event-storming-container .djs-context-pad.open",
-    ":root[data-cd-kontrast=hoch] .event-storming-container .event-storming-label-input",
-    ":root[data-cd-kontrast=hoch] .event-storming-container .event-storming-note-toolbar",
-    ":root[data-cd-kontrast=hoch] .event-storming-container .event-storming-color-picker",
-    ":root[data-cd-kontrast=hoch] .event-storming-container .event-storming-label-suggestions",
-    ":root[data-cd-kontrast=hoch] .event-storming-container .event-storming-spelling-tooltip",
-    ":root[data-cd-kontrast=hoch] .event-storming-shortcuts",
-    ":root[data-cd-kontrast=hoch] .event-storming-shortcuts-close:focus-visible",
-  ],
-  "context-map": [
-    ...tokensIn("context-maps-tokens"),
-    ":root { --cdc-* }",
-    ":root { --bio-* }",
-    ":root[data-cd-kontrast=hoch] .cm-dialog",
-    ":root[data-cd-kontrast=hoch] .cm-dialog-button",
-    ":root[data-cd-kontrast=hoch] .cm-dialog-close:focus-visible",
-    ":root[data-cd-kontrast=hoch] .cm-dialog-button:focus-visible",
-    ":root[data-cd-kontrast=hoch] .cm-dialog-input:focus-visible",
-  ],
-  "value-chain": [
-    ...tokensIn("value-chain-tokens"),
-    ":root { --cdc-* }",
-    ":root { --bio-* }",
-    ":root[data-cd-kontrast=hoch] .vc-container .djs-context-pad.open",
-    ":root[data-cd-kontrast=hoch] .vc-container .djs-direct-editing-parent",
-    ":root[data-cd-kontrast=hoch] .vc-shortcuts",
-    ":root[data-cd-kontrast=hoch] .vc-shortcuts-close:focus-visible",
-  ],
+  "event-storming": [...tokensIn("event-storming-tokens"), ":root { --cdc-* }", ":root { --bio-* }"],
+  "context-map": [...tokensIn("context-maps-tokens"), ":root { --cdc-* }", ":root { --bio-* }"],
+  "value-chain": [...tokensIn("value-chain-tokens"), ":root { --cdc-* }", ":root { --bio-* }"],
 };
 
 test("the scoping keys on each renderer's own files, as pnpm's store spells them", () => {
@@ -194,6 +165,8 @@ const ROOT_RULES: Record<string, string[]> = {
     ".wardley-canvas .wardley-container.wardley-labels-draggable",
     ".wardley-canvas .wardley-container.wardley-label-dragging",
     ".wardley-canvas .wardley-container.wardley-read-only",
+    // the text colour of a root that carries the theme the appearance surface sets
+    ".wardley-canvas .wardley-container[data-cd-theme]",
   ],
   "team-topology": [
     ".tt-canvas .tt-djs-container",
@@ -260,42 +233,6 @@ test("designIQ's own rules on a renderer's root name it as a descendant of the c
     });
   }
   assert.ok(named > 0, "src/index.css keeps the Team Topologies palette below the SPA's empty top strip");
-});
-
-/** the palette properties lib/value-chain-palette.css sets for a host without the shell's chrome */
-const PALETTE_LAYOUT = new Set(["display", "flex-direction", "top", "left", "transform", "width", "float"]);
-
-test("value-chain: the renderer lays out no palette outside the shell's chrome, so designIQ's own sheet does (guide §5.5)", async () => {
-  const spec = MIRAGON_RENDERERS.find((s) => s.id === "value-chain")!;
-  const outsideChrome: string[] = [];
-  (await scopedSheet(spec)).walkRules((rule) => {
-    if (!rule.selectors.some((selector) => selector.includes(".djs-palette:not([data-chrome=palette])"))) return;
-    rule.walkDecls(
-      (decl) => void (PALETTE_LAYOUT.has(decl.prop) && outsideChrome.push(`${rule.selector} { ${decl.prop} }`)),
-    );
-  });
-  // a release that lays its palette out itself makes lib/value-chain-palette.css redundant: drop it then
-  assert.deepEqual(outsideChrome, []);
-  const sheets = ["../src/index.css", "../src/mcp-app/miragon-styles.css"].map((path) =>
-    readFileSync(new URL(path, import.meta.url), "utf8"),
-  );
-  for (const sheet of sheets) assert.match(sheet, /@import "[./]*\/?lib\/value-chain-palette\.css";/);
-});
-
-test("value-chain: every role and shell measure lib/value-chain-palette.css reads is declared by the renderer's own sheet", () => {
-  // ui-kit's vendored sheet predates both families (packages/ui-kit/test/cd-references.test.ts lists this file),
-  // so the renderer's token layer is the one place they come from
-  const spec = MIRAGON_RENDERERS.find((s) => s.id === "value-chain")!;
-  const declared = new Set(
-    [...readFileSync(stylesheetOf(spec), "utf8").matchAll(/(--cd-(?:ui|shell)-[\w-]+)\s*:/g)].map((m) => m[1]!),
-  );
-  const sheet = readFileSync(new URL("../src/lib/value-chain-palette.css", import.meta.url), "utf8");
-  const read = new Set([...sheet.matchAll(/var\(\s*(--cd-(?:ui|shell)-[\w-]+)/g)].map((m) => m[1]!));
-  assert.ok(read.size >= 8, "the sheet reads the renderer's roles");
-  assert.deepEqual(
-    [...read].filter((name) => !declared.has(name)),
-    [],
-  );
 });
 
 /** the declarations of the unlayered `:root` rules that set a family (--bio-, --cdc-) */

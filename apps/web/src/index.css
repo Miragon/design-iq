@@ -3,7 +3,6 @@
 @import "./lib/bpmn-io-theme.css";
 @import "./lib/todo-canvas.css";
 @import "./lib/miragon-legend.css";
-@import "./lib/value-chain-palette.css";
 
 /* the kit's raw sources live under node_modules (not auto-scanned) — tell
    Tailwind to pick up the utility classes its components use */
