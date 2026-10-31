@@ -164,6 +164,18 @@ export function checkBpmnXml(
   /** every flow node of every container (incl. embedded sub-processes) */
   const nodes = new Map<string, string>();
   for (const c of model.containers) for (const [id, n] of c.nodes) nodes.set(id, n.tag);
+  // a model holding nothing but one none start event, and no flow at all, is a
+  // fresh draft (the blank template of a new model, #183): that start event is
+  // no dead end yet. A second flow node anywhere or any flow, and every rule applies
+  const [onlyNode, ...otherNodes] = model.nodes;
+  const freshDraftStart =
+    otherNodes.length === 0 &&
+    onlyNode?.tag === "startEvent" &&
+    onlyNode.eventDefinitions === undefined &&
+    model.flows.length === 0 &&
+    model.collaborations.every((collab) => collab.messageFlows.length === 0)
+      ? onlyNode.id
+      : undefined;
 
   // structural checks — per container: each pool / embedded sub-process is its own graph
   for (const c of model.containers) {
@@ -192,7 +204,7 @@ export function checkBpmnXml(
       if (tag === "endEvent" && (out.get(id) ?? 0) > 0) err("bpmn/flow", `end event ${id} has outgoing flows`);
       if (tag !== "startEvent" && tag !== "boundaryEvent" && (inc.get(id) ?? 0) === 0)
         err("bpmn/flow", `${id} is unreachable (no incoming flow, ${c.label})`);
-      if (tag !== "endEvent" && (out.get(id) ?? 0) === 0)
+      if (tag !== "endEvent" && id !== freshDraftStart && (out.get(id) ?? 0) === 0)
         err("bpmn/flow", `${id} is a dead end (no outgoing flow, ${c.label})`);
     }
   }

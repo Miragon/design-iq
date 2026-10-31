@@ -23,6 +23,8 @@ import {
   serializeDocument as serializeValueChain,
 } from "@miragon/value-chain-schema-model";
 
+import { modelElements } from "../elements.ts";
+import { extractModelGraph } from "../extract.ts";
 import {
   hasTemplate,
   newBpmnXml,
@@ -70,6 +72,33 @@ test("hasTemplate mirrors templateFor — it drives the New menu and the create 
     assert.equal(hasTemplate(id), false, id);
     assert.equal(templateFor(id, "x", "X"), undefined, id);
   }
+});
+
+test("the bpmn template is one unnamed none start event in a plain process, with its BPMNDI (#183)", () => {
+  const xml = newBpmnXml("order-to-cash", "Order to Cash");
+  const graph = extractModelGraph("bpmn", xml);
+  assert.deepEqual(JSON.parse(JSON.stringify(graph)), {
+    notation: "bpmn",
+    nodes: [{ id: "startEvent_start", type: "startEvent", extra: {} }],
+    edges: [],
+    meta: { lanes: [], pools: [], processes: [{ id: "order-to-cash", name: "Order to Cash" }] },
+  });
+  assert.match(xml, /<bpmn:process id="order-to-cash" name="Order to Cash" isExecutable="false">/);
+  // no pool, no trigger, no end event, no flow, no placeholder name
+  assert.doesNotMatch(
+    xml,
+    /collaboration|participant|EventDefinition|endEvent|sequenceFlow|BPMNEdge|BPMNLabel|name="(?!Order to Cash")/,
+  );
+  // the diagram draws the process and its start event, where the editor's first view shows it
+  assert.deepEqual(modelElements("bpmn", xml), [
+    { id: "order-to-cash", name: "Order to Cash" },
+    { id: "startEvent_start" },
+  ]);
+  assert.match(xml, /<bpmndi:BPMNPlane id="BPMNPlane_order-to-cash" bpmnElement="order-to-cash">/);
+  assert.match(
+    xml,
+    /<bpmndi:BPMNShape id="startEvent_start_di" bpmnElement="startEvent_start">\s*<dc:Bounds x="232" y="162" width="36" height="36" \/>\s*<\/bpmndi:BPMNShape>/,
+  );
 });
 
 test("the wardley template is a title-only OWM map", () => {

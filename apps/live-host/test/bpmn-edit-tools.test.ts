@@ -187,6 +187,56 @@ test("get_process_outline: the model as text — whole, around an element, one e
 
 // ── editing ──────────────────────────────────────────────────────────────────
 
+test("a new process: create_process gives one unnamed start event to build on, edit_process adds a path to an end (#183)", async () => {
+  const { client, call, callJson } = await connect(deps());
+  const create = (await client.listTools()).tools.find((t) => t.name === "create_process");
+  assert.match(
+    create?.description ?? "",
+    /With edit_process, add the path from startEvent_start \(`after` startEvent_start\) to an end event in one change: /,
+  );
+  const created = await callJson("create_process", { repo: REPO.fullName, name: "Order handling" });
+  assert.equal(created.process.bpmn, "processes/order-handling.bpmn");
+  const fresh = { repo: REPO.fullName, id: "order-handling" };
+
+  const outline = await callJson("get_process_outline", fresh);
+  // bpmn-cli's own checks warn about the missing end until there is one; warnings never block a save
+  assert.match(
+    outline.outline,
+    /^process order-handling "Order handling" non-executable\n {2}startEvent startEvent_start\nproblems:\n {2}W_NO_END order-handling: [^\n]*\n {2}W_DEAD_END startEvent_start: [^\n]*$/,
+  );
+  assert.equal(outline.saveGate, undefined, "a fresh draft passes the save gate");
+
+  // a step on its own would end in a dead end: refused, nothing written
+  const alone = await call("edit_process", {
+    ...fresh,
+    ops: [{ op: "add", kind: "userTask", name: "Check order", after: "startEvent_start" }],
+  });
+  assert.ok(alone.isError);
+  assert.match(alone.text, /userTask_checkOrder is a dead end/);
+
+  const out = await callJson("edit_process", {
+    ...fresh,
+    ops: [
+      { op: "set", id: "startEvent_start", values: { name: "Order received" } },
+      { op: "add", kind: "userTask", name: "Check order", after: "startEvent_start", as: "$check" },
+      { op: "add", kind: "endEvent", name: "Order checked", after: "$check" },
+    ],
+  });
+  assert.deepEqual([out.ok, out.written, out.save], [true, true, { warnings: [] }]);
+  assert.ok(out.change.created.includes('userTask userTask_checkOrder "Check order" - after startEvent_start'));
+  const xml = (await callJson("get_bpmn_xml", fresh)).content as string;
+  assert.match(xml, /<bpmndi:BPMNShape id="userTask_checkOrder_di" bpmnElement="userTask_checkOrder">/, "one DI style");
+  const view = await callJson("get_process", fresh);
+  assert.equal(view.name, "Order handling", "the title the process was created with");
+  assert.deepEqual(
+    view.events.map((e: { id: string; name: string }) => [e.id, e.name]),
+    [
+      ["startEvent_start", "Order received"],
+      ["endEvent_orderChecked", "Order checked"],
+    ],
+  );
+});
+
 test("edit_process: a batch with aliases lands in the live document, drawn, with element-id-naming's ids, nothing else touched", async () => {
   const { callJson, xml } = await connect(deps());
   const out = await callJson("edit_process", {

@@ -8,6 +8,7 @@ import { test } from "node:test";
 
 import { deriveProcess } from "../derive.ts";
 import { extractModelGraph } from "../extract.ts";
+import { newBpmnXml } from "../templates.ts";
 
 const BPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
@@ -107,20 +108,58 @@ test("deriveProcess: a single UNNAMED pool derives name=null (not ''), so the id
   assert.equal(p.pools[0]?.name, null);
 });
 
-test("deriveProcess: a plain process with no pool/lanes derives with name=null, no roles", () => {
-  const bare = `<?xml version="1.0"?>
-    <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
+test("deriveProcess: a plain process with no pool/lanes takes the process's name, no roles", () => {
+  const plain = (processes: string): string => `<?xml version="1.0"?>
+    <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">${processes}</bpmn:definitions>`;
+  const bare = plain(`
       <bpmn:process id="P" name="Bare">
         <bpmn:startEvent id="s"/><bpmn:task id="t" name="Do"/><bpmn:endEvent id="e"/>
         <bpmn:sequenceFlow id="a" sourceRef="s" targetRef="t"/>
         <bpmn:sequenceFlow id="b" sourceRef="t" targetRef="e"/>
-      </bpmn:process>
-    </bpmn:definitions>`;
+      </bpmn:process>`);
   const p = deriveProcess(extractModelGraph(".bpmn", bare)!);
-  assert.equal(p.name, null); // no pool → no derived name (the file stem is the id)
+  assert.equal(p.name, "Bare", "without a pool the process carries the title (a new model, #183)");
+  assert.deepEqual(p.pools, []);
   assert.deepEqual(p.roles, []);
   assert.equal(p.steps.length, 1);
   assert.equal(p.steps[0]?.role, undefined);
+
+  // no name to take: an unnamed process, or two processes without a pool
+  assert.equal(deriveProcess(extractModelGraph(".bpmn", plain('<bpmn:process id="P"/>'))!).name, null);
+  assert.equal(deriveProcess(extractModelGraph(".bpmn", plain('<bpmn:process id="P" name=""/>'))!).name, null);
+  const two = plain('<bpmn:process id="P" name="One"/><bpmn:process id="Q" name="Two"/>');
+  assert.equal(deriveProcess(extractModelGraph(".bpmn", two)!).name, null);
+});
+
+test("deriveProcess: a pool's name wins over its process's name", () => {
+  // BPMN above: pool "Sales", process "Order to Cash"
+  assert.equal(deriveProcess(extractModelGraph(".bpmn", BPMN)!).name, "Sales");
+});
+
+test("deriveProcess: an unnamed pool drawn around a named process keeps the process's name (#183)", () => {
+  // what bpmn-js writes when the modeller draws a pool around a new model's start event
+  const pooled = `<?xml version="1.0"?>
+    <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
+      <bpmn:collaboration id="C"><bpmn:participant id="Participant_1" processRef="order"/></bpmn:collaboration>
+      <bpmn:process id="order" name="Order handling"><bpmn:startEvent id="startEvent_start"/></bpmn:process>
+    </bpmn:definitions>`;
+  const p = deriveProcess(extractModelGraph(".bpmn", pooled)!);
+  assert.equal(p.name, "Order handling");
+  assert.deepEqual(p.pools, [{ id: "Participant_1", name: null }]);
+  // a black-box pool references no process: nothing to fall back to
+  const blackBox = pooled.replace(' processRef="order"', "");
+  assert.equal(deriveProcess(extractModelGraph(".bpmn", blackBox)!).name, null);
+});
+
+test("deriveProcess: a new model's title is its derived name, like the old template's pool (#183)", () => {
+  const p = deriveProcess(extractModelGraph(".bpmn", newBpmnXml("order-to-cash", "Order to Cash"))!);
+  assert.equal(p.name, "Order to Cash");
+  assert.deepEqual(p.pools, []);
+  assert.deepEqual(
+    p.events.map((e) => [e.id, e.type, e.name]),
+    [["startEvent_start", "startEvent", null]],
+  );
+  assert.deepEqual([p.steps, p.gateways, p.flows], [[], [], []]);
 });
 
 test("deriveProcess: a businessRuleTask surfaces the decision it delegates to", () => {

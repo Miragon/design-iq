@@ -13,6 +13,11 @@ carries a stable `ruleId` (e.g. `bpmn/flow`, `dmn/di`, `refs/dangling`). It trea
 repo as pure data — it never executes content-repo code. Exit code 0 = no errors (warnings
 allowed), 1 = errors.
 
+A BPMN model whose only flow node is one none start event, with no sequence flow or message flow,
+is a fresh draft: designIQ creates every new BPMN model that way, so its start event is not
+reported as a dead end. With a second flow node anywhere in the model (in another pool too), a
+trigger on the event or any flow, every rule applies.
+
 ## Team Topologies, Context Maps and Value Chains
 
 A `.tt`/`.ttm.json`, `.cm.json` or `.vc.json` file is parsed with the schema model its canvas

@@ -119,3 +119,111 @@ test("checkBpmnXml: coloured shapes, edges and labels validate clean (#189)", ()
   const { findings } = checkBpmnXml(coloured, { file: "coloured.bpmn" });
   assert.deepEqual(findings, [], `unexpected findings: ${JSON.stringify(findings)}`);
 });
+
+// #183: a new model starts as one unnamed none start event. Every element of
+// these models is drawn, so only the flow rules can speak
+const drawn = (
+  body: string,
+  {
+    shapes,
+    edges = [],
+    collaboration = "",
+    otherProcesses = "",
+  }: { shapes: string[]; edges?: string[]; collaboration?: string; otherProcesses?: string },
+): string => `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Defs" targetNamespace="http://example.com">
+  ${collaboration ? `<bpmn:collaboration id="Collab">${collaboration}</bpmn:collaboration>` : ""}
+  <bpmn:process id="P" isExecutable="false">${body}</bpmn:process>
+  ${otherProcesses}
+  <bpmndi:BPMNDiagram id="Diagram">
+    <bpmndi:BPMNPlane id="Plane" bpmnElement="${collaboration ? "Collab" : "P"}">
+      ${shapes.map((id) => `<bpmndi:BPMNShape id="${id}_di" bpmnElement="${id}"><dc:Bounds x="0" y="0" width="36" height="36" /></bpmndi:BPMNShape>`).join("")}
+      ${edges.map((id) => `<bpmndi:BPMNEdge id="${id}_di" bpmnElement="${id}"><di:waypoint x="0" y="0" /><di:waypoint x="9" y="9" /></bpmndi:BPMNEdge>`).join("")}
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+const flowFindings = (xml: string): string[] =>
+  checkBpmnXml(xml, { file: "draft.bpmn" }).findings.map((f) => `${f.severity} ${f.ruleId} ${f.message}`);
+
+test("checkBpmnXml: a model holding only one none start event is a fresh draft, no dead end (#183)", () => {
+  assert.deepEqual(flowFindings(drawn('<bpmn:startEvent id="S" />', { shapes: ["S"] })), []);
+  // the modeller wrapped the draft in a pool: still a draft
+  const pooled = drawn('<bpmn:startEvent id="S" />', {
+    shapes: ["Pool", "S"],
+    collaboration: '<bpmn:participant id="Pool" name="Sales" processRef="P" />',
+  });
+  assert.deepEqual(flowFindings(pooled), []);
+});
+
+test("checkBpmnXml: a second flow node, a trigger or any flow ends the fresh draft, every rule applies (#183)", () => {
+  const deadEnd = (id: string, process = "P"): string =>
+    `ERROR bpmn/flow ${id} is a dead end (no outgoing flow, process ${process})`;
+  assert.deepEqual(flowFindings(drawn('<bpmn:startEvent id="S" /><bpmn:task id="T" />', { shapes: ["S", "T"] })), [
+    deadEnd("S"),
+    "ERROR bpmn/flow T is unreachable (no incoming flow, process P)",
+    deadEnd("T"),
+  ]);
+  assert.deepEqual(
+    flowFindings(drawn('<bpmn:startEvent id="S1" /><bpmn:startEvent id="S2" />', { shapes: ["S1", "S2"] })),
+    ["ERROR bpmn/flow expected exactly one start event in process P, found 2", deadEnd("S1"), deadEnd("S2")],
+  );
+  const timer = '<bpmn:startEvent id="S"><bpmn:timerEventDefinition id="Timer" /></bpmn:startEvent>';
+  assert.deepEqual(flowFindings(drawn(timer, { shapes: ["S"] })), [deadEnd("S")]);
+  const flowIn = '<bpmn:startEvent id="S" /><bpmn:sequenceFlow id="F" sourceRef="Gone" targetRef="S" />';
+  assert.deepEqual(flowFindings(drawn(flowIn, { shapes: ["S"], edges: ["F"] })), [
+    "ERROR bpmn/flow sequenceFlow F references missing node 'Gone' (process P)",
+    "ERROR bpmn/flow start event S has incoming flows",
+    deadEnd("S"),
+  ]);
+  const messaged = drawn('<bpmn:startEvent id="S" />', {
+    shapes: ["Pool", "Customer", "S"],
+    edges: ["M"],
+    collaboration:
+      '<bpmn:participant id="Pool" name="Sales" processRef="P" /><bpmn:participant id="Customer" name="Customer" />' +
+      '<bpmn:messageFlow id="M" sourceRef="Customer" targetRef="S" />',
+  });
+  assert.deepEqual(flowFindings(messaged), [deadEnd("S")]);
+  const poolsMessaged = drawn('<bpmn:startEvent id="S" />', {
+    shapes: ["Pool", "Customer", "S"],
+    edges: ["M"],
+    collaboration:
+      '<bpmn:participant id="Pool" name="Sales" processRef="P" /><bpmn:participant id="Customer" name="Customer" />' +
+      '<bpmn:messageFlow id="M" sourceRef="Customer" targetRef="Pool" />',
+  });
+  assert.deepEqual(flowFindings(poolsMessaged), [deadEnd("S")], "a message flow between the pools is a flow too");
+  // the draft is the whole model: a lone start event in each of two processes, or
+  // one next to a complete process, is no new model
+  const lonely = '<bpmn:process id="Q" isExecutable="false"><bpmn:startEvent id="S2" /></bpmn:process>';
+  const twoPools = drawn('<bpmn:startEvent id="S1" />', {
+    shapes: ["Pool", "Customer", "S1", "S2"],
+    collaboration:
+      '<bpmn:participant id="Pool" name="Sales" processRef="P" />' +
+      '<bpmn:participant id="Customer" name="Customer" processRef="Q" />',
+    otherProcesses: lonely,
+  });
+  assert.deepEqual(flowFindings(twoPools), [deadEnd("S1"), deadEnd("S2", "Q")]);
+  assert.deepEqual(
+    flowFindings(drawn('<bpmn:startEvent id="S1" />', { shapes: ["S1", "S2"], otherProcesses: lonely })),
+    [deadEnd("S1"), deadEnd("S2", "Q")],
+  );
+  const complete =
+    '<bpmn:startEvent id="S1" /><bpmn:task id="T" /><bpmn:endEvent id="E" />' +
+    '<bpmn:sequenceFlow id="F1" sourceRef="S1" targetRef="T" /><bpmn:sequenceFlow id="F2" sourceRef="T" targetRef="E" />';
+  const nextToComplete = drawn(complete, {
+    shapes: ["Pool", "Customer", "S1", "T", "E", "S2"],
+    edges: ["F1", "F2"],
+    collaboration:
+      '<bpmn:participant id="Pool" name="Sales" processRef="P" />' +
+      '<bpmn:participant id="Customer" name="Customer" processRef="Q" />',
+    otherProcesses: lonely,
+  });
+  assert.deepEqual(flowFindings(nextToComplete), [deadEnd("S2", "Q")]);
+  // an embedded sub-process is no new model: its lone start event stays a dead end
+  const embedded =
+    '<bpmn:startEvent id="S" /><bpmn:subProcess id="Sub"><bpmn:startEvent id="Inner" /></bpmn:subProcess>' +
+    '<bpmn:endEvent id="E" /><bpmn:sequenceFlow id="F1" sourceRef="S" targetRef="Sub" />' +
+    '<bpmn:sequenceFlow id="F2" sourceRef="Sub" targetRef="E" />';
+  assert.deepEqual(flowFindings(drawn(embedded, { shapes: ["S", "Sub", "Inner", "E"], edges: ["F1", "F2"] })), [
+    "ERROR bpmn/flow Inner is a dead end (no outgoing flow, subProcess Sub)",
+  ]);
+});

@@ -207,7 +207,7 @@ call is gated by the caller's per-repo permission.
 | `open_value_chain_modeler`    | read  | Open the embedded Value Chain modeler widget.                                            |
 | `create_model`                | write | Scaffold a model of ANY template-capable notation from its blank template.               |
 | `save_model_content`          | write | Validated, conflict-guarded save of ANY model's text into the live document.             |
-| `create_process`              | write | Scaffold a new process `.bpmn` in the live workspace.                                    |
+| `create_process`              | write | Scaffold a new process `.bpmn`: one unnamed start event in a plain process, no pool.     |
 | `save_bpmn_xml`               | write | Validated, conflict-guarded save into the live document (requires `baseVersion`).        |
 | `edit_process`                | write | Opt-in: change a live process with operations on element ids; the diagram is computed.   |
 | `layout_process`              | write | Opt-in: tidy or redraw a live process's diagram.                                         |

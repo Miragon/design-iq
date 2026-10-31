@@ -105,6 +105,9 @@ export interface BpmnModelNode {
   calledElement?: string;
   /** businessRuleTask → the decision it delegates to (decisionRefOf) */
   decisionRef?: string;
+  /** an event's trigger: its event definition tags (messageEventDefinition, …)
+   *  and eventDefinitionRef; absent on a none event and every other node */
+  eventDefinitions?: string[];
   container: BpmnContainer;
 }
 
@@ -133,6 +136,8 @@ export interface BpmnModel {
   diRequired: Set<string>;
   /** raw optionals — extractBpmn projects identity, the validator filters truthy */
   lanes: Array<{ id?: string; name?: string; nodeIds: string[]; processIndex: number }>;
+  /** the top-level processes, raw optionals in document order */
+  processes: Array<{ id?: string; name?: string }>;
   /** grouped per <collaboration> — the validator's per-collab pass order is wire-visible */
   collaborations: Array<{
     pools: Array<{ id?: string; name?: string; processRef?: string }>;
@@ -148,6 +153,7 @@ export function readBpmn(defs: Record<string, any>): BpmnModel {
     flows: [],
     diRequired: new Set(),
     lanes: [],
+    processes: [],
     collaborations: [],
   };
 
@@ -183,6 +189,9 @@ export function readBpmn(defs: Record<string, any>): BpmnModel {
           const nodeId = rec["@_id"];
           if (!nodeId) continue;
           const decisionRef = tag === "businessRuleTask" ? decisionRefOf(node as Record<string, any>) : undefined;
+          const eventDefinitions = Object.keys(rec).filter(
+            (key) => key.endsWith("EventDefinition") || key === "eventDefinitionRef",
+          );
           const entry: BpmnModelNode = {
             id: nodeId,
             tag,
@@ -190,6 +199,7 @@ export function readBpmn(defs: Record<string, any>): BpmnModel {
             ...(rec["@_attachedToRef"] !== undefined ? { attachedTo: rec["@_attachedToRef"] } : {}),
             ...(rec["@_calledElement"] !== undefined ? { calledElement: rec["@_calledElement"] } : {}),
             ...(decisionRef ? { decisionRef } : {}),
+            ...(eventDefinitions.length > 0 ? { eventDefinitions } : {}),
             container,
           };
           model.nodes.push(entry);
@@ -213,6 +223,7 @@ export function readBpmn(defs: Record<string, any>): BpmnModel {
   for (const proc of asArray(defs.process as Record<string, unknown>[])) {
     const rec = proc as Record<string, any>;
     const pid = rec["@_id"] as string | undefined;
+    model.processes.push({ id: pid, name: rec["@_name"] as string | undefined });
     walk(proc as Record<string, unknown>, `process ${pid ?? "(anonymous)"}`, pid, false);
     for (const lane of asArray(rec.laneSet?.lane)) {
       model.lanes.push({
@@ -272,7 +283,8 @@ function extractBpmn(raw: string): ModelGraph {
   const pools = model.collaborations.flatMap((c) =>
     c.pools.map((pl) => ({ id: pl.id ?? "", name: pl.name ?? "", processRef: pl.processRef ?? "" })),
   );
-  return { notation: "bpmn", nodes, edges, meta: { lanes, pools } };
+  const processes = model.processes.map((p) => ({ id: p.id, name: p.name }));
+  return { notation: "bpmn", nodes, edges, meta: { lanes, pools, processes } };
 }
 
 /**

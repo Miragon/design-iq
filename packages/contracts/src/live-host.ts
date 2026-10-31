@@ -40,7 +40,7 @@ export interface ProcessInfo {
  * The process id (= file stem) is derived from `name`; it must be unique
  * repo-wide, so a duplicate is a 409 regardless of `folder`. */
 export interface CreateProcessBody {
-  /** human title — becomes the pool name; the file stem is its kebab-case slug */
+  /** human title: becomes the process name (`<bpmn:process name>`); the file stem is its kebab-case slug */
   name: string;
   /** target folder relative to the processes root ("" / absent = root) */
   folder?: string;

@@ -56,7 +56,7 @@ view (name, roles, steps with their role, gateways, sub-process calls) and
 
 1. Cite the source (`processes/order-to-cash.bpmn`, lane *Billing*, step
    *Check credit limit*) for every claim.
-2. If a process has no lanes, no name (no pool), or an obvious gap, surface it —
-   the derived view is only as rich as the model.
+2. If a process has no lanes, no name (neither a named pool nor a named process),
+   or an obvious gap, surface it: the derived view is only as rich as the model.
 3. If the answer is not in the models, say so and name the file where it *should*
    live. Offer to run `process-review`.
