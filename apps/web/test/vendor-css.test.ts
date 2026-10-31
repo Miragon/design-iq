@@ -265,14 +265,36 @@ test("src/index.css keeps at the top of the SPA's canvas, which has no chrome ov
   }
 });
 
-test("the widget only places a renderer's palette: its size, its one row and its scrolling stay the renderer's (guide §5.15)", () => {
-  const sheet = fileURLToPath(new URL("../src/mcp-app/miragon-styles.css", import.meta.url));
-  const set = new Set<string>();
-  postcss.parse(readFileSync(sheet, "utf8"), { from: sheet }).walkRules((rule) => {
-    if (!rule.selectors.some((selector) => /\.djs-palette/.test(selector))) return;
-    rule.walkDecls((decl) => void set.add(decl.prop));
+/** whether a renderer's sheet undoes diagram-js's 94px two-column clamp for its own palette */
+function liftsTwoColumnClamp(spec: MiragonRendererSpec): boolean {
+  let lifts = false;
+  postcss.parse(readFileSync(stylesheetOf(spec), "utf8")).walkRules((rule) => {
+    if (!rule.selectors.some((selector) => /\.djs-palette.*\.two-column\.open/.test(selector))) return;
+    rule.walkDecls("width", (decl) => void (lifts ||= decl.value !== "94px"));
   });
-  assert.deepEqual([...set].sort(), ["max-width", "top"]);
+  return lifts;
+}
+
+test("the widget only places a renderer's palette: its size, its one row and its scrolling stay the renderer's (guide §5.15), but for diagram-js's two-column clamp where the renderer leaves it", () => {
+  const sheet = fileURLToPath(new URL("../src/mcp-app/miragon-styles.css", import.meta.url));
+  const placed = new Set<string>();
+  const unclamped = new Set<string>();
+  postcss.parse(readFileSync(sheet, "utf8"), { from: sheet }).walkRules((rule) => {
+    for (const selector of rule.selectors.filter((each) => /\.djs-palette/.test(each))) {
+      if (!/\.two-column\.open/.test(selector)) {
+        rule.walkDecls((decl) => void placed.add(decl.prop));
+        continue;
+      }
+      rule.walkDecls((decl) => assert.equal(`${decl.prop}: ${decl.value}`, "width: max-content", selector));
+      unclamped.add(selector);
+    }
+  });
+  assert.deepEqual([...placed].sort(), ["max-width", "top"]);
+  const expected = MIRAGON_RENDERERS.filter((spec) => !liftsTwoColumnClamp(spec)).map(
+    (spec) =>
+      `#app[data-kind="miragon"] #canvas .${spec.canvasClassName} .${RENDERER_ROOT[spec.id]} .djs-palette.two-column.open`,
+  );
+  assert.deepEqual([...unclamped].sort(), expected.sort());
 });
 
 /** the declarations of the unlayered `:root` rules that set a family (--bio-, --cdc-) */
