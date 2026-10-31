@@ -1,23 +1,25 @@
 /**
  * A gesture on the canvas holds a peer's re-import back (#295, live-client's
  * sync rule 3), with the real modelers apps/web mounts, under jsdom
- * (test/renderer-dom.ts): the SPA editor and the live widget's engine each
- * hand the element they mount the canvas in to the live binding. A pointer
- * held on the SPA's canvas keeps the widget peer's move off it until the
- * release; a diagram-js move in the widget's canvas (its marker on the root
- * element, its preview drawn) keeps the SPA's move off it until the drag
- * ends. Each canvas's own drop then merges with the other's: both moves in
- * the shared text and on both canvases, nobody told of a conflict. An armed
- * palette tool (bpmn-js's hand tool, a Miragon renderer's lasso) sets the
- * marker and draws no preview: it holds nothing back, and the binding sends
- * it no Escape (bpmn-js's hand tool stays armed through the import). A
- * bpmn-js drop or create that bpmn-js writes into the text across the held
- * move's DI merges with it line by line (#309), and so does a dmn-js DRD
- * create; a drop that moves the task the held move moved gives way to it,
- * with the conflict toast and no exception. A drag that outlasts 10 s is
- * cancelled the way Escape cancels it, then the import runs. jsdom has no layout, so
- * the drags here run diagram-js's dragging without a pointer; pointer drags
- * in a browser: test/live-gesture-chromium.ts.
+ * (test/renderer-dom.ts). The bpmn-js and dmn-js mounts hand the live binding
+ * the element they mount the canvas in, whose DOM it reads; a Miragon
+ * renderer reports its gestures itself (contract 1.5's interaction surface),
+ * and a press that starts no drag is none. A pointer held on the SPA's
+ * bpmn-js canvas, or a drag on its Miragon canvas, keeps the widget peer's
+ * move off it until the release; a diagram-js move in the widget's canvas
+ * (its marker on the root element, its preview drawn) keeps the SPA's move
+ * off it until the drag ends. Each canvas's own drop then merges with the
+ * other's: both moves in the shared text and on both canvases, nobody told
+ * of a conflict. An armed palette tool (bpmn-js's hand tool, a Miragon
+ * renderer's lasso) sets the marker and draws no preview: it holds nothing
+ * back, and the binding sends it no Escape (bpmn-js's hand tool stays armed
+ * through the import). A bpmn-js drop or create that bpmn-js writes into the
+ * text across the held move's DI merges with it line by line (#309), and so
+ * does a dmn-js DRD create; a drop that moves the task the held move moved
+ * gives way to it, with the conflict toast and no exception. A Miragon drag
+ * that outlasts 10 s ends in the renderer's own import, with no Escape sent.
+ * jsdom has no layout, so the drags here run diagram-js's dragging without a
+ * pointer; pointer drags in a browser: test/live-gesture-chromium.ts.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -147,6 +149,26 @@ interface Peer {
   conflicts: string[];
   /** the canvas's export, where it is the shared text byte for byte after an import */
   exportText?(): string;
+  /** a Miragon renderer's own report of a running gesture, which its binding waits on */
+  gestureActive?(): boolean;
+}
+
+/**
+ * Holds a gesture on the peer's canvas until the returned release: a pointer
+ * held on it where the binding reads the DOM (bpmn-js), a drag where the
+ * renderer reports its gestures itself, to which a press is none.
+ */
+function holdGesture(peer: Peer, id: string, what: string): () => void {
+  if (!peer.gestureActive) {
+    peer.canvasHost.querySelector("svg")!.dispatchEvent(pointer("pointerdown"));
+    return () => window.dispatchEvent(pointer("pointerup"));
+  }
+  const dragging = startDrag(peer.diagram, peer.canvasHost, id);
+  assert.equal(peer.gestureActive(), true, `${what}: the renderer reports the drag`);
+  return () => {
+    dragging.cancel();
+    assert.equal(peer.gestureActive?.(), false, `${what}: and its end`);
+  };
 }
 
 const MOVE_IN_SPA: Point = { x: 30, y: 0 };
@@ -191,17 +213,19 @@ async function bothGesturesHold(
     assert.deepEqual([spa.conflicts, widget.conflicts], [[], []], `${what} ${where}: nobody lost an edit`);
   };
 
-  spa.canvasHost.querySelector("svg")!.dispatchEvent(pointer("pointerdown"));
+  const releaseSpa = holdGesture(spa, spaElement, `${what} in the SPA`);
   moveElement(widget.diagram, widgetElement, MOVE_IN_WIDGET);
   await wait(QUIET);
-  assert.deepEqual(positions(spa), start, `${what}: the SPA canvas waits while its pointer is down`);
-  window.dispatchEvent(pointer("pointerup"));
+  assert.deepEqual(positions(spa), start, `${what}: the SPA canvas waits while its gesture runs`);
+  releaseSpa();
   moveElement(spa.diagram, spaElement, MOVE_IN_SPA);
   await wait(SETTLED);
   await expectBothMoves(1, "after the SPA's drop");
 
   const before = positions(widget);
   const dragging = startDrag(widget.diagram, widget.canvasHost, widgetElement);
+  if (widget.gestureActive)
+    assert.equal(widget.gestureActive(), true, `${what}: the renderer reports the widget's drag`);
   moveElement(spa.diagram, spaElement, MOVE_IN_SPA);
   await wait(QUIET);
   assert.deepEqual(positions(widget), before, `${what}: the widget canvas waits while its drag runs`);
@@ -406,12 +430,14 @@ test("the Miragon renderers: a gesture in the SPA editor or the widget holds the
           canvasHost: spaHost,
           conflicts: spaConflicts,
           exportText: () => spaModeler.exportText(),
+          gestureActive: () => spaModeler.interaction!.active(),
         },
         {
           diagram: engine.modeler.diagram as unknown as Diagram,
           canvasHost: widgetHost,
           conflicts: widgetConflicts,
           exportText: () => engine.modeler.exportText(),
+          gestureActive: () => engine.modeler.interaction!.active(),
         },
       ],
       moved,
@@ -461,7 +487,7 @@ test("dmn-js: a pointer held on the SPA editor holds a peer's change back until 
   }
 });
 
-test("a drag that outlasts 10 s gives way: diagram-js cancels it the way Escape does, then the peer's move is imported", async () => {
+test("a Miragon drag that outlasts 10 s gives way: the renderer's own import ends it, no Escape sent, and the peer's move is in", async () => {
   const { MIRAGON_RENDERERS } = await import("../src/notations/miragon/index.ts");
   const { mountMiragonEngine } = await import("../src/mcp-app/engines/miragon.ts");
   const spec = MIRAGON_RENDERERS.find((s) => s.id === "wardley");
@@ -486,6 +512,7 @@ test("a drag that outlasts 10 s gives way: diagram-js cancels it the way Escape 
   const errors: unknown[] = [];
   const onError = (event: ErrorEvent): void => void errors.push(event.error);
   window.addEventListener("error", onError);
+  const page = watchPage();
   await wait(100);
   const start = positionOf(local.diagram, "cmp_kettle");
 
@@ -496,6 +523,8 @@ test("a drag that outlasts 10 s gives way: diagram-js cancels it the way Escape 
   assert.ok(dragging.context(), "the drag still runs");
   await wait(2_000);
   assert.equal(dragging.context(), null, "the drag is cancelled");
+  assert.equal(local.engine.modeler.interaction?.active(), false, "the renderer reports its end");
+  assert.equal(page.seen.escapes, 0, "by the renderer's import, no Escape sent");
   assert.equal(local.canvasHost.getElementsByClassName("djs-drag-active").length, 0, "its marker is gone");
   assert.ok(near(positionOf(local.diagram, "cmp_kettle"), shifted(start, MOVE_IN_WIDGET)), "the peer's move is in");
   document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 80, clientY: 80 }));
@@ -504,6 +533,7 @@ test("a drag that outlasts 10 s gives way: diagram-js cancels it the way Escape 
   assert.equal(local.engine.modeler.exportText(), docs[0].getText("content").toString());
   assert.deepEqual([local.conflicts, peer.conflicts], [[], []]);
   window.removeEventListener("error", onError);
+  page.stop();
   for (const { unbind, engine } of engines) {
     unbind();
     engine.destroy();
@@ -637,6 +667,29 @@ test("an armed palette tool holds nothing back and is not cancelled: bpmn-js's h
     page.stop();
     for (const engine of engines) engine.destroy();
   }
+});
+
+test("a press on a Miragon canvas that starts no drag holds nothing back: the binding reads the renderer, not the DOM", async () => {
+  const { engines } = await miragonEngines(
+    "event-storming",
+    "title Checkout\ncommand Place Order [240,300]\nevent Order Placed [620,300]\n",
+    2,
+  );
+  const [local, peer] = engines as [Engine, Engine];
+  const page = watchPage();
+  local.canvasHost.querySelector("svg")!.dispatchEvent(pointer("pointerdown"));
+  const start = positionOf(local.diagram, "event_order_placed");
+  moveElement(peer.diagram, "event_order_placed", MOVE_IN_WIDGET);
+  await wait(QUIET);
+  assert.ok(
+    near(positionOf(local.diagram, "event_order_placed"), shifted(start, MOVE_IN_WIDGET)),
+    "the peer's move is imported while the pointer is down",
+  );
+  window.dispatchEvent(pointer("pointerup"));
+  assert.deepEqual(page.seen.errors, [], "nothing thrown");
+  assert.deepEqual([local.conflicts, peer.conflicts], [[], []]);
+  page.stop();
+  for (const engine of engines) engine.destroy();
 });
 
 /** where a modeler draws its elements, each shape's id and position, sorted: two canvases that show one text agree */

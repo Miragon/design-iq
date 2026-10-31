@@ -9,8 +9,9 @@
  *     places of the text (placed by context, else by lines, #309), and gives
  *     way where they edited the same place or the merge fails the gate (rule 4)
  *  3. debounced re-import of remote changes with view-state restore and echo
- *     suppression (Yjs transaction origin + last-export equality), held back
- *     while a local gesture runs on the canvas, for 10 s at most (#295)
+ *     suppression (Yjs transaction origin + last-export equality), one import
+ *     at a time, held back while a local gesture runs on the canvas, for 10 s
+ *     at most (#295)
  *  4. gate the merged text before import; keep rendering the last good state on
  *     rare invalid interleavings — the next update usually heals the document.
  *     Canvas exports that cross on the wire and replace the same text never
@@ -54,7 +55,7 @@ const UNRENDERABLE_NOTICE_MS = 5000;
 
 /** how long a remote re-import waits for a gesture on the canvas to end: a stuck gesture must not hide peers' edits for good */
 const GESTURE_HOLD_MS = 10_000;
-/** how often a re-import held back for a gesture looks again */
+/** how often a re-import held back for a gesture read from the DOM looks again */
 const GESTURE_RECHECK_MS = 100;
 /** diagram-js puts it on the root element while a drag runs, also a palette create that follows the pointer with no button held */
 const DRAG_ACTIVE_MARKER = "djs-drag-active";
@@ -137,6 +138,28 @@ export interface SyncAdapter {
   beforeImport(isFirstImport: boolean): () => void;
   /** subscribe to local model-change events; returns the unsubscribe */
   observeModel(onChanged: () => void): () => void;
+  /**
+   * set by an adapter whose modeler keeps the collaborative-modeler contract
+   * (@miragon/modeler-api, miragon-sync): the binding then reads a gesture
+   * from the modeler, never from the DOM, and writes each canvas edit into
+   * the text before the modeler's change listener returns
+   */
+  contract?: ContractModeler;
+}
+
+/** contract 1.5's interaction surface: whether the user holds a gesture on the canvas */
+export interface GestureSurface {
+  active(): boolean;
+  /** the new value, once each way; it may run inside importText (the cancel of L1) or a pointer handler */
+  onChange(listener: (active: boolean) => void): () => void;
+}
+
+/** what the binding reads of a modeler behind the collaborative-modeler contract */
+export interface ContractModeler {
+  /** synchronous: inside a change listener it already returns the changed document (L3) */
+  exportText(): string;
+  /** absent before contract 1.5: such a modeler holds no re-import back */
+  interaction?: GestureSurface | undefined;
 }
 
 interface CanvasGesture {
@@ -147,14 +170,11 @@ interface CanvasGesture {
 }
 
 /**
- * A gesture on the canvas, read from the DOM alone, so it holds for every
- * diagram-js editor, whatever services it registers: a pointer held on the
- * canvas host, or diagram-js's drag marker inside it while the drag carries
- * elements (a palette create follows the pointer with no button held).
- * Contract 1.5's interaction surface would let a Miragon renderer answer
- * itself: every release apps/web pins offers it since the 2026-10-30
- * releases (apps/web/test/miragon-renderers.test.ts), and this binding
- * moves onto it in design-iq#370's second pull request.
+ * A gesture on the canvas of an editor without the contract's interaction
+ * surface (bpmn-js, dmn-js), read from the DOM alone, whatever services the
+ * editor registers: a pointer held on the canvas host, or diagram-js's drag
+ * marker inside it while the drag carries elements (a palette create follows
+ * the pointer with no button held).
  */
 function watchCanvasGesture(host: Element): CanvasGesture {
   const page = host.ownerDocument;
@@ -216,10 +236,13 @@ export interface SyncOptions {
    */
   onUnrenderable?: (message: string | null) => void;
   /**
-   * the element the canvas is mounted in. While a gesture runs on it (a
-   * drag, a resize, a connection, a lasso, a palette create), remote
+   * the element the canvas is mounted in, for an editor without the
+   * contract's interaction surface (bpmn-js, dmn-js). While a gesture runs on
+   * it (a drag, a resize, a connection, a lasso, a palette create), remote
    * re-imports wait: an import replaces the shapes the gesture works on, and
    * its drop would throw on them and lose the edit. Absent = never held back.
+   * A modeler behind the contract reports its gestures itself
+   * (SyncAdapter.contract): its binding never reads this element.
    */
   canvasHost?: Element;
 }
@@ -313,6 +336,8 @@ export function bindModelSync(
   sync: SyncOptions = {},
 ): () => void {
   let importing = false;
+  /** an import was asked for while one ran: it follows that one, reading the text as it is then */
+  let importQueued = false;
   let lastExport = "";
   let lastLocalEdit = 0;
   let pendingLocalExport = false;
@@ -320,7 +345,10 @@ export function bindModelSync(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let repairTimer: ReturnType<typeof setTimeout> | undefined;
   let unbound = false;
-  const gesture = sync.canvasHost ? watchCanvasGesture(sync.canvasHost) : undefined;
+  const { contract } = adapter;
+  const interaction = contract?.interaction;
+  const domGesture = !contract && sync.canvasHost ? watchCanvasGesture(sync.canvasHost) : undefined;
+  const gestureActive = (): boolean => interaction?.active() ?? domGesture?.active() ?? false;
   /** when the remote state now held back for a gesture began to wait */
   let heldForGestureSince: number | undefined;
 
@@ -400,6 +428,13 @@ export function bindModelSync(
   }
 
   async function importFromY(): Promise<void> {
+    if (unbound) return;
+    if (importing) {
+      // imports never overlap (the contract defines none that do), and the
+      // follower reads the text when it starts, so one follower is enough
+      importQueued = true;
+      return;
+    }
     // a wait for a gesture spans only the rechecks that follow each other: any
     // other outcome starts the next wait afresh
     const waitingSince = heldForGestureSince;
@@ -435,20 +470,23 @@ export function bindModelSync(
       scheduleImport(OVERLAP_GRACE_MS - sinceOverlap);
       return;
     }
-    if (gesture?.active()) {
+    if (gestureActive()) {
       // a gesture has committed nothing yet, so no quiet period covers it; its
       // drop merges into ytext like any local edit, and the import after it
       // takes in both edits. A drop that changes the held change's lines is a
       // conflict there (applyLocalEdit): the peer's edit stays
       const since = waitingSince ?? Date.now();
-      if (Date.now() - since < GESTURE_HOLD_MS) {
+      const left = since + GESTURE_HOLD_MS - Date.now();
+      if (left > 0) {
         heldForGestureSince = since;
-        scheduleImport(GESTURE_RECHECK_MS);
+        // the modeler tells the end (onChange below); the DOM is read again
+        scheduleImport(interaction ? left : GESTURE_RECHECK_MS);
         return;
       }
-      // past the hold the peers' edits win: the gesture ends before the import,
-      // so it never drops onto shapes the import replaced
-      gesture.cancel();
+      // past the hold the peers' edits win, and the gesture ends before the
+      // import replaces the shapes it works on: a modeler behind the contract
+      // ends it in its own import (L1), the others the way Escape does
+      domGesture?.cancel();
     }
     // what this text holds, read with it: more may arrive while it imports
     const closure = logClosure();
@@ -458,28 +496,36 @@ export function bindModelSync(
       const isFirstImport = lastExport === "";
       const restoreView = adapter.beforeImport(isFirstImport);
       await adapter.importText(text);
+      // an import that settles after the unbind may meet a destroyed modeler
+      if (unbound) return;
       restoreView();
       lastExport = text;
       matched(closure, foreign);
       importErrorReported = false;
       rendered();
     } catch (err) {
+      if (unbound) return;
       console.warn("[designiq] remote document not importable, keeping last good state", err);
       reportFirstImportFailure(err instanceof Error ? err.message : String(err));
       notRendered(text);
       planRepair(text);
     } finally {
       importing = false;
-      if (pendingLocalExport) {
+      if (!unbound && pendingLocalExport) {
         // a canvas edit landed while we were importing — never swallow it,
         // re-export now (no-ops if the import made it obsolete)
         pendingLocalExport = false;
         void onModelChanged();
       }
+      if (!unbound && importQueued) {
+        importQueued = false;
+        scheduleImport(0);
+      }
     }
   }
 
   const scheduleImport = (delay = 350): void => {
+    if (unbound) return;
     clearTimeout(timer);
     timer = setTimeout(importFromY, delay);
   };
@@ -542,6 +588,14 @@ export function bindModelSync(
     scheduleImport();
   };
   ytext.observe(observer);
+
+  // never an import inside the listener, which may run inside importText (the
+  // cancel of L1) or a pointer handler. The import reads the text when it
+  // starts: by then the drop is in it (onModelChanged writes it before the
+  // change listener returns), also from a modeler that reports the end first
+  const offInteraction = interaction?.onChange((active) => {
+    if (!active && heldForGestureSince !== undefined) scheduleImport(0);
+  });
 
   // a peer standing down changes who repairs, without touching the text. A
   // write shows its writer is in the room, whatever the presence last said:
@@ -694,6 +748,17 @@ export function bindModelSync(
   }
 
   const onModelChanged = async (): Promise<void> => {
+    if (unbound) return;
+    if (contract) {
+      // in the text before the change listener returns, also while an import
+      // waits for this action to finish (L1, 1.6): the canvas still holds the
+      // text before that import, so the edit merges against lastExport, and
+      // the import after the waiting one shows both
+      lastLocalEdit = Date.now();
+      const text = contract.exportText();
+      if (text && text !== lastExport) applyLocalEdit(text);
+      return;
+    }
     if (importing) {
       // fires for the commandStack 'clear' of our own importText (harmless no-op
       // on re-run) AND for real user edits racing the import. Known limit of
@@ -705,7 +770,7 @@ export function bindModelSync(
     }
     lastLocalEdit = Date.now();
     const text = await adapter.exportText();
-    if (!text || text === lastExport) return;
+    if (unbound || !text || text === lastExport) return;
     applyLocalEdit(text);
   };
   const unobserveModel = adapter.observeModel(() => void onModelChanged());
@@ -768,7 +833,10 @@ export function bindModelSync(
     onConflict?.(CONFLICT_MESSAGE);
     pendingLocalExport = false;
     lastLocalEdit = 0; // bypass the quiet period: re-import now
-    void importFromY();
+    // a modeler behind the contract is inside its change listener here, in
+    // the middle of the user's action: the import starts once that has returned
+    if (contract) scheduleImport(0);
+    else void importFromY();
   }
 
   void importFromY();
@@ -780,7 +848,8 @@ export function bindModelSync(
     sync.awareness?.off("change", onPresence);
     losses.unobserve(onLosses);
     unobserveModel();
-    gesture?.dispose();
+    offInteraction?.();
+    domGesture?.dispose();
     clearTimeout(timer);
     clearTimeout(repairTimer);
     clearTimeout(unrenderableTimer);

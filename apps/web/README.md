@@ -555,17 +555,20 @@ reads (`--cd-ui-*`) come from the renderer's token layer.
 The renderers' own `createShortcutsDialog` is gone since the 2026-10-30 releases. The title
 dialogs and the popovers ("Map title…", "Map size…", "X-axis labels…") are still the renderers'.
 
-**A gesture holds the live re-imports back.** Every live binding, the SPA's editors and
-the widget engines alike, passes live-client the element it mounts the canvas in: while a
-pointer is held on it or a diagram-js drag that carries elements runs in it, a peer's
-change waits, for 10 s at most (sync rule 3 in `docs/platform-concept.md`, #295). An
-armed palette tool (hand, space, lasso) holds nothing back. The drop then merges with the
-held change line by line (sync rule 2, #309), also where bpmn-js writes a moved or new
-shape's DI last, across the DI a peer moved, and where Wardley and Event Storming list a
-new element right after the one a peer moved. A drop that changes the same lines (two
-moves of one element), or whose merge would fail the notation's gate (well-formed XML for
-BPMN and DMN, a text that is not blank for the Miragon notations), gives way to the peer's
-change, with the conflict toast.
+**A gesture holds the live re-imports back.** While a gesture runs on a canvas, a peer's
+change waits, for 10 s at most (sync rule 3 in `docs/platform-concept.md`, #295). The BPMN
+and DMN bindings, the SPA's editors and the widget's BPMN engine alike, pass live-client
+the element they mount the canvas in: a pointer held on it, or a diagram-js drag that
+carries elements in it, is a gesture, and one held past 10 s is cancelled with an Escape.
+The Miragon bindings pass none: each renderer reports its gestures through the contract's
+`interaction` surface, where a press that starts no drag is none, and one held past 10 s
+ends in the renderer's own import, with no Escape sent. An armed palette tool (hand, space,
+lasso) holds nothing back. The drop then merges with the held change line by line (sync
+rule 2, #309), also where bpmn-js writes a moved or new shape's DI last, across the DI a
+peer moved, and where Wardley and Event Storming list a new element right after the one a
+peer moved. A drop that changes the same lines (two moves of one element), or whose merge
+would fail the notation's gate (well-formed XML for BPMN and DMN, a text that is not blank
+for the Miragon notations), gives way to the peer's change, with the conflict toast.
 `test/live-gesture.test.ts` covers every mount under jsdom, with diagram-js's dragging run
 without a pointer. Pointer drags in a browser are checked by hand, outside CI:
 `test/live-gesture-chromium.ts` starts a Live Host of its own and drags, creates and arms
