@@ -27,6 +27,8 @@ minimumReleaseAgeExclude:
   - "@miragon/context-maps-cml@0.1.8"
   - "@miragon/value-chain-renderer@0.10.0"
   - "@miragon/value-chain-schema-model@0.7.3"
+  # the BPMN editing engine (ADR 0009): published 2026-10-30, adopted on 2026-10-31
+  - "@miragon/bpmn-cli@0.9.0"
 overrides:
   # vitepress 1.6.4 (docs/) is the latest release and still requests vite
   # ^5.4.14, which is stuck below the dev-server fixes; 6.4.5 also closes the

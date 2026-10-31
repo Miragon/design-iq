@@ -3,16 +3,18 @@
  * in-memory BpmnEditIo: the re-application of a change on a concurrent edit
  * and its limits (baseVersion, ops that no longer apply), the design-iq
  * validator inside the engine (counted messages, lint "warn"), the platform a
- * design model is edited as, and the engine's errors in tool words. The tools
- * over a real live document: bpmn-edit-tools.test.ts.
+ * design model is edited as, the engine's errors in tool words, and the arch
+ * fence on the engine's entries. The tools over a real live document:
+ * bpmn-edit-tools.test.ts.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { AppError } from "@designiq/http-kit";
-import { applyToXml, CliError } from "@miragon/bpmn-cli";
+import { applyToXml, BpmnError } from "@miragon/bpmn-cli";
 import { checkModel } from "@miragon/design-iq-validator";
 
 import {
@@ -184,12 +186,12 @@ test("validator: a counted error that improves is the same error; one that grows
   // 2 → 0: no start event at all is a new problem, not the old one improved
   await assert.rejects(
     run(withStarts(1), [{ op: "remove", ids: ["StartEvent_extra_0", "StartEvent_order_received"] }]),
-    (e: unknown) => e instanceof CliError && e.code === "E_VALIDATION" && /found 0/.test(JSON.stringify(e.details)),
+    (e: unknown) => e instanceof BpmnError && e.code === "E_VALIDATION" && /found 0/.test(JSON.stringify(e.details)),
   );
   // 3 → 4: refused, the grown count is a new error
   await assert.rejects(
     run(withStarts(2), [{ op: "add", kind: "startEvent", name: "Fax received", in: "order-to-cash" }]),
-    (e: unknown) => e instanceof CliError && e.code === "E_VALIDATION" && /found 4/.test(JSON.stringify(e.details)),
+    (e: unknown) => e instanceof BpmnError && e.code === "E_VALIDATION" && /found 4/.test(JSON.stringify(e.details)),
   );
 });
 
@@ -204,7 +206,7 @@ test("validator: a large process's complexity warning shrinking with the change 
     })),
   );
   const io = memoryIo(big.xml);
-  const out = await editProcess(io, PATH, [{ op: "remove", ids: ["Task_step_0"] }]);
+  const out = await editProcess(io, PATH, [{ op: "remove", ids: ["userTask_step0"] }]);
   assert.ok(out.ok && out.written);
   assert.ok(!out.change.warnings.some((w) => /bpmn\/complexity/.test(w)), out.change.warnings.join("\n"));
   const grown = await editProcess(memoryIo(big.xml), PATH, [
@@ -251,7 +253,7 @@ test("a model no process of which is executable is edited as a design model: lin
   assert.ok((await editProcess(design, PATH, link)).ok);
   assert.match(
     design.doc(),
-    /<bpmn:businessRuleTask id="Task_rate_risk" name="Rate risk" calledDecision="credit-limit-check"/,
+    /<bpmn:businessRuleTask id="businessRuleTask_rateRisk" name="Rate risk" calledDecision="credit-limit-check"/,
   );
 
   // a link in an engine spelling keeps it, and a new link takes the spelling the file's links share (bpmn-cli 0.7)
@@ -267,7 +269,7 @@ test("a model no process of which is executable is edited as a design model: lin
   );
   assert.match(
     camunda.doc(),
-    /<bpmn:businessRuleTask id="Task_rate_risk" name="Rate risk" camunda:decisionRef="credit-limit-check"/,
+    /<bpmn:businessRuleTask id="businessRuleTask_rateRisk" name="Rate risk" camunda:decisionRef="credit-limit-check"/,
   );
   assert.doesNotMatch(camunda.doc(), / calledDecision="/);
   assert.ok(
@@ -279,7 +281,7 @@ test("a model no process of which is executable is edited as a design model: lin
   await editProcess(executable, PATH, link, { lint: "warn" });
   assert.match(
     executable.doc(),
-    /<bpmn:businessRuleTask id="Task_rate_risk" name="Rate risk" camunda:decisionRef="credit-limit-check"/,
+    /<bpmn:businessRuleTask id="businessRuleTask_rateRisk" name="Rate risk" camunda:decisionRef="credit-limit-check"/,
   );
 });
 
@@ -287,7 +289,7 @@ test("a model no process of which is executable is edited as a design model: lin
 
 test("engine errors: code, op, element, candidates and a hint in tool words; house AppError codes", () => {
   const notFound = engineError(
-    new CliError("E_NOT_FOUND", 'No element with id "Task_Aa"', "model", {
+    new BpmnError("E_NOT_FOUND", 'No element with id "Task_Aa"', "model", {
       element: "Task_Aa",
       candidates: ["Task_A"],
       op: 1,
@@ -301,11 +303,11 @@ test("engine errors: code, op, element, candidates and a hint in tool words; hou
     'E_NOT_FOUND in ops[1] (Task_Aa): No element with id "Task_Aa"\ncandidates: Task_A\n' +
       "hint: Run get_process_outline (or its `find`) to list the ids.",
   );
-  const usage = engineError(new CliError("E_USAGE", "ops[0] (add): unknown key", "usage"));
+  const usage = engineError(new BpmnError("E_USAGE", "ops[0] (add): unknown key", "usage"));
   assert.equal(usage.status, 400);
 
   const refused = engineError(
-    new CliError("E_VALIDATION", "The change would introduce 1 error(s)", "model", {
+    new BpmnError("E_VALIDATION", "The change would introduce 1 error(s)", "model", {
       errors: [{ code: "bpmn/flow", message: "Timer_1 is a dead end", validator: "design-iq", severity: "error" }],
       hint: "… (`bpmn apply <file> ops.json`) …, or pass --force to write anyway.",
     }),
@@ -313,6 +315,68 @@ test("engine errors: code, op, element, candidates and a hint in tool words; hou
   assert.match(refused.message, /^- \[design-iq\] bpmn\/flow: Timer_1 is a dead end$/m);
   assert.match(refused.message, /hint: complete the change in the same call .* lint 'warn'/);
   assert.doesNotMatch(refused.message, /--force|bpmn apply/);
+});
+
+const pack = () => ({ op: "add", kind: "userTask", name: "Pack goods", after: "Task_fulfill_order" });
+const label = (after: string) => ({ op: "add", kind: "userTask", name: "Label parcel", after });
+
+test("engine errors: a diagram-only op is told to move after a later op that adds elements, and only then (bpmn-cli 0.9)", async () => {
+  const notFound = async (ops: unknown[]): Promise<string> => {
+    const error = await editProcess(memoryIo(EXAMPLE), PATH, ops).then(
+      () => assert.fail("saved"),
+      (e: unknown) => e,
+    );
+    assert.ok(error instanceof AppError && error.code === "bpmn-edit/not-found", String(error));
+    return error.message;
+  };
+  const advice = /diagram-only op/;
+
+  assert.match(
+    await notFound([{ op: "color", ids: ["userTask_packGoods"], color: "red" }, pack()]),
+    /^hint: color is a diagram-only op and sees only what the ops before it made: if a later op adds userTask_packGoods, put color after that op\. Run get_process_outline \(or its `find`\) to list ids\.$/m,
+  );
+  // no later op adds anything: the engine's hint alone, which names what the batch made before
+  const madeBefore = await notFound([pack(), { op: "color", ids: ["Task_pack_goods"], color: "red" }]);
+  assert.match(
+    madeBefore,
+    /^hint: Created earlier in this batch: userTask_packGoods, flow_packGoodsToInvoiceHandling; name them with "as": "\$name"/m,
+  );
+  assert.doesNotMatch(madeBefore, advice);
+  const typo = [{ op: "color", ids: ["Task_fulfil_order"], color: "red" }];
+  assert.doesNotMatch(await notFound(typo), advice);
+  const removed = [
+    { op: "remove", ids: ["Task_reject_order"] },
+    { op: "color", ids: ["Task_reject_order"], color: "red" },
+  ];
+  assert.doesNotMatch(await notFound(removed), advice);
+  // a model op names only what exists before it, as on 0.8: the engine's hint
+  assert.doesNotMatch(
+    await notFound([{ op: "set", id: "userTask_packGoods", values: { name: "Pack" } }, pack()]),
+    advice,
+  );
+});
+
+test("a flow id in element-id-naming's form follows its ends; one in another form, as bpmn-cli 0.8 wrote it, keeps its id (bpmn-cli 0.9)", async () => {
+  const packed = (await applyToXml(EXAMPLE, [pack()])).xml;
+  const current = memoryIo(packed);
+  const followed = await editProcess(current, PATH, [label("userTask_packGoods")]);
+  assert.ok(followed.ok && followed.written);
+  assert.deepEqual(followed.change.renamed, { flow_packGoodsToInvoiceHandling: "flow_packGoodsToLabelParcel" });
+  assert.match(current.doc(), /<bpmn:sequenceFlow id="flow_packGoodsToLabelParcel" sourceRef="userTask_packGoods" /);
+
+  // the same document with the ids bpmn-cli 0.8 gave the task and its flow in this file's style
+  const older = memoryIo(
+    packed
+      .replaceAll("flow_packGoodsToInvoiceHandling", "Flow_pack_goods_to_invoice_handling")
+      .replaceAll("userTask_packGoods", "Task_pack_goods"),
+  );
+  const kept = await editProcess(older, PATH, [label("Task_pack_goods")]);
+  assert.ok(kept.ok && kept.written);
+  assert.equal(kept.change.renamed, undefined, "nothing renamed, although the id names its old target");
+  assert.match(
+    older.doc(),
+    /<bpmn:sequenceFlow id="Flow_pack_goods_to_invoice_handling" sourceRef="Task_pack_goods" targetRef="userTask_labelParcel" /,
+  );
 });
 
 test("toolWords: the CLI's reading and checking commands become tools; op commands stay for the flag mapping", () => {
@@ -330,7 +394,7 @@ test("a new flow never takes a message flow's id; a boundary on a gateway or a n
   const collab = await applyToXml(EXAMPLE, [
     { op: "add", kind: "participant", name: "Customer", blackBox: true, as: "$customer" },
     // a message flow holding the id the engine would give the next flow
-    { op: "connect", source: "Task_reject_order", target: "$customer", id: "Flow_pack_goods_to_invoice_handling" },
+    { op: "connect", source: "Task_reject_order", target: "$customer", id: "flow_packGoodsToInvoiceHandling" },
   ]);
   const io = memoryIo(collab.xml);
   const out = await editProcess(io, PATH, [
@@ -343,7 +407,7 @@ test("a new flow never takes a message flow's id; a boundary on a gateway or a n
     [],
     "no id twice",
   );
-  assert.match(io.doc(), /<bpmn:messageFlow id="Flow_pack_goods_to_invoice_handling"/, "the message flow survives");
+  assert.match(io.doc(), /<bpmn:messageFlow id="flow_packGoodsToInvoiceHandling"/, "the message flow survives");
 
   const refused = async (ops: unknown[], code: string) =>
     assert.rejects(editProcess(memoryIo(EXAMPLE), PATH, ops), (e: unknown) => e instanceof AppError && e.code === code);
@@ -355,4 +419,26 @@ test("a new flow never takes a message flow's id; a boundary on a gateway or a n
     [{ op: "add", kind: "userTask", name: "After the end", after: "EndEvent_order_rejected" }],
     "bpmn-edit/invalid-source",
   );
+});
+
+// ── the engine's entries (ADR 0009: its core only) ───────────────────────────
+
+test("pnpm arch fences the pinned engine's ./node entry and its CLI, never its core (bpmn-cli-core-only)", async () => {
+  const { default: config } = (await import(
+    pathToFileURL(join(import.meta.dirname, "..", "..", "..", ".dependency-cruiser.mjs")).href
+  )) as { default: { forbidden: { name: string; to: { path?: string } }[] } };
+  const fence = new RegExp(config.forbidden.find((r) => r.name === "bpmn-cli-core-only")!.to.path!);
+  const manifest = fileURLToPath(import.meta.resolve("@miragon/bpmn-cli/package.json"));
+  const pkg = JSON.parse(readFileSync(manifest, "utf8")) as {
+    bin: Record<string, string>;
+    exports: Record<string, { types: string; default: string }>;
+  };
+  const file = (relative: string) => join(dirname(manifest), relative);
+  // dependency-cruiser resolves an import to the types file, Node to the module: both must be fenced
+  for (const relative of [pkg.exports["./node"]!.types, pkg.exports["./node"]!.default, ...Object.values(pkg.bin)]) {
+    assert.match(file(relative), fence, relative);
+  }
+  for (const relative of [pkg.exports["."]!.types, pkg.exports["."]!.default]) {
+    assert.doesNotMatch(file(relative), fence, relative);
+  }
 });
