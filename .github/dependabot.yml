@@ -79,6 +79,12 @@ updates:
           - "@miragon/team-topologies-*"
           - "@miragon/value-chain-*"
           - "@miragon/modeler-*"
+          # the simulation add-on carries a pnpm patch for exactly 0.4.0
+          # (patchedDependencies in pnpm-workspace.yaml), and pnpm refuses an
+          # install whose patch fits no installed version, so a bump of the
+          # add-on fails its update: outside the group it fails alone. Its next
+          # release is taken by hand, dropping the patch or carrying it forward.
+          - "@emaarco/dmn-js-simulation"
         update-types: ["minor", "patch"]
       # a renderer and its schema model move together (the renderer pins the
       # schema model exactly; packages/notations pins it as a devDependency to
