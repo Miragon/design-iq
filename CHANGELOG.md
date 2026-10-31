@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.14.0](https://github.com/Miragon/design-iq/compare/v5.13.3...v5.14.0) (2026-10-31)
+
+
+### Features
+
+* **live-host:** report the detected mode and missing settings at startup ([#385](https://github.com/Miragon/design-iq/issues/385)) ([5ba5c93](https://github.com/Miragon/design-iq/commit/5ba5c936973b02fcacba3ef9a9cf7d26f8b11b91)), closes [#2](https://github.com/Miragon/design-iq/issues/2)
+* **notations,validator,live-host:** start a new BPMN model with just one start event ([#383](https://github.com/Miragon/design-iq/issues/383)) ([e488163](https://github.com/Miragon/design-iq/commit/e4881632a188bec5691c17770ef10936c6def91a)), closes [#183](https://github.com/Miragon/design-iq/issues/183)
+* **web:** the logo leads to the current repository's home ([#382](https://github.com/Miragon/design-iq/issues/382)) ([1c27317](https://github.com/Miragon/design-iq/commit/1c273178872ec0405a73ed6bad88d16364c71c48)), closes [#184](https://github.com/Miragon/design-iq/issues/184)
+
+
+### Bug Fixes
+
+* **live-host:** run the container as a non-root user ([#384](https://github.com/Miragon/design-iq/issues/384)) ([d221343](https://github.com/Miragon/design-iq/commit/d221343bcd298eb89ab49edf215eef15866bd8ef)), closes [#3](https://github.com/Miragon/design-iq/issues/3)
+
 ## [5.13.3](https://github.com/Miragon/design-iq/compare/v5.13.2...v5.13.3) (2026-10-31)
 
 
