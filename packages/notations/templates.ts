@@ -25,50 +25,34 @@ export function xmlProcessId(id: string): string {
 }
 
 /**
- * The initial content of a newly created process file — the MINIMAL model
- * that passes the platform validator with zero errors: start → end with one
- * sequence flow and complete BPMNDI (a lone start event would be a "dead
- * end"). A collaboration pool carries the human title so the derived process
- * view (./derive: name = the single pool's name) shows it.
+ * The initial content of a newly created process file: ONE unnamed none
+ * start event in a plain process, with its BPMNDI, and nothing else (#183).
+ * No pool, no end event, no flow: whether the model becomes a collaboration,
+ * and what its pools and events are called, is the modeller's call, and a
+ * placeholder name would end up in released models. The validator takes a
+ * process holding only this start event as a fresh draft, not a dead end, so
+ * a new model still opens with zero errors. The title is the process name,
+ * which the derived view (./derive) falls back to when there is no pool.
+ *
+ * The start event's id is element-id-naming's default for an unnamed start
+ * event, the one bpmn-cli gives it (edit_process's new ids follow the same
+ * rule); its DI takes bpmn-js's `<id>_di`, which bpmn-cli keeps writing in a
+ * file of that form. The shape sits where the old template's start event did,
+ * inside the viewport the editor's first fit-viewport shows.
  */
 export function newBpmnXml(id: string, name: string): string {
   const xmlId = xmlProcessId(id);
   const title = escapeXml(name);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_${xmlId}" targetNamespace="http://bpmn.io/schema/bpmn">
-  <bpmn:collaboration id="Collaboration_${xmlId}">
-    <bpmn:participant id="Participant_${xmlId}" name="${title}" processRef="${xmlId}" />
-  </bpmn:collaboration>
   <bpmn:process id="${xmlId}" name="${title}" isExecutable="false">
-    <bpmn:startEvent id="StartEvent_1" name="Process started">
-      <bpmn:outgoing>Flow_1</bpmn:outgoing>
-    </bpmn:startEvent>
-    <bpmn:endEvent id="EndEvent_1" name="Process completed">
-      <bpmn:incoming>Flow_1</bpmn:incoming>
-    </bpmn:endEvent>
-    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="EndEvent_1" />
+    <bpmn:startEvent id="startEvent_start" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_${xmlId}">
-    <bpmndi:BPMNPlane id="BPMNPlane_${xmlId}" bpmnElement="Collaboration_${xmlId}">
-      <bpmndi:BPMNShape id="Participant_${xmlId}_di" bpmnElement="Participant_${xmlId}" isHorizontal="true">
-        <dc:Bounds x="160" y="80" width="600" height="200" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_${xmlId}" bpmnElement="${xmlId}">
+      <bpmndi:BPMNShape id="startEvent_start_di" bpmnElement="startEvent_start">
         <dc:Bounds x="232" y="162" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="214" y="205" width="73" height="14" />
-        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
-        <dc:Bounds x="652" y="162" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="625" y="205" width="90" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
-        <di:waypoint x="268" y="180" />
-        <di:waypoint x="652" y="180" />
-      </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

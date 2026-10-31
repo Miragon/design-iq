@@ -26,6 +26,7 @@ import {
   toolWords,
 } from "../src/application/bpmn-edit.ts";
 import { baseVersionOf, type PutOutcome } from "../src/application/content.ts";
+import { newBpmnXml } from "../src/domain/bpmn-template.ts";
 
 const PATH = "processes/order-to-cash.bpmn";
 /** a hand-drawn design model: a pool, lanes, a decision link, a call activity — it declares Camunda 7 but executes nowhere */
@@ -377,6 +378,18 @@ test("a flow id in element-id-naming's form follows its ends; one in another for
     older.doc(),
     /<bpmn:sequenceFlow id="Flow_pack_goods_to_invoice_handling" sourceRef="Task_pack_goods" targetRef="userTask_labelParcel" /,
   );
+});
+
+test("a new model's start event carries the id the engine gives an unnamed start event, element-id-naming's default (#183)", async () => {
+  const blank = newBpmnXml("order", "Order");
+  const withoutStart = blank
+    .replace(/\s*<bpmn:startEvent [^>]*\/>/, "")
+    .replace(/\s*<bpmndi:BPMNShape [\s\S]*?<\/bpmndi:BPMNShape>/, "");
+  const added = await applyToXml(withoutStart, [{ op: "add", kind: "startEvent", in: "order" }]);
+  const startId = (xml: string): string | undefined => /<bpmn:startEvent id="([^"]+)"/.exec(xml)?.[1];
+  assert.equal(startId(withoutStart), undefined);
+  assert.equal(startId(blank), "startEvent_start");
+  assert.equal(startId(added.xml), startId(blank));
 });
 
 test("toolWords: the CLI's reading and checking commands become tools; op commands stay for the flag mapping", () => {

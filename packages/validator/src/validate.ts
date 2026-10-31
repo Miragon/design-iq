@@ -164,6 +164,9 @@ export function checkBpmnXml(
   /** every flow node of every container (incl. embedded sub-processes) */
   const nodes = new Map<string, string>();
   for (const c of model.containers) for (const [id, n] of c.nodes) nodes.set(id, n.tag);
+  const messageFlowEnds = new Set(
+    model.collaborations.flatMap((collab) => collab.messageFlows.flatMap((mf) => [mf.from, mf.to])),
+  );
 
   // structural checks — per container: each pool / embedded sub-process is its own graph
   for (const c of model.containers) {
@@ -184,6 +187,17 @@ export function checkBpmnXml(
     if (!c.isSubProcess && starts !== 1)
       err("bpmn/flow", `expected exactly one start event in ${c.label}, found ${starts}`);
     if (c.isSubProcess && !c.triggeredByEvent && starts > 1) err("bpmn/flow", `${c.label} has ${starts} start events`);
+    // a process holding nothing but one none start event, no flow in or out, is
+    // a fresh draft (the blank template of a new model, #183): its start event
+    // is no dead end yet. A second flow node or any flow, and every rule applies
+    const [only, ...others] = model.nodes.filter((n) => n.container === c);
+    const freshDraft =
+      !c.isSubProcess &&
+      others.length === 0 &&
+      c.flows.length === 0 &&
+      only?.tag === "startEvent" &&
+      only.eventDefinitions === undefined &&
+      !messageFlowEnds.has(only.id);
     for (const [id, { tag }] of c.nodes) {
       // an event sub-process attaches to its own trigger, not the parent flow —
       // it is legitimately unconnected to the parent's sequence flow
@@ -192,7 +206,7 @@ export function checkBpmnXml(
       if (tag === "endEvent" && (out.get(id) ?? 0) > 0) err("bpmn/flow", `end event ${id} has outgoing flows`);
       if (tag !== "startEvent" && tag !== "boundaryEvent" && (inc.get(id) ?? 0) === 0)
         err("bpmn/flow", `${id} is unreachable (no incoming flow, ${c.label})`);
-      if (tag !== "endEvent" && (out.get(id) ?? 0) === 0)
+      if (tag !== "endEvent" && !freshDraft && (out.get(id) ?? 0) === 0)
         err("bpmn/flow", `${id} is a dead end (no outgoing flow, ${c.label})`);
     }
   }

@@ -11,8 +11,8 @@
  *    sequenceFlow key first occurs later (o_f1 before f1/f2);
  *  - `extra` is ALWAYS an object ({} when empty) and carries exactly
  *    parent/calledElement/attachedTo/decisionRef;
- *  - meta.lanes is an identity projection (no ""-fallbacks), meta.pools maps
- *    absent attributes to "".
+ *  - meta.lanes and meta.processes are identity projections (no ""-fallbacks),
+ *    meta.pools maps absent attributes to "".
  *
  * Compared through a JSON round-trip: the WIRE representation is what is
  * pinned (in memory, absent attrs ride as `name: undefined` properties).
@@ -77,6 +77,7 @@ test("extractBpmn: the full wire output of a nested model is pinned", () => {
     meta: {
       lanes: [{ id: "L1", name: "Clerk", nodeIds: ["Start", "A"] }],
       pools: [{ id: "Pool_A", name: "Sales", processRef: "P" }],
+      processes: [{ id: "P" }],
     },
   });
 });

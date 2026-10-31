@@ -148,9 +148,10 @@ test("createProcess: writes the template and returns the wire row (dirty)", asyn
     liveSessions: 0,
   });
   const xml = readFileSync(join(ws, "processes", "orders", "order-to-cash.bpmn"), "utf8");
-  assert.match(xml, /<bpmn:process id="order-to-cash" name="Order to Cash" isExecutable="false">/);
-  assert.match(xml, /<bpmn:participant [^>]*name="Order to Cash"/, "pool name carries the title (derived view)");
-  assert.match(xml, /<bpmndi:BPMNEdge id="Flow_1_di"/, "complete BPMNDI (start, end, flow)");
+  assert.equal(xml, newBpmnXml("order-to-cash", "Order to Cash"), "the blank template");
+  assert.match(xml, /<bpmn:process id="order-to-cash" name="Order to Cash" isExecutable="false">/, "carries the title");
+  assert.doesNotMatch(xml, /<bpmn:participant/, "no pool: the modeller decides on a collaboration");
+  assert.match(xml, /<bpmndi:BPMNShape id="startEvent_start_di" bpmnElement="startEvent_start">/, "complete BPMNDI");
 });
 
 test("createProcess: slugs the title with the shared rule (umlauts, punctuation)", async () => {
@@ -268,7 +269,7 @@ test("template: XML ids stay NCNames for digit-leading stems; title is escaped",
   assert.equal(escapeXml(`a & <b> "c"`), "a &amp; &lt;b&gt; &quot;c&quot;");
   const xml = newBpmnXml("2nd-level-support", `Tom & Jerry's "Support"`);
   assert.match(xml, /<bpmn:process id="p-2nd-level-support" name="Tom &amp; Jerry's &quot;Support&quot;"/);
-  assert.match(xml, /processRef="p-2nd-level-support"/);
+  assert.match(xml, /<bpmndi:BPMNPlane id="BPMNPlane_p-2nd-level-support" bpmnElement="p-2nd-level-support">/);
 });
 
 // ── createNotationModel (#139): the registry-generic create ─────────────────

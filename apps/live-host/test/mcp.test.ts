@@ -442,7 +442,7 @@ test("todos: create anchors to the open process, list filters by it, close compl
     id: "order",
     title: "  Check the credit limit  ",
     body: "The threshold looks stale.",
-    elements: [{ id: "StartEvent_1", name: "Process started" }],
+    elements: [{ id: "startEvent_start", name: "Order received" }],
   });
   assert.equal(created.todo.title, "Check the credit limit", "title is trimmed");
   assert.equal(created.todo.author, "petra", "attribution is the CALLER's login, not an argument");
@@ -450,7 +450,7 @@ test("todos: create anchors to the open process, list filters by it, close compl
     notation: "bpmn",
     model: "order",
     file: PATH,
-    elements: [{ id: "StartEvent_1", name: "Process started" }],
+    elements: [{ id: "startEvent_start", name: "Order received" }],
     processVersion: null,
   });
 
@@ -500,27 +500,27 @@ test("todos: an element id the process does not have is refused with its closest
     repo: REPO.fullName,
     id: "order",
     title: "x",
-    elements: [{ id: "StartEvent_1" }, { id: "StartEvent_2" }, { id: "StartEvent_1_di" }],
+    elements: [{ id: "startEvent_start" }, { id: "startEvent_end" }, { id: "startEvent_start_di" }],
   });
   assert.ok(unknown.isError);
   assert.equal(
     unknown.text,
     "The process 'order' has no element with these ids:\n" +
-      "- StartEvent_2: closest StartEvent_1 (Process started), EndEvent_1 (Process completed), Participant_order (Order)\n" +
-      "- StartEvent_1_di: closest StartEvent_1 (Process started), EndEvent_1 (Process completed), Participant_order (Order)\n" +
+      "- startEvent_end: closest startEvent_start, order (Order)\n" +
+      "- startEvent_start_di: closest startEvent_start, order (Order)\n" +
       "Select the elements again, or file the todo on the whole process. An agent anchors it to ids get_view reports, or omits `elements`.",
     "the diagram interchange's ids are no elements",
   );
   assert.equal(issues.created.length, 0);
 
-  // the pool is no node of the process graph, yet the canvas selects it
+  // the process is no node of its own graph, yet its diagram draws it (its plane)
   await callJson("create_todo", {
     repo: REPO.fullName,
     id: "order",
     title: "x",
-    elements: [{ id: "Participant_order" }],
+    elements: [{ id: "order" }],
   });
-  assert.deepEqual(issues.created[0]?.input.anchor.elements, [{ id: "Participant_order", name: null }]);
+  assert.deepEqual(issues.created[0]?.input.anchor.elements, [{ id: "order", name: null }]);
 });
 
 test("todos on other notations: a Wardley Map takes them, the same id of a process stays apart, a decision has none", async () => {
@@ -1112,6 +1112,32 @@ test("get→save round-trip incl. the conflict retry loop (stale token never ove
   assert.equal(derived.baseVersion, saved.baseVersion);
 });
 
+test("create_process: a plain process holding one unnamed start event, its title the name every view shows, and the tool says so (#183)", async () => {
+  const { client, callJson } = await connect(deps());
+  const description = (await client.listTools()).tools.find((t) => t.name === "create_process")?.description;
+  assert.match(
+    description ?? "",
+    /a plain process \(no pool\) named `name` that holds one unnamed start event, `startEvent_start`, and nothing else/,
+  );
+  assert.match(description ?? "", /with save_bpmn_xml, the path to an end event/, "no edit_process on this host");
+
+  const created = await callJson("create_process", { repo: REPO.fullName, name: "Order handling" });
+  assert.equal(created.process.bpmn, "processes/order-handling.bpmn");
+  const fresh = { repo: REPO.fullName, id: "order-handling" };
+  const xml = (await callJson("get_bpmn_xml", fresh)).content as string;
+  const checked = await callJson("validate_model", { content: xml, repo: REPO.fullName, path: created.process.bpmn });
+  assert.deepEqual([checked.ok, checked.findings], [true, []], "a fresh draft starts at zero findings");
+
+  const process = await callJson("get_process", fresh);
+  assert.deepEqual(
+    [process.name, process.pools, process.events],
+    ["Order handling", [], [{ id: "startEvent_start", name: null, type: "startEvent" }]],
+  );
+  assert.equal((await callJson("get_view", fresh)).name, "Order handling");
+  const listed = await callJson("list_processes", { repo: REPO.fullName });
+  assert.ok(listed.processes.some((p: { id: string; name: string }) => p.name === "order-handling"));
+});
+
 test("decisions: list → get_decision (derived table) → save_dmn_xml round-trip", async () => {
   const { call, callJson } = await connect(deps());
 
@@ -1340,8 +1366,11 @@ test("agent presence: reads announce the caller's agent in the room, a save adds
   const got = await callJson("get_bpmn_xml", { repo: REPO.fullName, id: "order" });
   assert.deepEqual(touches, [{ room, login: "petra", name: "petra" }], "a read: presence, no selection");
 
-  // rename the start event only — the diff must single it out
-  const edited = VALID.replace('name="Process started"', 'name="Order received"');
+  // name the start event only: the diff must single it out
+  const edited = VALID.replace(
+    '<bpmn:startEvent id="startEvent_start" />',
+    '<bpmn:startEvent id="startEvent_start" name="Order received" />',
+  );
   const saved = await callJson("save_bpmn_xml", {
     repo: REPO.fullName,
     id: "order",
@@ -1349,7 +1378,7 @@ test("agent presence: reads announce the caller's agent in the room, a save adds
     baseVersion: got.baseVersion,
   });
   assert.equal(saved.ok, true);
-  assert.deepEqual(touches.at(-1), { room, login: "petra", name: "petra", selection: ["StartEvent_1"] });
+  assert.deepEqual(touches.at(-1), { room, login: "petra", name: "petra", selection: ["startEvent_start"] });
 
   // the non-BPMN notations ride the same seam (the wardley extractor)
   const owm = await callJson("get_model_content", { repo: REPO.fullName, path: OWM_PATH });
