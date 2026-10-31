@@ -265,15 +265,27 @@ test("src/index.css keeps at the top of the SPA's canvas, which has no chrome ov
   }
 });
 
-/** whether a renderer's sheet undoes diagram-js's 94px two-column clamp for its own palette */
+/** a selector only for the palette the modeler shell skins, which designIQ never mounts */
+const shellPaletteOnly = (selector: string): boolean => /(?<!:not\()\[data-chrome="?palette"?\]/.test(selector);
+
+/** whether a renderer's sheet undoes diagram-js's 94px two-column clamp for its own palette, as designIQ shows it */
 function liftsTwoColumnClamp(spec: MiragonRendererSpec): boolean {
   let lifts = false;
   postcss.parse(readFileSync(stylesheetOf(spec), "utf8")).walkRules((rule) => {
-    if (!rule.selectors.some((selector) => /\.djs-palette.*\.two-column\.open/.test(selector))) return;
+    const clamp = (selector: string) =>
+      /\.djs-palette.*\.two-column\.open/.test(selector) && !shellPaletteOnly(selector);
+    if (!rule.selectors.some(clamp)) return;
     rule.walkDecls("width", (decl) => void (lifts ||= decl.value !== "94px"));
   });
   return lifts;
 }
+
+test("every renderer undoes diagram-js's two-column clamp for its own palette, so a canvas shorter than the tools keeps them all inside its one row", () => {
+  assert.deepEqual(
+    MIRAGON_RENDERERS.filter((spec) => !liftsTwoColumnClamp(spec)).map((spec) => spec.id),
+    [],
+  );
+});
 
 test("the widget only places a renderer's palette: its size, its one row and its scrolling stay the renderer's (guide §5.15), but for diagram-js's two-column clamp where the renderer leaves it", () => {
   const sheet = fileURLToPath(new URL("../src/mcp-app/miragon-styles.css", import.meta.url));
