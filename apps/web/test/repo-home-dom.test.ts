@@ -8,8 +8,9 @@
  * the list of repositories, as before. It is the page shown only there, on the
  * root overview or the start page, never in a folder or an editor. The
  * repository is the one in the address, so the logo follows a move to another
- * repository. The overview, at its root and in a folder, keeps its Repositories
- * link to the list.
+ * repository. On every page the logo has the CI focus ring with its gap, as the
+ * app's buttons do. The overview, at its root and in a folder, keeps its
+ * Repositories link to the list.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -119,9 +120,10 @@ async function mount(location: string) {
   return { host, router, logo };
 }
 
-/** the logo's target, whether it is the page shown, and its name, which starts with the word it shows (WCAG 2.5.3) */
+/** the logo's target, whether it is the page shown, its name, which starts with the word it shows (WCAG 2.5.3), and its focus ring */
 function assertLogo(logo: HTMLAnchorElement, href: string, current: boolean, name: string): void {
   assert.equal(logo.getAttribute("href"), href, "where the logo leads");
+  for (const ring of focusRing.split(" ")) assert.ok(logo.classList.contains(ring), `the logo's focus ring: ${ring}`);
   assert.equal(logo.getAttribute("aria-current"), current ? "page" : null, "the logo is the page shown");
   assert.equal(logo.getAttribute("aria-label"), name, "the logo's name");
   const label = logo.querySelector("span > span")?.textContent ?? "";

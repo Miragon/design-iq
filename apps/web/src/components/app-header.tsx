@@ -1,5 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@designiq/ui-kit/components/avatar";
-import { Button } from "@designiq/ui-kit/components/button";
+import { Button, focusRing } from "@designiq/ui-kit/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +15,7 @@ import { MiragonComet } from "@/components/miragon-comet";
 import type { Me } from "@/lib/api";
 import { useConfig, useLogout } from "@/lib/queries";
 
-const LOGO_CLASS = "flex items-center gap-2.5";
+const LOGO_CLASS = `flex items-center gap-2.5 rounded-sm ${focusRing}`;
 
 export function AppHeader({ me }: { me?: Me }) {
   const logout = useLogout();
