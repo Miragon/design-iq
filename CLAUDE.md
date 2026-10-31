@@ -122,11 +122,7 @@ https://raw.githubusercontent.com/Miragon/corporate-identity/main/plugins/mirago
 - The Miragon renderers (`@miragon/*-renderer`) bring their own CI styling — don't restyle
   them, nor the modeler shell's Keyboard shortcuts… dialog every Miragon notation opens
   (`showShortcutsDialog` of `@miragon/modeler-shell`, its look the shell's `shell.css`, loaded
-  with each renderer). The one exception is Value Chain's palette: value-chain-renderer 0.8.1 lays it out
-  and makes it reachable by keyboard only inside the modeler shell's chrome, so
-  `apps/web/src/lib/value-chain-palette.css` and `.ts` do what the shell does until a release
-  ships it (`test/vendor-css.test.ts` and `test/value-chain-palette-dom.test.ts` fail then, and
-  both files go). The Live Host's own HTML pages (editor sign-in landing, `create-app`) cannot load
+  with each renderer). The Live Host's own HTML pages (editor sign-in landing, `create-app`) cannot load
   the SPA sheet: they share the inline CI shell in `apps/live-host/src/http/brand-page.ts`.
 - **brand-lint** (the miragon-brand PostToolUse hook, active via `.miragon/brand.json`) flags
   colours outside the CI palette in every edit, in CSS also a raw brand hex instead of its

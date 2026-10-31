@@ -4,7 +4,7 @@
  * adds, such as the canvas's own undo keys), given the mount options of the SPA's editor (no
  * import fit of the renderer's own) and of the MCP-App widget (its chrome's insets as the free
  * area, no import fit either), checked by `assertContract`, in a host that carries the spec's
- * canvas class, with what `attached` adds there (Value Chain's palette). The jsdom suite
+ * canvas class, with what a spec's `attached` adds there. The jsdom suite
  * (miragon-renderers.test.ts) cannot lay a canvas out; the kit needs the browser's layout for the
  * view state, the boxes and the fit.
  *
@@ -17,8 +17,10 @@
  * miragon-renderers.test.ts checks that each renderer gets the widget's insets.
  *
  * The harnesses follow the renderers' own (packages/renderer/test/browser in
- * Miragon/modeler-suite), their fixtures copied from the releases designIQ pins. A skip or an
- * advisory fails, as there.
+ * Miragon/modeler-suite), their fixtures copied from the releases designIQ pins, the gestures of
+ * contract 1.6 (`startGesture`, `armTool`, `startPan`) included: real pointer events on the
+ * canvas, at points in diagram coordinates, so they land on the same elements whatever view the
+ * host's fit leaves. A skip or an advisory fails, as there.
  */
 import { assertContract } from "@designiq/live-client/miragon-sync";
 import type {
@@ -36,6 +38,9 @@ import type { CollaborativeModeler, ImportResult } from "@miragon/modeler-api";
 import {
   attachedHost,
   type ConformanceHarness,
+  type GestureKind,
+  type HeldGesture,
+  type HeldPan,
   type InteractionState,
   registerConformance,
 } from "@miragon/modeler-api/conformance";
@@ -142,6 +147,125 @@ function pressEnter(field: HTMLElement, init: KeyboardEventInit = {}): void {
   field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }));
 }
 
+interface Point {
+  x: number;
+  y: number;
+}
+
+/** One step of the kit's pan, in screen pixels: past the 15 px drag threshold of diagram-js's MoveCanvas. */
+const PAN_STEP = 40;
+
+const canvasOf = (modeler: CollaborativeModeler): Canvas => servicesOf(modeler).get<Canvas>("canvas");
+
+function canvasSvgOf(modeler: CollaborativeModeler): SVGSVGElement {
+  const svg = containerOf(modeler).querySelector<SVGSVGElement>(":scope > svg");
+  if (!svg) throw new Error("the canvas has no <svg>");
+  return svg;
+}
+
+/** the client point of a point in diagram coordinates, under the view as it is now */
+function clientAt(modeler: CollaborativeModeler, point: Point): Point {
+  const canvas = canvasOf(modeler);
+  const rect = canvas.getContainer().getBoundingClientRect();
+  const viewbox = canvas.viewbox();
+  return { x: rect.left + (point.x - viewbox.x) * viewbox.scale, y: rect.top + (point.y - viewbox.y) * viewbox.scale };
+}
+
+function diagramAt(modeler: CollaborativeModeler, client: Point): Point {
+  const canvas = canvasOf(modeler);
+  const rect = canvas.getContainer().getBoundingClientRect();
+  const viewbox = canvas.viewbox();
+  return {
+    x: viewbox.x + (client.x - rect.left) / viewbox.scale,
+    y: viewbox.y + (client.y - rect.top) / viewbox.scale,
+  };
+}
+
+function centreOf(target: Element): Point {
+  const rect = target.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+function middleOf(modeler: CollaborativeModeler, id: string): Point {
+  const shape = elementOf(modeler, id) as Shape;
+  return { x: shape.x + shape.width / 2, y: shape.y + shape.height / 2 };
+}
+
+const shifted = (point: Point, dx: number, dy: number): Point => ({ x: point.x + dx, y: point.y + dy });
+
+function mouse(target: EventTarget, type: string, at: Point, init: MouseEventInit = {}): void {
+  target.dispatchEvent(
+    new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: at.x, clientY: at.y, ...init }),
+  );
+}
+
+function graphicsOf(modeler: CollaborativeModeler, id: string): SVGElement {
+  const graphics = servicesOf(modeler).get<ElementRegistry>("elementRegistry").getGraphics(id);
+  if (!graphics) throw new Error(`no graphics for ${id}`);
+  return graphics;
+}
+
+const rootGraphicsOf = (modeler: CollaborativeModeler): SVGElement => graphicsOf(modeler, rootOf(modeler).id);
+
+function paletteEntry(modeler: CollaborativeModeler, action: string): HTMLElement {
+  const entry = containerOf(modeler).querySelector<HTMLElement>(`.djs-palette [data-action="${action}"]`);
+  if (!entry) throw new Error(`the palette has no ${action} entry`);
+  return entry;
+}
+
+/** a pointer click on a palette entry (`detail: 1`, unlike Enter or Space on it), at its centre */
+function clickEntry(entry: HTMLElement): Point {
+  const at = centreOf(entry);
+  mouse(entry, "click", at, { detail: 1 });
+  return at;
+}
+
+function dragEntry(entry: HTMLElement): Point {
+  const at = centreOf(entry);
+  entry.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, clientX: at.x, clientY: at.y }));
+  return at;
+}
+
+/** the pointer enters the canvas: diagram-js takes a drag's drop target from the hover events */
+function enterCanvas(modeler: CollaborativeModeler): void {
+  canvasSvgOf(modeler).dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+}
+
+/** Escape where diagram-js's dragging hears it: a keyup on the document */
+function escapeOnDocument(): void {
+  document.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape", bubbles: true, cancelable: true }));
+}
+
+/** Escape as the keyboard sends it to the focused canvas */
+function escapeOnCanvas(modeler: CollaborativeModeler): void {
+  const svg = canvasSvgOf(modeler);
+  for (const type of ["keydown", "keyup"]) {
+    svg.dispatchEvent(new KeyboardEvent(type, { key: "Escape", bubbles: true, cancelable: true }));
+  }
+}
+
+function holdPan(target: EventTarget, start: Point, step = PAN_STEP): HeldPan {
+  let steps = 0;
+  const pointer = (): Point => shifted(start, steps * step, 0);
+  mouse(target, "mousedown", pointer());
+  steps = 1;
+  mouse(document, "mousemove", pointer());
+  return {
+    move() {
+      steps += 1;
+      mouse(document, "mousemove", pointer());
+    },
+    drop: () => mouse(document, "mouseup", pointer()),
+  };
+}
+
+async function svgExportOf(modeler: CollaborativeModeler): Promise<string> {
+  const diagram = (modeler as MiragonModeler).diagram as unknown as {
+    saveSVG(): { svg: string } | Promise<{ svg: string }>;
+  };
+  return (await diagram.saveSVG()).svg;
+}
+
 function wardleyHarness(): NotationHarness {
   const mapOf = (modeler: CollaborativeModeler): WardleyModeler =>
     (modeler as CollaborativeWardleyModeler).diagram as WardleyModeler;
@@ -151,6 +275,46 @@ function wardleyHarness(): NotationHarness {
     const field = containerOf(modeler).querySelector<HTMLInputElement | HTMLTextAreaElement>(".wardley-label-input");
     if (!field) throw new Error("no label editor is open");
     return field;
+  };
+  // free plot of tea-shop, inside the view an import fits: where a create lands and a pan starts
+  const freeSpot: Point = { x: 500, y: 330 };
+  // The map's pan constraint keeps the plot within 120 diagram units of the view's sides when the
+  // host gives the renderer no free area, as the SPA does: past the SPA's fit of this host that
+  // leaves about 50 px to pan, short of the two 40 px steps the pan case takes from the fit (its
+  // first one, and one more from the view it restores). 20 px still passes MoveCanvas's threshold.
+  const panStep = 20;
+  // a drop lands where it applies, so a create held over the palette is brought onto the plot first
+  const startGesture = (modeler: CollaborativeModeler, kind: GestureKind): HeldGesture => {
+    const svg = canvasSvgOf(modeler);
+    const cancel = (): void => escapeOnCanvas(modeler);
+    if (kind === "move") {
+      const cup = modeler.elements?.list().find((element) => element.name === "Cup")?.id;
+      if (!cup) throw new Error("the imported map has no component Cup to move");
+      const pressed = clientAt(modeler, middleOf(modeler, cup));
+      mouse(graphicsOf(modeler, cup), "mousedown", pressed);
+      enterCanvas(modeler);
+      const held = shifted(pressed, 30, 10);
+      mouse(document, "mousemove", shifted(held, -15, 0));
+      mouse(document, "mousemove", held);
+      return { drop: () => mouse(svg, "mouseup", held), cancel };
+    }
+    const entry = clickEntry(paletteEntry(modeler, "create.component"));
+    if (kind === "create") {
+      enterCanvas(modeler);
+      const held = clientAt(modeler, freeSpot);
+      mouse(document, "mousemove", held);
+      return { drop: () => mouse(svg, "mouseup", held), cancel };
+    }
+    mouse(document, "mousemove", shifted(entry, 4, 2));
+    return {
+      drop() {
+        enterCanvas(modeler);
+        const spot = clientAt(modeler, freeSpot);
+        mouse(document, "mousemove", spot);
+        mouse(svg, "mouseup", spot);
+      },
+      cancel,
+    };
   };
   // each new component is named apart, so the collision case compares ids of different components
   let added = 0;
@@ -208,6 +372,18 @@ function wardleyHarness(): NotationHarness {
       return edit ? { elementId: edit.elementId, text: edit.value } : undefined;
     },
     commitInteraction: (modeler) => pressEnter(labelField(modeler)),
+    startGesture,
+    armTool(modeler) {
+      const entry = clickEntry(paletteEntry(modeler, "lasso-tool"));
+      enterCanvas(modeler);
+      mouse(document, "mousemove", shifted(entry, 40, 120));
+      mouse(document, "mousemove", shifted(entry, 60, 160));
+    },
+    startPan(modeler) {
+      canvasSvgOf(modeler).focus();
+      return holdPan(rootGraphicsOf(modeler), clientAt(modeler, freeSpot), panStep);
+    },
+    exportImage: svgExportOf,
   };
 }
 
@@ -220,6 +396,40 @@ function eventStormingHarness(): NotationHarness {
     return field;
   };
   const stickyToEdit = (modeler: CollaborativeModeler): DiagramElement => elementOf(modeler, "event_order_placed");
+  // free board of order-checkout, above the closed line: where a create lands and a pan starts
+  const freeSpot: Point = { x: 300, y: 100 };
+  // hover first: diagram-js takes a drag's drop target from the hover events
+  const hoverAt = (modeler: CollaborativeModeler, point: Point): void => {
+    const svg = canvasSvgOf(modeler);
+    mouse(svg, "mouseover", clientAt(modeler, point));
+    mouse(svg, "mousemove", clientAt(modeler, point));
+  };
+  // a drop lands where it applies, so a create held over the palette is brought onto the board first
+  const startGesture = (modeler: CollaborativeModeler, kind: GestureKind): HeldGesture => {
+    const svg = canvasSvgOf(modeler);
+    if (kind === "move") {
+      const sticky = stickyToEdit(modeler);
+      const start = middleOf(modeler, sticky.id);
+      const end = shifted(start, 60, 40);
+      mouse(graphicsOf(modeler, sticky.id), "mousedown", clientAt(modeler, start));
+      hoverAt(modeler, shifted(start, 30, 20));
+      hoverAt(modeler, end);
+      return { drop: () => mouse(svg, "mouseup", clientAt(modeler, end)), cancel: escapeOnDocument };
+    }
+    mouse(paletteEntry(modeler, "create.event"), "click", clientAt(modeler, freeSpot), { detail: 1 });
+    if (kind === "create") {
+      hoverAt(modeler, shifted(freeSpot, -40, -20));
+      hoverAt(modeler, freeSpot);
+    }
+    return {
+      drop() {
+        hoverAt(modeler, freeSpot);
+        mouse(svg, "mousedown", clientAt(modeler, freeSpot));
+        mouse(svg, "mouseup", clientAt(modeler, freeSpot));
+      },
+      cancel: escapeOnDocument,
+    };
+  };
   let added = 0;
   return {
     canonicalTexts: [orderCheckout, warehouseBigPicture],
@@ -271,6 +481,17 @@ function eventStormingHarness(): NotationHarness {
     },
     // Cmd/Ctrl+Enter saves a sticky; a plain Enter breaks its line
     commitInteraction: (modeler) => pressEnter(labelField(modeler), { ctrlKey: true }),
+    startGesture,
+    armTool(modeler) {
+      mouse(paletteEntry(modeler, "lasso-tool"), "click", clientAt(modeler, freeSpot), { detail: 1 });
+      hoverAt(modeler, shifted(freeSpot, 40, 20));
+    },
+    // diagram-js's MoveCanvas takes a press only while the canvas has the focus
+    startPan(modeler) {
+      canvasOf(modeler).focus();
+      return holdPan(canvasSvgOf(modeler), clientAt(modeler, freeSpot));
+    },
+    exportImage: svgExportOf,
   };
 }
 
@@ -288,6 +509,41 @@ function teamTopologyHarness(): NotationHarness {
     const sizeOfInteraction = new RegExp(`("id": "${interactionId}",[\\s\\S]*?),\\n\\s*"size": \\{[^}]*\\}`);
     if (!sizeOfInteraction.test(onlineShop)) throw new Error(`the fixture lost "${interactionId}"`);
     return onlineShop.replace(sizeOfInteraction, "$1");
+  };
+  // free canvas of the online-shop sample, right of the flow: where a create lands
+  const freeSpot: Point = { x: 1120, y: 120 };
+  const moveTo = (modeler: CollaborativeModeler, point: Point): void =>
+    mouse(document, "mousemove", clientAt(modeler, point));
+  const releaseAt = (modeler: CollaborativeModeler, point: Point): void =>
+    mouse(canvasSvgOf(modeler), "mouseup", clientAt(modeler, point));
+  // a drop lands where it applies, so a create held over the palette is brought onto free canvas first
+  const startGesture = (modeler: CollaborativeModeler, kind: GestureKind): HeldGesture => {
+    if (kind === "move") {
+      const start = middleOf(modeler, "team_checkout");
+      const end = shifted(start, 60, 30);
+      mouse(graphicsOf(modeler, "team_checkout"), "mousedown", clientAt(modeler, start));
+      enterCanvas(modeler);
+      moveTo(modeler, shifted(start, 20, 10));
+      moveTo(modeler, end);
+      return { drop: () => releaseAt(modeler, end), cancel: escapeOnDocument };
+    }
+    if (kind === "create") {
+      clickEntry(paletteEntry(modeler, "team.platform"));
+      enterCanvas(modeler);
+      moveTo(modeler, shifted(freeSpot, -40, 0));
+      moveTo(modeler, freeSpot);
+      return { drop: () => releaseAt(modeler, freeSpot), cancel: escapeOnDocument };
+    }
+    const entry = dragEntry(paletteEntry(modeler, "team.stream-aligned"));
+    mouse(document, "mousemove", shifted(entry, 12, 8));
+    return {
+      drop() {
+        enterCanvas(modeler);
+        moveTo(modeler, freeSpot);
+        releaseAt(modeler, freeSpot);
+      },
+      cancel: escapeOnDocument,
+    };
   };
   let teams = 0;
   let titles = 0;
@@ -354,6 +610,19 @@ function teamTopologyHarness(): NotationHarness {
       return edit ? { elementId: edit.elementId, text: edit.value } : undefined;
     },
     commitInteraction: (modeler) => pressEnter(labelField(modeler)),
+    startGesture,
+    armTool(modeler) {
+      clickEntry(paletteEntry(modeler, "lasso-tool"));
+      enterCanvas(modeler);
+      moveTo(modeler, { x: 600, y: 60 });
+      moveTo(modeler, { x: 640, y: 90 });
+    },
+    // diagram-js's MoveCanvas takes a press only while the canvas has the focus
+    startPan(modeler) {
+      canvasOf(modeler).focus();
+      return holdPan(rootGraphicsOf(modeler), centreOf(containerOf(modeler)));
+    },
+    exportImage: svgExportOf,
   };
 }
 
@@ -366,6 +635,55 @@ function contextMapHarness(): NotationHarness {
     const field = containerOf(modeler).querySelector<HTMLElement>(".djs-direct-editing-content");
     if (!field) throw new Error("no label editor is open");
     return field;
+  };
+  // free canvas of the conference planner, away from every context and relationship
+  const freeSpot: Point = { x: 150, y: 600 };
+  const hoverCanvasAt = (modeler: CollaborativeModeler, at: Point): void => {
+    mouse(document, "mousemove", at);
+    mouse(canvasSvgOf(modeler), "mouseover", at);
+    mouse(document, "mousemove", at);
+  };
+  // a drop lands where it applies, so a create held over the palette is brought onto free canvas first
+  const startGesture = (modeler: CollaborativeModeler, kind: GestureKind): HeldGesture => {
+    if (kind === "move") {
+      const start = clientAt(modeler, middleOf(modeler, "ctx_cfp"));
+      const hit = graphicsOf(modeler, "ctx_cfp").querySelector(".djs-hit");
+      if (!hit) throw new Error("ctx_cfp has no hit area");
+      mouse(hit, "mousedown", start);
+      mouse(document, "mousemove", shifted(start, 20, 10));
+      const held = shifted(start, 40, 20);
+      hoverCanvasAt(modeler, held);
+      return {
+        drop() {
+          mouse(document, "mousemove", shifted(held, 10, 0));
+          mouse(document, "mouseup", shifted(held, 10, 0));
+        },
+        cancel: escapeOnDocument,
+      };
+    }
+    if (kind === "create") {
+      dragEntry(paletteEntry(modeler, "context.core"));
+      const held = clientAt(modeler, freeSpot);
+      hoverCanvasAt(modeler, held);
+      return {
+        drop() {
+          mouse(document, "mousemove", shifted(held, 5, 0));
+          mouse(document, "mouseup", shifted(held, 5, 0));
+        },
+        cancel: escapeOnDocument,
+      };
+    }
+    const onPalette = clickEntry(paletteEntry(modeler, "context.supporting"));
+    mouse(document, "mousemove", shifted(onPalette, 3, 2));
+    return {
+      drop() {
+        const target = clientAt(modeler, freeSpot);
+        hoverCanvasAt(modeler, target);
+        mouse(canvasSvgOf(modeler), "mousedown", target);
+        mouse(document, "mouseup", target);
+      },
+      cancel: escapeOnDocument,
+    };
   };
   let contexts = 0;
   let titles = 0;
@@ -428,6 +746,17 @@ function contextMapHarness(): NotationHarness {
       return edit ? { elementId: edit.elementId, text: edit.text } : undefined;
     },
     commitInteraction: (modeler) => pressEnter(labelField(modeler), { keyCode: 13 }),
+    startGesture,
+    armTool(modeler) {
+      clickEntry(paletteEntry(modeler, "lasso-tool"));
+      hoverCanvasAt(modeler, clientAt(modeler, freeSpot));
+    },
+    // diagram-js's MoveCanvas takes a press only while the canvas has the focus
+    startPan(modeler) {
+      canvasOf(modeler).focus();
+      return holdPan(rootGraphicsOf(modeler), centreOf(containerOf(modeler)));
+    },
+    exportImage: svgExportOf,
   };
 }
 
@@ -468,6 +797,55 @@ function valueChainHarness(): NotationHarness {
     const field = containerOf(modeler).querySelector<HTMLElement>(".djs-direct-editing-content");
     if (!field) throw new Error("no label editor is open");
     return field;
+  };
+  // free canvas of the Porter example, below Marketing: where a create lands and a pan starts
+  const freeSpot: Point = { x: 800, y: 380 };
+  // a release without a point is where the pointer last was
+  const pointerOn = (modeler: CollaborativeModeler) => {
+    let last: Point = { x: 0, y: 0 };
+    const fire = (target: EventTarget, type: string, point: Point, init?: MouseEventInit): void => {
+      last = point;
+      mouse(target, type, clientAt(modeler, point), init);
+    };
+    const moveTo = (point: Point): void => fire(document, "mousemove", point);
+    return {
+      press: (target: EventTarget, point: Point) => fire(target, "mousedown", point),
+      moveTo,
+      hover(point: Point) {
+        fire(canvasSvgOf(modeler), "mouseover", point);
+        moveTo(point);
+      },
+      release: (point: Point = last) => fire(document, "mouseup", point),
+      pick(action: string): Point {
+        const entry = paletteEntry(modeler, action);
+        const at = diagramAt(modeler, centreOf(entry));
+        fire(entry, "click", at, { detail: 1 });
+        return at;
+      },
+    };
+  };
+  // a drop lands where it applies, so a create held over the palette is brought onto the canvas first
+  const startGesture = (modeler: CollaborativeModeler, kind: GestureKind): HeldGesture => {
+    const pointer = pointerOn(modeler);
+    if (kind === "move") {
+      const [first] = (modeler as CollaborativeValueChainModeler).elements.list();
+      if (!first) throw new Error("the diagram has no element to move");
+      const start = middleOf(modeler, first.id);
+      pointer.press(graphicsOf(modeler, first.id), start);
+      pointer.moveTo(shifted(start, 20, 0));
+      pointer.moveTo(shifted(start, 40, 0));
+      return { drop: () => pointer.release(), cancel: escapeOnDocument };
+    }
+    const entry = pointer.pick("create.step");
+    if (kind === "create") pointer.hover(freeSpot);
+    else pointer.moveTo(shifted(entry, 0, 8));
+    return {
+      drop() {
+        pointer.hover(freeSpot);
+        pointer.release(freeSpot);
+      },
+      cancel: escapeOnDocument,
+    };
   };
   let steps = 0;
   return {
@@ -546,6 +924,15 @@ function valueChainHarness(): NotationHarness {
       return open ? { elementId: open.element.id, text: open.text } : undefined;
     },
     commitInteraction: (modeler) => pressEnter(labelField(modeler), { keyCode: 13 }),
+    startGesture,
+    armTool: (modeler) => void pointerOn(modeler).pick("lasso-tool"),
+    startPan(modeler) {
+      const pointer = pointerOn(modeler);
+      pointer.pick("hand-tool");
+      pointer.hover(freeSpot);
+      return holdPan(canvasSvgOf(modeler), clientAt(modeler, freeSpot));
+    },
+    exportImage: svgExportOf,
   };
 }
 
@@ -614,12 +1001,20 @@ async function mountAsDesignIq(
   const detach = renderer.attached?.(modeler, container);
   const view = miragonView(modeler);
   const mountName = `${spec.pkg}${readonly ? " (viewer)" : ""} as ${host.name} mounts it`;
+  // the kit destroys the modeler from its listeners, an import's included (contract 1.6): what a
+  // host does after an import then has no modeler left to read or fit
+  let destroyed = false;
+  const waitingImports = new Set<{ view: string }>();
   const importLeavingTheView = async (text: string): Promise<ImportResult> => {
-    const viewBefore = JSON.stringify(modeler.getViewState());
+    const waiting = { view: JSON.stringify(modeler.getViewState()) };
+    waitingImports.add(waiting);
     try {
       return await modeler.importText(text);
     } finally {
-      if (JSON.stringify(modeler.getViewState()) !== viewBefore) mountsWhoseImportMovedTheView.add(mountName);
+      waitingImports.delete(waiting);
+      if (!destroyed && JSON.stringify(modeler.getViewState()) !== waiting.view) {
+        mountsWhoseImportMovedTheView.add(mountName);
+      }
     }
   };
   return new Proxy(modeler, {
@@ -627,14 +1022,22 @@ async function mountAsDesignIq(
       if (property === "importText") {
         return async (text: string) => {
           const result = await importLeavingTheView(text);
+          if (destroyed) return result;
           view.fit(host.fitInsets(container), false);
+          // an import called while this one waited may settle after this fit: the view it leaves
+          // is the one the host set, not the one it was called on
+          for (const waiting of waitingImports) waiting.view = JSON.stringify(modeler.getViewState());
           return result;
         };
       }
       if (property === "destroy") {
+        // the host's part once, and the renderer's every time: a second destroy() is the kit's to check
         return () => {
-          view.destroy();
-          detach?.();
+          if (!destroyed) {
+            destroyed = true;
+            view.destroy();
+            detach?.();
+          }
           target.destroy();
         };
       }

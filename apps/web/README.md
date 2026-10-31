@@ -494,15 +494,12 @@ are the ONE template + entry, built once per spec with the spec aliased in
 through `@/mcp-app/widget-spec` (`miragonWidgetConfig`) and emitted as
 `mcp-app-<id>.html`. The dev server resolves that alias to
 `widget-spec.dev.ts`: `/mcp-app-miragon.html?notation=<id>` previews any of them.
-One renderer needs a sheet and a module of designIQ's own: value-chain-renderer lays out its
-palette, and makes it reachable by keyboard, only inside the modeler shell's chrome, which
-designIQ does not mount. `lib/value-chain-palette.css` (imported by `index.css` and
-`miragon-styles.css`) gives it the horizontal glass palette at the top centre of guide §5.5, in
-the renderer's own roles; `lib/value-chain-palette.ts` (the spec's `attached` hook, in both
-hosts) gives it the toolbar semantics, the roving tab stop with Enter and Space, the pressed
-tool and its place before the canvas in the tab order. `test/vendor-css.test.ts` and
-`test/value-chain-palette-dom.test.ts` fail once a release does either itself, and the file
-goes then. The hover tooltip with the shortcut chip is the renderer's own.
+Every renderer lays out its palette without the modeler shell's chrome, which designIQ does not
+mount: the glass toolbar of guide §5.5 with one roving tab stop, the pressed tool, its place
+before the canvas in the tab order and the guide's tooltip (Value Chain since
+value-chain-renderer 0.10.0, which retired designIQ's own sheet and module for it;
+`test/miragon-renderers.test.ts` holds all five to it). designIQ only places it (`index.css`,
+`miragon-styles.css`).
 
 **PNG exports in Geist.** Export as PNG draws the renderer's standalone SVG as an image with
 the modeler shell's `svgToPng` (`@miragon/modeler-shell/export`, the same for every Miragon
@@ -555,7 +552,7 @@ The dialog is built on open and removed on close, keeps the focus inside, gives 
 the SPA does not scope it, since every rule of it keys on the shell's own classes, and its
 legend-row rules, which reach the rows the renderers draw into designIQ's Legend panel, set
 nothing `lib/miragon-legend.css` does not set itself (`test/vendor-css.test.ts`). The roles it
-reads (`--cd-ui-*`) come from the renderer's token layer, as for `lib/value-chain-palette.css`.
+reads (`--cd-ui-*`) come from the renderer's token layer.
 The renderers' own `createShortcutsDialog` is deprecated in the suite. The title dialogs and
 the popovers ("Map title…", "Map size…", "X-axis labels…") are still the renderers'.
 
