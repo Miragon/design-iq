@@ -8,7 +8,7 @@ import { test } from "node:test";
 
 import { decisionVariables, freeVariablesOf, variableOf } from "../model.ts";
 import { simulateDecision } from "../simulate.ts";
-import { RABATT, VERSAND, view } from "./fixtures.ts";
+import { FREIGABE, RABATT, VERSAND, view } from "./fixtures.ts";
 
 test("free variables: a table without InputData still declares what it needs", () => {
   const variables = decisionVariables(view(RABATT));
@@ -109,4 +109,28 @@ test("simulate: a UNIQUE violation is reported with the offending rules", () => 
   const zone = result.decisions[0];
   assert.deepEqual(zone?.matchedRules, ["Rule_inland", "Rule_eu"]);
   assert.match(zone?.violation ?? "", /UNIQUE/);
+});
+
+test("simulate: a column reads its value as its own typeRef, whatever the InputData declares", () => {
+  const decision = view(FREIGABE);
+
+  const express = simulateDecision(decision, { betrag: 20, express: true });
+  assert.deepEqual(express.decisions[0]?.reportedRules, ["Rule_express"], "true is a boolean in a boolean column");
+  assert.equal(express.decisions[0]?.value, "sofort");
+
+  const big = simulateDecision(decision, { betrag: 750, express: false });
+  assert.deepEqual(big.decisions[0]?.matchedRules, ["Rule_gross"], "750 is a number in a number column");
+  assert.equal(big.decisions[0]?.value, "pruefen");
+
+  // compared as strings, "viel" would pass `>= 500` and decide something
+  const notANumber = simulateDecision(decision, { betrag: "viel", express: false });
+  assert.deepEqual(notANumber.decisions[0]?.matchedRules, []);
+  assert.equal(notANumber.decisions[0]?.value, null);
+});
+
+test("simulate: a column the scenario leaves unset is reported as null, not dropped", () => {
+  const result = simulateDecision(view(RABATT), { kundentyp: "neu" });
+  assert.deepEqual(result.decisions[0]?.inputs, { Kundentyp: "neu", Bestellwert: null });
+  assert.match(JSON.stringify(result), /"Bestellwert":null/, "an agent sees the column in the JSON it gets");
+  assert.deepEqual(result.decisions[0]?.reportedRules, ["Rule_neu"]);
 });

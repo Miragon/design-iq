@@ -18,7 +18,7 @@
     "@designiq/mcp-kit": "workspace:*",
     "@designiq/notations": "workspace:*",
     "@designiq/ui-kit": "workspace:*",
-    "@emaarco/dmn-js-simulation": "0.3.2",
+    "@emaarco/dmn-js-simulation": "0.4.0",
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/geist-mono": "5.3.0",
     "@miragon/context-maps-cml": "0.1.8",
