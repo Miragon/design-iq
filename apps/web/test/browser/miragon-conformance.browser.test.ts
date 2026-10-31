@@ -266,7 +266,7 @@ async function svgExportOf(modeler: CollaborativeModeler): Promise<string> {
   return (await diagram.saveSVG()).svg;
 }
 
-function wardleyHarness(): NotationHarness {
+function wardleyHarness(host: DesignIqHost): NotationHarness {
   const mapOf = (modeler: CollaborativeModeler): WardleyModeler =>
     (modeler as CollaborativeWardleyModeler).diagram as WardleyModeler;
   const labelEditing = (modeler: CollaborativeModeler): WardleyLabelEditing =>
@@ -278,11 +278,12 @@ function wardleyHarness(): NotationHarness {
   };
   // free plot of tea-shop, inside the view an import fits: where a create lands and a pan starts
   const freeSpot: Point = { x: 500, y: 330 };
-  // The map's pan constraint keeps the plot within 120 diagram units of the view's sides when the
-  // host gives the renderer no free area, as the SPA does: past the SPA's fit of this host that
-  // leaves about 50 px to pan, short of the two 40 px steps the pan case takes from the fit (its
+  // Without a free area (the SPA's mount passes no insets) the map's pan constraint keeps the
+  // content within 120 diagram units of the view's sides: past the SPA's fit of this host that
+  // leaves about 52 px to pan, short of the two 40 px steps the pan case takes from the fit (its
   // first one, and one more from the view it restores). 20 px still passes MoveCanvas's threshold.
-  const panStep = 20;
+  // The widget's free area leaves room for the suite's step.
+  const panStep = host.mount.insets ? PAN_STEP : 20;
   // a drop lands where it applies, so a create held over the palette is brought onto the plot first
   const startGesture = (modeler: CollaborativeModeler, kind: GestureKind): HeldGesture => {
     const svg = canvasSvgOf(modeler);
@@ -936,7 +937,7 @@ function valueChainHarness(): NotationHarness {
   };
 }
 
-const HARNESSES: Readonly<Record<string, () => NotationHarness>> = {
+const HARNESSES: Readonly<Record<string, (host: DesignIqHost) => NotationHarness>> = {
   wardley: wardleyHarness,
   "event-storming": eventStormingHarness,
   "team-topology": teamTopologyHarness,
@@ -1006,6 +1007,8 @@ async function mountAsDesignIq(
   let destroyed = false;
   const waitingImports = new Set<{ view: string }>();
   const importLeavingTheView = async (text: string): Promise<ImportResult> => {
+    // an import after destroy() is the renderer's alone to answer
+    if (destroyed) return modeler.importText(text);
     const waiting = { view: JSON.stringify(modeler.getViewState()) };
     waitingImports.add(waiting);
     try {
@@ -1068,7 +1071,7 @@ for (const spec of MIRAGON_RENDERERS) {
       }
       registerConformance(
         {
-          ...harness(),
+          ...harness(host),
           create: () => mountAsDesignIq(spec, host, false),
           createReadonly: () => mountAsDesignIq(spec, host, true),
         },
