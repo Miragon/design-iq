@@ -133,8 +133,48 @@ function sidePanels() {
   };
 }
 
+/**
+ * The SPA's view switch as the live editor drives the canvas layer: the source
+ * view hides it and makes it inert, a reveal (`views.reveal()`) shows it on
+ * React's next commit and only then tells the editor (EditorContext.visibility)
+ */
+function viewSwitch(shownAtFirst: boolean) {
+  const listeners = new Set<() => void>();
+  const state = { shown: shownAtFirst, reveals: 0 };
+  let layer: HTMLElement | undefined;
+  const show = (next: boolean): void => {
+    state.shown = next;
+    if (layer) layer.inert = !next;
+    for (const listener of [...listeners]) listener();
+  };
+  const context: Pick<EditorContext, "visibility" | "revealCanvas"> = {
+    visibility: {
+      visible: () => state.shown,
+      onChange(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+    revealCanvas() {
+      state.reveals += 1;
+      setTimeout(() => show(true), 10);
+    },
+  };
+  return {
+    state,
+    show,
+    context,
+    listening: () => listeners.size,
+    /** the canvas host the switch hides, inert while it does */
+    hides(host: HTMLElement): void {
+      layer = host;
+      host.inert = !state.shown;
+    },
+  };
+}
+
 /** the SPA's editor of a notation on a shared Y.Text, its ⋯ trigger in the page */
-async function editorOf(id: string, panels = sidePanels()) {
+async function editorOf(id: string, panels = sidePanels(), context: Partial<EditorContext> = {}) {
   const [spec, renderer] = await load(id);
   const { mountMiragonEditor } = await import("../src/notations/miragon/editor.ts");
   const container = host(spec.canvasClassName);
@@ -159,6 +199,7 @@ async function editorOf(id: string, panels = sidePanels()) {
       menuTrigger: () => trigger,
       onActionFailed: (message: string) => void failed.push(message),
       sidePanels: panels.room,
+      ...context,
     } as unknown as EditorContext,
   );
   await wait(50);
@@ -397,12 +438,73 @@ test("a read-only viewer: Type captions, Export and Help stay usable, the entrie
 test("Wardley: Map size… opens its popover at the menu's place in the mount's host, with the size field focused", async () => {
   const { engine, container } = await widgetOf("wardley");
   runModelerItem(engine.menu!, "modeler:map-size");
+  // the widget's canvas is always on screen: its reveal is done at once
+  await wait(0);
   const popover = container.querySelector<HTMLElement>(".wardley-popover:not([hidden])");
   assert.ok(popover);
   assert.equal(popover.getAttribute("role"), "dialog", "a non-modal dialog: the zoom keys stay");
   assert.equal(popover.getAttribute("aria-modal"), null);
   assert.equal(document.activeElement, popover.querySelector("select"));
   engine.destroy();
+});
+
+const openPopover = (container: HTMLElement): HTMLElement | null =>
+  container.querySelector<HTMLElement>(".wardley-popover:not([hidden])");
+
+const WARDLEY_POPOVERS = [
+  ["Map size…", "modeler:map-size"],
+  ["X-axis labels…", "modeler:x-axis-labels"],
+] as const;
+
+test("Wardley in the SPA's source view: Map size… and X-axis labels… bring the diagram forward, open over it with the focus inside, and give the focus to the ⋯ trigger on Escape", async () => {
+  for (const [label, item] of WARDLEY_POPOVERS) {
+    const layer = viewSwitch(false);
+    const { editor, container, trigger } = await editorOf("wardley", sidePanels(), layer.context);
+    layer.hides(container);
+    // the ⋯ menu's dialog entries leave the focus on the trigger as they open (guide §5.4)
+    trigger.focus();
+    runModelerItem(editor.menu!, item);
+    await wait(0);
+    assert.equal(layer.state.reveals, 1, `${label}: the diagram comes forward`);
+    assert.equal(openPopover(container), null, `${label}: no popover in the hidden, inert layer`);
+    await wait(50);
+    assert.equal(layer.state.shown, true);
+    const popover = openPopover(container);
+    assert.ok(popover, `${label}: once the diagram shows, the popover opens over it`);
+    assert.ok(popover.contains(document.activeElement), `${label}: with the focus inside`);
+    assert.equal(layer.listening(), 0, `${label}: the reveal stops listening once the canvas shows`);
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(escape);
+    assert.equal(openPopover(container), null, `${label}: Escape closes it`);
+    assert.equal(document.activeElement, trigger, `${label}: and gives the focus to the ⋯ trigger (guide §5.4)`);
+    assert.equal(layer.state.shown, true, `${label}: the diagram stays in front`);
+    editor.destroy();
+  }
+});
+
+test("Wardley in the SPA's canvas view: Map size… and X-axis labels… open at once and reveal nothing", async () => {
+  for (const [label, item] of WARDLEY_POPOVERS) {
+    const layer = viewSwitch(true);
+    const { editor, container } = await editorOf("wardley", sidePanels(), layer.context);
+    layer.hides(container);
+    runModelerItem(editor.menu!, item);
+    await wait(0);
+    assert.equal(layer.state.reveals, 0, label);
+    assert.ok(openPopover(container)?.contains(document.activeElement), `${label}: open, the focus inside`);
+    editor.destroy();
+  }
+});
+
+test("Wardley in the SPA: a popover whose reveal is still pending when the editor goes opens nothing", async () => {
+  const layer = viewSwitch(false);
+  const { editor, container } = await editorOf("wardley", sidePanels(), layer.context);
+  layer.hides(container);
+  runModelerItem(editor.menu!, "modeler:map-size");
+  editor.destroy();
+  assert.equal(layer.listening(), 0, "the teardown drops the reveal's listener");
+  layer.show(true);
+  await wait(50);
+  assert.equal(openPopover(container), null);
 });
 
 test("exports: the SVG reaches the host's download, named after the model", async () => {
@@ -576,7 +678,6 @@ test("exports: the PNG is drawn from the SVG with Geist inside, through a data: 
       assert.equal(svg.match(/@font-face/g)?.length, 1, `${id}: Geist alone, not the key chips' Geist Mono`);
       assert.match(svg, /<text[^>]*font-family[^>]*Geist Variable/, `${id}: and its text asks for it`);
       assert.equal(background, paper[id], `${id}: the paper under the drawing`);
-      assert.doesNotMatch(svg, /tt-export-paper/, `${id}: no sheet of the renderer's over that paper`);
     }
   } finally {
     removeGeist();
@@ -703,16 +804,23 @@ test("withoutPresence: an SVG without the layer comes back as it was, one that c
   );
 });
 
-test("Team Topologies: the PNG's SVG loses the renderer's white sheet and nothing else", async () => {
-  const { withoutExportSheet } = await import("../src/notations/miragon/team-topology.ts");
-  const sheet = '<rect class="tt-export-paper" x="0" y="0" width="80" height="40" fill="#FFFFFF"/>';
-  const drawing = (first: string) =>
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 40" width="80" height="40">${first}<g class="viewport"><rect class="team" width="10" height="10"/></g></svg>`;
-  const without = withoutExportSheet(drawing(sheet));
-  assert.doesNotMatch(without, /tt-export-paper/);
-  assert.match(without, /<g class="viewport"><rect class="team" width="10" height="10"\/><\/g>/);
-  // a renderer that no longer draws the sheet (Miragon/modeler-suite#234) needs no change here
-  assert.equal(withoutExportSheet(drawing("")), drawing(""));
+test("Team Topologies: the SVG export draws no sheet behind the diagram, so the PNG shows the guide's ground under it", async () => {
+  const { engine, files, failures } = await widgetOf("team-topology");
+  runModelerItem(engine.menu!, "modeler:export-svg");
+  await wait(50);
+  assert.deepEqual(failures, []);
+  // read as HTML: under jsdom the export's root names its xmlns twice, which an XML parser refuses
+  const page = document.createElement("div");
+  page.innerHTML = String(files[0]!.data);
+  const svg = page.querySelector("svg");
+  assert.ok(svg);
+  assert.ok(svg.querySelector(".viewport text"), "the drawing is there");
+  assert.deepEqual(
+    [...svg.children].filter((child) => child.localName === "rect").map((sheet) => sheet.outerHTML),
+    [],
+    "no rect under the drawing (team-topologies-renderer 0.16.0 dropped its white sheet)",
+  );
+  engine.destroy();
 });
 
 test("displayName: every renderer's document title", async () => {

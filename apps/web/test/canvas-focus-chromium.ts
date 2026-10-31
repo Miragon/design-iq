@@ -72,6 +72,11 @@
  *     lands in Monaco. A Miragon notation's Keyboard shortcuts… dialog, which
  *     lives in that hidden layer, takes the mouse: a click on its Close
  *     button closes it, and so does one on its backdrop.
+ *  9. Wardley's popovers that preview on the canvas (Map size…, X-axis
+ *     labels…), chosen in the ⋯ menu while the source view shows: the
+ *     diagram comes forward (its layer neither inert nor transparent) and
+ *     the popover opens over it with the focus inside. Escape closes it,
+ *     gives the focus to the ⋯ trigger and leaves the diagram in front.
  *
  * No page error and no console error on the way. Exits 1 on any failure.
  */
@@ -140,6 +145,8 @@ interface Model {
   dialogs?: string[];
   /** of them, the title dialog, whose Apply writes the document */
   title?: string;
+  /** the renderer's popovers in the ⋯ menu, which preview on the canvas */
+  popovers?: string[];
 }
 
 const BPMN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -176,6 +183,7 @@ const MODELS: Model[] = [
     b: "cmp_kettle",
     dialogs: ["Map title…", "Keyboard shortcuts…"],
     title: "Map title…",
+    popovers: ["Map size…", "X-axis labels…"],
   },
   {
     notation: "event-storming",
@@ -433,6 +441,15 @@ async function tabLeavesDialog(page: Page): Promise<string | undefined> {
   }
   return undefined;
 }
+
+/** the canvas layer is on screen: not inert, not transparent */
+const canvasOnScreen = (page: Page): Promise<boolean> =>
+  page.evaluate(() => {
+    const layer = document
+      .querySelector(".djs-container")
+      ?.closest(".wardley-canvas, .es-canvas, .cm-canvas, .tt-canvas, .vc-canvas");
+    return layer instanceof HTMLElement && !layer.inert && getComputedStyle(layer).opacity !== "0";
+  }, undefined);
 
 const dialogOpen = (page: Page): Promise<boolean> =>
   page.evaluate(() => document.querySelector("dialog:modal") !== null, undefined);
@@ -732,6 +749,36 @@ async function run(page: Page, model: Model): Promise<void> {
   }
   await page.click(CANVAS_SIDE);
   await page.waitForTimeout(SETTLE);
+
+  // 9. a popover that previews on the canvas, chosen behind the source view, brings the diagram forward
+  for (const popover of model.popovers ?? []) {
+    await page.click(SOURCE_SIDE);
+    await page.waitForTimeout(SETTLE);
+    check(!(await canvasOnScreen(page)), `${name}: the source view hides the diagram`);
+    await page.click('button[aria-label="More"]');
+    await page.click(`[role="menu"] [role="menuitem"]:has-text("${popover}")`);
+    await page.waitForTimeout(SETTLE);
+    const open = await page.evaluate(() => {
+      const shown = document.querySelector<HTMLElement>(".wardley-popover:not([hidden])");
+      return {
+        overTheDiagram: shown?.checkVisibility({ opacityProperty: true, visibilityProperty: true }) ?? false,
+        focusInside: shown?.contains(document.activeElement) ?? false,
+      };
+    }, undefined);
+    check(await canvasOnScreen(page), `${name}: ${popover} brings the diagram forward`);
+    check(open.overTheDiagram, `${name}: ... and opens over it`);
+    check(open.focusInside, `${name}: ... with the focus inside`);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(SETTLE);
+    const closed = await page.evaluate(
+      () => document.querySelector(".wardley-popover:not([hidden])") === null,
+      undefined,
+    );
+    check(closed, `${name}: Escape closes ${popover}`);
+    const after = await focused(page);
+    check(after === "trigger", `${name}: ... gives the focus to the ⋯ trigger (${after})`);
+    check(await canvasOnScreen(page), `${name}: ... and leaves the diagram in front`);
+  }
 }
 
 const playwright = loadPlaywright();

@@ -6,12 +6,12 @@
 @import "./geist-mono.css";
 @import "../lib/miragon-legend.css";
 
-/* top-centre (the renderer sheets centre it), under the row (tier 2) unless
-   it fits between the clusters (tier 1); `max-content` lifts the leaked
-   two-column clamp */
+/* top-centre, as the renderer sheets centre it, but under designIQ's corner
+   row (tier 2) unless it fits between the clusters (tier 1): the renderers
+   place it for the shell's 40px row and 12px inset, this chrome has 36px
+   corners and 12 or 16px insets plus the host's safe area */
 #app[data-kind="miragon"] #canvas .djs-palette {
   top: var(--under-row);
-  width: max-content;
   max-width: calc(100% - var(--inset-l) - var(--inset-r));
 }
 
@@ -19,10 +19,12 @@
   top: var(--inset-t);
 }
 
-/* clamped narrower than its tools (compact): groups wrap, never clip */
-#app[data-kind="miragon"] #canvas .djs-palette-entries {
-  flex-wrap: wrap;
-  row-gap: 4px;
+/* diagram-js narrows a palette to its 94px two-column layout in a canvas
+   shorter than its tools (a host that caps the inline height). The other
+   four renderers undo that for their one row; context-maps-renderer 0.9.0
+   does not, and its tools would spill past the glass */
+#app[data-kind="miragon"] #canvas .cm-canvas .cm-djs-container .djs-palette.two-column.open {
+  width: max-content;
 }
 
 /* a renderer's popover (Wardley: Map size…, X-axis labels…) opens where the

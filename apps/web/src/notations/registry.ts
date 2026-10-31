@@ -83,6 +83,11 @@ export interface EditorContext {
   /** the shell's ⋯ menu trigger, where an engine's dialogs give the focus
    *  back when they close (MountedEditor.menu); null while not rendered */
   menuTrigger?(): HTMLElement | null;
+  /** brings the editor's layer on screen when the source alone shows, as a
+   *  reveal of an element does; never remembered as the person's choice.
+   *  `visibility` tells when it shows. Optional: absent = the layer is
+   *  always on screen */
+  revealCanvas?(): void;
   /** an action of the engine's menu failed (an export): surface it */
   onActionFailed?(message: string): void;
   /** what an open side panel covers of the canvas, which a fit keeps clear

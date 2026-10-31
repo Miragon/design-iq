@@ -17,24 +17,6 @@ import type { TtBaseViewer, TtModeling } from "@miragon/team-topologies-renderer
 
 import { contractOptions, type LoadedMiragonRenderer, type MiragonRendererSpec } from "./spec.ts";
 
-const EXPORT_SHEET_CLASS = "tt-export-paper";
-
-/** The renderer's SVG starts with a white sheet the size of the drawing, which
- *  would hide the canvas ground of guide §10.7 that the PNG fills under the
- *  drawing. Miragon/modeler-suite#234 drops the sheet from the renderer, in a
- *  release after 0.15.1; an SVG without it passes through untouched, so that
- *  release needs no change here, and this goes once designIQ pins it. The SVG
- *  download stays the renderer's own. */
-export function withoutExportSheet(svg: string): string {
-  const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
-  const sheet = Array.from(parsed.documentElement.children).find(
-    (child) => child.localName === "rect" && child.getAttribute("class") === EXPORT_SHEET_CLASS,
-  );
-  if (!sheet) return svg;
-  sheet.remove();
-  return new XMLSerializer().serializeToString(parsed);
-}
-
 export const spec: MiragonRendererSpec = {
   id: "team-topology",
   pkg: "@miragon/team-topologies-renderer",
@@ -83,7 +65,7 @@ export const spec: MiragonRendererSpec = {
           exports: imageExports(
             host,
             async () => diagram.saveSVG().svg,
-            (svg) => svgToPng(withoutExportSheet(svg), { background: PNG_BACKGROUND.ground }),
+            (svg) => svgToPng(svg, { background: PNG_BACKGROUND.ground }),
           ),
           showKeyboardShortcuts: () => shortcuts.open(),
         });

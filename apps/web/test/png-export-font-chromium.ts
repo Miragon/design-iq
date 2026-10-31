@@ -315,8 +315,6 @@ async function measureLabel(input: {
   const height = Number.parseFloat(source.getAttribute("height") ?? "") * 2;
   const variant = (geist: boolean, withLabel: boolean): string => {
     const svg = new DOMParser().parseFromString(input.svg, "image/svg+xml");
-    // the Team Topologies PNG is drawn without the renderer's white sheet (notations/miragon/team-topology.ts)
-    for (const sheet of [...svg.querySelectorAll("rect.tt-export-paper")]) sheet.remove();
     if (!withLabel) {
       const flat = (text: string | null) => (text ?? "").replace(/\s+/g, "");
       for (const text of [...svg.querySelectorAll("text")])

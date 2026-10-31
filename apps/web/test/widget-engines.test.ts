@@ -579,13 +579,13 @@ test("a renderer without contentBounds (contract 1.2): the fit frames diagram-js
   engine.destroy();
 });
 
-test("the SPA's view (a first fit, no insets): the chrome fits the first import, later imports keep the view the binding restores", async () => {
+test("the SPA's view (its fit insets as the free area, a first fit): the chrome fits the first import, later imports keep the view the binding restores", async () => {
   const inner = { x: 40, y: 20, width: 1400, height: 600 };
   let content: Box | undefined = { x: -60, y: -40, width: 1900, height: 900 };
   const insets: Insets = { top: 88, right: 24, bottom: 24, left: 24 };
   const r = fakeRenderer({ inner, contentBounds: () => content });
-  const modeler = r.renderer.create({ fitOnImport: false });
-  assert.deepEqual(r.state.mounts[0]!.options, { fitOnImport: false });
+  const modeler = r.renderer.create({ insets: () => insets });
+  assert.deepEqual(r.state.mounts[0]!.options?.insets?.(), insets, "the renderer's free area is the fit's");
   const view = miragonView(modeler, { firstFit: () => insets });
   await modeler.importText("map");
   await tick(5);
@@ -605,7 +605,7 @@ test("the SPA's view (a first fit, no insets): the chrome fits the first import,
   // is the one a move is measured against, and no later import fits over it
   const board: { drawn?: Box } = {};
   const empty = fakeRenderer({ inner: { x: 0, y: 0, width: 0, height: 0 }, contentBounds: () => board.drawn });
-  const emptyBoard = empty.renderer.create({ fitOnImport: false });
+  const emptyBoard = empty.renderer.create({ insets: () => insets });
   const emptyView = miragonView(emptyBoard, { firstFit: () => insets });
   await emptyBoard.importText("board");
   await tick(5);

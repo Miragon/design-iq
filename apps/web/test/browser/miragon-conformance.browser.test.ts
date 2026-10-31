@@ -1,10 +1,10 @@
 /**
  * @miragon/modeler-api's conformance kit against the five Miragon renderers as designIQ mounts
  * them (issue 301): each spec's own factories from `load()` (`contractOptions` and what the spec
- * adds, such as the canvas's own undo keys), given the mount options of the SPA's editor (no
- * import fit of the renderer's own) and of the MCP-App widget (its chrome's insets as the free
- * area, no import fit either), checked by `assertContract`, in a host that carries the spec's
- * canvas class, with what a spec's `attached` adds there. The jsdom suite
+ * adds, such as the canvas's own undo keys), given the mount options of the SPA's editor (its fit
+ * insets beside the renderer's palette as the free area, no import fit of the renderer's own) and
+ * of the MCP-App widget (its chrome's insets as the free area, no import fit either), checked by
+ * `assertContract`, in a host that carries the spec's canvas class. The jsdom suite
  * (miragon-renderers.test.ts) cannot lay a canvas out; the kit needs the browser's layout for the
  * view state, the boxes and the fit.
  *
@@ -13,8 +13,9 @@
  * view after every import, so an import here first has to leave the view as it was (a renderer
  * that fits anyway, or a mount that lost the option, fails the case) and then ends with a fit
  * into the host's insets (miragonView). That fit stands in for the hosts' own view handling, which
- * a pass says nothing about. The free area is not observable here, as no kit case reads it:
- * miragon-renderers.test.ts checks that each renderer gets the widget's insets.
+ * a pass says nothing about. No kit case reads the free area, but Wardley's pan constraint keeps
+ * the pan case's view inside it: miragon-renderers.test.ts checks that each renderer gets the
+ * hosts' insets.
  *
  * The harnesses follow the renderers' own (packages/renderer/test/browser in
  * Miragon/modeler-suite), their fixtures copied from the releases designIQ pins, the gestures of
@@ -73,7 +74,7 @@ import { afterEach, describe, test } from "vitest";
 import type { Insets } from "../../src/mcp-app/core/engine.ts";
 import { computeLayout } from "../../src/mcp-app/core/layout.ts";
 import { miragonView } from "../../src/mcp-app/engines/miragon.ts";
-import { paletteBottomIn, SPA_MOUNT, spaFitInsets } from "../../src/notations/miragon/editor.ts";
+import { spaCanvasInsets } from "../../src/notations/miragon/editor.ts";
 import { MIRAGON_RENDERERS } from "../../src/notations/miragon/index.ts";
 import type { MiragonModeler, MiragonMountOptions, MiragonRendererSpec } from "../../src/notations/miragon/spec.ts";
 import conferencePlanner from "./fixtures/context-map/conference-planner.cm?raw";
@@ -244,9 +245,9 @@ function escapeOnCanvas(modeler: CollaborativeModeler): void {
   }
 }
 
-function holdPan(target: EventTarget, start: Point, step = PAN_STEP): HeldPan {
+function holdPan(target: EventTarget, start: Point): HeldPan {
   let steps = 0;
-  const pointer = (): Point => shifted(start, steps * step, 0);
+  const pointer = (): Point => shifted(start, steps * PAN_STEP, 0);
   mouse(target, "mousedown", pointer());
   steps = 1;
   mouse(document, "mousemove", pointer());
@@ -266,7 +267,7 @@ async function svgExportOf(modeler: CollaborativeModeler): Promise<string> {
   return (await diagram.saveSVG()).svg;
 }
 
-function wardleyHarness(host: DesignIqHost): NotationHarness {
+function wardleyHarness(): NotationHarness {
   const mapOf = (modeler: CollaborativeModeler): WardleyModeler =>
     (modeler as CollaborativeWardleyModeler).diagram as WardleyModeler;
   const labelEditing = (modeler: CollaborativeModeler): WardleyLabelEditing =>
@@ -278,12 +279,6 @@ function wardleyHarness(host: DesignIqHost): NotationHarness {
   };
   // free plot of tea-shop, inside the view an import fits: where a create lands and a pan starts
   const freeSpot: Point = { x: 500, y: 330 };
-  // Without a free area (the SPA's mount passes no insets) the map's pan constraint keeps the
-  // content within 120 diagram units of the view's sides: past the SPA's fit of this host that
-  // leaves about 52 px to pan, short of the two 40 px steps the pan case takes from the fit (its
-  // first one, and one more from the view it restores). 20 px still passes MoveCanvas's threshold.
-  // The widget's free area leaves room for the suite's step.
-  const panStep = host.mount.insets ? PAN_STEP : 20;
   // a drop lands where it applies, so a create held over the palette is brought onto the plot first
   const startGesture = (modeler: CollaborativeModeler, kind: GestureKind): HeldGesture => {
     const svg = canvasSvgOf(modeler);
@@ -382,7 +377,7 @@ function wardleyHarness(host: DesignIqHost): NotationHarness {
     },
     startPan(modeler) {
       canvasSvgOf(modeler).focus();
-      return holdPan(rootGraphicsOf(modeler), clientAt(modeler, freeSpot), panStep);
+      return holdPan(rootGraphicsOf(modeler), clientAt(modeler, freeSpot));
     },
     exportImage: svgExportOf,
   };
@@ -937,7 +932,7 @@ function valueChainHarness(): NotationHarness {
   };
 }
 
-const HARNESSES: Readonly<Record<string, (host: DesignIqHost) => NotationHarness>> = {
+const HARNESSES: Readonly<Record<string, () => NotationHarness>> = {
   wardley: wardleyHarness,
   "event-storming": eventStormingHarness,
   "team-topology": teamTopologyHarness,
@@ -947,7 +942,8 @@ const HARNESSES: Readonly<Record<string, (host: DesignIqHost) => NotationHarness
 
 interface DesignIqHost {
   name: string;
-  mount: MiragonMountOptions;
+  /** the free area the host hands the renderer: the insets its fit leaves clear */
+  mount(container: HTMLElement): MiragonMountOptions;
   /** where the host's fit after an import puts the content */
   fitInsets(container: HTMLElement): Insets;
 }
@@ -965,12 +961,12 @@ const WIDGET_FIT_INSETS: Insets = computeLayout({
 const HOSTS: readonly DesignIqHost[] = [
   {
     name: "the SPA's editor",
-    mount: SPA_MOUNT,
-    fitInsets: (container) => spaFitInsets({ paletteBottom: paletteBottomIn(container), coveredRight: 0 }),
+    mount: (container) => ({ insets: () => spaCanvasInsets(container) }),
+    fitInsets: (container) => spaCanvasInsets(container),
   },
   {
     name: "the MCP-App widget",
-    mount: { insets: () => WIDGET_FIT_INSETS },
+    mount: () => ({ insets: () => WIDGET_FIT_INSETS }),
     fitInsets: () => WIDGET_FIT_INSETS,
   },
 ];
@@ -996,10 +992,10 @@ async function mountAsDesignIq(
   const container = attachedHost(HOST_WIDTH, HOST_HEIGHT);
   if (container.parentElement) hostWrappers.push(container.parentElement);
   container.classList.add(spec.canvasClassName);
-  const modeler = readonly ? renderer.createViewer(host.mount) : renderer.create(host.mount);
+  const mount = host.mount(container);
+  const modeler = readonly ? renderer.createViewer(mount) : renderer.create(mount);
   assertContract(modeler, spec.contractNotation);
   modeler.attachTo(container);
-  const detach = renderer.attached?.(modeler, container);
   const view = miragonView(modeler);
   const mountName = `${spec.pkg}${readonly ? " (viewer)" : ""} as ${host.name} mounts it`;
   // the kit destroys the modeler from its listeners, an import's included (contract 1.6): what a
@@ -1039,7 +1035,6 @@ async function mountAsDesignIq(
           if (!destroyed) {
             destroyed = true;
             view.destroy();
-            detach?.();
           }
           target.destroy();
         };
@@ -1071,7 +1066,7 @@ for (const spec of MIRAGON_RENDERERS) {
       }
       registerConformance(
         {
-          ...harness(host),
+          ...harness(),
           create: () => mountAsDesignIq(spec, host, false),
           createReadonly: () => mountAsDesignIq(spec, host, true),
         },

@@ -232,7 +232,69 @@ test("designIQ's own rules on a renderer's root name it as a descendant of the c
       }
     });
   }
-  assert.ok(named > 0, "src/index.css keeps the Team Topologies palette below the SPA's empty top strip");
+  assert.ok(named > 0, "src/index.css keeps the narrow canvas's palettes out of the SPA's empty top strip");
+});
+
+/** whether a renderer's sheet moves its palette down in a narrow canvas: a row kept free for a host's top chrome */
+function dropsPaletteWhenNarrow(spec: MiragonRendererSpec): boolean {
+  let drops = false;
+  postcss.parse(readFileSync(stylesheetOf(spec), "utf8")).walkAtRules("container", (at) => {
+    if (!/width\s*<=\s*760px/.test(at.params)) return;
+    at.walkRules((rule) => {
+      if (rule.selectors.some((selector) => /\.djs-palette(?![\w-])/.test(selector)) && rule.some(isTop)) drops = true;
+    });
+  });
+  return drops;
+}
+
+const isTop = (node: postcss.ChildNode): boolean => node.type === "decl" && node.prop === "top";
+
+test("src/index.css keeps at the top of the SPA's canvas, which has no chrome over it, exactly the palettes a renderer drops in a narrow canvas", () => {
+  const index = fileURLToPath(new URL("../src/index.css", import.meta.url));
+  const atTop = new Set<string>();
+  postcss.parse(readFileSync(index, "utf8"), { from: index }).walkRules((rule) => {
+    if (!rule.some((node) => isTop(node) && (node as postcss.Declaration).value === "12px")) return;
+    for (const selector of rule.selectors) atTop.add(selector);
+  });
+  for (const spec of MIRAGON_RENDERERS) {
+    // the id outranks the renderer's scoped rule, which loads after index.css
+    const lifted = atTop.has(
+      `#root .${spec.canvasClassName} .${RENDERER_ROOT[spec.id]} .djs-palette:not([data-chrome="palette"])`,
+    );
+    assert.equal(lifted, dropsPaletteWhenNarrow(spec), spec.id);
+  }
+});
+
+/** whether a renderer's sheet undoes diagram-js's 94px two-column clamp for its own palette */
+function liftsTwoColumnClamp(spec: MiragonRendererSpec): boolean {
+  let lifts = false;
+  postcss.parse(readFileSync(stylesheetOf(spec), "utf8")).walkRules((rule) => {
+    if (!rule.selectors.some((selector) => /\.djs-palette.*\.two-column\.open/.test(selector))) return;
+    rule.walkDecls("width", (decl) => void (lifts ||= decl.value !== "94px"));
+  });
+  return lifts;
+}
+
+test("the widget only places a renderer's palette: its size, its one row and its scrolling stay the renderer's (guide §5.15), but for diagram-js's two-column clamp where the renderer leaves it", () => {
+  const sheet = fileURLToPath(new URL("../src/mcp-app/miragon-styles.css", import.meta.url));
+  const placed = new Set<string>();
+  const unclamped = new Set<string>();
+  postcss.parse(readFileSync(sheet, "utf8"), { from: sheet }).walkRules((rule) => {
+    for (const selector of rule.selectors.filter((each) => /\.djs-palette/.test(each))) {
+      if (!/\.two-column\.open/.test(selector)) {
+        rule.walkDecls((decl) => void placed.add(decl.prop));
+        continue;
+      }
+      rule.walkDecls((decl) => assert.equal(`${decl.prop}: ${decl.value}`, "width: max-content", selector));
+      unclamped.add(selector);
+    }
+  });
+  assert.deepEqual([...placed].sort(), ["max-width", "top"]);
+  const expected = MIRAGON_RENDERERS.filter((spec) => !liftsTwoColumnClamp(spec)).map(
+    (spec) =>
+      `#app[data-kind="miragon"] #canvas .${spec.canvasClassName} .${RENDERER_ROOT[spec.id]} .djs-palette.two-column.open`,
+  );
+  assert.deepEqual([...unclamped].sort(), expected.sort());
 });
 
 /** the declarations of the unlayered `:root` rules that set a family (--bio-, --cdc-) */

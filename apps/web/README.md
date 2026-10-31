@@ -408,10 +408,14 @@ editors take the same keys on the whole page while their canvas is on screen
 (`src/notations/bpmn-io-keys.ts`), and their wheel zoom stays put below 20 %;
 there ⇧1 fits 24px clear of the palette column, the DRD's name card, its
 simulation card and an open side panel. The first view of a Miragon editor is that
-fit too: the editor mounts the renderer with `fitOnImport: false`, because
-the renderer's own import fit leaves no room for the palette over the canvas,
-and fits the first import itself (`firstFit` in `diagramView`); a peer's
-re-import keeps the view the user has. Both hosts fit a Miragon
+fit too. The editor hands the renderer these fit insets as the contract's free
+area, read as the palette and a panel are laid out when the renderer needs
+them: keyboard creation lands beside both, Wardley's pan constraint leaves a
+fit beside an open panel where it is (without it, the map stayed under the
+panel), and Team Topologies keeps its context pad out of the panel. The
+renderer fits nothing on import, as its own fit leaves no room for the
+palette over the canvas: the editor fits the first import itself (`firstFit`
+in `diagramView`), and a peer's re-import keeps the view the user has. Both hosts fit a Miragon
 renderer to the box its `contentBounds()` reports (`@miragon/modeler-api`
 contract 1.3, feature-detected in `miragonView`, `engines/miragon.ts`):
 Wardley's plot with its axes, an Event Storming board's arrow annotations, a
@@ -445,7 +449,13 @@ title…, Keyboard shortcuts…) opens its dialog once the closing menu is gone:
 mounted for its exit animation, and its dismissable layer would take the dialog's first Escape. A
 Miragon dialog opens in the canvas layer, behind the source view too, where that layer is hidden
 and inert but keeps its `pointer-events` (`HIDDEN_LAYER_CLASS`, below); `index.css` also gives an
-open one the pointer itself. `test/canvas-focus.test.ts` holds the
+open one the pointer itself. Wardley's Map size… and X-axis labels… are popovers that preview on
+the canvas and, not being modal, would stay hidden and inert there: from the source view they bring
+the diagram forward first (`MiragonMenuHost.revealCanvas`, the shell's `views.reveal()`, never
+remembered as a choice) and open over it once it shows, the focus in their first field. Escape
+closes one and gives the focus to the ⋯ trigger (guide §5.4); the diagram stays
+(`test/miragon-menus.test.ts`, in the built app step 9 of `test/canvas-focus-chromium.ts`).
+`test/canvas-focus.test.ts` holds the
 rules, `test/canvas-focus-dom.test.ts` runs them on each real canvas, also clicking as Safari does,
 and `test/toolbar-focus-dom.test.ts` renders the toolbar with React under jsdom
 (`test/component-dom.ts` loads its `.tsx`): the menu stays non-modal, and its entries and the view
@@ -498,16 +508,22 @@ Every renderer lays out its palette without the modeler shell's chrome, which de
 mount: the glass toolbar of guide §5.5 with one roving tab stop, the pressed tool, its place
 before the canvas in the tab order and the guide's tooltip (Value Chain since
 value-chain-renderer 0.10.0, which retired designIQ's own sheet and module for it;
-`test/miragon-renderers.test.ts` holds all five to it). designIQ only places it (`index.css`,
-`miragon-styles.css`).
+`test/miragon-renderers.test.ts` holds all five to it). It stays one row, which Wardley Maps,
+Event Storming, Team Topologies and Value Chain scroll sideways in a narrow canvas (guide §5.15);
+Context Maps has four tools and no scroll rule. designIQ only places it: the widget under its
+corner row (`miragon-styles.css`), and the SPA, which has no chrome over its canvas, at the top
+where Wardley Maps, Event Storming, Team Topologies and Value Chain move it 64px down in a canvas
+up to 760px wide (`index.css`). The widget also keeps Context Maps' row whole in a canvas shorter
+than its tools, where diagram-js narrows a palette to 94px and context-maps-renderer 0.9.0, unlike
+the other four, does not undo it. `test/vendor-css.test.ts` holds both lists to the renderers'
+sheets.
 
 **PNG exports in Geist.** Export as PNG draws the renderer's standalone SVG as an image with
 the modeler shell's `svgToPng` (`@miragon/modeler-shell/export`, the same for every Miragon
 renderer, in the SPA and in the widget) on the design guide's light export ground (§10.7,
 `PNG_BACKGROUND` in `notations/miragon/menu-content.ts`): the plot's white under a Wardley map,
-the canvas grey under the others (a Team Topologies SVG starts with a white sheet that would
-hide it, so the PNG is drawn without that sheet; the SVG download keeps the renderer's own until
-a team-topologies-renderer release without it, Miragon/modeler-suite#234). Neither export
+the canvas grey under the others, which no renderer covers with a sheet of its own since
+team-topologies-renderer 0.16.0 dropped its white one. Neither export
 carries the peers on the canvas: the renderers' `saveSVG` copies the whole live canvas,
 designIQ's presence layer with its cursors, outlines and name pills included, so `imageExports`
 (`notations/miragon/menu-content.ts`) removes that layer first (`withoutPresence`,
