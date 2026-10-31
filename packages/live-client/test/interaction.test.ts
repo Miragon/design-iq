@@ -18,8 +18,8 @@
  *     and no import starts inside that listener, also not the one after a
  *     canvas edit that gives way to a peer's change of the same line;
  *  4. a canvas edit made while an import waits for the user's action merges
- *     with the peer's change that import brings, and the next import shows
- *     both;
+ *     with the peer's change that import brings, and the import that follows
+ *     right after it, with no quiet period, shows both;
  *  5. imports run one at a time in call order, and the changes that arrive
  *     meanwhile make one more import, of the text as it is when it starts;
  *  6. after the unbind nothing runs: no import, no listener, no timer.
@@ -381,6 +381,15 @@ test("a canvas edit made while an import waits for the user's action merges with
   finish(["Task_a", 300]);
   assert.equal(xOf(r.ytext.toString(), "Task_a"), 300, "the action's edit is in the shared text");
   assert.equal(xOf(r.ytext.toString(), "Task_f"), 600, "next to the peer's change");
+
+  // the waiting import draws the peer's text alone; the 600 ms quiet period
+  // after a local edit would leave the user's own edit off the canvas meanwhile
+  await wait(200);
+  assert.deepEqual(
+    [xOf(r.modeler.canvas(), "Task_a"), xOf(r.modeler.canvas(), "Task_f")],
+    [300, 600],
+    "the canvas shows both right after the waiting import, the user's edit not undone for a quiet period",
+  );
 
   await wait(SETTLED);
   bothKept(r, 300, 600);

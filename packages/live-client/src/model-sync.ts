@@ -752,9 +752,14 @@ export function bindModelSync(
     if (contract) {
       // in the text before the change listener returns, also while an import
       // waits for this action to finish (L1, 1.6): the canvas still holds the
-      // text before that import, so the edit merges against lastExport, and
-      // the import after the waiting one shows both
-      lastLocalEdit = Date.now();
+      // text before that import, so the edit merges against lastExport. That
+      // import draws the peer's text without the edit, so the one that shows
+      // both follows it at once: the edit is in the text already, and the
+      // import's fresh undo history holds nothing a quiet period would keep
+      if (importing) {
+        importQueued = true;
+        lastLocalEdit = 0;
+      } else lastLocalEdit = Date.now();
       const text = contract.exportText();
       if (text && text !== lastExport) applyLocalEdit(text);
       return;

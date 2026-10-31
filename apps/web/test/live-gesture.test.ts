@@ -16,8 +16,10 @@
  * through the import). A bpmn-js drop or create that bpmn-js writes into the
  * text across the held move's DI merges with it line by line (#309), and so
  * does a dmn-js DRD create; a drop that moves the task the held move moved
- * gives way to it, with the conflict toast and no exception. A Miragon drag
- * that outlasts 10 s ends in the renderer's own import, with no Escape sent.
+ * gives way to it, with the conflict toast and no exception. A bpmn-js drag
+ * that outlasts 10 s is cancelled by the binding's Escape, the way the user
+ * cancels it, before the import runs; a Miragon drag that outlasts 10 s ends
+ * in the renderer's own import, with no Escape sent.
  * jsdom has no layout, so the drags here run diagram-js's dragging without a
  * pointer; pointer drags in a browser: test/live-gesture-chromium.ts.
  */
@@ -538,6 +540,36 @@ test("a Miragon drag that outlasts 10 s gives way: the renderer's own import end
     unbind();
     engine.destroy();
   }
+});
+
+test("a bpmn-js drag that outlasts 10 s gives way: the binding's Escape cancels it, then the peer's move is imported", async () => {
+  const docs = room(await canonicalBpmn());
+  const [local, peer] = (await bpmnEngines(docs)) as [Engine, Engine];
+  const page = watchPage();
+  const check = positionOf(local.diagram, "Task_check");
+  const ship = positionOf(local.diagram, "Task_ship");
+
+  const dragging = startDrag(local.diagram, local.canvasHost, "Task_check");
+  moveElement(peer.diagram, "Task_ship", MOVE_IN_WIDGET);
+  await wait(9_000);
+  assert.deepEqual(positionOf(local.diagram, "Task_ship"), ship, "held for nearly 10 s");
+  assert.ok(dragging.context(), "the drag still runs");
+  await wait(2_000);
+  assert.equal(dragging.context(), null, "the drag is cancelled");
+  assert.ok(page.seen.escapes > 0, "by the binding's Escape");
+  assert.equal(local.canvasHost.getElementsByClassName("djs-drag-active").length, 0, "its marker is gone");
+  assert.deepEqual(positionOf(local.diagram, "Task_ship"), shifted(ship, MOVE_IN_WIDGET), "the peer's move is in");
+  document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 80, clientY: 80 }));
+  await wait(QUIET);
+  const text = docs[0].getText("content").toString();
+  assert.equal(docs[1].getText("content").toString(), text, "the peers converge");
+  assert.deepEqual(boundsIn(text, "Task_ship"), shifted(ship, MOVE_IN_WIDGET), "the peer's move stays in the text");
+  assert.deepEqual(boundsIn(text, "Task_check"), check, "the cancelled drag moved nothing");
+  assert.deepEqual(positionOf(local.diagram, "Task_check"), check, "nor on the canvas");
+  assert.deepEqual(page.seen.errors, [], "nothing thrown");
+  assert.deepEqual([local.conflicts, peer.conflicts], [[], []]);
+  page.stop();
+  for (const engine of [local, peer]) engine.destroy();
 });
 
 interface Engine {
