@@ -43,13 +43,13 @@ export interface MiragonModeler extends CollaborativeModeler {
  *  factory options every renderer takes */
 export interface MiragonMountOptions {
   /** what the host's chrome covers along the canvas edges (px), read
-   *  whenever the renderer needs it — the widget's layout insets. The host
-   *  then also fits the view after every import itself. Absent (the SPA,
-   *  whose chrome sits outside the canvas): the renderer's defaults apply */
+   *  whenever the renderer needs it: the widget's layout insets, the SPA's
+   *  fit insets beside the renderer's palette and an open side panel. The
+   *  host then sets the view after an import itself (the widget after every
+   *  one, the SPA after the first). Absent: the renderer's defaults apply */
   insets?: () => Insets;
-  /** false: the host sets the view after an import itself, without insets
-   *  — the SPA fits the first import beside the renderer's palette, which
-   *  the renderer's own fit does not leave free. Implied by `insets` */
+  /** false: the host sets the view after an import itself without naming
+   *  a free area. Implied by `insets` */
   fitOnImport?: false;
 }
 
@@ -73,6 +73,12 @@ export interface MiragonMenuHost extends MenuHost {
   readonly root: HTMLElement;
   /** a viewer: the entries that change the document stay disabled */
   readonly readOnly: boolean;
+  /** brings the diagram on screen where the host hides it (the SPA's
+   *  source-only view) and resolves once it is there. A popover that
+   *  previews its change on the canvas (Wardley's Map size…, X-axis
+   *  labels…) waits for it: unlike a modal dialog, it stays in the hidden,
+   *  inert layer it lives in, where it could take neither the focus nor a key */
+  revealCanvas(): Promise<void>;
 }
 
 /** a mount's menu content and the dialogs it built, which go with the mount */
@@ -90,10 +96,6 @@ export interface LoadedMiragonRenderer {
   createViewer(options?: MiragonMountOptions): MiragonModeler;
   /** the document's own title, for the menu header; undefined = none set */
   title?(modeler: MiragonModeler): string | undefined;
-  /** what a mount adds to the renderer's own DOM once it sits in the canvas
-   *  host; returns what takes it off again. No spec needs it since
-   *  value-chain-renderer 0.10.0 brings its palette's keyboard side itself */
-  attached?(modeler: MiragonModeler, host: HTMLElement): () => void;
   /** the renderer's own menu content (Model, Export, Help), where its
    *  package ships it */
   menu?(modeler: MiragonModeler, host: MiragonMenuHost): MiragonMenu;

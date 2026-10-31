@@ -39,7 +39,9 @@ export interface MiragonEngine extends WidgetEngine {
 }
 
 /** the dialogs live in the mount's own host, so they go with it; the
- *  trigger is read when a dialog closes, never copied */
+ *  trigger is read when a dialog closes, never copied. The widget has no
+ *  source view: its canvas is on screen whenever the menu is, so a popover
+ *  that previews on it opens at once */
 function menuHostIn(host: MenuHost, root: HTMLElement, readOnly: boolean): MiragonMenuHost {
   return {
     get trigger() {
@@ -49,6 +51,7 @@ function menuHostIn(host: MenuHost, root: HTMLElement, readOnly: boolean): Mirag
     download: (build) => host.download(build),
     root,
     readOnly,
+    revealCanvas: () => Promise.resolve(),
   };
 }
 
@@ -85,7 +88,6 @@ export function mountMiragonEngine(
     throw error;
   }
   modeler.attachTo(container);
-  const detach = renderer.attached?.(modeler, container);
   const view = miragonView(modeler, opts ? { insets: opts.insets } : {});
   // Value Chain's diagram-js keeps its own zoom keys on the focused canvas: the
   // chrome's run there first, and the document's listener skips a prevented key
@@ -145,7 +147,6 @@ export function mountMiragonEngine(
       menu?.destroy();
       unrouteKeys?.();
       unguardWheel();
-      detach?.();
       view.destroy();
       modeler.destroy();
     },

@@ -483,10 +483,39 @@ test("each spec hands the chrome's insets to its renderer as the contract's free
   }
 });
 
-test("a host that fits itself (the widget's insets, the SPA's fitOnImport: false) sets the view after an import; by default the renderer fits it", async () => {
+test("the SPA hands each renderer its fit insets as the free area, read as the palette and a side panel are laid out now", async () => {
+  const { mountMiragonEditor, spaFitInsets } = await import("../src/notations/miragon/editor.ts");
+  for (const spec of MIRAGON_RENDERERS) {
+    const renderer = await spec.load();
+    let covered = 0;
+    let modeler: MiragonModeler | undefined;
+    const editor = mountMiragonEditor(
+      spec,
+      { ...renderer, create: (options) => (modeler = renderer.create(options)) },
+      host(spec.canvasClassName),
+      spaContext({
+        ytext: new Y.Doc().getText("content"),
+        doc: new Y.Doc(),
+        onSyncError: () => {},
+        onImportFailed: () => {},
+        sidePanels: { covered: () => covered, onChange: () => () => {} },
+      }),
+    );
+    assert.ok(modeler);
+    const freeArea = (): unknown => FREE_AREA_INSETS[spec.id]!(modeler!.diagram);
+    // jsdom lays nothing out: the palette measures 0
+    assert.deepEqual(freeArea(), spaFitInsets({ paletteBottom: 0, coveredRight: 0 }), `${spec.id}: no panel`);
+    covered = 320;
+    assert.deepEqual(freeArea(), spaFitInsets({ paletteBottom: 0, coveredRight: 320 }), `${spec.id}: a panel open`);
+    editor.destroy();
+  }
+});
+
+test("a host that fits itself (the widget's insets, the SPA's, fitOnImport: false) sets the view after an import; by default the renderer fits it", async () => {
   const mounts: Array<[where: string, mount: MiragonMountOptions, fitsItself: boolean]> = [
     ["the widget", { insets: () => ({ top: 56, right: 0, bottom: 0, left: 300 }) }, true],
-    ["the SPA", { fitOnImport: false }, true],
+    ["the SPA", { insets: () => ({ top: 24, right: 24, bottom: 24, left: 24 }) }, true],
+    ["no free area", { fitOnImport: false }, true],
     ["no host option", {}, false],
   ];
   for (const [id, text] of DOCUMENTS) {

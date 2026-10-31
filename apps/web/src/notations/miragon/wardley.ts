@@ -5,7 +5,8 @@
  *  content too, though it is no element: the box its `contentBounds()`
  *  reports (contract 1.3) holds it, and its pan constraint keeps a host's
  *  fit to that box in place. Its menu content (`mapMenu`) brings Map
- *  title…, Map size… and X-axis labels… (one undoable step each), the PNG
+ *  title…, Map size… and X-axis labels… (one undoable step each; the two
+ *  popovers preview on the canvas, so they bring it forward), the PNG
  *  and SVG exports and Keyboard shortcuts…, which opens the modeler shell's
  *  dialog with the package's `mapShortcuts`; the map file itself is no
  *  export, it is the model. Its PNG goes through the modeler shell's
@@ -32,7 +33,7 @@ export const spec: MiragonRendererSpec = {
       },
       ,
       ,
-      { dialogChrome, imageExports, lazily, ownTitle, PNG_BACKGROUND, shortcutsDialog },
+      { canvasPopover, dialogChrome, imageExports, lazily, ownTitle, PNG_BACKGROUND, shortcutsDialog },
       { svgToPng },
     ] = await Promise.all([
       import("@miragon/wardley-renderer"),
@@ -53,13 +54,13 @@ export const spec: MiragonRendererSpec = {
         const map = mapOf(modeler);
         const chrome = dialogChrome(host);
         const title = lazily(() => createTitleDialog(chrome, map));
-        const size = lazily(() => createMapSizePopover(chrome, map));
-        const axis = lazily(() => createAxisLabelsPopover(chrome, map));
+        const size = canvasPopover(host, () => createMapSizePopover(chrome, map));
+        const axis = canvasPopover(host, () => createAxisLabelsPopover(chrome, map));
         const shortcuts = shortcutsDialog(host, mapShortcuts);
         const groups = mapMenu({
           mapTitle: () => title.get().open(),
-          mapSize: () => size.get().open(),
-          axisLabels: () => axis.get().open(),
+          mapSize: () => size.open(),
+          axisLabels: () => axis.open(),
           exports: imageExports(
             host,
             async () => (await map.saveSVG()).svg,

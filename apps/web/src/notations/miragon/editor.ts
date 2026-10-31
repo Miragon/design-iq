@@ -3,12 +3,15 @@
  * manifest (plugin.ts) together with the spec's `load()`: the renderer's
  * contract factory mounted into the SPA's canvas host and bound to the shared
  * Y.Text through live-client's miragon-sync, with live presence attached.
- * The SPA's chrome sits outside the canvas (only a side panel opens over
- * its edge, on demand), so the factory gets no insets: the renderer's
- * defaults apply. The renderer's palette floats over the canvas, though,
- * and the renderer's own import fit does not leave it free: the editor
- * mounts it without one and fits the first import as ⇧1 does, beside the
- * palette; a peer's re-import keeps the view the user has.
+ * The SPA's chrome sits outside the canvas, but the renderer's palette
+ * floats over its top and a side panel opens over its right edge on demand.
+ * The factory gets the editor's fit insets, measured whenever the renderer
+ * reads them, as the contract's free area: keyboard creation lands beside
+ * the palette and an open panel, Wardley's pan constraint keeps a fit beside
+ * them where it is, and Team Topologies keeps its context pad out of the
+ * panel. The renderer's own import fit does not leave the palette free, so
+ * the editor mounts it without one and fits the first import as ⇧1 does; a
+ * peer's re-import keeps the view the user has.
  * The zoom keys and ⇧1 are the MCP-App widget's (lib/chrome-keys.ts): four
  * renderers bind none, and without them Cmd/Ctrl + `+` zooms the page. Value
  * Chain's diagram-js keeps its own on the focused canvas, so every canvas
@@ -28,13 +31,14 @@ import { SHELL } from "@miragon/modeler-shell/core";
 
 import { type ChromeKeyDeps, handleChromeKey, routeCanvasChromeKeys } from "@/lib/chrome-keys";
 import { attachPresenceCanvas } from "@/lib/presence-canvas";
+import type { SidePanelRoom } from "@/lib/side-panel-room";
 import { attachSurfaceTodoCanvas } from "@/lib/todo-surface-canvas";
 import type { ExportFile, Insets } from "@/mcp-app/core/engine";
 import { keepWheelZoomDirection } from "@/mcp-app/engines/diagram-js";
 import { miragonView } from "@/mcp-app/engines/miragon";
 
 import type { EditorContext, MountedEditor } from "../registry";
-import type { LoadedMiragonRenderer, MiragonMountOptions, MiragonRendererSpec } from "./spec";
+import type { LoadedMiragonRenderer, MiragonRendererSpec } from "./spec";
 
 /** what floats over the SPA's canvas, measured in px from its edges */
 export interface SpaCanvasRoom {
@@ -60,15 +64,53 @@ export function spaFitInsets(room: SpaCanvasRoom): Insets {
   };
 }
 
-/** what the SPA hands every mount: no fit of the renderer's own, the editor fits the first import */
-export const SPA_MOUNT: MiragonMountOptions = { fitOnImport: false };
-
 export function paletteBottomIn(container: HTMLElement): number {
   const palette = container.querySelector(".djs-palette");
   if (!palette) return 0;
   const box = palette.getBoundingClientRect();
   if (box.height === 0) return 0;
   return Math.max(0, Math.round(box.bottom - container.getBoundingClientRect().top));
+}
+
+/** the fit insets of a canvas host as it is laid out now: its palette, an open side panel */
+export function spaCanvasInsets(container: HTMLElement, sidePanels?: SidePanelRoom): Insets {
+  return spaFitInsets({ paletteBottom: paletteBottomIn(container), coveredRight: sidePanels?.covered() ?? 0 });
+}
+
+/**
+ * Brings the canvas forward where the source alone shows it hidden and inert
+ * behind it, and resolves once its layer is on screen again, after the commit
+ * that lifts `inert`: what opens next in it can take the focus. A pending one
+ * is dropped by `cancel`, the mount's teardown.
+ */
+function canvasReveal(ctx: Pick<EditorContext, "visibility" | "revealCanvas">): {
+  reveal(): Promise<void>;
+  cancel(): void;
+} {
+  const waiting = new Set<() => void>();
+  return {
+    reveal() {
+      const { visibility, revealCanvas } = ctx;
+      if (!visibility || !revealCanvas || visibility.visible()) return Promise.resolve();
+      return new Promise((resolve) => {
+        let off = (): void => {};
+        const stop = (): void => {
+          off();
+          waiting.delete(stop);
+        };
+        off = visibility.onChange(() => {
+          if (!visibility.visible()) return;
+          stop();
+          resolve();
+        });
+        waiting.add(stop);
+        revealCanvas();
+      });
+    },
+    cancel() {
+      for (const stop of [...waiting]) stop();
+    },
+  };
 }
 
 /** an export as a browser download; a failure is reported, never silent */
@@ -99,11 +141,12 @@ export function mountMiragonEditor(
   container: HTMLElement,
   ctx: EditorContext,
 ): MountedEditor {
-  const modeler = renderer.create(SPA_MOUNT);
+  const fitInsets = (): Insets => spaCanvasInsets(container, ctx.sidePanels);
+  // the fit insets are the free area too: what a fit leaves clear is what the
+  // palette and an open panel cover. The renderer reads them when it needs
+  // them and fits nothing on import with them: the editor fits the first one
+  const modeler = renderer.create({ insets: fitInsets });
   modeler.attachTo(container);
-  const detach = renderer.attached?.(modeler, container);
-  const fitInsets = (): Insets =>
-    spaFitInsets({ paletteBottom: paletteBottomIn(container), coveredRight: ctx.sidePanels?.covered() ?? 0 });
   // before the binding: its first import may finish right away, and the fit
   // of that import is the view a later move is measured against
   const view = miragonView(modeler, { firstFit: fitInsets });
@@ -122,7 +165,6 @@ export function mountMiragonEditor(
   } catch (error) {
     todos.destroy();
     view.destroy();
-    detach?.();
     modeler.destroy();
     throw error;
   }
@@ -159,7 +201,10 @@ export function mountMiragonEditor(
     if (!view.isTouched() && view.hasViewport()) view.fit(fitInsets(), false);
   });
   // the dialogs sit inside the canvas host: the SPA scopes the renderer's
-  // stylesheet under its class (vendor-css.ts)
+  // stylesheet under its class (vendor-css.ts). Behind the source view that
+  // host is hidden and inert, so a popover that previews on the canvas
+  // brings it forward first
+  const canvas = canvasReveal(ctx);
   const menu = renderer.menu?.(modeler, {
     root: container,
     readOnly: false,
@@ -168,18 +213,19 @@ export function mountMiragonEditor(
     },
     fileStem: () => modelStem(ctx.docPath),
     download: (build) => saveFile(doc, build, ctx.onActionFailed),
+    revealCanvas: () => canvas.reveal(),
   });
   return {
     elements: todos,
     ...(menu ? { menu: menu.groups } : {}),
     focus: () => view.focus?.(),
     destroy: () => {
+      canvas.cancel();
       menu?.destroy();
       offSidePanels?.();
       doc.removeEventListener("keydown", onKey);
       unrouteKeys();
       unguardWheel();
-      detach?.();
       view.destroy();
       todos.destroy();
       presenceCanvas?.destroy();

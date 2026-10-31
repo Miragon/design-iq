@@ -64,6 +64,35 @@ export function lazily<T extends { destroy(): void }>(make: () => T): Lazy<T> {
   };
 }
 
+export interface CanvasPopover {
+  open(): void;
+  /** a reveal still pending opens nothing any more */
+  destroy(): void;
+}
+
+/**
+ * A popover that previews its change on the canvas (guide §5.4: Map size…,
+ * X-axis labels…), built on first use. It opens over the diagram: where the
+ * host hides the canvas (the SPA's source-only view) the diagram comes
+ * forward first (MiragonMenuHost.revealCanvas), as a non-modal popover would
+ * stay hidden and inert in that layer, where a modal dialog leaves it.
+ */
+export function canvasPopover(host: MiragonMenuHost, make: () => { open(): void; destroy(): void }): CanvasPopover {
+  const popover = lazily(make);
+  let gone = false;
+  return {
+    open() {
+      void host.revealCanvas().then(() => {
+        if (!gone) popover.get().open();
+      });
+    },
+    destroy() {
+      gone = true;
+      popover.destroy();
+    },
+  };
+}
+
 export interface ShortcutsDialog {
   open(): void;
   /** closes an open one: it lives in the mount's host and goes with the mount */

@@ -6,23 +6,18 @@
 @import "./geist-mono.css";
 @import "../lib/miragon-legend.css";
 
-/* top-centre (the renderer sheets centre it), under the row (tier 2) unless
-   it fits between the clusters (tier 1); `max-content` lifts the leaked
-   two-column clamp */
+/* top-centre, as the renderer sheets centre it (one row, which scrolls
+   sideways where it is too wide), but under designIQ's corner row (tier 2)
+   unless it fits between the clusters (tier 1): the renderers place it for
+   the shell's 40px row and 12px inset, this chrome has 36px corners and 12
+   or 16px insets plus the host's safe area */
 #app[data-kind="miragon"] #canvas .djs-palette {
   top: var(--under-row);
-  width: max-content;
   max-width: calc(100% - var(--inset-l) - var(--inset-r));
 }
 
 #app[data-kind="miragon"][data-palette="tier1"] #canvas .djs-palette {
   top: var(--inset-t);
-}
-
-/* clamped narrower than its tools (compact): groups wrap, never clip */
-#app[data-kind="miragon"] #canvas .djs-palette-entries {
-  flex-wrap: wrap;
-  row-gap: 4px;
 }
 
 /* a renderer's popover (Wardley: Map size…, X-axis labels…) opens where the

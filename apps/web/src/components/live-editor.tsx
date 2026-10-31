@@ -382,6 +382,7 @@ export function LiveEditor({
             },
             presence: presenceSurface,
             menuTrigger: () => menuTriggerRef.current,
+            revealCanvas: () => views.reveal(),
             sidePanels: sidePanelRoom(
               () => layersRef.current,
               () => canvasRef.current,
