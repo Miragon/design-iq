@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.13.3](https://github.com/Miragon/design-iq/compare/v5.13.2...v5.13.3) (2026-10-31)
+
+
+### Bug Fixes
+
+* **web:** take Context Maps' own palette fix for short canvases ([#380](https://github.com/Miragon/design-iq/issues/380)) ([f50d1d6](https://github.com/Miragon/design-iq/commit/f50d1d6194c3a80ee1008d93a683b69cc97f2811)), closes [#374](https://github.com/Miragon/design-iq/issues/374)
+
 ## [5.13.2](https://github.com/Miragon/design-iq/compare/v5.13.1...v5.13.2) (2026-10-31)
 
 
