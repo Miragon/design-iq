@@ -9,6 +9,45 @@ is the only place that reads env); the Docker image overrides two of them (`PORT
 See the [install guide](./) and
 [github-app-setup.md](github-app-setup.md) for obtaining the GitHub App values.
 
+## Startup report
+
+When the Live Host is up it prints one banner. `mode` is the operating mode your settings
+select, with the names of the [operating modes](./#operating-modes): `no auth (LIVE_AUTH=none)`
+with a single repo or with the GitHub App, `OIDC + GitHub App` (recommended), or `cell`.
+Below `OIDC + GitHub App`, `next mode` lists the settings that mode still needs. Every
+`warning` names a setting that is only half there and what stays off because of it. A
+secret shows up only as set or missing, never with its value. A setting the server cannot
+run with still stops it with an error, as before.
+
+```text
+──────────────────────────────────────────────────
+Live Host ready (single port)
+mode      : no auth (LIVE_AUTH=none), GitHub App
+next mode : OIDC + GitHub App, missing LIVE_OIDC_ISSUER, LIVE_OIDC_JWKS_URL and LIVE_OIDC_CLIENT_ID; then set LIVE_AUTH=oidc
+host repo : acme/processes (local content: /app)
+data dir  : /data
+endpoint  : http://localhost:8080  (HTTP + WebSocket, one port)
+repos     : acme/processes, acme/architecture
+minting   : local (app key)
+auth      : NONE (LIVE_AUTH=none): every request is @petra, every repository writable; local evaluation or a trusted network only
+mcp       : POST /mcp
+room name = <owner>/<repo>/<path>, Y.Text field 'content'
+warning   : GITHUB_WEBHOOK_SECRET is missing: POST /webhook/github answers 503, so installation changes show up only after Refresh or a restart
+──────────────────────────────────────────────────
+```
+
+| Warned about                                        | When                                     | What stays off                                       |
+| --------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------- |
+| `GITHUB_APP_ID` and the app private key             | one without the other                    | the GitHub App connection (single-repo mode)         |
+| `GITHUB_WEBHOOK_SECRET`                             | the App is connected, the secret missing | webhooks (`503`): changes arrive on Refresh only     |
+| `GITHUB_APP_SLUG`                                   | the App is connected, the slug missing   | the overview's "Add repository" button               |
+| `LIVE_OIDC_AUTHORIZE_URL` and `LIVE_OIDC_TOKEN_URL` | one without the other                    | skipping discovery: the other endpoint still uses it |
+| `SESSION_ENC_KEY`                                   | `LIVE_AUTH=oidc` without it              | logins in flight surviving a restart                 |
+| `LIVE_OIDC_*`                                       | set under `LIVE_AUTH=none`               | all of them: a host without auth has no login        |
+| `CELL_SECRET` and `TOKEN_MINT_URL`                  | the secret without the URL               | remote token minting                                 |
+| `TENANT_INSTALLATION_ID`                            | no token mint and no App key             | every repository                                     |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`          | either one set                           | retired by ADR 0007, not read: remove them           |
+
 ## Core
 
 | Variable                | Default                         | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |

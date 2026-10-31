@@ -50,6 +50,7 @@ import { makeOidcVerifier } from "./auth/oidc.ts";
 import { makeOidcLogin } from "./auth/oidc-login.ts";
 import { ConnectionLimiter } from "./domain/conn-limit.ts";
 import { DocSizeGuard } from "./domain/doc-size-guard.ts";
+import { startupReport } from "./domain/startup-report.ts";
 import { startApi } from "./http/api.ts";
 import { AccessCache } from "./repos/access.ts";
 import { hasContentConfig, loadContentConfig, notAContentRepoReason } from "./repos/content.ts";
@@ -147,6 +148,7 @@ async function deepHealth(): Promise<{ ok: boolean; checks: Record<string, unkno
 const SESSION_ENC_KEY = process.env.SESSION_ENC_KEY ?? process.env.CELL_TOKEN_KEY;
 const sessions = new SessionStore(db, SESSION_ENC_KEY);
 const appSlug = process.env.GITHUB_APP_SLUG;
+const WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET;
 
 // server-as-app credentials (installation enumeration = the repo overview). The
 // private key comes from the shared loader (@designiq/github-app): raw PEM env,
@@ -200,7 +202,7 @@ const connectionSource = tokens
       // LOCAL: verify GitHub webhooks with the App secret. REMOTE cell: the
       // control plane forwards events re-signed with the cell's own secret, so
       // verify with CELL_SECRET (the cell never learns the App webhook secret).
-      webhookSecret: MINT_URL ? CELL_SECRET : process.env.GITHUB_WEBHOOK_SECRET,
+      webhookSecret: MINT_URL ? CELL_SECRET : WEBHOOK_SECRET,
       baseUrl: GH_BASE,
       tenantInstallationId: TENANT_INSTALLATION_ID,
     })
@@ -278,11 +280,6 @@ const local = NO_AUTH ? makeLocalPrincipal(process.env.LIVE_LOCAL_USER) : undefi
 
 // the release backend (push URL + PR creation on installation tokens passed per call)
 const github = createGitHubProvider({ baseUrl: GH_BASE, apiUrl: GH_API });
-if (process.env.GITHUB_CLIENT_ID || process.env.GITHUB_CLIENT_SECRET) {
-  console.log(
-    "GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET are no longer read (ADR 0007: the GitHub OAuth login was retired) — remove them",
-  );
-}
 // authz = the app-side installation-token check (ADR 0001, no user token — the
 // only path since ADR 0007). none mode: everything the registry knows is writable.
 const access = NO_AUTH ? allowAllAccess : new AccessCache(connectionSource);
@@ -337,6 +334,8 @@ const oidc =
 // No secret → public client. Needs the resource-server config above — the flow's
 // access token is verified by exactly that verifier (incl. the cell tenant gate).
 const OIDC_CLIENT_ID = process.env.LIVE_OIDC_CLIENT_ID;
+const OIDC_AUTHORIZE_URL = process.env.LIVE_OIDC_AUTHORIZE_URL;
+const OIDC_TOKEN_URL = process.env.LIVE_OIDC_TOKEN_URL;
 const oidcLogin = ((): ReturnType<typeof makeOidcLogin> | undefined => {
   // a client id without the verifier is caught by the oidc-mode gate below
   if (!OIDC_CLIENT_ID || NO_AUTH || !oidc) return undefined;
@@ -344,14 +343,11 @@ const oidcLogin = ((): ReturnType<typeof makeOidcLogin> | undefined => {
     issuer: OIDC_ISSUER!,
     clientId: OIDC_CLIENT_ID,
     clientSecret: process.env.LIVE_OIDC_CLIENT_SECRET,
-    authorizeUrl: process.env.LIVE_OIDC_AUTHORIZE_URL,
-    tokenUrl: process.env.LIVE_OIDC_TOKEN_URL,
+    authorizeUrl: OIDC_AUTHORIZE_URL,
+    tokenUrl: OIDC_TOKEN_URL,
     label: process.env.LIVE_OIDC_LOGIN_LABEL,
   });
 })();
-if (NO_AUTH && (OIDC_ISSUER || OIDC_CLIENT_ID)) {
-  console.log("LIVE_AUTH=none — LIVE_OIDC_* are ignored: an unauthenticated host has no login");
-}
 // oidc mode has two prerequisites, checked at boot: the IdP (browser login AND
 // bearer JWTs — one identity contract) and a GitHub App connection to authorize
 // against. Missing either is a misconfiguration, never a silently open or a
@@ -553,37 +549,34 @@ void (async () => {
   }
   // tokens resolve through the synced registry — only now resume todo jobs
   todoJobs?.resume();
-  console.log("──────────────────────────────────────────────────");
-  console.log(
-    `Live Host ready (${TENANT_INSTALLATION_ID ? `cell — installation ${TENANT_INSTALLATION_ID}` : "multi-repo"}, single port)`,
-  );
-  console.log(`host repo : ${HOST_REPO} (local content: ${HOST_CONTENT})`);
-  console.log(`data dir  : ${DATA_DIR}`);
-  console.log(`endpoint  : http://localhost:${PORT}  (HTTP + WebSocket, one port)`);
-  console.log(
-    `repos     : ${registry
-      .list()
-      .map((r) => r.fullName)
-      .join(
-        ", ",
-      )}${connectionSource?.canEnumerate ? "" : "  (static — no connection source, installations not enumerated)"}`,
-  );
-  console.log(
-    `minting   : ${MINT_URL ? `remote (control plane, tenant ${TENANT_INSTALLATION_ID})` : appCreds ? "local (app key)" : "none"}`,
-  );
-  console.log(
-    local
-      ? `auth      : NONE (LIVE_AUTH=none) — every request is @${local.user.login}, every repository writable; local evaluation / trusted network only`
-      : `auth      : OIDC — browser SSO + bearer JWT (${oidc?.issuer})`,
-  );
-  console.log(`mcp       : POST /mcp${MCP_READONLY ? " (read-only — write tools not registered)" : ""}`);
-  if (MCP_BPMN_EDIT) {
-    console.log(
-      `mcp       : + semantic BPMN tools (LIVE_MCP_BPMN_EDIT=1, ADR 0009)${MCP_READONLY ? " — read-only: the outline only" : ""}`,
-    );
-  }
-  console.log(`room name = <owner>/<repo>/<path>, Y.Text field 'content'`);
-  console.log("──────────────────────────────────────────────────");
+  const report = startupReport({
+    port: PORT,
+    hostRepo: HOST_REPO,
+    hostContentDir: HOST_CONTENT,
+    dataDir: DATA_DIR,
+    repos: registry.list().map((r) => r.fullName),
+    enumeratesInstallations: Boolean(connectionSource?.canEnumerate),
+    auth: NO_AUTH ? "none" : "oidc",
+    localUser: local?.user.login,
+    githubApp: {
+      id: process.env.GITHUB_APP_ID,
+      privateKey: appPrivateKey,
+      slug: appSlug,
+      webhookSecret: WEBHOOK_SECRET,
+    },
+    oidc: {
+      issuer: OIDC_ISSUER,
+      jwksUrl: OIDC_JWKS_URL,
+      clientId: OIDC_CLIENT_ID,
+      authorizeUrl: OIDC_AUTHORIZE_URL,
+      tokenUrl: OIDC_TOKEN_URL,
+    },
+    sessionKey: SESSION_ENC_KEY,
+    cell: { tenantInstallationId: TENANT_INSTALLATION_ID, tokenMintUrl: MINT_URL, cellSecret: CELL_SECRET },
+    retiredGitHubOAuth: { clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET },
+    mcp: { readOnly: MCP_READONLY, bpmnEdit: MCP_BPMN_EDIT },
+  });
+  for (const line of report.lines) console.log(line);
   // checkouts made by an earlier boot: record where their default branch
   // stands, so "Updated X ago" has a signal before the next fetch (#213) —
   // one local git process per existing checkout, never at listing time
