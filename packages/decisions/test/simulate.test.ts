@@ -2,6 +2,9 @@
  * simulateDecision — the server-side evaluation. Covers the two shapes that
  * matter in practice: a bare decision table whose variables are free (no
  * InputData modelled) and a chained DRD where one decision feeds the next.
+ * Two cases pin what the patched DRD evaluator keeps from 0.3 (see engine.ts):
+ * a column reads an untyped InputData as its own typeRef, and an unset column
+ * is reported as null.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";

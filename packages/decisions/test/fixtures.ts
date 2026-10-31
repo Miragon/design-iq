@@ -1,7 +1,8 @@
 /**
  * The DMN fixtures the decision tests share: one table WITHOUT a DRD (how
- * decision tables are actually written in the wild), and a two-step DRD with
- * modelled InputData whose second decision reads the first one's result.
+ * decision tables are actually written in the wild), a two-step DRD with
+ * modelled InputData whose second decision reads the first one's result, and
+ * modelled InputData without a type, read by a number and a boolean column.
  */
 import { type DerivedDecision, deriveDecision } from "@designiq/notations/derive";
 import { extractModelGraph } from "@designiq/notations/extract";

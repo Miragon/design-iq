@@ -1,0 +1,32 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index ffa85768ea4b6c59598792717d4e73bfe41251a4..c9106d7501a7f2e11256b07d23427ccdf08c5035 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -14024,8 +14024,9 @@ class DecisionRequirementsDiagramEvaluator {
+         const { logic } = decision;
+         if (logic.kind === 'decisionTable') {
+             // Resolve each table input from the context via its FEEL input expression.
+-            const values = logic.model.inputs.map(input => input.expression ? (evaluateExpression(input.expression, context) ?? undefined) : undefined);
+-            const table = new DecisionTableEvaluator(logic.model).evaluateFeelValues(values);
++            // designIQ: coerce each value to the reading column's typeRef, as 0.3 did (see pnpm-workspace.yaml)
++            const values = logic.model.inputs.map(input => input.expression ? evaluateExpression(input.expression, context) : undefined);
++            const table = new DecisionTableEvaluator(logic.model).evaluate(values);
+             const inputs = values;
+             return { decisionId: decision.id, value: this.decisionTableValue(logic.model, table), table, inputs };
+         }
+diff --git a/dist/index.js b/dist/index.js
+index 25ed7ebccae7c0e485b11aac6c2443aa632cdc13..c97e4ce2ae31113dacd5e56398f71c6322869a5b 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -14020,8 +14020,9 @@ class DecisionRequirementsDiagramEvaluator {
+         const { logic } = decision;
+         if (logic.kind === 'decisionTable') {
+             // Resolve each table input from the context via its FEEL input expression.
+-            const values = logic.model.inputs.map(input => input.expression ? (evaluateExpression(input.expression, context) ?? undefined) : undefined);
+-            const table = new DecisionTableEvaluator(logic.model).evaluateFeelValues(values);
++            // designIQ: coerce each value to the reading column's typeRef, as 0.3 did (see pnpm-workspace.yaml)
++            const values = logic.model.inputs.map(input => input.expression ? evaluateExpression(input.expression, context) : undefined);
++            const table = new DecisionTableEvaluator(logic.model).evaluate(values);
+             const inputs = values;
+             return { decisionId: decision.id, value: this.decisionTableValue(logic.model, table), table, inputs };
+         }

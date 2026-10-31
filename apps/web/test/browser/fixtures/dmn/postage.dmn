@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/" id="Definitions_postage" name="Postage" namespace="http://designiq.dev/dmn/postage">
+  <inputData id="InputData_country" name="Country"><variable id="Variable_country" name="country" typeRef="Any" /></inputData>
+  <inputData id="InputData_weight" name="Weight"><variable id="Variable_weight" name="weight" typeRef="Any" /></inputData>
+  <inputData id="InputData_express" name="Express"><variable id="Variable_express" name="express" typeRef="Any" /></inputData>
+  <decision id="zone" name="Zone">
+    <variable id="Variable_zone" name="zone" typeRef="string" />
+    <informationRequirement id="Requirement_country"><requiredInput href="#InputData_country" /></informationRequirement>
+    <decisionTable id="Table_zone" hitPolicy="FIRST">
+      <input id="Input_country" label="Country"><inputExpression id="Expression_country" typeRef="string"><text>country</text></inputExpression></input>
+      <output id="Output_zone" name="zone" typeRef="string" />
+      <rule id="Rule_domestic"><inputEntry id="Entry_domestic_country"><text>"DE"</text></inputEntry><outputEntry id="Entry_domestic_zone"><text>"domestic"</text></outputEntry></rule>
+      <rule id="Rule_abroad"><inputEntry id="Entry_abroad_country"><text>-</text></inputEntry><outputEntry id="Entry_abroad_zone"><text>"abroad"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+  <decision id="postage" name="Postage">
+    <variable id="Variable_postage" name="postage" typeRef="number" />
+    <informationRequirement id="Requirement_zone"><requiredDecision href="#zone" /></informationRequirement>
+    <informationRequirement id="Requirement_weight"><requiredInput href="#InputData_weight" /></informationRequirement>
+    <informationRequirement id="Requirement_express"><requiredInput href="#InputData_express" /></informationRequirement>
+    <decisionTable id="Table_postage" hitPolicy="FIRST">
+      <input id="Input_zone" label="Zone"><inputExpression id="Expression_zone" typeRef="string"><text>zone</text></inputExpression></input>
+      <input id="Input_weight" label="Weight"><inputExpression id="Expression_weight" typeRef="number"><text>weight</text></inputExpression></input>
+      <input id="Input_express" label="Express"><inputExpression id="Expression_express" typeRef="boolean"><text>express</text></inputExpression></input>
+      <output id="Output_postage" name="postage" typeRef="number" />
+      <rule id="Rule_express">
+        <inputEntry id="Entry_express_zone"><text>-</text></inputEntry>
+        <inputEntry id="Entry_express_weight"><text>-</text></inputEntry>
+        <inputEntry id="Entry_express_express"><text>true</text></inputEntry>
+        <outputEntry id="Entry_express_postage"><text>19.9</text></outputEntry>
+      </rule>
+      <rule id="Rule_letter">
+        <inputEntry id="Entry_letter_zone"><text>"domestic"</text></inputEntry>
+        <inputEntry id="Entry_letter_weight"><text>1</text></inputEntry>
+        <inputEntry id="Entry_letter_express"><text>-</text></inputEntry>
+        <outputEntry id="Entry_letter_postage"><text>4.9</text></outputEntry>
+      </rule>
+      <rule id="Rule_parcel">
+        <inputEntry id="Entry_parcel_zone"><text>"domestic"</text></inputEntry>
+        <inputEntry id="Entry_parcel_weight"><text>-</text></inputEntry>
+        <inputEntry id="Entry_parcel_express"><text>-</text></inputEntry>
+        <outputEntry id="Entry_parcel_postage"><text>7.9</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="Diagram_postage">
+      <dmndi:DMNShape id="Shape_postage" dmnElementRef="postage"><dc:Bounds height="80" width="180" x="300" y="80" /></dmndi:DMNShape>
+      <dmndi:DMNShape id="Shape_zone" dmnElementRef="zone"><dc:Bounds height="80" width="180" x="160" y="240" /></dmndi:DMNShape>
+      <dmndi:DMNShape id="Shape_country" dmnElementRef="InputData_country"><dc:Bounds height="45" width="125" x="187" y="400" /></dmndi:DMNShape>
+      <dmndi:DMNShape id="Shape_weight" dmnElementRef="InputData_weight"><dc:Bounds height="45" width="125" x="447" y="257" /></dmndi:DMNShape>
+      <dmndi:DMNShape id="Shape_express" dmnElementRef="InputData_express"><dc:Bounds height="45" width="125" x="600" y="257" /></dmndi:DMNShape>
+      <dmndi:DMNEdge id="Edge_country" dmnElementRef="Requirement_country"><di:waypoint x="250" y="400" /><di:waypoint x="250" y="320" /></dmndi:DMNEdge>
+      <dmndi:DMNEdge id="Edge_zone" dmnElementRef="Requirement_zone"><di:waypoint x="250" y="240" /><di:waypoint x="360" y="160" /></dmndi:DMNEdge>
+      <dmndi:DMNEdge id="Edge_weight" dmnElementRef="Requirement_weight"><di:waypoint x="509" y="257" /><di:waypoint x="420" y="160" /></dmndi:DMNEdge>
+      <dmndi:DMNEdge id="Edge_express" dmnElementRef="Requirement_express"><di:waypoint x="662" y="257" /><di:waypoint x="460" y="140" /></dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>
