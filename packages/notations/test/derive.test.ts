@@ -136,6 +136,21 @@ test("deriveProcess: a pool's name wins over its process's name", () => {
   assert.equal(deriveProcess(extractModelGraph(".bpmn", BPMN)!).name, "Sales");
 });
 
+test("deriveProcess: an unnamed pool drawn around a named process keeps the process's name (#183)", () => {
+  // what bpmn-js writes when the modeller draws a pool around a new model's start event
+  const pooled = `<?xml version="1.0"?>
+    <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
+      <bpmn:collaboration id="C"><bpmn:participant id="Participant_1" processRef="order"/></bpmn:collaboration>
+      <bpmn:process id="order" name="Order handling"><bpmn:startEvent id="startEvent_start"/></bpmn:process>
+    </bpmn:definitions>`;
+  const p = deriveProcess(extractModelGraph(".bpmn", pooled)!);
+  assert.equal(p.name, "Order handling");
+  assert.deepEqual(p.pools, [{ id: "Participant_1", name: null }]);
+  // a black-box pool references no process: nothing to fall back to
+  const blackBox = pooled.replace(' processRef="order"', "");
+  assert.equal(deriveProcess(extractModelGraph(".bpmn", blackBox)!).name, null);
+});
+
 test("deriveProcess: a new model's title is its derived name, like the old template's pool (#183)", () => {
   const p = deriveProcess(extractModelGraph(".bpmn", newBpmnXml("order-to-cash", "Order to Cash"))!);
   assert.equal(p.name, "Order to Cash");

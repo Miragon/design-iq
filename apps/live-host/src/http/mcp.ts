@@ -1315,9 +1315,11 @@ export function createLiveMcpServer(
       description:
         "Create a new BPMN process from the validator-clean blank template: a plain process (no pool) named " +
         "`name` that holds one unnamed start event, `startEvent_start`, and nothing else (no end event, no " +
-        "flow). Returns its ProcessInfo incl. the bpmn path for get/save. Build on the start event " +
-        (opts.bpmnEdit ? "with edit_process (`after` startEvent_start), " : "with save_bpmn_xml, ") +
-        "the path to an end event in the same change: a step without an outgoing flow is a validation error.",
+        "flow). Returns its ProcessInfo incl. the bpmn path for get/save. " +
+        (opts.bpmnEdit
+          ? "With edit_process, add the path from startEvent_start (`after` startEvent_start) to an end event in one change"
+          : "With save_bpmn_xml, add the path from startEvent_start to an end event in one save") +
+        ": a step without an outgoing flow is a validation error.",
       create: (r, workspace, body) => createProcess(r, workspace, body),
       pathOf: (created) => created.bpmn,
     });

@@ -43,7 +43,7 @@ export interface ProcessElement {
 }
 
 export interface DerivedProcess {
-  /** the single pool's name; without a pool, the single process's name; else null */
+  /** the single pool's name, else its process's name; without a pool, the single process's name; else null */
   name: string | null;
   /** BPMN pools (participants) */
   pools: { id: string; name: string | null }[];
@@ -124,13 +124,16 @@ export function deriveProcess(graph: ModelGraph): DerivedProcess {
   const roles: ProcessRole[] = lanes.map((l) => ({ id: l.id, name: l.name ?? null, stepIds: l.nodeIds }));
 
   // name: single pool name is the most process-like label. A plain process (a
-  // new model starts as one, #183) has no pool and carries its title itself.
+  // new model starts as one, #183) carries its title itself, and keeps it
+  // when the modeller draws a pool around it: bpmn-js names no new pool.
   // Else null (the file stem is the id the caller already has): multiple pools
   // or processes have no one name.
   const processes = meta.processes ?? [];
+  const poolRef = pools.length === 1 ? meta.pools?.[0]?.processRef : undefined;
+  const poolProcess = poolRef ? processes.find((p) => p.id === poolRef) : undefined;
   const name =
     pools.length === 1
-      ? pools[0]?.name || null
+      ? pools[0]?.name || poolProcess?.name || null
       : pools.length === 0 && processes.length === 1
         ? processes[0]?.name || null
         : null;

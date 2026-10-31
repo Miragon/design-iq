@@ -30,9 +30,9 @@ export function xmlProcessId(id: string): string {
  * No pool, no end event, no flow: whether the model becomes a collaboration,
  * and what its pools and events are called, is the modeller's call, and a
  * placeholder name would end up in released models. The validator takes a
- * process holding only this start event as a fresh draft, not a dead end, so
- * a new model still opens with zero errors. The title is the process name,
- * which the derived view (./derive) falls back to when there is no pool.
+ * model holding only this start event as a fresh draft, not a dead end, so a
+ * new model still opens with zero errors. The title is the process name,
+ * which the derived view (./derive) falls back to when no pool names it.
  *
  * The start event's id is element-id-naming's default for an unnamed start
  * event, the one bpmn-cli gives it (edit_process's new ids follow the same

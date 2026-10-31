@@ -190,15 +190,19 @@ test("get_process_outline: the model as text — whole, around an element, one e
 test("a new process: create_process gives one unnamed start event to build on, edit_process adds a path to an end (#183)", async () => {
   const { client, call, callJson } = await connect(deps());
   const create = (await client.listTools()).tools.find((t) => t.name === "create_process");
-  assert.match(create?.description ?? "", /with edit_process \(`after` startEvent_start\), the path to an end event/);
+  assert.match(
+    create?.description ?? "",
+    /With edit_process, add the path from startEvent_start \(`after` startEvent_start\) to an end event in one change: /,
+  );
   const created = await callJson("create_process", { repo: REPO.fullName, name: "Order handling" });
   assert.equal(created.process.bpmn, "processes/order-handling.bpmn");
   const fresh = { repo: REPO.fullName, id: "order-handling" };
 
   const outline = await callJson("get_process_outline", fresh);
+  // bpmn-cli's own checks warn about the missing end until there is one; warnings never block a save
   assert.match(
     outline.outline,
-    /^process order-handling "Order handling" non-executable\n {2}startEvent startEvent_start\n/,
+    /^process order-handling "Order handling" non-executable\n {2}startEvent startEvent_start\nproblems:\n {2}W_NO_END order-handling: [^\n]*\n {2}W_DEAD_END startEvent_start: [^\n]*$/,
   );
   assert.equal(outline.saveGate, undefined, "a fresh draft passes the save gate");
 

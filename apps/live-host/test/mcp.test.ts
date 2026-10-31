@@ -1119,7 +1119,11 @@ test("create_process: a plain process holding one unnamed start event, its title
     description ?? "",
     /a plain process \(no pool\) named `name` that holds one unnamed start event, `startEvent_start`, and nothing else/,
   );
-  assert.match(description ?? "", /with save_bpmn_xml, the path to an end event/, "no edit_process on this host");
+  assert.match(
+    description ?? "",
+    /With save_bpmn_xml, add the path from startEvent_start to an end event in one save: /,
+    "no edit_process on this host",
+  );
 
   const created = await callJson("create_process", { repo: REPO.fullName, name: "Order handling" });
   assert.equal(created.process.bpmn, "processes/order-handling.bpmn");
@@ -1410,7 +1414,7 @@ test("get_presence: who is in the room — `you` is the caller's own human prese
               login: "petra",
               state: {
                 user: { name: "Petra", color: "#fa8100" },
-                canvas: { cursor: { x: 240, y: 180 }, selection: ["StartEvent_1"] },
+                canvas: { cursor: { x: 240, y: 180 }, selection: ["startEvent_start"] },
               },
             },
             {
@@ -1422,7 +1426,7 @@ test("get_presence: who is in the room — `you` is the caller's own human prese
               clientId: 3,
               state: {
                 user: { name: "AI · Kai", color: "#7c4dff", kind: "agent" },
-                canvas: { cursor: null, selection: ["EndEvent_1"] },
+                canvas: { cursor: null, selection: ["order"] },
               },
             },
             { clientId: 4, login: "mia", state: { selection: { anchor: 3 } } }, // y-monaco only — not announced yet
@@ -1432,9 +1436,9 @@ test("get_presence: who is in the room — `you` is the caller's own human prese
   const out = await callJson("get_presence", { repo: REPO.fullName, id: "order" });
   assert.equal(out.path, PATH);
   assert.deepEqual(out.peers, [
-    { name: "Petra", kind: "human", you: true, selection: ["StartEvent_1"], cursor: { x: 240, y: 180 } },
+    { name: "Petra", kind: "human", you: true, selection: ["startEvent_start"], cursor: { x: 240, y: 180 } },
     { name: "Kai", kind: "human", you: false, selection: [], cursor: null },
-    { name: "AI · Kai", kind: "agent", you: false, selection: ["EndEvent_1"], cursor: null },
+    { name: "AI · Kai", kind: "agent", you: false, selection: ["order"], cursor: null },
   ]);
   // a room nobody has open — and a deps without the port at all — answer empty
   const other = await callJson("get_presence", { repo: REPO.fullName, path: OWM_PATH });
