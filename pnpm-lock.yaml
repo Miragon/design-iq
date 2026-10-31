@@ -90,8 +90,8 @@ importers:
         specifier: 4.7.1
         version: 4.7.1(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
       '@miragon/bpmn-cli':
-        specifier: 0.8.0
-        version: 0.8.0
+        specifier: 0.9.0
+        version: 0.9.0
       '@miragon/design-iq-validator':
         specifier: workspace:*
         version: link:../../packages/validator
@@ -1467,13 +1467,13 @@ packages:
     resolution: {integrity: sha512-j37dj/h6p6pots1L7pLPPNuABEEu9WP4OYg9pW1g+nYG331j0+3canE9OagtYdytYvdSAMG+2fKU5cxep6LgjA==}
     engines: {node: '>=22.12.0'}
 
-  '@miragon/bpmn-cli@0.8.0':
-    resolution: {integrity: sha512-EeO2mMLTIx6ZXKmj0S0O1LaSyUYFJTvuTQ0yqUkusfeQFiNae3pWqUiiQjIVRMLl+5wbVFgFAkikWADnR/6CRA==}
+  '@miragon/bpmn-cli@0.9.0':
+    resolution: {integrity: sha512-EpxTSHf5iubZVh2wAQ18KdbhbDrIM+RrZlSI/eR6nYAt6avklx0diDYDtRa3q0dTXvEuMOjMPkk8mkhiXh8ViA==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
-  '@miragon/bpmnlint-plugin-rules@0.12.1':
-    resolution: {integrity: sha512-w3ljBY5kh3WpudZhAV56JzNDBSp+vZ454e3LL/TkpG+HVIqauWZBOtcUddxUJLvKcjlG1NcGaC87Y907J91faQ==}
+  '@miragon/bpmnlint-plugin-rules@0.19.0':
+    resolution: {integrity: sha512-jjCIu2qL3gDfg82HzVKZEoCfKZVWwaLNHyRP5JVwD6nq5VgHG0ZOcXFwD6ROoueRqjn3NI2nbTViK4mv7PLZeQ==}
     engines: {node: '>=22'}
     peerDependencies:
       bpmnlint: '>=11.14.0'
@@ -2828,11 +2828,6 @@ packages:
 
   birpc@2.9.0:
     resolution: {integrity: sha512-KrayHS5pBi69Xi9JmvoqrIgYGDkD6mcSe/i6YKi3w5kekCLzrX4+nawcXqrj2tIp50Kw/mT/s3p+GVK0A0sKxw==}
-
-  bpmn-auto-layout@2.0.0-alpha.2:
-    resolution: {integrity: sha512-Xg8BoRMijfECgWljIlE44hbGDAuF0BkjJuLfd5o3oOx1ileL06EJQhlgO040xFIegfjxq91dVFAoxCL17wo53A==}
-    engines: {node: '>= 18'}
-    hasBin: true
 
   bpmn-js-color-picker@0.7.2:
     resolution: {integrity: sha512-V3Gusxgx+Y6uEh3gg2Jpqd92au0kjfad6ETSNa7U0p2/hqlpYj8RWGwqjUui9tghkTg0mlKaqs6KZ8Lvxzn0pg==}
@@ -5808,17 +5803,16 @@ snapshots:
     dependencies:
       '@chevrotain/types': 13.2.0
 
-  '@miragon/bpmn-cli@0.8.0':
+  '@miragon/bpmn-cli@0.9.0':
     dependencies:
-      '@miragon/bpmnlint-plugin-rules': 0.12.1(bpmnlint@11.15.0)(moddle@8.2.1)
+      '@miragon/bpmnlint-plugin-rules': 0.19.0(bpmnlint@11.15.0)(moddle@8.2.1)
       '@resvg/resvg-wasm': 2.6.2
-      bpmn-auto-layout: 2.0.0-alpha.2
       bpmn-moddle: 10.3.1
       bpmnlint: 11.15.0
       commander: 15.0.0
       moddle: 8.2.1
 
-  '@miragon/bpmnlint-plugin-rules@0.12.1(bpmnlint@11.15.0)(moddle@8.2.1)':
+  '@miragon/bpmnlint-plugin-rules@0.19.0(bpmnlint@11.15.0)(moddle@8.2.1)':
     dependencies:
       bpmnlint: 11.15.0
       bpmnlint-plugin-camunda-compat: 2.61.1(bpmnlint@11.15.0)
@@ -7087,11 +7081,6 @@ snapshots:
       require-from-string: 2.0.2
 
   birpc@2.9.0: {}
-
-  bpmn-auto-layout@2.0.0-alpha.2:
-    dependencies:
-      bpmn-moddle: 10.3.1
-      min-dash: 5.1.0
 
   bpmn-js-color-picker@0.7.2(bpmn-js@18.31.1):
     dependencies:

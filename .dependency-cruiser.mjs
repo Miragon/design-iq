@@ -136,7 +136,8 @@ export default {
         "path (gate, compare-and-set, live write). Its ./node entry writes files " +
         "past all three, and its CLI parses argv — neither belongs in the platform.",
       from: { path: "^(apps|packages)/" },
-      to: { path: "node_modules/@miragon/bpmn-cli/(dist/(node/|cli\\.)|bin/)" },
+      // dist/node/ up to 0.8, dist/node.js and dist/node.d.ts since 0.9
+      to: { path: "node_modules/@miragon/bpmn-cli/(dist/(node[./]|cli\\.)|bin/)" },
     },
     {
       name: "bpmn-kinds-has-zero-imports",

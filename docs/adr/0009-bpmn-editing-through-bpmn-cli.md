@@ -2,7 +2,8 @@
 
 - **Status:** accepted (2026-10-12), amended (2026-10-13, #248: the engine has no copy of
   the save gate, see Consequences; 2026-10-14, #248: on bpmn-cli 0.7.0 a design model's
-  decision links keep the file's spelling, see decision 4); the tools stay opt-in
+  decision links keep the file's spelling, see decision 4; 2026-10-31: what bpmn-cli 0.9.0
+  changes, see decisions 1 to 3 and Consequences); the tools stay opt-in
   (`LIVE_MCP_BPMN_EDIT=1`) until the A/B gate below has run with this engine
 - **Context:** issue [#236](https://github.com/Miragon/design-iq/issues/236), the follow-up
   to PR [#218](https://github.com/Miragon/design-iq/pull/218) (`@bpmiq/bpmn-edit`, an editor
@@ -52,6 +53,9 @@ message flows). One shared engine is cheaper than two parallel BPMN editors.
    the save gate. No `@designiq/bpmn-edit` package: the glue is live-host specific (content
    I/O, the save gate, error mapping), and a browser consumer would import the engine
    directly.
+   _Amended 2026-10-31:_ bpmn-cli 0.9.0 moved the `./node` entry from `dist/node/` to
+   `dist/node.js`. The fence covers both, and a live-host test checks it against the entries
+   of the pinned version.
 2. **Three opt-in tools on `/mcp`** (`apps/live-host/src/application/bpmn-edit.ts`, wired in
    `http/mcp.ts`, registered with `LIVE_MCP_BPMN_EDIT=1`):
    - `get_process_outline` (read; also on read-only hosts): the model as compact text (ids,
@@ -62,6 +66,11 @@ message flows). One shared engine is cheaper than two parallel BPMN editors.
      `remove`, `retype`, `move`, `order`, `ext`, `split` and the diagram-only format ops) as
      one transaction. The tool description carries the op table, kinds and triggers derived
      from the pinned engine's own schema, so it follows the version.
+     _Amended 2026-10-31:_ since bpmn-cli 0.9.0 the operations run in their order, the
+     diagram-only ones too: one of those sees the drawing of the operations before it and
+     names only elements that exist by then (`E_NOT_FOUND` otherwise, with a hint to move it
+     after the operation that adds the element). 0.8 ran the diagram-only ones after all the
+     others.
    - `layout_process` (write): `tidy` keeps the drawing and removes overlaps; `redraw` draws
      it anew (only when asked: it replaces the drawing people see).
 
@@ -77,6 +86,13 @@ message flows). One shared engine is cheaper than two parallel BPMN editors.
    and makes room like the modeler's space tool; a drawing the engine made itself, or none,
    is drawn in full. New ids follow the file's style and speak. Text the change did not
    touch keeps its bytes, so the live document's minimal-diff write stays small.
+   _Amended 2026-10-31:_ since bpmn-cli 0.9.0 new ids follow the defaults of
+   `element-id-naming` (`@miragon/bpmnlint-plugin-rules`), whatever the file's other ids look
+   like: `userTask_checkInvoice`, `flow_checkInvoiceToShipOrder`. The engine reads other
+   conventions from a `.bpmnlintrc` only through its `./node` entry, which the live host
+   does not use, so every repository gets the defaults. Existing ids stay, except a flow id
+   that names its source and target: it follows a change of its ends, as before (the
+   result's `renamed`).
 4. **A model executes nowhere until a process says so.** A document none of whose processes
    is executable is edited as a design model (`platform: none`), whatever platform the
    modeler declared, without the engine's Camunda 7 / 8 warnings. An executable one gets
@@ -124,6 +140,9 @@ prompt keep using `save_bpmn_xml`, which stays.
 - The live host image carries the engine's dependencies: `bpmn-moddle` (the version bpmn-js
   brings already), `bpmn-auto-layout` (loaded only on request) and `@resvg/resvg-wasm`
   (MPL-2.0, used only by the engine's PNG rendering, which the host does not call).
+  _Amended 2026-10-31:_ bpmn-cli 0.9.0 dropped `bpmn-auto-layout` together with its
+  `engine` option, which the live host never passed: a redraw uses the engine's own
+  layout, as it did before.
   _Amended 2026-10-14 (#248):_ since bpmn-cli 0.7.0 also `bpmnlint` and
   `@miragon/bpmnlint-plugin-rules` (with `bpmnlint-plugin-camunda-compat` and the Camunda
   moddles; MIT and ISC). The engine's core never imports them. It runs bpmnlint only when

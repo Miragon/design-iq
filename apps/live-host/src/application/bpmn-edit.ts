@@ -21,11 +21,12 @@ import type { ContentWire, PutContentResultWire } from "@designiq/contracts/live
 import { AppError } from "@designiq/http-kit";
 import {
   applyToXml,
+  BpmnError,
   type Change,
-  CliError,
   type EditOptions,
   type EditResult,
   findXml,
+  FORMAT_OP_NAMES,
   type FormatResult,
   KINDS,
   kindsJson,
@@ -252,7 +253,13 @@ export function editProcess(
   ops: unknown,
   options: ChangeOptions = {},
 ): Promise<BpmnEditResult> {
-  return changeLive(io, path, "edit", (xml, engineOpts) => applyToXml(xml, ops, engineOpts), options);
+  return changeLive(
+    io,
+    path,
+    "edit",
+    (xml, engineOpts) => engine(() => applyToXml(xml, ops, engineOpts), ops),
+    options,
+  );
 }
 
 export type LayoutMode = "tidy" | "redraw";
@@ -479,17 +486,17 @@ function refusal(tool: Tool, code: string, message: string, edit: EditResult): s
   return `${listed}\n${repair}, or pass lint 'warn' if the user wants to save the model with its errors.`;
 }
 
-/** runs the engine; its CliError becomes an AppError with an agent-readable message */
-async function engine<T>(run: () => Promise<T>): Promise<T> {
+/** runs the engine; its BpmnError becomes an AppError with an agent-readable message */
+async function engine<T>(run: () => Promise<T>, ops?: unknown): Promise<T> {
   try {
     return await run();
   } catch (e) {
-    if (e instanceof CliError) throw engineError(e);
+    if (e instanceof BpmnError) throw engineError(e, ops);
     throw e;
   }
 }
 
-const STATUS: Record<CliError["category"], number> = { usage: 400, model: 422, layout: 422, io: 422, internal: 500 };
+const STATUS: Record<BpmnError["category"], number> = { usage: 400, model: 422, layout: 422, io: 422, internal: 500 };
 
 /** the remedy of a refusal the CLI answers with --force, which the tools do not have */
 const REMEDY: Record<string, string> = {
@@ -505,8 +512,10 @@ const REMEDY: Record<string, string> = {
  * plus the engine's details: the candidates, a room-making op, the errors a
  * change would add, the hint — in tool words (toolWords).
  */
-export function engineError(e: CliError): AppError {
+export function engineError(e: BpmnError, ops?: unknown): AppError {
   const d = e.details;
+  // since bpmn-cli 0.9 a diagram-only op runs where it stands in the batch: what a later op adds is not there yet
+  const diagramOp = e.code === "E_NOT_FOUND" ? diagramOpAt(ops, d.op) : undefined;
   const where = [d.op !== undefined ? `in ops[${d.op}]` : "", d.element ? `(${d.element})` : ""].filter(Boolean);
   const lines = [`${e.code}${where.length > 0 ? ` ${where.join(" ")}` : ""}: ${toolWords(e.message)}`];
   const errors =
@@ -525,10 +534,18 @@ export function engineError(e: CliError): AppError {
         (errors.some((f) => f.validator === "design-iq")
           ? ", or pass lint 'warn' if the user wants to save the model with these errors"
           : "")
-      : (REMEDY[e.code] ?? (d.hint ? toolWords(d.hint) : undefined));
+      : diagramOp
+        ? `${diagramOp} is a diagram-only op and sees only the elements the ops before it made: put it after the op ` +
+          `that adds ${d.element ?? "the element"}, or look the id up with get_process_outline`
+        : (REMEDY[e.code] ?? (d.hint ? toolWords(d.hint) : undefined));
   if (remedy) lines.push(`hint: ${remedy}`);
   return new AppError(`bpmn-edit/${kebab(e.code)}`, lines.join("\n"), { status: STATUS[e.category], expose: true });
 }
+
+const diagramOpAt = (ops: unknown, index: number | undefined): string | undefined => {
+  const op = Array.isArray(ops) && index !== undefined ? (ops[index] as { op?: unknown } | undefined)?.op : undefined;
+  return typeof op === "string" && (FORMAT_OP_NAMES as readonly string[]).includes(op) ? op : undefined;
+};
 
 /** E_NOT_FOUND → not-found (the house AppError codes are `<area>/<kebab>`) */
 const kebab = (code: string): string =>
@@ -580,7 +597,7 @@ export const OP_NAMES = (DEFS.op as unknown as { oneOf: { $ref: string }[] }).on
 
 /** `add      kind* name id as …` — one line per semantic op, `*` = required; the format ops on one line */
 export function opsTable(): string {
-  const format = new Set(["place", "align", "color", "label", "route", "space", "tidy", "compact"]);
+  const format = new Set<string>(FORMAT_OP_NAMES);
   const width = Math.max(...OP_NAMES.map((n) => n.length));
   const keys = (name: string) => {
     const def = DEFS[name] ?? {};

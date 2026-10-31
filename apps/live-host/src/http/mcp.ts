@@ -214,11 +214,13 @@ const SCHEMA_REFUSALS =
 const EDIT_PROCESS_DESCRIPTION = [
   "BPMN only: change a LIVE process with operations on its element ids (get_process_outline lists them) instead " +
     "of rewriting its XML. The diagram is computed: a hand-drawn one is kept, new elements go next to their " +
-    'neighbours. New ids follow the file\'s style; `"as": "$name"` names what an op creates for later ops. One ' +
-    "transaction: refused as a whole when an op fails or the change adds a validation error, else saved like " +
-    "save_bpmn_xml. A concurrent change gets the ops applied again to the new version (`baseVersion` makes it a " +
-    "conflict). The result lists what was created, changed and removed (use ids from a saved result; a dry run's " +
-    "may change), the warnings it added and the layout score (lower is better) — no XML.",
+    "neighbours. New ids follow element-id-naming's defaults (userTask_checkInvoice, flow_checkInvoiceToShip), not " +
+    'the file\'s style; `"as": "$name"` names what an op creates for later ops. The ops run in their order, the ' +
+    "diagram-only ones too: those see only what the ops before them made. One transaction: refused as a whole when " +
+    "an op fails or the change adds a validation error, else saved like save_bpmn_xml. A concurrent change gets " +
+    "the ops applied again to the new version (`baseVersion` makes it a conflict). The result lists what was " +
+    "created, changed and removed (use ids from a saved result; a dry run's may change), the warnings it added and " +
+    "the layout score (lower is better) — no XML.",
   'Example: [{"op":"add","kind":"userTask","name":"Check invoice","after":"Activity_ReceiveInvoice","as":"$check"},' +
     '{"op":"add","kind":"boundaryEvent:timer","name":"2 days","on":"$check","timer":"P2D","as":"$late"},' +
     '{"op":"add","kind":"endEvent","name":"Invoice escalated","after":"$late"}]',
@@ -801,7 +803,7 @@ export function createLiveMcpServer(
           ops: z
             .array(z.looseObject({ op: z.enum(OP_NAMES) }))
             .min(1)
-            .describe("the operations, applied in order as one transaction"),
+            .describe("the operations, applied in their order as one transaction (the diagram-only ones too)"),
           ...changeArgs,
         }),
         annotations: WRITE,
