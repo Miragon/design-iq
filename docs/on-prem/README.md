@@ -50,9 +50,23 @@ serves on-prem installs and Miragon's hosted cells).
 The compose file takes the tag from `DESIGNIQ_VERSION` in `.env` (default `latest`).
 
 Container facts: listens on `PORT=8080`, state under `LIVE_DATA_DIR=/data` (mount a
-volume there), ships `git` + CA certificates for cloning connected repos. The container
-currently runs as **root** so a freshly mounted volume is writable out of the box. If your
-policy requires a non-root user, run with `user:` and make `/data` writable for that uid.
+volume there), ships `git` + CA certificates for cloning connected repos. It runs as the
+unprivileged user **`1000:1000`** (uid:gid, the base image's `node`), set by number so
+Kubernetes' `runAsNonRoot` accepts it. `/data` must belong to that user:
+
+- A **named volume** (`-v designiq-data:/data`) takes its owner from the image the first
+  time it is mounted. Nothing to do.
+- A **bind mount** on Linux (`./data:/data` in the compose file) belongs to whoever created
+  the directory, and to root when Docker creates it. Create it and hand it over before the
+  first start: `mkdir -p data && sudo chown 1000:1000 data`. Docker Desktop on macOS maps
+  the owner of a bind mount itself. Nothing to do.
+- In **Kubernetes**, `securityContext.fsGroup: 1000` makes the volume writable, a fresh one
+  and one an older image wrote, on volume types that support `fsGroup`.
+
+When the Live Host cannot write `/data`, it does not start: it names the path, the uid:gid
+it runs as and the command that fixes it. On Linux, a content checkout you bind-mount
+(`LIVE_HOST_CONTENT_DIR`) must be writable for `1000:1000` as well; Docker Desktop on macOS
+needs nothing. git works in the clones and the checkout whoever owns them.
 
 ## Quickstart (compose)
 
@@ -69,6 +83,7 @@ policy requires a non-root user, run with `user:` and make `/data` writable for 
    ```bash
    cd deploy
    cp .env.example .env        # fill in LIVE_PUBLIC_URL + the GitHub App values
+   mkdir -p data && sudo chown 1000:1000 data   # Linux only: ./data belongs to the Live Host's user
    docker compose up -d
    ```
 
@@ -210,6 +225,25 @@ out in the release notes. For production, pin `vX.Y.Z` and move deliberately. Co
 4.x: [upgrading-to-5.md](../upgrading-to-5.md). The image name changed with the rename to
 designIQ, so `pull` alone does not reach 5.0.
 
+**Coming from 5.13.3 or older:** those images ran as root, so the volume or Linux bind
+mount they wrote belongs to root, and the Live Host, which now runs as `1000:1000`, refuses
+to start on it. Hand the data directory over once, with the Live Host stopped:
+
+```bash
+docker compose pull
+docker compose stop live-host
+docker compose run --rm --user root live-host chown -R 1000:1000 /data
+docker compose up -d
+```
+
+With plain Docker, run the same `chown` against your volume:
+`docker run --rm --user root -v designiq-data:/data ghcr.io/miragon/designiq-live-host:<tag> chown -R 1000:1000 /data`.
+In Kubernetes, `fsGroup: 1000` hands the volume over on volume types that support it;
+on any other, run the same `chown` once as root, in a one-off Job or an init container.
+A bind mount under Docker Desktop on macOS needs nothing. A `LIVE_AUTH=none` host
+without `LIVE_LOCAL_USER` now acts as `node` instead of `root`; set `LIVE_LOCAL_USER=root`
+to keep the favorites and recently opened repositories it saved as `local:root`.
+
 ## Health
 
 `GET /healthz`: liveness plus a deep check: SQLite writability and disk headroom (<5 %
@@ -218,6 +252,9 @@ free = degraded). `200` with `status: "ok"`, or `503` with `status: "degraded"`:
 ```json
 { "status": "ok", "tenant": null, "liveDocs": 3, "sqlite": "ok", "diskFreeMb": 51234, "diskUsedPct": 37 }
 ```
+
+`sqlite` is `ok` when a test write to `live.db` went through, else SQLite's error, such as
+`attempt to write a readonly database`.
 
 Standalone (on-prem) the full detail is public: a single-tenant box has nothing to gate.
 Only in cell mode is the detail reduced to `{ "status": ... }` unless the poller presents

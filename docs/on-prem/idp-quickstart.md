@@ -56,7 +56,9 @@ pnpm live-host            # plus GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY_FILE / G
 Both in containers: write `deploy/.env` first: `LIVE_PUBLIC_URL=http://localhost:8301`
 (the realm's redirect URI is exactly that; the template's `https://design.example.com`
 placeholder would be refused by Keycloak), the GitHub App values, and the OIDC block from
-`.env.example` uncommented as is. Then run `docker compose --profile keycloak up -d`. The
+`.env.example` uncommented as is. On Linux, also create `deploy/data` for the Live Host's
+user before the first start (`mkdir -p data && sudo chown 1000:1000 data`, see
+[the image](./#the-image)). Then run `docker compose --profile keycloak up -d`. The
 block differs from the source-run values in one respect: the Live Host reaches Keycloak
 over the compose network, so JWKS and the token endpoint go via `http://keycloak:8080`
 (`LIVE_OIDC_JWKS_URL`, `LIVE_OIDC_TOKEN_URL`), while the issuer and the authorize URL

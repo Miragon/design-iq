@@ -63,7 +63,7 @@ docker run -p 8301:8080 \
 
 :::
 
-Without a GitHub App, the host clones without credentials, so the repo has to be public. A local checkout is served in place: edits write through to your working tree, `git diff` shows them, and you commit as usual. `GITHUB_REPO` is then only a label.
+Without a GitHub App, the host clones without credentials, so the repo has to be public. A local checkout is served in place: edits write through to your working tree, `git diff` shows them, and you commit as usual. `GITHUB_REPO` is then only a label. The container runs as uid 1000, so on Linux that user must be able to write the checkout; Docker Desktop on macOS needs nothing ([the image](./on-prem/#the-image)).
 
 Login, private repos and release as pull request need an OIDC provider and your own GitHub App. The [IdP quickstart](./on-prem/idp-quickstart.md) starts a Keycloak with a ready realm, [GitHub App setup](./on-prem/github-app-setup.md) registers the App, and the [self-hosting guide](./on-prem/) covers the rest.
 

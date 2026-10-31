@@ -85,6 +85,9 @@ docker run -p 8301:8080 -e LIVE_AUTH=none -e LIVE_PUBLIC_URL=http://localhost:83
   ghcr.io/miragon/designiq-live-host:latest
 ```
 
+The container runs as uid 1000, so on Linux that user must be able to write the checkout;
+Docker Desktop on macOS needs nothing ([the image](docs/on-prem/README.md#the-image)).
+
 (A `/content` without a usable root `designiq.yml` (or legacy `bpmiq.yml`) is not a content
 repo: the host says so at boot and clones `GITHUB_REPO` instead, which is where a made-up
 label then fails.)
