@@ -37,6 +37,20 @@ overrides:
   # has it as npm "overrides"; under pnpm it lives here. It changes with a CI
   # release of the kit.
   vitepress>vite: 6.4.5
+patchedDependencies:
+  # @emaarco/dmn-js-simulation 0.4.0 stopped coercing the value its DRD
+  # evaluator hands a decision table to the reading column's typeRef, and
+  # reports an unresolved column as undefined instead of null. dmn-js gives
+  # every new InputData the type "Any", read as a string, so in a DRD drawn in
+  # designIQ a number, boolean or date column would compare that string: in
+  # the add-on's Simulate DRD card and in @designiq/decisions (simulate_decision,
+  # run_decision_tests, pnpm validate). The patch restores the 0.3 evaluation,
+  # two lines in each bundle; the Dockerfiles copy it before their install,
+  # and packages/decisions/test/simulate.test.ts and
+  # apps/web/test/browser/dmn-simulation.browser.test.ts fail without it.
+  # Unblock: an add-on release that coerces by column again drops this entry;
+  # until then a new add-on version needs the patch carried forward by hand.
+  "@emaarco/dmn-js-simulation@0.4.0": patches/@emaarco__dmn-js-simulation@0.4.0.patch
 peerDependencyRules:
   allowedVersions:
     # vitepress-plugin-mermaid 2.0.17 (docs/) is the latest release and still

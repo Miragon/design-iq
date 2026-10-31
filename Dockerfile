@@ -12,6 +12,8 @@ FROM node:26-slim AS build
 RUN npm install -g corepack@latest && corepack enable
 WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json .npmrc ./
+# the patches pnpm-workspace.yaml applies at install (patchedDependencies)
+COPY patches ./patches/
 COPY apps/live-host/package.json ./apps/live-host/
 COPY apps/web/package.json ./apps/web/
 COPY apps/vscode/package.json ./apps/vscode/
