@@ -760,10 +760,12 @@ an agent names elements by id and says what changes, and never writes XML or BPM
   `space`, `tidy`, `compact`) as one transaction. A hand-drawn diagram is kept: new elements are
   placed next to their neighbours; a diagram the engine drew is redrawn. New ids follow the
   defaults of the `element-id-naming` lint rule (`userTask_checkInvoice`,
-  `flow_checkInvoiceToShipOrder`), whatever the file's other ids look like. The operations run in
-  their order, the diagram-only ones too, so a diagram-only operation comes after the operations
-  that add what it names. The result names what was created, changed and removed, what each
-  format op did, the warnings the change added and the layout score, without any XML.
+  `flow_checkInvoiceToShipOrder`), whatever the file's other ids look like. A flow id of that form
+  follows a change of the flow's ends (the result's `renamed`); a flow id of another form stays,
+  also one in the style bpmn-cli 0.8 wrote (`Flow_pack_goods_to_invoice_handling`). The
+  operations run in their order, the diagram-only ones too, so a diagram-only operation comes after
+  the operations that add what it names. The result names what was created, changed and removed,
+  what each format op did, the warnings the change added and the layout score, without any XML.
 - `layout_process`: `tidy` (keep the drawing, remove overlaps) or `redraw` (draw it anew).
 
 The change is saved like `save_bpmn_xml`, with the same validation (`lint`), compare-and-set and

@@ -317,26 +317,65 @@ test("engine errors: code, op, element, candidates and a hint in tool words; hou
   assert.doesNotMatch(refused.message, /--force|bpmn apply/);
 });
 
-test("engine errors: a diagram-only op that names what a later op adds is told to move after it (bpmn-cli 0.9)", () => {
-  const missing = (op: number) =>
-    new BpmnError("E_NOT_FOUND", 'No element with id "userTask_pack"', "model", {
-      element: "userTask_pack",
-      candidates: [],
-      op,
-      hint: "Run `bpmn show <file>` or `bpmn find <file> <text>` to list ids.",
-    });
-  const ops = [
-    { op: "place", ids: ["userTask_pack"], below: "Task_fulfill_order" },
-    { op: "set", id: "userTask_pack", values: { name: "Pack" } },
-  ];
+const pack = () => ({ op: "add", kind: "userTask", name: "Pack goods", after: "Task_fulfill_order" });
+const label = (after: string) => ({ op: "add", kind: "userTask", name: "Label parcel", after });
+
+test("engine errors: a diagram-only op is told to move after a later op that adds elements, and only then (bpmn-cli 0.9)", async () => {
+  const notFound = async (ops: unknown[]): Promise<string> => {
+    const error = await editProcess(memoryIo(EXAMPLE), PATH, ops).then(
+      () => assert.fail("saved"),
+      (e: unknown) => e,
+    );
+    assert.ok(error instanceof AppError && error.code === "bpmn-edit/not-found", String(error));
+    return error.message;
+  };
+  const advice = /diagram-only op/;
+
   assert.match(
-    engineError(missing(0), ops).message,
-    /^hint: place is a diagram-only op and sees only the elements the ops before it made: put it after the op that adds userTask_pack, or look the id up with get_process_outline$/m,
+    await notFound([{ op: "color", ids: ["userTask_packGoods"], color: "red" }, pack()]),
+    /^hint: color is a diagram-only op and sees only what the ops before it made: if a later op adds userTask_packGoods, put color after that op\. Run get_process_outline \(or its `find`\) to list ids\.$/m,
   );
+  // no later op adds anything: the engine's hint alone, which names what the batch made before
+  const madeBefore = await notFound([pack(), { op: "color", ids: ["Task_pack_goods"], color: "red" }]);
   assert.match(
-    engineError(missing(1), ops).message,
-    /^hint: Run get_process_outline \(or its `find`\) to list ids\.$/m,
-    "a model op keeps the engine's hint",
+    madeBefore,
+    /^hint: Created earlier in this batch: userTask_packGoods, flow_packGoodsToInvoiceHandling; name them with "as": "\$name"/m,
+  );
+  assert.doesNotMatch(madeBefore, advice);
+  const typo = [{ op: "color", ids: ["Task_fulfil_order"], color: "red" }];
+  assert.doesNotMatch(await notFound(typo), advice);
+  const removed = [
+    { op: "remove", ids: ["Task_reject_order"] },
+    { op: "color", ids: ["Task_reject_order"], color: "red" },
+  ];
+  assert.doesNotMatch(await notFound(removed), advice);
+  // a model op names only what exists before it, as on 0.8: the engine's hint
+  assert.doesNotMatch(
+    await notFound([{ op: "set", id: "userTask_packGoods", values: { name: "Pack" } }, pack()]),
+    advice,
+  );
+});
+
+test("a flow id in element-id-naming's form follows its ends; one in another form, as bpmn-cli 0.8 wrote it, keeps its id (bpmn-cli 0.9)", async () => {
+  const packed = (await applyToXml(EXAMPLE, [pack()])).xml;
+  const current = memoryIo(packed);
+  const followed = await editProcess(current, PATH, [label("userTask_packGoods")]);
+  assert.ok(followed.ok && followed.written);
+  assert.deepEqual(followed.change.renamed, { flow_packGoodsToInvoiceHandling: "flow_packGoodsToLabelParcel" });
+  assert.match(current.doc(), /<bpmn:sequenceFlow id="flow_packGoodsToLabelParcel" sourceRef="userTask_packGoods" /);
+
+  // the same document with the ids bpmn-cli 0.8 gave the task and its flow in this file's style
+  const older = memoryIo(
+    packed
+      .replaceAll("flow_packGoodsToInvoiceHandling", "Flow_pack_goods_to_invoice_handling")
+      .replaceAll("userTask_packGoods", "Task_pack_goods"),
+  );
+  const kept = await editProcess(older, PATH, [label("Task_pack_goods")]);
+  assert.ok(kept.ok && kept.written);
+  assert.equal(kept.change.renamed, undefined, "nothing renamed, although the id names its old target");
+  assert.match(
+    older.doc(),
+    /<bpmn:sequenceFlow id="Flow_pack_goods_to_invoice_handling" sourceRef="Task_pack_goods" targetRef="userTask_labelParcel" /,
   );
 });
 

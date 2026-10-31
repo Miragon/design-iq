@@ -220,7 +220,7 @@ const EDIT_PROCESS_DESCRIPTION = [
     "an op fails or the change adds a validation error, else saved like save_bpmn_xml. A concurrent change gets " +
     "the ops applied again to the new version (`baseVersion` makes it a conflict). The result lists what was " +
     "created, changed and removed (use ids from a saved result; a dry run's may change), the warnings it added and " +
-    "the layout score (lower is better) — no XML.",
+    "the layout score (lower is better), without any XML.",
   'Example: [{"op":"add","kind":"userTask","name":"Check invoice","after":"Activity_ReceiveInvoice","as":"$check"},' +
     '{"op":"add","kind":"boundaryEvent:timer","name":"2 days","on":"$check","timer":"P2D","as":"$late"},' +
     '{"op":"add","kind":"endEvent","name":"Invoice escalated","after":"$late"}]',

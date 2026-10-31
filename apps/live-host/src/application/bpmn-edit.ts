@@ -68,13 +68,13 @@ export interface ChangeOptions {
 
 /** what a change did — the engine's report, never the XML */
 export interface BpmnChangeWire {
-  /** `userTask Task_pack_goods "Pack goods" - after Task_fulfill_order`, in the order of creation */
+  /** `userTask userTask_packGoods "Pack goods" - after Task_fulfill_order`, in the order of creation */
   created: string[];
   /** batch aliases ("as": "$name") → the final id */
   aliases?: Record<string, string>;
-  /** `sequenceFlow Flow_to_invoice - Task_fulfill_order -> Task_pack_goods (was -> CallActivity_x)` */
+  /** `sequenceFlow Flow_to_invoice - Task_fulfill_order -> userTask_packGoods (was -> CallActivity_x)` */
   changed: string[];
-  /** ids the change renamed: old → new (a flow whose speaking id named its old ends) */
+  /** ids the change renamed: old → new (a flow whose id, in element-id-naming's form, named its old ends) */
   renamed?: Record<string, string>;
   removed: string[];
   /** findings the change ADDED (`CODE element: message (hint)`); those the document already had are not repeated */
@@ -514,8 +514,6 @@ const REMEDY: Record<string, string> = {
  */
 export function engineError(e: BpmnError, ops?: unknown): AppError {
   const d = e.details;
-  // since bpmn-cli 0.9 a diagram-only op runs where it stands in the batch: what a later op adds is not there yet
-  const diagramOp = e.code === "E_NOT_FOUND" ? diagramOpAt(ops, d.op) : undefined;
   const where = [d.op !== undefined ? `in ops[${d.op}]` : "", d.element ? `(${d.element})` : ""].filter(Boolean);
   const lines = [`${e.code}${where.length > 0 ? ` ${where.join(" ")}` : ""}: ${toolWords(e.message)}`];
   const errors =
@@ -534,17 +532,32 @@ export function engineError(e: BpmnError, ops?: unknown): AppError {
         (errors.some((f) => f.validator === "design-iq")
           ? ", or pass lint 'warn' if the user wants to save the model with these errors"
           : "")
-      : diagramOp
-        ? `${diagramOp} is a diagram-only op and sees only the elements the ops before it made: put it after the op ` +
-          `that adds ${d.element ?? "the element"}, or look the id up with get_process_outline`
-        : (REMEDY[e.code] ?? (d.hint ? toolWords(d.hint) : undefined));
+      : [diagramOpAdvice(e, ops), REMEDY[e.code] ?? (d.hint ? toolWords(d.hint) : undefined)].filter(Boolean).join(" ");
   if (remedy) lines.push(`hint: ${remedy}`);
   return new AppError(`bpmn-edit/${kebab(e.code)}`, lines.join("\n"), { status: STATUS[e.category], expose: true });
 }
 
-const diagramOpAt = (ops: unknown, index: number | undefined): string | undefined => {
-  const op = Array.isArray(ops) && index !== undefined ? (ops[index] as { op?: unknown } | undefined)?.op : undefined;
-  return typeof op === "string" && (FORMAT_OP_NAMES as readonly string[]).includes(op) ? op : undefined;
+/**
+ * Since bpmn-cli 0.9 a diagram-only op runs where it stands in the batch, so it
+ * cannot name what a later op adds. Said only when a later op can add an
+ * element at all, and as a condition: a typo, or an id an earlier op removed or
+ * renamed, would otherwise be sent looking for an op that does not exist.
+ */
+function diagramOpAdvice(e: BpmnError, ops: unknown): string | undefined {
+  const index = e.details.op;
+  if (e.code !== "E_NOT_FOUND" || !Array.isArray(ops) || index === undefined) return undefined;
+  const name = opName(ops[index]);
+  if (!name || !(FORMAT_OP_NAMES as readonly string[]).includes(name)) return undefined;
+  if (!ops.slice(index + 1).some((op) => ADDING_OPS.has(opName(op) ?? ""))) return undefined;
+  return (
+    `${name} is a diagram-only op and sees only what the ops before it made: if a later op adds ` +
+    `${e.details.element ?? "the element"}, put ${name} after that op.`
+  );
+}
+
+const opName = (op: unknown): string | undefined => {
+  const name = (op as { op?: unknown } | null | undefined)?.op;
+  return typeof name === "string" ? name : undefined;
 };
 
 /** E_NOT_FOUND → not-found (the house AppError codes are `<area>/<kebab>`) */
@@ -594,6 +607,11 @@ const DEFS = OPS_SCHEMA.$defs as Record<string, OpDef>;
 export const OP_NAMES = (DEFS.op as unknown as { oneOf: { $ref: string }[] }).oneOf.map((r) =>
   r.$ref.split("/").at(-1)!,
 ) as [string, ...string[]];
+
+/** the ops that can add an element: they take an `as` alias or the id of a flow they make */
+const ADDING_OPS = new Set(
+  OP_NAMES.filter((name) => DEFS[name]?.properties?.as !== undefined || DEFS[name]?.properties?.flowId !== undefined),
+);
 
 /** `add      kind* name id as …` — one line per semantic op, `*` = required; the format ops on one line */
 export function opsTable(): string {

@@ -262,7 +262,7 @@ test("edit_process: a diagram-only op runs where it stands, so it cannot name wh
   assert.match(early.text, /^E_NOT_FOUND in ops\[0\] \(userTask_packGoods\)/);
   assert.match(
     early.text,
-    /^hint: color is a diagram-only op and sees only the elements the ops before it made: put it after the op that adds userTask_packGoods/m,
+    /^hint: color is a diagram-only op and sees only what the ops before it made: if a later op adds userTask_packGoods, put color after that op\./m,
   );
   assert.equal(await xml(), EXAMPLE);
 
