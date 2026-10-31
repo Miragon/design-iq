@@ -200,8 +200,8 @@ importers:
         specifier: 0.1.8
         version: 0.1.8(zod@4.6.7)
       '@miragon/context-maps-renderer':
-        specifier: 0.9.0
-        version: 0.9.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
+        specifier: 0.9.1
+        version: 0.9.1(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/event-storming-renderer':
         specifier: 0.9.0
         version: 0.9.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
@@ -1481,8 +1481,8 @@ packages:
   '@miragon/context-maps-cml@0.1.8':
     resolution: {integrity: sha512-irUUZE0AH8EVoNWDGDj62EAtIL5PqaMqjCqQHEjcF9xb3N6oDIZrlGcbOvZb6EP5lsK3WfxXc/GJnyxuGQQlgQ==}
 
-  '@miragon/context-maps-renderer@0.9.0':
-    resolution: {integrity: sha512-9yjNWkzh1NyVFnjGzJpP1IuFOYBUMe8JSg/knwj2MXKyuyoft1xNL6DpnKpoNhmUHRJoo/5pY/Q3OtNbJTmGuQ==}
+  '@miragon/context-maps-renderer@0.9.1':
+    resolution: {integrity: sha512-IA6r7TOoDrKJScxkP0+lIHnnq8xPFZ9YIlQNS+ZmeJI7BzhxTVXjdltrmf/T1+DSLuHxxbw3TiokAVqvzRGjjQ==}
     peerDependencies:
       diagram-js: ^15.26.0
       didi: ^11.0.0 || ^12.0.0
@@ -5828,7 +5828,7 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
-  '@miragon/context-maps-renderer@0.9.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/context-maps-renderer@0.9.1(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
       '@miragon/context-maps-schema-model': 0.5.1(zod@4.6.7)
       '@miragon/modeler-api': 1.6.0

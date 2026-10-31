@@ -22,11 +22,15 @@ minimumReleaseAgeExclude:
   - "@miragon/event-storming-schema-model@0.3.1"
   - "@miragon/team-topologies-renderer@0.17.0"
   - "@miragon/team-topologies-schema-model@0.17.0"
-  - "@miragon/context-maps-renderer@0.9.0"
   - "@miragon/context-maps-schema-model@0.5.1"
   - "@miragon/context-maps-cml@0.1.8"
   - "@miragon/value-chain-renderer@0.10.0"
   - "@miragon/value-chain-schema-model@0.7.3"
+  # context-maps-renderer 0.9.1, its palette whole on a short canvas
+  # (Miragon/modeler-suite#511): published 2026-10-31, adopted on 2026-10-31.
+  # It takes 0.9.0's place in the list above, as pnpm reads only the first
+  # entry that names a package
+  - "@miragon/context-maps-renderer@0.9.1"
   # the BPMN editing engine (ADR 0009): published 2026-10-30, adopted on 2026-10-31
   - "@miragon/bpmn-cli@0.9.0"
 overrides:

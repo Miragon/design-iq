@@ -19,14 +19,6 @@
   top: var(--inset-t);
 }
 
-/* diagram-js narrows a palette to its 94px two-column layout in a canvas
-   shorter than its tools (a host that caps the inline height). The other
-   four renderers undo that for their one row; context-maps-renderer 0.9.0
-   does not, and its tools would spill past the glass */
-#app[data-kind="miragon"] #canvas .cm-canvas .cm-djs-container .djs-palette.two-column.open {
-  width: max-content;
-}
-
 /* a renderer's popover (Wardley: Map size…, X-axis labels…) opens where the
    menu dropped down: under designIQ's 36px corner row, not the shell's 40px,
    and over the renderer's palette (110), as a popover stands over the

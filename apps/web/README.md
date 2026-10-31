@@ -510,13 +510,13 @@ before the canvas in the tab order and the guide's tooltip (Value Chain since
 value-chain-renderer 0.10.0, which retired designIQ's own sheet and module for it;
 `test/miragon-renderers.test.ts` holds all five to it). It stays one row, which Wardley Maps,
 Event Storming, Team Topologies and Value Chain scroll sideways in a narrow canvas (guide §5.15);
-Context Maps has four tools and no scroll rule. designIQ only places it: the widget under its
-corner row (`miragon-styles.css`), and the SPA, which has no chrome over its canvas, at the top
-where Wardley Maps, Event Storming, Team Topologies and Value Chain move it 64px down in a canvas
-up to 760px wide (`index.css`). The widget also keeps Context Maps' row whole in a canvas shorter
-than its tools, where diagram-js narrows a palette to 94px and context-maps-renderer 0.9.0, unlike
-the other four, does not undo it. `test/vendor-css.test.ts` holds both lists to the renderers'
-sheets.
+Context Maps has four tools and no scroll rule. The row also keeps every tool in a canvas shorter
+than its tools, where diagram-js narrows a palette to 94px: each renderer undoes that for its own
+palette (Context Maps since context-maps-renderer 0.9.1). designIQ only places it: the widget
+under its corner row (`miragon-styles.css`), and the SPA, which has no chrome over its canvas, at
+the top where Wardley Maps, Event Storming, Team Topologies and Value Chain move it 64px down in a
+canvas up to 760px wide (`index.css`). `test/vendor-css.test.ts` holds that list and the 94px
+lift to the renderers' sheets, and keeps designIQ's own sheets free of a lift.
 
 **PNG exports in Geist.** Export as PNG draws the renderer's standalone SVG as an image with
 the modeler shell's `svgToPng` (`@miragon/modeler-shell/export`, the same for every Miragon
