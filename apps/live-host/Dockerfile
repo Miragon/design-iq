@@ -65,8 +65,12 @@ COPY --from=build /app/packages/live-client ./packages/live-client
 COPY --from=build /app/packages/http-kit ./packages/http-kit
 COPY --from=build /app/packages/mcp-kit ./packages/mcp-kit
 COPY --from=build /app/packages/validator ./packages/validator
-RUN mkdir -p /data
+# /data belongs to the user below: a fresh named volume takes this owner from the
+# image, while a bind mount and a volume an older image wrote as root need it handed
+# over once (docs/on-prem/README.md; the server names the command at boot)
+RUN mkdir -p /data && chown 1000:1000 /data
 EXPOSE 8080
-# runs as root so the mounted /data volume (root-owned) is writable — the
-# platform key lives in Fly secrets, not on this box; harden per MR-3.
+# node:26-slim's `node` user, by number: Kubernetes' runAsNonRoot can only verify a
+# numeric USER. The code under /app stays root's, read-only to the server.
+USER 1000:1000
 CMD ["node", "apps/live-host/src/server.ts"]

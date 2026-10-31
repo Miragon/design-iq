@@ -21,6 +21,12 @@ services:
     volumes:
       # host-owned state: Yjs lineages + sessions (live.db), repo registry,
       # workspace clones — the image sets LIVE_DATA_DIR=/data
+      # The Live Host runs as 1000:1000 and must own ./data. On Linux, create it
+      # before the first `up` (`mkdir -p data && sudo chown 1000:1000 data`), or
+      # Docker creates it root's; Docker Desktop on macOS maps the owner itself.
+      # A named volume (`designiq-data:/data`) takes the owner from the image.
+      # A ./data written by an image up to 5.13.3 (root) is handed over once:
+      #   docker compose run --rm --user root live-host chown -R 1000:1000 /data
       - ./data:/data
     restart: unless-stopped
     # Graceful shutdown MUST outlast the in-process hard exit (LIVE_SHUTDOWN_MS,

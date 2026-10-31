@@ -48,6 +48,7 @@ import { WsTicketStore } from "./application/ws-tickets.ts";
 import { allowAllAccess, makeLocalPrincipal } from "./auth/none.ts";
 import { makeOidcVerifier } from "./auth/oidc.ts";
 import { makeOidcLogin } from "./auth/oidc-login.ts";
+import { dataDirProblem } from "./data-dir.ts";
 import { ConnectionLimiter } from "./domain/conn-limit.ts";
 import { DocSizeGuard } from "./domain/doc-size-guard.ts";
 import { startApi } from "./http/api.ts";
@@ -96,6 +97,14 @@ const migrations = new RoomMigrations();
 // oversized doc is never written to SQLite or the workspace file). Env-overridable.
 const MAX_DOC_BYTES = Number(process.env.LIVE_MAX_DOC_BYTES ?? 8_000_000);
 const docGuard = new DocSizeGuard(MAX_DOC_BYTES);
+
+// a data directory this user cannot write stops the boot here, with the fix, not
+// at the first write (src/data-dir.ts)
+const dataDirRefusal = dataDirProblem(DATA_DIR);
+if (dataDirRefusal) {
+  console.error(dataDirRefusal);
+  process.exit(1);
+}
 
 // Yjs persistence: the SAME document lineage must survive restarts, otherwise
 // reconnecting clients merge their old history into a freshly seeded doc and
