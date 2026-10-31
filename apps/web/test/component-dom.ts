@@ -21,10 +21,14 @@ const SRC = new URL("../src/", import.meta.url);
 const VITE_ENV = "import.meta.env ??= {};";
 
 registerHooks({
-  // test/renderer-dom.ts resolves the "@/" alias to a .ts module only
+  // test/renderer-dom.ts resolves the "@/" alias and an extensionless relative import to a .ts module only
   resolve(specifier, context, nextResolve) {
     if (specifier.startsWith("@/")) {
       const component = new URL(`${specifier.slice(2)}.tsx`, SRC);
+      if (existsSync(component)) return nextResolve(component.href, context);
+    }
+    if (specifier.startsWith(".") && context.parentURL?.startsWith(SRC.href)) {
+      const component = new URL(`${specifier}.tsx`, context.parentURL);
       if (existsSync(component)) return nextResolve(component.href, context);
     }
     return nextResolve(specifier, context);
