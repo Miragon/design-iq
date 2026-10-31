@@ -1,5 +1,20 @@
 # Changelog
 
+## [5.13.0](https://github.com/Miragon/design-iq/compare/v5.12.0...v5.13.0) (2026-10-30)
+
+
+### Features
+
+* **web,validator,mcp:** use the Miragon shell's dialog and PNG export and move to the 2026-10-28 releases ([#362](https://github.com/Miragon/design-iq/issues/362)) ([af3c5ff](https://github.com/Miragon/design-iq/commit/af3c5ff541ef2b0e8fa22c1e411176ac838fe76a))
+
+
+### Bug Fixes
+
+* **notations,web:** refuse Value Chain connections as todo anchors and keep the wheel's zoom direction on Miragon canvases ([#363](https://github.com/Miragon/design-iq/issues/363)) ([d7628be](https://github.com/Miragon/design-iq/commit/d7628be8f8af11a58806fee7c9343b19667efe16))
+* **web,notations,live-host:** match todo anchors and Wardley stages to what each canvas draws ([#364](https://github.com/Miragon/design-iq/issues/364)) ([655a5f2](https://github.com/Miragon/design-iq/commit/655a5f286076cb0493a6f89161443a0784d7911c))
+* **web:** leave the peers out of Miragon exports and let renderer dialogs take clicks and Escape ([#366](https://github.com/Miragon/design-iq/issues/366)) ([f3cc27b](https://github.com/Miragon/design-iq/commit/f3cc27b33b45b8a8eb3aa33558e39b654acf49e1))
+* **web:** make the editor's dialogs native modal dialogs that hold the focus ([#365](https://github.com/Miragon/design-iq/issues/365)) ([2a4990a](https://github.com/Miragon/design-iq/commit/2a4990a130d7bfb3ce7c92958da13eb02ac5dc4f))
+
 ## [5.12.0](https://github.com/Miragon/design-iq/compare/v5.11.1...v5.12.0) (2026-10-28)
 
 
