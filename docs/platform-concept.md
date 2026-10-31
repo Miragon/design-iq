@@ -218,24 +218,35 @@ rules make it sound (all grounded in verified bpmn-js/moddle behavior):
    at all: half of a move is a model nobody made. A diff of more than 1000 changed lines
    gives way rather than hold up the drop.
 3. **Debounce remote re-imports** (~300–500 ms) with an import-suppression flag and
-   string-equality guard (echo prevention via Yjs transaction origins). **Hold them back
-   while a local gesture runs** (#295). A drag, resize, connection, lasso or palette create
-   has committed nothing yet, so the quiet period after a local edit does not cover it, and
-   an import replaces the shapes it works on: its drop would throw and lose the move. The
-   binding reads the gesture from the DOM of the element the canvas is mounted in, the same
-   way for every diagram-js editor: a pointer held on it, or diagram-js's `djs-drag-active`
-   marker inside it while the drag carries elements, which a drag preview (`djs-dragger`)
-   or diagram-js's grabbing cursor shows (a palette create follows the pointer with no
-   button held, its preview gone while the pointer is off the canvas). The marker alone is
-   no gesture: a palette tool that waits for its next press (hand, space, lasso, global
-   connect) keeps it set, and is neither waited for nor cancelled. The import runs once the
-   gesture ends, after the drop's own edit, which merges like any local edit (rule 2):
-   where the drop and the held change changed different lines, the canvas takes in both;
-   where they changed the same lines, the drop gives way to the peer's change, with the
-   conflict toast. A gesture that outlasts 10 s gives way: it is cancelled the way
-   Escape cancels it, then the import runs. Gates and repairs (rule 4) do not wait for a
-   gesture. The notice of a text that stays unrenderable goes only once a text renders: a
-   fix that arrives during a gesture lifts it when the held import runs.
+   string-equality guard (echo prevention via Yjs transaction origins), **one at a time**:
+   an import asked for while one runs follows it, one at most, and reads the text when it
+   starts. **Hold them back while a local gesture runs** (#295). A drag, resize,
+   connection, lasso or palette create has committed nothing yet, so the quiet period after
+   a local edit does not cover it, and an import replaces the shapes it works on: its drop
+   would throw and lose the move. A Miragon modeler says itself while the user holds a
+   gesture (the `interaction` surface of `@miragon/modeler-api`): the import waits for the
+   end it reports and reads the shared text then, which holds the drop, since the binding
+   writes every canvas edit into the text before the modeler's change listener returns. A
+   press that has not started a drag is no gesture there: a peer's change that comes in
+   while the pointer is held still is imported and ends the press, and the user presses
+   again to drag. bpmn-js and dmn-js have no such surface, so for them the binding reads
+   the gesture from the DOM of the element the canvas is mounted in: a pointer held on it,
+   or diagram-js's `djs-drag-active` marker inside it while the drag carries elements,
+   which a drag preview (`djs-dragger`) or diagram-js's grabbing cursor shows (a palette
+   create follows the pointer with no button held, its preview gone while the pointer is
+   off the canvas). The marker alone is no gesture: a palette tool that waits for its next
+   press (hand, space, lasso, global connect) keeps it set, and is neither waited for nor
+   cancelled. The import runs once the gesture ends, after the drop's own edit, which
+   merges like any local edit (rule 2): where the drop and the held change changed
+   different lines, the canvas takes in both; where they changed the same lines, the drop
+   gives way to the peer's change, with the conflict toast. A Miragon modeler's import also
+   waits for the user's running action (a drop, a command): an edit that action makes
+   merges into the text the same way, and the import that follows right after it shows
+   both. A gesture that outlasts 10 s gives way and the import runs: a Miragon modeler's
+   import ends the gesture itself, and bpmn-js and dmn-js get an Escape first, the way the
+   user cancels a drag. Gates and repairs (rule 4) do not wait for a gesture. The notice of
+   a text that stays unrenderable goes only once a text renders: a fix that arrives during
+   a gesture lifts it when the held import runs.
 4. **Validate merged XML before import** (cheap parse); on the rare interleaved-merge
    corruption, fall back to the last-good snapshot the Live Host keeps anyway.
    **Repair a merge that canvas writes alone broke** (#274). Two canvas exports that cross

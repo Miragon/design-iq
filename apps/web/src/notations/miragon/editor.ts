@@ -115,10 +115,15 @@ export function mountMiragonEditor(
   });
   let unbind: () => void;
   try {
-    unbind = bindMiragon(modeler, spec.contractNotation, ctx.ytext, ctx.doc, ctx.onSyncError, ctx.onImportFailed, {
-      ...ctx.sync,
-      canvasHost: container,
-    });
+    unbind = bindMiragon(
+      modeler,
+      spec.contractNotation,
+      ctx.ytext,
+      ctx.doc,
+      ctx.onSyncError,
+      ctx.onImportFailed,
+      ctx.sync,
+    );
   } catch (error) {
     todos.destroy();
     view.destroy();

@@ -209,9 +209,9 @@ test("each spec's factories are its renderer's: meta.notation is the spec's cont
 /**
  * Contract 1.5's optional surfaces, which every pinned renderer offers since
  * the 2026-10-30 releases: interaction (is a gesture running) and appearance
- * (the themes a modeler draws: light alone in all five). live-client still
- * reads a gesture from the canvas's DOM (model-sync.ts watchCanvasGesture)
- * until it moves onto `interaction` (design-iq#370).
+ * (the themes a modeler draws: light alone in all five). live-client's
+ * Miragon binding waits on `interaction` for a gesture to end
+ * (miragon-sync.ts), never reading the canvas's DOM.
  */
 test("contract 1.5: every pinned renderer offers the interaction and the appearance surface, light alone", async () => {
   for (const spec of MIRAGON_RENDERERS) {
