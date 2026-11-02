@@ -14,7 +14,7 @@ import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { AppError } from "@designiq/http-kit";
-import { applyToXml, BpmnError } from "@miragon/bpmn-cli";
+import { applyToXml, BpmnError, type Operation } from "@miragon/bpmn-cli";
 import { checkModel } from "@miragon/design-iq-validator";
 
 import {
@@ -31,7 +31,7 @@ import { newBpmnXml } from "../src/domain/bpmn-template.ts";
 const PATH = "processes/order-to-cash.bpmn";
 /** a hand-drawn design model: a pool, lanes, a decision link, a call activity — it declares Camunda 7 but executes nowhere */
 const EXAMPLE = readFileSync(join(import.meta.dirname, "fixtures", "bpmn-edit", "order-to-cash.bpmn"), "utf8");
-const RENAME = [{ op: "set", id: "Task_fulfill_order", values: { name: "Ship order" } }];
+const RENAME = [{ op: "set", id: "Task_fulfill_order", set: { name: "Ship order" } }];
 
 /** an in-memory document; `coEdit` runs before each of the first `conflicts` writes, like a co-editor's keystroke */
 function memoryIo(
@@ -122,7 +122,7 @@ test("a document that keeps changing gives up after MAX_ATTEMPTS with a conflict
 test("baseVersion: a stale one is a conflict before anything runs; a concurrent change is never re-applied", async () => {
   // ops that would not even apply to the current text: the stale version is reported, not their failure
   const stale = memoryIo(EXAMPLE);
-  const missing = [{ op: "set", id: "Task_gone", values: { name: "x" } }];
+  const missing = [{ op: "set", id: "Task_gone", set: { name: "x" } }];
   const before = await editProcess(stale, PATH, missing, { baseVersion: "not-the-current-one" });
   assert.deepEqual(before, {
     ok: false,
@@ -177,13 +177,15 @@ const withStarts = (n: number) =>
   );
 
 test("validator: a counted error that improves is the same error; one that grows is a new one", async () => {
-  const run = (xml: string, ops: unknown[]) =>
-    applyToXml(xml, ops, { validators: [designIqValidator(PATH, undefined)], layout: false });
+  const run = (xml: string, ops: Operation[]) =>
+    applyToXml(xml, ops, { validators: [designIqValidator(PATH, undefined)] });
   // 3 → 2 start events: no new error, the old one is reported as already there
   const better = await run(withStarts(2), [{ op: "remove", ids: ["StartEvent_extra_1"] }]);
-  const report = better.result.validation.validators![0]!;
-  assert.deepEqual(report.errors, []);
-  assert.ok(report.preexisting.some((f) => /found 2$/.test(f.message)));
+  assert.deepEqual(
+    better.findings.filter((f) => f.validator === "design-iq" && f.severity === "error"),
+    [],
+  );
+  assert.ok(better.preexisting.some((f) => f.validator === "design-iq" && /found 2$/.test(f.message)));
   // 2 → 0: no start event at all is a new problem, not the old one improved
   await assert.rejects(
     run(withStarts(1), [{ op: "remove", ids: ["StartEvent_extra_0", "StartEvent_order_received"] }]),
@@ -217,7 +219,9 @@ test("validator: a large process's complexity warning shrinking with the change 
 });
 
 test("validator: lint 'warn' reports the errors a change adds instead of refusing it — and keeps every other guard", async () => {
-  const deadEnd = [{ op: "add", kind: "boundaryEvent:timer", name: "1 day", on: "Task_validate_order", timer: "P1D" }];
+  const deadEnd = [
+    { op: "add", kind: "boundaryEvent:timer", name: "1 day", on: "Task_validate_order", set: { timer: "P1D" } },
+  ];
   const warned = await editProcess(memoryIo(EXAMPLE), PATH, deadEnd, { lint: "warn" });
   assert.ok(warned.ok && warned.written);
   assert.ok(warned.change.warnings.some((w) => /^\[design-iq\] bpmn\/flow: .*dead end/.test(w)));
@@ -244,23 +248,23 @@ test("validator: lint 'warn' reports the errors a change adds instead of refusin
 
 // ── the platform a model is edited as ────────────────────────────────────────
 
-test("a model no process of which is executable is edited as a design model: links keep the file's spelling", async () => {
+test("the platform comes from the file's namespaces: a decision link on a Camunda 7 file is camunda:decisionRef (bpmn-cli 0.10)", async () => {
   const link = [
     { op: "add", kind: "businessRuleTask", name: "Rate risk", after: "Task_validate_order", as: "$r" },
-    { op: "set", id: "$r", values: { calledDecision: "credit-limit-check" } },
+    { op: "set", id: "$r", set: { calledDecision: "credit-limit-check" } },
   ];
-  // the file's only link is unprefixed: so is a new one
+  // the file declares the camunda namespace: a new link takes its spelling, even beside an unprefixed one
   const design = memoryIo(EXAMPLE);
   assert.ok((await editProcess(design, PATH, link)).ok);
   assert.match(
     design.doc(),
-    /<bpmn:businessRuleTask id="businessRuleTask_rateRisk" name="Rate risk" calledDecision="credit-limit-check"/,
+    /<bpmn:businessRuleTask id="businessRuleTask_rateRisk" name="Rate risk" camunda:decisionRef="credit-limit-check"/,
   );
 
   // a link in an engine spelling keeps it, and a new link takes the spelling the file's links share (bpmn-cli 0.7)
   const camunda = memoryIo(EXAMPLE.replace(' calledDecision="', ' camunda:decisionRef="'));
   const kept = await editProcess(camunda, PATH, [
-    { op: "set", id: "Task_check_credit", values: { calledDecision: "credit-limit-v2" } },
+    { op: "set", id: "Task_check_credit", set: { calledDecision: "credit-limit-v2" } },
     ...link,
   ]);
   assert.ok(kept.ok && kept.written);
@@ -321,39 +325,24 @@ test("engine errors: code, op, element, candidates and a hint in tool words; hou
 const pack = () => ({ op: "add", kind: "userTask", name: "Pack goods", after: "Task_fulfill_order" });
 const label = (after: string) => ({ op: "add", kind: "userTask", name: "Label parcel", after });
 
-test("engine errors: a diagram-only op is told to move after a later op that adds elements, and only then (bpmn-cli 0.9)", async () => {
-  const notFound = async (ops: unknown[]): Promise<string> => {
+test("engine errors: a drawing op before a model op is a usage error that says to send the model ops first (bpmn-cli 0.10)", async () => {
+  const refused = async (ops: unknown[]): Promise<AppError> => {
     const error = await editProcess(memoryIo(EXAMPLE), PATH, ops).then(
       () => assert.fail("saved"),
       (e: unknown) => e,
     );
-    assert.ok(error instanceof AppError && error.code === "bpmn-edit/not-found", String(error));
-    return error.message;
+    assert.ok(error instanceof AppError, String(error));
+    return error;
   };
-  const advice = /diagram-only op/;
-
+  const before = await refused([{ op: "color", ids: ["userTask_packGoods"], color: "red" }, pack()]);
+  assert.equal(before.code, "bpmn-edit/usage");
+  assert.match(before.message, /^hint: Send two batches: the model operations first, then the drawing operations\.$/m);
+  // after the model ops, a drawing op names what they made; an id they did not make is not found
+  const madeBefore = await refused([pack(), { op: "color", ids: ["Task_pack_goods"], color: "red" }]);
+  assert.equal(madeBefore.code, "bpmn-edit/not-found");
   assert.match(
-    await notFound([{ op: "color", ids: ["userTask_packGoods"], color: "red" }, pack()]),
-    /^hint: color is a diagram-only op and sees only what the ops before it made: if a later op adds userTask_packGoods, put color after that op\. Run get_process_outline \(or its `find`\) to list ids\.$/m,
-  );
-  // no later op adds anything: the engine's hint alone, which names what the batch made before
-  const madeBefore = await notFound([pack(), { op: "color", ids: ["Task_pack_goods"], color: "red" }]);
-  assert.match(
-    madeBefore,
+    madeBefore.message,
     /^hint: Created earlier in this batch: userTask_packGoods, flow_packGoodsToInvoiceHandling; name them with "as": "\$name"/m,
-  );
-  assert.doesNotMatch(madeBefore, advice);
-  const typo = [{ op: "color", ids: ["Task_fulfil_order"], color: "red" }];
-  assert.doesNotMatch(await notFound(typo), advice);
-  const removed = [
-    { op: "remove", ids: ["Task_reject_order"] },
-    { op: "color", ids: ["Task_reject_order"], color: "red" },
-  ];
-  assert.doesNotMatch(await notFound(removed), advice);
-  // a model op names only what exists before it, as on 0.8: the engine's hint
-  assert.doesNotMatch(
-    await notFound([{ op: "set", id: "userTask_packGoods", values: { name: "Pack" } }, pack()]),
-    advice,
   );
 });
 
@@ -393,9 +382,18 @@ test("a new model's start event carries the id the engine gives an unnamed start
 });
 
 test("toolWords: the CLI's reading and checking commands become tools; op commands stay for the flag mapping", () => {
-  assert.equal(toolWords("See `bpmn kinds --json`."), "See the kinds in edit_process's description.");
+  assert.equal(toolWords("See `bpmn guide kinds`."), "See the kinds in edit_process's description.");
+  assert.equal(
+    toolWords("`bpmn guide ops` lists every operation"),
+    "the ops in edit_process's description lists every operation",
+  );
+  assert.equal(
+    toolWords("state: 0 errors, 1 warning (bpmn validate lists them)"),
+    "state: 0 errors, 1 warning (validate_bpmn lists them)",
+  );
   assert.equal(toolWords("`bpmn validate <file>` lists them"), "validate_bpmn lists them");
-  assert.equal(toolWords("run `bpmn layout <file> --tidy`"), "run layout_process with mode 'tidy'");
+  assert.equal(toolWords("run `bpmn tidy <file>`"), "run layout_process with mode 'tidy'");
+  assert.equal(toolWords("see `bpmn diagram <file>`"), "see the layout part of an edit_process result");
   assert.equal(toolWords("Fix the XML, or pass --force to write anyway."), "Fix the XML.");
   const move = "If Lane_billing does it: `bpmn move <file> Task_x --lane Lane_billing`.";
   assert.equal(toolWords(move), move);
@@ -436,7 +434,7 @@ test("a new flow never takes a message flow's id; a boundary on a gateway or a n
 
 // ── the engine's entries (ADR 0009: its core only) ───────────────────────────
 
-test("pnpm arch fences the pinned engine's ./node entry and its CLI, never its core (bpmn-cli-core-only)", async () => {
+test("pnpm arch fences the pinned engine's CLI, never its core (bpmn-cli-core-only)", async () => {
   const { default: config } = (await import(
     pathToFileURL(join(import.meta.dirname, "..", "..", "..", ".dependency-cruiser.mjs")).href
   )) as { default: { forbidden: { name: string; to: { path?: string } }[] } };
@@ -447,8 +445,7 @@ test("pnpm arch fences the pinned engine's ./node entry and its CLI, never its c
     exports: Record<string, { types: string; default: string }>;
   };
   const file = (relative: string) => join(dirname(manifest), relative);
-  // dependency-cruiser resolves an import to the types file, Node to the module: both must be fenced
-  for (const relative of [pkg.exports["./node"]!.types, pkg.exports["./node"]!.default, ...Object.values(pkg.bin)]) {
+  for (const relative of Object.values(pkg.bin)) {
     assert.match(file(relative), fence, relative);
   }
   for (const relative of [pkg.exports["."]!.types, pkg.exports["."]!.default]) {

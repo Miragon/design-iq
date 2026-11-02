@@ -33,6 +33,8 @@ minimumReleaseAgeExclude:
   - "@miragon/context-maps-renderer@0.9.1"
   # the BPMN editing engine (ADR 0009): published 2026-10-30, adopted on 2026-10-31
   - "@miragon/bpmn-cli@0.9.0"
+  # the 0.10 release candidate (Miragon/bpmn-cli#140): published 2026-11-02, adopted on 2026-11-02
+  - "@miragon/bpmn-cli@0.10.0-rc.1"
 overrides:
   # vitepress 1.6.4 (docs/) is the latest release and still requests vite
   # ^5.4.14, which is stuck below the dev-server fixes; 6.4.5 also closes the

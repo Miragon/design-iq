@@ -1523,6 +1523,15 @@ test("validate_bpmn dry-runs the platform validator without writing", async () =
   assert.ok(bad.findings.some((f: { severity: string }) => f.severity === "ERROR"));
   const good = await callJson("validate_bpmn", { xml: VALID, repo: REPO.fullName, path: PATH });
   assert.equal(good.ok, true);
+  // bpmn-cli 0.10: the engine's own findings (no longer in the outline) come with the platform's, once each,
+  // and its warnings never fail the check
+  const engineCodes = good.findings
+    .map((f: { ruleId: string }) => f.ruleId)
+    .filter((id: string) => id.startsWith("bpmn-cli/"));
+  assert.deepEqual(
+    engineCodes.filter((id: string) => id === "bpmn-cli/W_NO_END"),
+    ["bpmn-cli/W_NO_END"],
+  );
   // dry-run: the live content is untouched
   const got = await callJson("get_bpmn_xml", { repo: REPO.fullName, id: "order" });
   assert.equal(got.content, VALID);
