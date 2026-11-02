@@ -222,7 +222,8 @@ const EDIT_PROCESS_DESCRIPTION = [
     "the ops applied again to the new version (`baseVersion` makes it a conflict). The result lists what was " +
     "created, changed and removed (use ids from a saved result; a dry run's may change), the warnings it added and " +
     "the layout score (lower is better), without any XML. A write does not redraw the diagram by itself: end a " +
-    "process built from scratch over several calls with layout_process (mode 'redraw').",
+    "process built from scratch over several calls with layout_process (mode 'redraw'), and a batch whose new " +
+    'elements the engine cannot place (lanes, pools) with {"op":"layout"}: the save gate refuses undrawn shapes.',
   'Example: [{"op":"add","kind":"userTask","name":"Check invoice","after":"Activity_ReceiveInvoice","as":"$check"},' +
     '{"op":"add","kind":"boundaryEvent:timer","name":"2 days","on":"$check","set":{"timer":"P2D"},"as":"$late"},' +
     '{"op":"add","kind":"endEvent","name":"Invoice escalated","after":"$late"}]',

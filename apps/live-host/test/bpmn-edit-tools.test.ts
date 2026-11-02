@@ -347,6 +347,27 @@ test("edit_process: a failing op refuses the whole batch — the engine's error,
   assert.equal(await xml(), EXAMPLE);
 });
 
+test("edit_process: lanes the engine leaves undrawn are refused with the hint to end the batch with layout (bpmn-cli 0.10)", async () => {
+  const { call, callJson } = await connect(deps());
+  await callJson("create_process", { repo: REPO.fullName, name: "Return handling" });
+  const fresh = { repo: REPO.fullName, id: "return-handling" };
+  await callJson("edit_process", {
+    ...fresh,
+    ops: [{ op: "add", kind: "endEvent", name: "Return handled", after: "startEvent_start" }],
+  });
+  const lanes = [
+    { op: "add", kind: "lane", name: "Service desk", in: "return-handling", members: ["startEvent_start"] },
+    { op: "add", kind: "lane", name: "Accounting", in: "return-handling", members: ["endEvent_returnHandled"] },
+  ];
+  const undrawn = await call("edit_process", { ...fresh, ops: lanes });
+  assert.ok(undrawn.isError, undrawn.text);
+  assert.match(undrawn.text, /lane lane_serviceDesk has no BPMNDI shape/);
+  assert.match(undrawn.text, /^hint: end the batch with \{"op":"layout"\}/m);
+
+  const drawn = await callJson("edit_process", { ...fresh, ops: [...lanes, { op: "layout" }] });
+  assert.equal(drawn.written, true);
+});
+
 test("edit_process: a change that adds a save-gate error is refused inside the engine, document untouched", async () => {
   const { call, xml } = await connect(deps());
   // a boundary event without a path is a dead end for designIQ's validator

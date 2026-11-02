@@ -529,9 +529,11 @@ export function engineError(e: BpmnError): AppError {
   // a message that asks "did you mean" names them already
   if (d.candidates?.length && !/did you mean/i.test(e.message)) lines.push(`candidates: ${d.candidates.join(", ")}`);
   if (d.ops !== undefined) lines.push(`send this op first, in the same call: ${JSON.stringify(d.ops)}`);
+  const undrawn = errors.some((f) => f.validator === "design-iq" && f.code === "bpmn/di");
   const remedy =
     e.code === "E_VALIDATION"
-      ? "complete the change in the same call (a boundary event together with the path after it, a gateway with its " +
+      ? (undrawn ? 'end the batch with {"op":"layout"}, which draws what the operations left undrawn, or ' : "") +
+        "complete the change in the same call (a boundary event together with the path after it, a gateway with its " +
         "branches)" +
         (errors.some((f) => f.validator === "design-iq")
           ? ", or pass lint 'warn' if the user wants to save the model with these errors"
