@@ -133,10 +133,10 @@ export default {
       comment:
         "The BPMN editing engine (@miragon/bpmn-cli, ADR 0009) is used through its " +
         "browser-safe core: strings in, strings out, saved through the content save " +
-        "path (gate, compare-and-set, live write). Its ./node entry writes files " +
-        "past all three, and its CLI parses argv — neither belongs in the platform.",
+        "path (gate, compare-and-set, live write). Its CLI parses argv and writes " +
+        "files past all three — it does not belong in the platform.",
       from: { path: "^(apps|packages)/" },
-      // dist/node/ up to 0.8, dist/node.js and dist/node.d.ts since 0.9
+      // dist/node/ up to 0.8, dist/node.js and dist/node.d.ts in 0.9; 0.10 has no ./node entry
       to: { path: "node_modules/@miragon/bpmn-cli/(dist/(node[./]|cli\\.)|bin/)" },
     },
     {

@@ -59,6 +59,7 @@ import {
   type BpmnEditIo,
   type ChangeOptions,
   editProcess,
+  engineFindings,
   kindsList,
   layoutProcess,
   type LayoutRequest,
@@ -215,20 +216,22 @@ const EDIT_PROCESS_DESCRIPTION = [
   "BPMN only: change a LIVE process with operations on its element ids (get_process_outline lists them) instead " +
     "of rewriting its XML. The diagram is computed: a hand-drawn one is kept, new elements go next to their " +
     "neighbours. New ids follow element-id-naming's defaults (userTask_checkInvoice, flow_checkInvoiceToShip), not " +
-    'the file\'s style; `"as": "$name"` names what an op creates for later ops. The ops run in their order, the ' +
-    "diagram-only ones too: those see only what the ops before them made. One transaction: refused as a whole when " +
+    'the file\'s style; `"as": "$name"` names what an op creates for later ops. The ops run in their order; the ' +
+    "diagram-only ones come after every model op of the batch and see what those made. One transaction: refused as a whole when " +
     "an op fails or the change adds a validation error, else saved like save_bpmn_xml. A concurrent change gets " +
     "the ops applied again to the new version (`baseVersion` makes it a conflict). The result lists what was " +
     "created, changed and removed (use ids from a saved result; a dry run's may change), the warnings it added and " +
-    "the layout score (lower is better), without any XML.",
+    "the layout score (lower is better), without any XML. A write does not redraw the diagram by itself: end a " +
+    "process built from scratch over several calls with layout_process (mode 'redraw'), and a batch whose new " +
+    'elements the engine cannot place (lanes, pools) with {"op":"layout"}: the save gate refuses undrawn shapes.',
   'Example: [{"op":"add","kind":"userTask","name":"Check invoice","after":"Activity_ReceiveInvoice","as":"$check"},' +
-    '{"op":"add","kind":"boundaryEvent:timer","name":"2 days","on":"$check","timer":"P2D","as":"$late"},' +
+    '{"op":"add","kind":"boundaryEvent:timer","name":"2 days","on":"$check","set":{"timer":"P2D"},"as":"$late"},' +
     '{"op":"add","kind":"endEvent","name":"Invoice escalated","after":"$late"}]',
   `Ops (* = required):\n${opsTable()}`,
   "A new node goes `after` X (appended after a gateway or a path's end, else spliced into X's outgoing flow), " +
     "`before` Y, into `flow` F, between `after` X and `before` Y, unconnected `in` a process, pool or " +
     "sub-process, or `on` an activity (boundary events); `to` T also connects it. `split`: a gateway, its " +
-    "branches and the join. `remove` bridges the gap (`withBranch`: removes the path behind). `set` `values`: " +
+    "branches and the join. `remove` bridges the gap (`withBranch`: removes the path behind). `set` (on `set` and `add`): " +
     'name, doc, condition, default, lane, calledElement, calledDecision, prefixed vendor keys; "" removes. A ' +
     "format op's `path` is [fromId, toId].",
   `Kinds: ${kindsList()}. Triggers follow the kind (boundaryEvent:timer) with their keys: ${triggersList()}. ` +
@@ -1030,7 +1033,11 @@ export function createLiveMcpServer(
       // THE one check dispatch (incl. the generic dangling-reference rule) —
       // the same path the CLI and the save gate run, so all three agree
       const modelIds = await repoModelIds(repo);
-      const findings = checkModel(xml, { path: path ?? "<bpmn>", notation: "bpmn", modelIds }) ?? [];
+      const file = path ?? "<bpmn>";
+      const findings = [
+        ...(checkModel(xml, { path: file, notation: "bpmn", modelIds }) ?? []),
+        ...(await engineFindings(xml, file)),
+      ];
       return ok({ ok: !findings.some((f) => f.severity === "ERROR"), findings });
     }),
   );

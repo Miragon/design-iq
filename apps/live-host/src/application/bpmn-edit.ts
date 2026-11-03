@@ -25,21 +25,19 @@ import {
   type Change,
   type EditOptions,
   type EditResult,
+  type Finding,
+  type FindResult,
   findXml,
-  FORMAT_OP_NAMES,
   type FormatResult,
-  KINDS,
   kindsJson,
-  layoutXml,
-  type MutationSummary,
-  mutationSummary,
-  type NamedValidator,
+  type Operation,
   OPS_SCHEMA,
   showXml,
+  validateXml,
+  type Validator,
   type ValidatorFinding,
-  type Warning,
 } from "@miragon/bpmn-cli";
-import { checkModel } from "@miragon/design-iq-validator";
+import { checkModel, type Finding as PlatformFinding } from "@miragon/design-iq-validator";
 
 import type { PutOutcome, SaveCheck } from "./content.ts";
 
@@ -83,8 +81,8 @@ export interface BpmnChangeWire {
   notes: string[];
   /** what each format op (place, align, color, label, route, space, tidy, compact, order) did to the drawing */
   format?: string[];
-  /** the layout that ran; its score counts layout problems (lower is better) */
-  layout: MutationSummary["layout"] & { reason?: string };
+  /** the layout score after the change, and before it: it counts layout problems (lower is better) */
+  layout: { score: number; before?: number };
 }
 
 export type BpmnEditResult =
@@ -225,14 +223,10 @@ const conflict = (attempts: number, message: string): BpmnEditResult => ({
 });
 
 /**
- * The engine's options for one attempt. The platform follows the document:
- * a model no process of which is executable is a design model whatever
- * platform the modeler declared, so no engine profile (the Camunda 7 / 8
- * warnings) is reported, and a decision link keeps the file's spelling: a
- * task's own camunda:decisionRef or zeebe:calledDecision is updated in place,
- * a new link takes the engine spelling all the file's other links share, else
- * it is the unprefixed calledDecision. The engine has no copy of the save
- * gate: design-iq's validator is the only check of design-iq's rules inside it.
+ * The engine's options for one attempt. The engine reads the platform from the
+ * file's namespaces and runs its Camunda checks only on executable processes.
+ * It has no copy of the save gate: design-iq's validator is the only check of
+ * design-iq's rules inside it.
  */
 function engineOptions(
   current: { path: string; content: string },
@@ -240,8 +234,6 @@ function engineOptions(
   options: ChangeOptions,
 ): EditOptions {
   return {
-    file: current.path,
-    platform: /\bisExecutable\s*=\s*["']true["']/.test(current.content) ? "auto" : "none",
     validators: [designIqValidator(current.path, modelIds, options.lint ?? "block")],
   };
 }
@@ -257,7 +249,7 @@ export function editProcess(
     io,
     path,
     "edit",
-    (xml, engineOpts) => engine(() => applyToXml(xml, ops, engineOpts), ops),
+    (xml, engineOpts) => engine(() => applyToXml(xml, ops as Operation[], engineOpts)),
     options,
   );
 }
@@ -282,19 +274,14 @@ export function layoutProcess(
   if (request.mode === "tidy" && (request.expand?.length || request.collapse?.length)) {
     throw usage("`expand` and `collapse` redraw the diagram: use them with mode 'redraw'");
   }
-  return changeLive(
-    io,
-    path,
-    "layout",
-    (xml, engineOpts) =>
-      layoutXml(xml, {
-        ...engineOpts,
-        ...(request.mode === "tidy" ? { tidy: true } : {}),
-        ...(request.expand?.length ? { expand: request.expand } : {}),
-        ...(request.collapse?.length ? { collapse: request.collapse } : {}),
-      }),
-    options,
-  );
+  return changeLive(io, path, "layout", (xml, engineOpts) => applyToXml(xml, layoutOps(request), engineOpts), options);
+}
+
+function layoutOps(request: LayoutRequest): Operation[] {
+  if (request.mode === "tidy") return [{ op: "tidy" }];
+  const drawnAs = (ids: string[] | undefined, expanded: boolean): Operation[] =>
+    (ids ?? []).map((id) => ({ op: "set", id, set: { expanded } }));
+  return [...drawnAs(request.expand, true), ...drawnAs(request.collapse, false), { op: "layout" }];
 }
 
 export interface OutlineRequest {
@@ -330,15 +317,16 @@ export async function outlineProcess(io: BpmnEditIo, path: string, request: Outl
   const current = await io.read(path);
   const outline =
     request.find !== undefined
-      ? findLines(await engine(() => findXml(current.content, request.find!)), request.find)
-      : await engine(() =>
-          showXml(current.content, {
-            ...(request.element !== undefined ? { id: request.element, context: true } : {}),
+      ? findLines(await engine(() => findXml(current.content, { text: request.find! })), request.find)
+      : await engine(async () => {
+          const shown = await showXml(current.content, {
+            ...(request.element !== undefined ? { id: request.element } : {}),
             ...(request.around !== undefined ? { around: request.around } : {}),
             ...(request.depth !== undefined ? { depth: request.depth } : {}),
-            ...(request.scope !== undefined ? { scope: request.scope } : {}),
-          }),
-        );
+            ...(request.scope !== undefined ? { in: request.scope } : {}),
+          });
+          return toolWords(shown.text);
+        });
   const gate = await io.check(current.path, { content: current.content, lint: "warn" });
   const saveGate = !gate.ok
     ? { refused: gate.message }
@@ -349,12 +337,12 @@ export async function outlineProcess(io: BpmnEditIo, path: string, request: Outl
 }
 
 /** `userTask Task_check "Check order" (in order-to-cash)` per hit */
-function findLines(hits: Awaited<ReturnType<typeof findXml>>, text: string): string {
+function findLines({ hits }: FindResult, text: string): string {
   if (hits.length === 0) return `no element's id, name, text or vendor value contains "${text}"`;
   return hits
     .map(
       (h) =>
-        `${h.kind} ${h.id}${h.name ? ` "${h.name}"` : ""}${h.scope ? ` (in ${h.scope})` : ""}` +
+        `${h.kind} ${h.id}${h.name ? ` "${h.name}"` : ""}${h.in ? ` (in ${h.in})` : ""}` +
         (h.match ? ` [${h.match}]` : ""),
     )
     .join("\n");
@@ -390,7 +378,7 @@ export function designIqValidator(
   path: string,
   modelIds: ReadonlyMap<string, ReadonlySet<string>> | undefined,
   lint: Lint = "block",
-): NamedValidator {
+): Validator {
   const before = new Map<string, number>();
   return {
     name: "design-iq",
@@ -422,31 +410,48 @@ export function designIqValidator(
   };
 }
 
+/** the engine's own checks (Camunda, lint, layout) as platform findings; none for XML it cannot read */
+export async function engineFindings(xml: string, file: string): Promise<PlatformFinding[]> {
+  let report;
+  try {
+    report = await validateXml(xml);
+  } catch (e) {
+    if (e instanceof BpmnError) return [];
+    throw e;
+  }
+  return report.findings.map((f) => ({
+    severity: f.severity === "error" ? "ERROR" : "WARN",
+    ruleId: `bpmn-cli/${f.code}`,
+    file,
+    message: toolWords(`${f.element ? `${f.element}: ` : ""}${f.message}`),
+  }));
+}
+
 // ── results and errors ────────────────────────────────────────────────────────
 
 /** `userTask Task_x "Name" - detail` */
 const changeLine = (c: Change): string =>
   `${c.kind} ${c.id}${c.name ? ` "${c.name}"` : ""}${c.detail ? ` - ${toolWords(c.detail)}` : ""}`;
 
-const warningLine = (w: Warning & { validator?: string }): string =>
+const warningLine = (w: Finding): string =>
   `${w.validator ? `[${w.validator}] ` : ""}${w.code}${w.element ? ` ${w.element}` : ""}: ${toolWords(w.message)}` +
   (w.hint ? ` (${toolWords(w.hint)})` : "");
 
 function changeOf(edit: EditResult): BpmnChangeWire {
-  const r = edit.result;
-  const { aliases, renamed, layout } = mutationSummary(r);
-  const created = new Set(r.created.map((c) => c.id));
+  const created = new Set(edit.created.map((c) => c.id));
+  const renamed = Object.fromEntries(edit.renamed.map(({ from, to }) => [from, to]));
+  const before = edit.score.before?.score;
   return {
-    created: r.created.map(changeLine),
-    ...(aliases ? { aliases } : {}),
+    created: edit.created.map(changeLine),
+    ...(Object.keys(edit.aliases).length ? { aliases: edit.aliases } : {}),
     // an element the batch created is listed once, as created
-    changed: r.changed.filter((c) => !created.has(c.id)).map(changeLine),
-    ...(renamed ? { renamed } : {}),
-    removed: r.removed.map(changeLine),
-    warnings: r.warnings.added.map(warningLine),
-    notes: r.notes.map(toolWords),
-    ...(r.layout.format?.length ? { format: r.layout.format.map(formatLine) } : {}),
-    layout: { ...layout, ...(r.layout.reason ? { reason: r.layout.reason } : {}) },
+    changed: edit.changed.filter((c) => !created.has(c.id)).map(changeLine),
+    ...(edit.renamed.length ? { renamed } : {}),
+    removed: edit.removed.map(changeLine),
+    warnings: edit.findings.map(warningLine),
+    notes: edit.notes.map(toolWords),
+    ...(edit.format.length ? { format: edit.format.map(formatLine) } : {}),
+    layout: { score: edit.score.after.score, ...(before !== undefined ? { before } : {}) },
   };
 }
 
@@ -472,7 +477,7 @@ function formatLine(f: FormatResult): string {
  */
 function refusal(tool: Tool, code: string, message: string, edit: EditResult): string {
   if (code !== "content/invalid-model") return message;
-  const old = (edit.result.validation.validators ?? []).flatMap((v) => v.preexisting);
+  const old = edit.preexisting;
   const listed =
     old.length > 0
       ? "the save gate refuses a model with errors (lint 'block'), and the document had these before your change " +
@@ -487,11 +492,11 @@ function refusal(tool: Tool, code: string, message: string, edit: EditResult): s
 }
 
 /** runs the engine; its BpmnError becomes an AppError with an agent-readable message */
-async function engine<T>(run: () => Promise<T>, ops?: unknown): Promise<T> {
+async function engine<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (e) {
-    if (e instanceof BpmnError) throw engineError(e, ops);
+    if (e instanceof BpmnError) throw engineError(e);
     throw e;
   }
 }
@@ -512,12 +517,11 @@ const REMEDY: Record<string, string> = {
  * plus the engine's details: the candidates, a room-making op, the errors a
  * change would add, the hint — in tool words (toolWords).
  */
-export function engineError(e: BpmnError, ops?: unknown): AppError {
+export function engineError(e: BpmnError): AppError {
   const d = e.details;
   const where = [d.op !== undefined ? `in ops[${d.op}]` : "", d.element ? `(${d.element})` : ""].filter(Boolean);
   const lines = [`${e.code}${where.length > 0 ? ` ${where.join(" ")}` : ""}: ${toolWords(e.message)}`];
-  const errors =
-    e.code === "E_VALIDATION" && Array.isArray(d.errors) ? (d.errors as (Warning & { validator?: string })[]) : [];
+  const errors = e.code === "E_VALIDATION" && Array.isArray(d.errors) ? (d.errors as Finding[]) : [];
   for (const f of errors) lines.push(`- ${warningLine({ ...f, hint: undefined })}`);
   // what a lossy import would drop
   if (e.code === "E_IMPORT_LOSSY" && Array.isArray(d.warnings))
@@ -525,40 +529,19 @@ export function engineError(e: BpmnError, ops?: unknown): AppError {
   // a message that asks "did you mean" names them already
   if (d.candidates?.length && !/did you mean/i.test(e.message)) lines.push(`candidates: ${d.candidates.join(", ")}`);
   if (d.ops !== undefined) lines.push(`send this op first, in the same call: ${JSON.stringify(d.ops)}`);
+  const undrawn = errors.some((f) => f.validator === "design-iq" && f.code === "bpmn/di");
   const remedy =
     e.code === "E_VALIDATION"
-      ? "complete the change in the same call (a boundary event together with the path after it, a gateway with its " +
+      ? (undrawn ? 'end the batch with {"op":"layout"}, which draws what the operations left undrawn, or ' : "") +
+        "complete the change in the same call (a boundary event together with the path after it, a gateway with its " +
         "branches)" +
         (errors.some((f) => f.validator === "design-iq")
           ? ", or pass lint 'warn' if the user wants to save the model with these errors"
           : "")
-      : [diagramOpAdvice(e, ops), REMEDY[e.code] ?? (d.hint ? toolWords(d.hint) : undefined)].filter(Boolean).join(" ");
+      : (REMEDY[e.code] ?? (d.hint ? toolWords(d.hint) : undefined));
   if (remedy) lines.push(`hint: ${remedy}`);
   return new AppError(`bpmn-edit/${kebab(e.code)}`, lines.join("\n"), { status: STATUS[e.category], expose: true });
 }
-
-/**
- * Since bpmn-cli 0.9 a diagram-only op runs where it stands in the batch, so it
- * cannot name what a later op adds. Said only when a later op can add an
- * element at all, and as a condition: a typo, or an id an earlier op removed or
- * renamed, would otherwise be sent looking for an op that does not exist.
- */
-function diagramOpAdvice(e: BpmnError, ops: unknown): string | undefined {
-  const index = e.details.op;
-  if (e.code !== "E_NOT_FOUND" || !Array.isArray(ops) || index === undefined) return undefined;
-  const name = opName(ops[index]);
-  if (!name || !(FORMAT_OP_NAMES as readonly string[]).includes(name)) return undefined;
-  if (!ops.slice(index + 1).some((op) => ADDING_OPS.has(opName(op) ?? ""))) return undefined;
-  return (
-    `${name} is a diagram-only op and sees only what the ops before it made: if a later op adds ` +
-    `${e.details.element ?? "the element"}, put ${name} after that op.`
-  );
-}
-
-const opName = (op: unknown): string | undefined => {
-  const name = (op as { op?: unknown } | null | undefined)?.op;
-  return typeof name === "string" ? name : undefined;
-};
 
 /** E_NOT_FOUND → not-found (the house AppError codes are `<area>/<kebab>`) */
 const kebab = (code: string): string =>
@@ -578,15 +561,17 @@ const usage = (message: string): AppError =>
 const CLI_WORDS: ReadonlyArray<readonly [RegExp, string]> = [
   [/`bpmn show\b[^`]*` or `bpmn find\b[^`]*`/g, "get_process_outline (or its `find`)"],
   [/`bpmn find\b[^`]*`/g, "get_process_outline with `find`"],
-  [/`bpmn show\b[^`]*--layout[^`]*`/g, "the diagram part of get_bpmn_xml"],
   [/`bpmn show\b[^`]*`/g, "get_process_outline"],
-  [/`bpmn kinds\b[^`]*`/g, "the kinds in edit_process's description"],
+  [/`bpmn guide kinds\b[^`]*`/g, "the kinds in edit_process's description"],
+  [/`bpmn guide ops\b[^`]*`/g, "the ops in edit_process's description"],
+  [/`bpmn guide\b[^`]*`/g, "edit_process's description"],
   [/`bpmn validate\b[^`]*`/g, "validate_bpmn"],
+  [/\bbpmn validate\b/g, "validate_bpmn"],
   [/`bpmn apply\b[^`]*`/g, "one edit_process call"],
-  [/`bpmn layout\b[^`]*--tidy[^`]*`/g, "layout_process with mode 'tidy'"],
+  [/`bpmn tidy\b[^`]*`/g, "layout_process with mode 'tidy'"],
   [/`bpmn layout\b[^`]*`/g, "layout_process with mode 'redraw'"],
   [/`bpmn new\b[^`]*`/g, "create_process"],
-  [/`bpmn (?:metrics|render)\b[^`]*`/g, "the layout part of an edit_process result"],
+  [/`bpmn (?:diagram|render)\b[^`]*`/g, "the layout part of an edit_process result"],
   [/,? or (?:pass |use )?--force\b[^.;)]*/g, ""],
 ];
 
@@ -603,19 +588,17 @@ interface OpDef {
 
 const DEFS = OPS_SCHEMA.$defs as Record<string, OpDef>;
 
-/** the ops of bpmn-cli's batch, in the schema's order */
-export const OP_NAMES = (DEFS.op as unknown as { oneOf: { $ref: string }[] }).oneOf.map((r) =>
-  r.$ref.split("/").at(-1)!,
-) as [string, ...string[]];
+const opNamesOf = (def: string): string[] =>
+  (DEFS[def] as unknown as { oneOf: { $ref: string }[] }).oneOf.map((r) => r.$ref.split("/").at(-1)!);
 
-/** the ops that can add an element: they take an `as` alias or the id of a flow they make */
-const ADDING_OPS = new Set(
-  OP_NAMES.filter((name) => DEFS[name]?.properties?.as !== undefined || DEFS[name]?.properties?.flowId !== undefined),
-);
+/** the ops of bpmn-cli's batch, in the schema's order */
+export const OP_NAMES = opNamesOf("op") as [string, ...string[]];
+
+const DRAWING_OP_NAMES = new Set(opNamesOf("drawingOp"));
 
 /** `add      kind* name id as …` — one line per semantic op, `*` = required; the format ops on one line */
 export function opsTable(): string {
-  const format = new Set<string>(FORMAT_OP_NAMES);
+  const format = DRAWING_OP_NAMES;
   const width = Math.max(...OP_NAMES.map((n) => n.length));
   const keys = (name: string) => {
     const def = DEFS[name] ?? {};
@@ -625,20 +608,21 @@ export function opsTable(): string {
       .join(" ");
   };
   const semantic = OP_NAMES.filter((n) => !format.has(n)).map((n) => `${n.padEnd(width)}  ${keys(n)}`);
-  const drawing = OP_NAMES.filter((n) => format.has(n)).map((n) => `${n} (${keys(n)})`);
+  const drawing = OP_NAMES.filter((n) => format.has(n)).map((n) => (keys(n) ? `${n} (${keys(n)})` : n));
   return [...semantic, `diagram only: ${drawing.join("; ")}`].join("\n");
 }
 
 /** `task, userTask, …` — the element kinds an op names */
 export function kindsList(): string {
-  return KINDS.map((k) => k.kind).join(", ");
+  return kindsJson()
+    .kinds.map((k) => k.kind)
+    .join(", ");
 }
 
-/** `message (message), timer (timer, timerKind), …, terminate` — the event triggers with their op keys */
+/** `message (message), timer (timer), …, terminate` — the event triggers with their op keys */
 export function triggersList(): string {
-  const triggers = kindsJson().triggers as Record<string, { keys?: string[] }>;
-  return Object.entries(triggers)
-    .filter(([name]) => name !== "none")
-    .map(([name, t]) => (t.keys?.length ? `${name} (${t.keys.join(", ")})` : name))
+  return kindsJson()
+    .triggers.filter(({ trigger }) => trigger !== "none")
+    .map(({ trigger, keys }) => (keys.length ? `${trigger} (${keys.join(", ")})` : trigger))
     .join(", ");
 }

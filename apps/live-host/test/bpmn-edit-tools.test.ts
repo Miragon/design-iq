@@ -42,7 +42,7 @@ const PATH = "processes/order-to-cash.bpmn";
 /** a hand-drawn design model: a pool, lanes, a decision link, a call activity, an event sub-process */
 const EXAMPLE = readFileSync(join(FIXTURES, "order-to-cash.bpmn"), "utf8");
 const ref = { repo: REPO.fullName, id: "order-to-cash" };
-const RENAME = [{ op: "set", id: "Task_validate_order", values: { name: "Check order" } }];
+const RENAME = [{ op: "set", id: "Task_validate_order", set: { name: "Check order" } }];
 
 const session: Session = {
   id: "sess-petra",
@@ -132,12 +132,12 @@ test("edit_process: its description carries the engine's op table, kinds and tri
   const edit = (await client.listTools()).tools.find((t) => t.name === "edit_process")!;
   assert.match(edit.description!, /^add +kind\* name id as /m);
   assert.match(edit.description!, /^split +after\* /m);
-  assert.match(edit.description!, /^diagram only: place \(.*\); compact \(ids\)$/m);
+  assert.match(edit.description!, /^diagram only: layout; tidy \(ids\); compact \(ids\); place \(.*\); space \(.*\)$/m);
   assert.match(edit.description!, /boundaryEvent, participant/);
-  assert.match(edit.description!, /timer \(timer, timerKind\)/);
-  // bpmn-cli 0.9: new ids no longer follow the file's style, and a diagram-only op runs where it stands
+  assert.match(edit.description!, /timer \(timer\)/);
+  // bpmn-cli 0.9: new ids no longer follow the file's style; 0.10: the diagram-only ops come last
   assert.match(edit.description!, /New ids follow element-id-naming's defaults \(userTask_checkInvoice, /);
-  assert.match(edit.description!, /The ops run in their order, the diagram-only ones too/);
+  assert.match(edit.description!, /the diagram-only ones come after every model op/);
   // clients cut long descriptions (Claude Code: 4096 characters) — the engine-derived table grows with the
   // engine, so a bump that crosses the budget must shorten the prose, not lose the end
   assert.ok(edit.description!.length < 4000, `edit_process description: ${edit.description!.length} characters`);
@@ -162,8 +162,8 @@ test("get_process_outline: the model as text — whole, around an element, one e
   assert.ok(!around.outline.includes("EndEvent_order_fulfilled"));
 
   const element = await callJson("get_process_outline", { ...ref, element: "Task_check_credit" });
-  assert.match(element.outline, /^lane: Lane_order_management "Order Management"$/m);
-  assert.match(element.outline, /^from: userTask Task_validate_order/m);
+  assert.match(element.outline, /^in: Participant_acme > order-to-cash · lane Lane_order_management$/m);
+  assert.match(element.outline, /^from: Task_validate_order \(Flow_to_credit\)/m);
 
   const found = await callJson("get_process_outline", { ...ref, find: "credit" });
   assert.match(found.outline, /^businessRuleTask Task_check_credit "Check credit limit"/m);
@@ -199,10 +199,11 @@ test("a new process: create_process gives one unnamed start event to build on, e
   const fresh = { repo: REPO.fullName, id: "order-handling" };
 
   const outline = await callJson("get_process_outline", fresh);
-  // bpmn-cli's own checks warn about the missing end until there is one; warnings never block a save
+  // bpmn-cli's own checks warn about the missing end until there is one (validate_bpmn lists them); warnings never
+  // block a save
   assert.match(
     outline.outline,
-    /^process order-handling "Order handling" non-executable\n {2}startEvent startEvent_start\nproblems:\n {2}W_NO_END order-handling: [^\n]*\n {2}W_DEAD_END startEvent_start: [^\n]*$/,
+    /^process order-handling "Order handling" non-executable\n {2}startEvent startEvent_start\nstate: 0 errors, 2 warnings \(validate_bpmn lists them[^\n]*\)$/,
   );
   assert.equal(outline.saveGate, undefined, "a fresh draft passes the save gate");
 
@@ -217,7 +218,7 @@ test("a new process: create_process gives one unnamed start event to build on, e
   const out = await callJson("edit_process", {
     ...fresh,
     ops: [
-      { op: "set", id: "startEvent_start", values: { name: "Order received" } },
+      { op: "set", id: "startEvent_start", set: { name: "Order received" } },
       { op: "add", kind: "userTask", name: "Check order", after: "startEvent_start", as: "$check" },
       { op: "add", kind: "endEvent", name: "Order checked", after: "$check" },
     ],
@@ -243,9 +244,15 @@ test("edit_process: a batch with aliases lands in the live document, drawn, with
     ...ref,
     ops: [
       { op: "add", kind: "userTask", name: "Pack goods", after: "Task_fulfill_order", as: "$pack" },
-      { op: "add", kind: "boundaryEvent:timer", name: "2 days", on: "$pack", timer: "P2D", as: "$late" },
+      { op: "add", kind: "boundaryEvent:timer", name: "2 days", on: "$pack", set: { timer: "P2D" }, as: "$late" },
       { op: "add", kind: "endEvent", name: "Packing escalated", after: "$late" },
-      { op: "add", kind: "textAnnotation", text: "packed by the warehouse team", in: "order-to-cash", as: "$note" },
+      {
+        op: "add",
+        kind: "textAnnotation",
+        set: { text: "packed by the warehouse team" },
+        in: "order-to-cash",
+        as: "$note",
+      },
       { op: "connect", source: "$note", target: "$pack" },
     ],
   });
@@ -266,7 +273,7 @@ test("edit_process: a batch with aliases lands in the live document, drawn, with
     ),
     "an existing id keeps its form",
   );
-  assert.equal(out.change.layout.mode, "incremental", "the hand-drawn diagram is kept");
+  assert.equal(typeof out.change.layout.score, "number", "the layout score after the change");
   assert.ok(!JSON.stringify(out).includes("<bpmn:"), "no XML in the result");
 
   // the new elements are in the document, in a lane, drawn
@@ -297,7 +304,7 @@ test("edit_process: the format ops say what they did to the drawing", async () =
   assert.deepEqual(out.change.format, ["color #0: colored Task_validate_order", "tidy #1: nothing to do"]);
 });
 
-test("edit_process: a diagram-only op runs where it stands, so it cannot name what a later op adds (bpmn-cli 0.9)", async () => {
+test("edit_process: a diagram-only op goes after the model ops; before one it is a usage error (bpmn-cli 0.10)", async () => {
   const { call, callJson, xml } = await connect(deps());
   const add = {
     op: "add",
@@ -309,11 +316,8 @@ test("edit_process: a diagram-only op runs where it stands, so it cannot name wh
   const color = { op: "color", ids: ["userTask_packGoods"], color: "red" };
   const early = await call("edit_process", { ...ref, ops: [color, add] });
   assert.ok(early.isError, early.text);
-  assert.match(early.text, /^E_NOT_FOUND in ops\[0\] \(userTask_packGoods\)/);
-  assert.match(
-    early.text,
-    /^hint: color is a diagram-only op and sees only what the ops before it made: if a later op adds userTask_packGoods, put color after that op\./m,
-  );
+  assert.match(early.text, /^E_USAGE in ops\[1\]: .*cannot follow the drawing operation ops\[0\] \(color\)/);
+  assert.match(early.text, /^hint: Send two batches: the model operations first, then the drawing operations\.$/m);
   assert.equal(await xml(), EXAMPLE);
 
   const late = await callJson("edit_process", { ...ref, ops: [add, color] });
@@ -343,12 +347,33 @@ test("edit_process: a failing op refuses the whole batch — the engine's error,
   assert.equal(await xml(), EXAMPLE);
 });
 
+test("edit_process: lanes the engine leaves undrawn are refused with the hint to end the batch with layout (bpmn-cli 0.10)", async () => {
+  const { call, callJson } = await connect(deps());
+  await callJson("create_process", { repo: REPO.fullName, name: "Return handling" });
+  const fresh = { repo: REPO.fullName, id: "return-handling" };
+  await callJson("edit_process", {
+    ...fresh,
+    ops: [{ op: "add", kind: "endEvent", name: "Return handled", after: "startEvent_start" }],
+  });
+  const lanes = [
+    { op: "add", kind: "lane", name: "Service desk", in: "return-handling", members: ["startEvent_start"] },
+    { op: "add", kind: "lane", name: "Accounting", in: "return-handling", members: ["endEvent_returnHandled"] },
+  ];
+  const undrawn = await call("edit_process", { ...fresh, ops: lanes });
+  assert.ok(undrawn.isError, undrawn.text);
+  assert.match(undrawn.text, /lane lane_serviceDesk has no BPMNDI shape/);
+  assert.match(undrawn.text, /^hint: end the batch with \{"op":"layout"\}/m);
+
+  const drawn = await callJson("edit_process", { ...fresh, ops: [...lanes, { op: "layout" }] });
+  assert.equal(drawn.written, true);
+});
+
 test("edit_process: a change that adds a save-gate error is refused inside the engine, document untouched", async () => {
   const { call, xml } = await connect(deps());
   // a boundary event without a path is a dead end for designIQ's validator
   const out = await call("edit_process", {
     ...ref,
-    ops: [{ op: "add", kind: "boundaryEvent:timer", name: "1 day", on: "Task_validate_order", timer: "P1D" }],
+    ops: [{ op: "add", kind: "boundaryEvent:timer", name: "1 day", on: "Task_validate_order", set: { timer: "P1D" } }],
   });
   assert.ok(out.isError, out.text);
   assert.match(out.text, /^E_VALIDATION/);
@@ -360,8 +385,8 @@ test("edit_process: a change that adds a save-gate error is refused inside the e
 test("edit_process: removing a node cleans its associations and message flows (#236 finding 2)", async () => {
   const collab = await applyToXml(EXAMPLE, [
     { op: "add", kind: "participant", name: "Customer", blackBox: true, as: "$customer" },
-    { op: "connect", source: "Task_reject_order", target: "$customer", name: "rejection" },
-    { op: "add", kind: "textAnnotation", text: "sent by mail", in: "order-to-cash", as: "$note" },
+    { op: "connect", source: "Task_reject_order", target: "$customer", set: { name: "rejection" } },
+    { op: "add", kind: "textAnnotation", set: { text: "sent by mail" }, in: "order-to-cash", as: "$note" },
     { op: "connect", source: "$note", target: "Task_reject_order" },
   ]);
   const { callJson, xml } = await connect(deps(collab.xml));
@@ -375,7 +400,7 @@ test("edit_process: removing a node cleans its associations and message flows (#
 
 test("edit_process: retype keeps the extensions and documentation of an activity (#236 finding 7)", async () => {
   const withExtras = await applyToXml(EXAMPLE, [
-    { op: "set", id: "Task_validate_order", values: { doc: "Four eyes." } },
+    { op: "set", id: "Task_validate_order", set: { doc: "Four eyes." } },
     {
       op: "ext",
       id: "Task_validate_order",
@@ -404,7 +429,7 @@ test("dry run: computes, asks the save gate, writes nothing (#236 finding 4)", a
   const same = await callJson("edit_process", {
     ...ref,
     dryRun: true,
-    ops: [{ op: "set", id: "Task_validate_order", values: { name: "Validate order" } }],
+    ops: [{ op: "set", id: "Task_validate_order", set: { name: "Validate order" } }],
   });
   assert.deepEqual([same.unchanged, same.dryRun, same.wouldSave], [true, true, undefined]);
 });
@@ -493,7 +518,7 @@ test("layout_process: redraw draws anew, changing only the geometry; every edge 
   const { call, callJson, xml } = await connect(deps());
   const before = (await callJson("get_process_outline", ref)).outline;
   const redraw = await callJson("layout_process", { ...ref, mode: "redraw" });
-  assert.deepEqual([redraw.ok, redraw.written, redraw.change.layout.mode], [true, true, "full"]);
+  assert.deepEqual([redraw.ok, redraw.written], [true, true]);
   assertEdgesRouted(await xml());
   assert.equal((await callJson("get_process_outline", ref)).outline, before, "the model itself is untouched");
 
