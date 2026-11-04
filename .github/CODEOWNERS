@@ -6,6 +6,9 @@
 #
 # GitHub ignores lines starting with #. Later entries win over earlier ones.
 
+# ── Everything else (fallback; must stay first, later entries win) ───
+*                             @dominikhorn93
+
 # ── Platform code ────────────────────────────────────────────────────
 /apps/                        @dominikhorn93
 /packages/                    @dominikhorn93
