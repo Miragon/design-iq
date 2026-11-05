@@ -26,12 +26,12 @@
     "@miragon/design-iq-validator": "workspace:*",
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/geist-mono": "5.3.0",
-    "@hocuspocus/server": "4.7.1",
+    "@hocuspocus/server": "4.8.0",
     "@miragon/bpmn-cli": "0.10.0",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/ext-apps": "2.0.4",
     "@modelcontextprotocol/server": "2.4.0",
-    "jose": "6.2.13",
+    "jose": "6.2.15",
     "yaml": "2.9.1",
     "y-protocols": "1.0.7",
     "yjs": "13.6.33",
@@ -39,6 +39,6 @@
   },
   "devDependencies": {
     "@types/ws": "8.18.2",
-    "ws": "8.22.0"
+    "ws": "8.22.1"
   }
 }
