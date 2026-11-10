@@ -27,10 +27,13 @@ export const CD = {
   /** text on light — and the CI's only dark ground (overlays, backdrops) */
   schwarz: "#1D1D1D",
   weiss: "#FFFFFF",
-  success: "#0B7A55",
-  warning: "#92610A",
-  danger: "#C92A2A",
-  info: "#2B50D4",
+  success: "#00E676",
+  warning: "#FFB000",
+  danger: "#CD1839",
+  info: "#335DE5",
+  successSoft: "#DAFBEB",
+  warningSoft: "#FFF1D2",
+  dangerSoft: "#FBEEF0",
   /** decorative lines (no contrast claim) */
   linie: "#E6E2E2",
   /** non-text that needs ≥ 3:1 (input borders, edges) */
@@ -52,6 +55,9 @@ export const CD_TOKENS: Record<string, string> = {
   "--cd-warning": CD.warning,
   "--cd-danger": CD.danger,
   "--cd-info": CD.info,
+  "--cd-success-soft": CD.successSoft,
+  "--cd-warning-soft": CD.warningSoft,
+  "--cd-danger-soft": CD.dangerSoft,
   "--cd-linie": CD.linie,
   "--cd-kontur": CD.kontur,
   "--cd-text-leise": CD.textLeise,
@@ -137,10 +143,10 @@ export const ALIASES = {
   success: CD.success,
   warning: CD.warning,
   info: CD.info,
-  /** opaque: the CI -soft 12 % over the ground, so no row tint shows through */
-  "success-soft": mix(CD.success, 12, CD.weiss),
-  "warning-soft": mix(CD.warning, 12, CD.weiss),
-  "destructive-soft": mix(CD.danger, 12, CD.weiss),
+  /** opaque: the CI -soft, so no row tint shows through */
+  "success-soft": CD.successSoft,
+  "warning-soft": CD.warningSoft,
+  "destructive-soft": CD.dangerSoft,
   link: CD.blauLink,
   brand: CD.gruen,
   border: CD.linie,

@@ -109,7 +109,7 @@ the plugin is installed; without it, read the guide:
 https://raw.githubusercontent.com/Miragon/corporate-identity/main/plugins/miragon-brand/skills/modeler-tool-design/assets/modeler-design-system.md
 
 - **Tokens are vendored, never forked:** `packages/ui-kit/src/cd-tokens.generated.css` —
-  never edit it, re-copy it from the skill to update. App aliases (`--primary`, `--link`,
+  never edit it, re-copy it with the plugin's `brand-assets.mjs` (`.miragon/brand-assets.yaml`). App aliases (`--primary`, `--link`,
   `--border`, `--canvas-*` …) live in `packages/ui-kit/src/tokens.css`, mirrored in
   `lib/tokens.ts` for code that needs a real colour value (Monaco, renderer defaults, SVG
   attributes); `pnpm --filter @designiq/ui-kit test` fails on drift and on contrast below

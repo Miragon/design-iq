@@ -23,6 +23,8 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - name: Brand assets unchanged since brand-assets.mjs copied them (.miragon/brand-assets.yaml)
+        run: sha256sum -c .miragon/brand-assets.sha256
       - run: pnpm install --frozen-lockfile
       - name: Lint (eslint — errors fail; warnings are the ratchet)
         run: pnpm lint
