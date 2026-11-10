@@ -5,7 +5,7 @@
  * elements so the persistence module and tests stay decoupled from the
  * engine.
  */
-import { CD, mix } from "@designiq/ui-kit/lib/tokens";
+import { CD } from "@designiq/ui-kit/lib/tokens";
 
 // FROZEN with the moddle descriptor (sticky-moddle.ts): moddle names a parsed
 // element "<descriptor prefix>:<type name>", so the left half MUST equal that
@@ -19,20 +19,21 @@ export const STICKY_SIZE = { width: 120, height: 120 };
 export const STICKY_MIN = { width: 60, height: 60 };
 
 /**
- * kind → fill/stroke on the CI palette (§3.6): the fill is a CI colour mixed
- * into white, the stroke the functional colour of its family (≥ 3:1 on the
- * canvas and on the fill) — note = warning, question = danger (an open end),
- * decision = green fill + success stroke, role = blue. Literal hex from the
- * tokens mirror: the renderer writes SVG attributes and the context pad a
- * data-URL icon, neither can read a CSS variable. Render-only — the file
- * stores the kind, never a colour. The Notes panel keys its dots on the
- * strokes.
+ * kind → fill/stroke/dot on the CI palette (§3.3, §3.6): the fill is the
+ * opaque -soft tint of its status, the stroke ≥ 3:1 on the canvas and on the
+ * fill. Green and amber stay fills with a black contour, red and blue carry
+ * the stroke themselves — note = warning, question = danger (an open end),
+ * decision = success, role = info. The dot (the Notes panel) is the status
+ * colour, beside the kind's name. Literal hex from the tokens mirror: the
+ * renderer writes SVG attributes and the context pad a data-URL icon, neither
+ * can read a CSS variable. Render-only — the file stores the kind, never a
+ * colour.
  */
-export const STICKY_COLORS: Record<StickyKind, { fill: string; stroke: string }> = {
-  note: { fill: mix(CD.warning, 20, CD.weiss), stroke: CD.warning },
-  question: { fill: mix(CD.danger, 18, CD.weiss), stroke: CD.danger },
-  decision: { fill: mix(CD.gruen, 24, CD.weiss), stroke: CD.success },
-  role: { fill: mix(CD.blau, 18, CD.weiss), stroke: CD.blau },
+export const STICKY_COLORS: Record<StickyKind, { fill: string; stroke: string; dot: string }> = {
+  note: { fill: CD.warningSoft, stroke: CD.schwarz, dot: CD.warning },
+  question: { fill: CD.dangerSoft, stroke: CD.danger, dot: CD.danger },
+  decision: { fill: CD.successSoft, stroke: CD.schwarz, dot: CD.success },
+  role: { fill: CD.infoSoft, stroke: CD.info, dot: CD.info },
 };
 
 /** text on every sticky fill (≥ 10:1 on each) */

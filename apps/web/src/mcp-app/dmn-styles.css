@@ -104,6 +104,10 @@
 
 .verdict.ok {
   background: var(--success-soft);
+  color: var(--foreground);
+}
+
+.verdict.ok .icon {
   color: var(--success);
 }
 
@@ -114,6 +118,10 @@
 
 .verdict.warn {
   background: var(--warning-soft);
+  color: var(--foreground);
+}
+
+.verdict.warn .icon {
   color: var(--warning);
 }
 
@@ -343,13 +351,20 @@ button.sect-row:focus-visible {
   padding: 6px 6px 6px 10px;
   border-radius: var(--cd-radius-sm);
   background: var(--success-soft);
-  color: var(--success);
+  color: var(--foreground);
   font-size: 12px;
   font-weight: 600;
 }
 
+.scn-strip .si {
+  color: var(--success);
+}
+
 .scn-strip.miss {
   background: var(--warning-soft);
+}
+
+.scn-strip.miss .si {
   color: var(--warning);
 }
 
@@ -406,7 +421,7 @@ button.sect-row:focus-visible {
 }
 
 .scn-error.warning {
-  color: var(--warning);
+  color: var(--foreground);
 }
 
 /* Test cases: one row button per case — a click replays it on the table */
@@ -496,7 +511,7 @@ button.sect-row:focus-visible {
   margin-top: 1px;
 }
 
-.case .outcome.pass {
+.case .outcome.pass .icon {
   color: var(--success);
 }
 

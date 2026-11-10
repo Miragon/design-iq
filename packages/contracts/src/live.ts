@@ -119,26 +119,28 @@ export interface PresenceUser {
 /** The identity palette presenceColor hashes into (Miragon CI, #238). Every
  *  entry carries a WHITE name label at ≥ 4.5:1 — which also makes cursors and
  *  outlines ≥ 3:1 on the white canvas (pinned by test/live.test.ts).
- *  CI first: warning, success and danger as they are, plus CI blau deepened
- *  toward schwarz. CI blau itself stays OUT — it is the LOCAL selection color
- *  (canvas outline, Monaco selection), and a peer outlined in it would read as
- *  your own selection. Seven people need more hues than the CI has: teal,
- *  magenta and brown are the documented exception — no violet (CI anti-slop
- *  U9), no grey (the unknown-peer fallback, web presence-format).
+ *  CI first: danger as it is, plus CI blau deepened toward schwarz. CI blau
+ *  itself stays OUT — it is the LOCAL selection color (canvas outline, Monaco
+ *  selection), and a peer outlined in it would read as your own selection. The
+ *  CI green and amber carry no white text (CI §3.3). Seven people need more
+ *  hues than the CI has: ochre, teal, deep green, magenta and brown are the
+ *  documented exception (ochre and deep green are the CI warning and success
+ *  before miragon-brand 1.8.0, kept so nobody's color changes) — no violet (CI
+ *  anti-slop U9), no grey (the unknown-peer fallback, web presence-format).
  *  The length keys the hash: changing it reshuffles everyone's color, changing
  *  an entry recolors only the people on that slot. Five slots kept the hue
  *  family of the previous palette, whose orange and cyan carried white text
  *  at only 2.6 and 3.0:1. */
 // brand-lint exception: categorical identity hues (the reasoning above); every
-// entry names its CI source or is one of the three exception hues
+// entry names its CI source or is one of the five exception hues
 // brand-lint-disable
 export const PRESENCE_COLORS = [
-  "#92610a", // CI warning
+  "#92610a", // ochre
   "#0e7490", // teal
   "#29408b", // CI blau 55 % into schwarz (color-mix in srgb)
-  "#0b7a55", // CI success
+  "#0b7a55", // deep green
   "#b0207a", // magenta
-  "#c92a2a", // CI danger
+  "#cd1839", // CI danger
   "#7b3f00", // brown
 ] as const;
 // brand-lint-enable

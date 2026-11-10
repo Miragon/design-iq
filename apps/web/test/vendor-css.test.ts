@@ -438,13 +438,16 @@ test("a token sheet without its layer fails the value check: team-topologies-ren
   // 0.11.2's stylesheet without its layer is byte for byte 0.11.1's
   const spec = MIRAGON_RENDERERS.find((s) => s.id === "team-topology")!;
   const unlayered = unlayeredTokens(await scopedSheet(spec, withoutLayers(readFileSync(stylesheetOf(spec), "utf8"))));
+  const status = ["--cd-success", "--cd-warning", "--cd-danger", "--cd-info"];
+  // its status colours are the ones miragon-brand 1.32.0 ships, so ui-kit now
+  // holds the same values…
   const uiKit = uiKitValuesOf(unlayered);
-  assert.notDeepEqual(unlayered, uiKit);
-  for (const name of ["--cd-success", "--cd-warning", "--cd-danger", "--cd-info"]) {
-    assert.ok(uiKit[name], name);
-    assert.notEqual(unlayered[name], uiKit[name], name);
-  }
+  for (const name of status) assert.equal(unlayered[name], uiKit[name], name);
   assert.equal(unlayered["--cd-warning"], canonicalValue("#ffb000"));
+  // …and the check fails as soon as one of them differs, as they did from the
+  // CI before 1.32.0
+  const drifted = { ...unlayered, "--cd-warning": canonicalValue("#92610A") };
+  assert.notDeepEqual(drifted, uiKitValuesOf(drifted));
 });
 
 /**

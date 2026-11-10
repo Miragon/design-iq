@@ -34,6 +34,7 @@ export const CD = {
   successSoft: "#DAFBEB",
   warningSoft: "#FFF1D2",
   dangerSoft: "#FBEEF0",
+  infoSoft: "#EEF1FD",
   /** decorative lines (no contrast claim) */
   linie: "#E6E2E2",
   /** non-text that needs ≥ 3:1 (input borders, edges) */
@@ -58,6 +59,7 @@ export const CD_TOKENS: Record<string, string> = {
   "--cd-success-soft": CD.successSoft,
   "--cd-warning-soft": CD.warningSoft,
   "--cd-danger-soft": CD.dangerSoft,
+  "--cd-info-soft": CD.infoSoft,
   "--cd-linie": CD.linie,
   "--cd-kontur": CD.kontur,
   "--cd-text-leise": CD.textLeise,

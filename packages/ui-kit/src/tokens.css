@@ -34,12 +34,14 @@
   --accent-foreground: var(--cd-blau-link);
   --destructive: var(--cd-danger);
   --destructive-foreground: var(--cd-weiss);
+  /* green and amber: fill, border, icon and dot, never text on light — their
+     text is --foreground (CI §3.3) */
   --success: var(--cd-success);
   --warning: var(--cd-warning);
   --info: var(--cd-info);
-  /* status tints for status-coloured text (badges, banners, destructive
-     hover): the CI's --cd-*-soft, OPAQUE — a selected or hovered row must not
-     show through and drop the text under 4.5:1 */
+  /* status tints under text (badges, banners, destructive hover): the CI's
+     --cd-*-soft, OPAQUE — a selected or hovered row must not show through and
+     drop the text under 4.5:1 */
   --success-soft: var(--cd-success-soft);
   --warning-soft: var(--cd-warning-soft);
   --destructive-soft: var(--cd-danger-soft);
