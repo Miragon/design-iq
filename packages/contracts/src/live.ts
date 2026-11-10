@@ -131,6 +131,9 @@ export interface PresenceUser {
  *  an entry recolors only the people on that slot. Five slots kept the hue
  *  family of the previous palette, whose orange and cyan carried white text
  *  at only 2.6 and 3.0:1. */
+// Deliberately outside cd-tokens.generated.css: the Miragon CI defines no
+// identity palette for collaborators, so these hues live here and only here.
+// Every other colour in design-iq comes from the token copy.
 // brand-lint exception: categorical identity hues (the reasoning above); every
 // entry names its CI source or is one of the five exception hues
 // brand-lint-disable
