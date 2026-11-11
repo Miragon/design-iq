@@ -10,7 +10,8 @@
  *    tokens and color-mix() of them, and one mode (no scheme override).
  * 4. The opaque status tints (--*-soft) are the CI's --cd-*-soft over the
  *    ground — a CI release that changes the tint fails until tokens.css follows.
- * 5. WCAG contrast: text ≥ 4.5:1, non-text ≥ 3:1.
+ * 5. WCAG contrast: text ≥ 4.5:1, non-text ≥ 3:1. Success and warning are
+ *    fills, borders, icons and dots only, never text on light (CI §3.3).
  *
  * Every other --cd-* name the platform references (radius, shadow, motion…)
  * is guarded by test/cd-references.test.ts.
@@ -160,17 +161,18 @@ const TEXT: Pair[] = [
   ["primary-foreground", "primary-hover"],
   ["destructive-foreground", "destructive"],
   ["destructive", "background"],
-  ["success", "background"],
-  ["warning", "background"],
-  // status text on its tint: badges, banners, the destructive hover…
-  ["success", "success-soft"],
-  ["warning", "warning-soft"],
+  // text on a status tint: badges, banners, the destructive hover. Green and
+  // amber are never text on light (CI §3.3): their text is the foreground…
+  ["foreground", "success-soft"],
+  ["foreground", "warning-soft"],
   ["destructive", "destructive-soft"],
-  // …and a status badge in a selected (accent) or hovered (muted) row
-  ["success", ["success-soft", "accent", "background"]],
-  ["warning", ["warning-soft", "accent", "background"]],
-  ["success", ["success-soft", "muted"]],
-  ["warning", ["warning-soft", "muted"]],
+  // …also in a badge in a selected (accent) or hovered (muted) row
+  ["foreground", ["success-soft", "accent", "background"]],
+  ["foreground", ["warning-soft", "accent", "background"]],
+  ["foreground", ["success-soft", "muted"]],
+  ["foreground", ["warning-soft", "muted"]],
+  ["destructive", ["destructive-soft", "accent", "background"]],
+  ["destructive", ["destructive-soft", "muted"]],
   ["info", "background"],
   ["link", "background"],
   ["link", "secondary"],

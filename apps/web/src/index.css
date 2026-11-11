@@ -100,12 +100,12 @@
    (bpmn-js overlays get raw DOM, not React), so it is styled here, not via JSX */
 .designiq-todo-badge {
   /* geometry/behaviour: lib/todo-canvas.css — these vars size it in rem and
-     colour it from the CI tokens: white on --warning is 5.3:1 */
+     colour it from the CI tokens: a full badge, black on --warning (CI §8) */
   --designiq-todo-badge-size: 1.25rem;
   --designiq-todo-badge-pad: 0.3rem;
   --designiq-todo-badge-font: 0.6875rem;
   --designiq-todo-badge-bg: var(--warning);
-  --designiq-todo-badge-fg: var(--cd-weiss);
+  --designiq-todo-badge-fg: var(--cd-schwarz);
 }
 
 /* semantic BPMN diff markers in the history compare dialog — set imperatively

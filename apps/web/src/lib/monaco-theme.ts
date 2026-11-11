@@ -36,9 +36,11 @@ const fg = (hex: string): string => hex.slice(0, 7);
 /** `color` at `pct` % over nothing — Monaco blends #rrggbbaa itself */
 const tint = (color: string, pct: number): string => mix(color, pct, "transparent");
 
-// The syntax colours — five roles. The base "vs" theme's pure red attribute
+// The syntax colours — four roles. The base "vs" theme's pure red attribute
 // names and #0000FF values are the loudest thing on a BPMN XML screen; the CI
-// blues lead instead, green reads as data.
+// blues lead instead, values read as the text they are. Green and amber are
+// never text on light (CI §3.3), and red means an error, so no status colour
+// colours a token but the invalid one.
 const SYNTAX = {
   /** tags, keywords, headings, a diagram's arrows — the structure: the CI's
    *  interactive blue */
@@ -46,10 +48,8 @@ const SYNTAX = {
   /** attribute names, JSON/YAML keys — blue deepened toward schwarz: the tag's
    *  family, told apart from it by depth */
   name: mix(CD.blau, 55, CD.schwarz),
-  /** attribute values, strings — success is the CI green that passes as text */
-  literal: CD.success,
-  /** numbers and constants */
-  number: CD.warning,
+  /** attribute values, strings, numbers and constants — the text role */
+  literal: ALIASES.foreground,
   /** comments, punctuation, the XML prolog — secondary text */
   quiet: ALIASES["muted-foreground"],
 } as const;
@@ -57,9 +57,9 @@ const SYNTAX = {
 // Text keeps ≥ 4.5:1 in every syntax colour (test/monaco-theme.test.ts) on
 // the grounds Monaco really paints — and it STACKS its highlights: the cursor's
 // word on the current line, a double-clicked word under its own selection, the
-// current find match (the selection) on the range-highlighted line. The CI's
-// text green and ochre reach only ≈ 5.3:1 on white, so ~11 % of blue is the
-// whole budget, not a per-state one. The selection spends it; every other state
+// current find match (the selection) on the range-highlighted line. The quiet
+// grey reaches only ≈ 5.6:1 on white, so ~11 % of blue is the whole budget,
+// not a per-state one. The selection spends it; every other state
 // (current line, occurrences, brackets, find matches) is a frame — ≥ 3:1 where
 // it must be found — or a gutter mark. Only the read-only diff tints its lines;
 // a selection dragged across them adds its blue (not covered).
@@ -104,12 +104,12 @@ export const designiqTheme: editor.IStandaloneThemeData = {
     { token: "string.html", foreground: fg(SYNTAX.literal) },
     { token: "string.value.json", foreground: fg(SYNTAX.literal) },
     { token: "string.yaml", foreground: fg(SYNTAX.literal) },
-    { token: "number", foreground: fg(SYNTAX.number) },
-    { token: "number.hex", foreground: fg(SYNTAX.number) },
-    { token: "attribute.value.number", foreground: fg(SYNTAX.number) },
-    { token: "attribute.value.unit", foreground: fg(SYNTAX.number) },
-    { token: "constant", foreground: fg(SYNTAX.number) },
-    { token: "regexp", foreground: fg(SYNTAX.number) },
+    { token: "number", foreground: fg(SYNTAX.literal) },
+    { token: "number.hex", foreground: fg(SYNTAX.literal) },
+    { token: "attribute.value.number", foreground: fg(SYNTAX.literal) },
+    { token: "attribute.value.unit", foreground: fg(SYNTAX.literal) },
+    { token: "constant", foreground: fg(SYNTAX.literal) },
+    { token: "regexp", foreground: fg(SYNTAX.literal) },
     { token: "invalid", foreground: fg(CD.danger) },
   ],
   colors: {
@@ -124,8 +124,8 @@ export const designiqTheme: editor.IStandaloneThemeData = {
     "editor.lineHighlightBorder": ALIASES.border,
     "editorCursor.foreground": ALIASES.link,
 
-    // selection: the CI blue, soft — 11 %, as the CI's 12 % "-soft" rounds
-    // (alpha byte) to just under 4.5:1 for the text green; weaker while the
+    // selection: the CI blue, soft — 11 %, the budget the quiet grey leaves
+    // for every ground stacked on it; weaker while the
     // editor is unfocused. The budget is spent there: whatever Monaco paints on
     // or beside a selection (the word's own highlight, its other occurrences,
     // the find matches) is a frame
@@ -145,20 +145,20 @@ export const designiqTheme: editor.IStandaloneThemeData = {
     "editor.foldBackground": NONE,
     "editorLink.activeForeground": ALIASES.link,
 
-    // find: frames in the CI's text green — any match can lie under the
+    // find: frames in the CI info blue — any match can lie under the
     // selection (Cmd+F seeds from it, a double-click selects one). The current
     // match is the selection plus the ≥ 3:1 frame, on a line left unbanded (vs
     // paints it yellow). The find-in-selection scope gets no fill either: the
     // selection and its matches sit on it, and a whole-line frame would rule
     // every line
     "editor.findMatchBackground": NONE,
-    "editor.findMatchBorder": CD.success,
+    "editor.findMatchBorder": CD.info,
     "editor.findMatchHighlightBackground": NONE,
-    "editor.findMatchHighlightBorder": tint(CD.success, 50),
+    "editor.findMatchHighlightBorder": tint(CD.info, 50),
     "editor.findRangeHighlightBackground": NONE,
     "editor.rangeHighlightBackground": NONE,
     // their scrollbar marks: vs paints them orange and VS Code blue
-    "editorOverviewRuler.findMatchForeground": tint(CD.success, 60),
+    "editorOverviewRuler.findMatchForeground": tint(CD.info, 60),
     "editorOverviewRuler.rangeHighlightForeground": tint(CD.blau, 60),
 
     // structure lines: decorative lines in linie, the active block in kontur.
@@ -167,10 +167,11 @@ export const designiqTheme: editor.IStandaloneThemeData = {
     "editorIndentGuide.activeBackground1": ALIASES.input,
     "editorWhitespace.foreground": ALIASES.input,
     "editorRuler.foreground": ALIASES.border,
-    // bracket-pair colours on the JSON notations: CI blue, green, ochre
+    // bracket-pair colours on the JSON notations: the blue of the tags, the
+    // deep blue of the names, the text
     "editorBracketHighlight.foreground1": SYNTAX.structure,
-    "editorBracketHighlight.foreground2": SYNTAX.literal,
-    "editorBracketHighlight.foreground3": SYNTAX.number,
+    "editorBracketHighlight.foreground2": SYNTAX.name,
+    "editorBracketHighlight.foreground3": SYNTAX.literal,
     "editorBracketHighlight.unexpectedBracket.foreground": CD.danger,
 
     // scrollbars: kontur, translucent — present, never louder than the text
@@ -226,13 +227,13 @@ export const designiqTheme: editor.IStandaloneThemeData = {
     // CI has no light red, so removed ones stay a quiet danger wash, on a line
     // a step lighter to leave it room. A frame would not do: Monaco draws the
     // text border around the whole line too. The gutter carries the strongest
-    // mark.
+    // mark, the CI's opaque -soft tint.
     "diffEditor.insertedLineBackground": tint(CD.success, 6),
     "diffEditor.insertedTextBackground": tint(CD.gruen, 12),
-    "diffEditorGutter.insertedLineBackground": tint(CD.success, 14),
+    "diffEditorGutter.insertedLineBackground": CD.successSoft,
     "diffEditor.removedLineBackground": tint(CD.danger, 5),
     "diffEditor.removedTextBackground": tint(CD.danger, 5),
-    "diffEditorGutter.removedLineBackground": tint(CD.danger, 14),
+    "diffEditorGutter.removedLineBackground": CD.dangerSoft,
     "diffEditorOverview.insertedForeground": tint(CD.success, 60),
     "diffEditorOverview.removedForeground": tint(CD.danger, 60),
     "diffEditor.border": ALIASES.border,

@@ -429,6 +429,9 @@ textarea {
 
 .pill.warning {
   border-color: var(--warning);
+}
+
+.pill.warning .icon {
   color: var(--warning);
 }
 
@@ -772,9 +775,13 @@ textarea {
   padding: 8px 10px;
   border-radius: var(--cd-radius-sm);
   background: var(--warning-soft);
-  color: var(--warning);
+  color: var(--foreground);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.finding:not(.danger) .icon {
+  color: var(--warning);
 }
 
 .finding.danger {

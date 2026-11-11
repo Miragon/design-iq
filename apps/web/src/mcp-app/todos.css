@@ -330,5 +330,5 @@ button.chip:hover {
   --designiq-todo-badge-pad: 4px;
   --designiq-todo-badge-font: 11px;
   --designiq-todo-badge-bg: var(--warning);
-  --designiq-todo-badge-fg: var(--background);
+  --designiq-todo-badge-fg: var(--foreground);
 }

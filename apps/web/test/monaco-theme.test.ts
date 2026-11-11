@@ -162,11 +162,13 @@ test("installMonacoTheme: defines the theme once, re-measures once Geist Mono is
 
 test("presence palette: the CI entries are the CI tokens; the fallback is the CI neutral", () => {
   const palette = PRESENCE_COLORS.map((c) => c.toUpperCase());
-  for (const ci of [CD.warning, CD.success, CD.danger, mix(CD.blau, 55, CD.schwarz)]) {
+  for (const ci of [CD.danger, mix(CD.blau, 55, CD.schwarz)]) {
     assert.ok(palette.includes(ci.toUpperCase()), `${ci} left the palette — update the comment in contracts/live.ts`);
   }
-  // the CI blue is the LOCAL selection — never a peer's colour
+  // the CI blue is the LOCAL selection — never a peer's colour; the CI green
+  // and amber carry no white name label (CI §3.3)
   assert.ok(!palette.includes(CD.blau) && !palette.includes(CD.blauLink));
+  assert.ok(!palette.includes(CD.success) && !palette.includes(CD.warning));
   assert.equal(FALLBACK_PRESENCE_COLOR, CD.textLeise);
   assert.ok(!palette.includes(FALLBACK_PRESENCE_COLOR.toUpperCase()));
   assert.ok(contrast(CD.weiss, FALLBACK_PRESENCE_COLOR) >= 4.5);

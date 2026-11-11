@@ -101,7 +101,7 @@ export function NotesPanel({ content, onRevealElement, onClose }: NotationPanelP
           <section key={kind} className="mb-4">
             <h3 className="text-muted-foreground mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase">
               {/* the kind's stroke colour — the canvas sticky's own colour, ≥ 3:1 */}
-              <span className="size-2 rounded-full" style={{ background: STICKY_COLORS[kind].stroke }} />
+              <span className="size-2 rounded-full" style={{ background: STICKY_COLORS[kind].dot }} />
               {KIND_LABEL[kind]} ({rows.length})
             </h3>
             <ul className="space-y-1">

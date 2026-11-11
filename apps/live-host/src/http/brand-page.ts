@@ -34,7 +34,7 @@ const GEIST_MONO = inlineFace("Geist Mono", "@fontsource-variable/geist-mono/fil
 
 const STYLE = `:root{color-scheme:light;
 --cd-blau:#335DE5;--cd-blau-link:#2B50D4;--cd-grau:#F9F7F7;--cd-schwarz:#1D1D1D;--cd-weiss:#FFFFFF;
---cd-linie:#E6E2E2;--cd-text-leise:#6B6666;--cd-success:#0B7A55;
+--cd-linie:#E6E2E2;--cd-text-leise:#6B6666;--cd-success:#00E676;
 --cd-shadow-1:0 1px 2px rgba(29, 29, 29, 0.06), 0 1px 3px rgba(29, 29, 29, 0.10);
 --cd-shadow-2:0 4px 12px rgba(29, 29, 29, 0.10);--cd-ease:cubic-bezier(0.4, 0, 0.2, 1)}
 *{box-sizing:border-box}

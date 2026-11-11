@@ -267,9 +267,11 @@
   --dmn-sim-accent-ink: var(--primary-hover);
   --dmn-sim-accent-soft: var(--accent);
   --dmn-sim-on-accent: var(--primary-foreground);
-  --dmn-sim-success: var(--success);
+  /* its success and warning colour the text on their tint: the text role,
+     green and amber are never text on light (CI §3.3) */
+  --dmn-sim-success: var(--foreground);
   --dmn-sim-success-soft: var(--cd-success-soft);
-  --dmn-sim-warning: var(--warning);
+  --dmn-sim-warning: var(--foreground);
   --dmn-sim-warning-soft: var(--cd-warning-soft);
   --dmn-sim-danger: var(--destructive);
   --dmn-sim-danger-soft: var(--cd-danger-soft);
@@ -290,6 +292,10 @@
   --dmn-sim-shadow-3: var(--cd-shadow-3);
   --dmn-sim-motion-fast: var(--cd-motion-fast);
   --dmn-sim-ease: var(--cd-ease);
+}
+/* the fired result is a full badge: black on the CI green (CI §8) */
+:is(.dmn-canvas, #canvas) .dmn-sim-badge {
+  color: var(--foreground);
 }
 /* its inputs draw the decorative line — an input needs ≥ 3:1 (the :is()
    carries #canvas' specificity, so the focus colour is restated) */
