@@ -51,12 +51,12 @@
     "@miragon/value-chain-schema-model": "0.7.3",
     "@miragon/wardley-dsl": "0.8.1",
     "@miragon/wardley-schema-model": "0.6.1",
-    "fast-xml-parser": "5.11.2",
+    "fast-xml-parser": "5.12.0",
     "yaml": "2.9.1",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@designiq/notations": "workspace:*",
-    "tsdown": "0.23.3"
+    "tsdown": "0.23.7"
   }
 }
