@@ -165,6 +165,12 @@ const ROOT_RULES: Record<string, string[]> = {
     ".wardley-canvas .wardley-container.wardley-labels-draggable",
     ".wardley-canvas .wardley-container.wardley-label-dragging",
     ".wardley-canvas .wardley-container.wardley-read-only",
+    // the explore mode (0.18.0): exploring, picking, and the faded rest of the map
+    ".wardley-canvas .wardley-container.wardley-exploring",
+    ".wardley-canvas .wardley-container.wardley-explore-picking",
+    ".wardley-canvas .wardley-container.wardley-explore-faded",
+    ".wardley-canvas .wardley-container:not(.wardley-explore-faded)",
+    ".wardley-canvas .wardley-container.wardley-read-only:not(.wardley-exploring)",
     // the text colour of a root that carries the theme the appearance surface sets
     ".wardley-canvas .wardley-container[data-cd-theme]",
   ],
