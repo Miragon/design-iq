@@ -91,7 +91,7 @@ export const mountDecision: MountDecision = (deps) => {
         "aria-labelledby": `${id}-t`,
         ...(opts.detail ? { "aria-describedby": `${id}-d` } : {}),
       },
-      h("div", { class: "head" }, icon(tone === "info" ? "info" : "triangle-alert", 18), text, later),
+      h("div", { class: "head" }, icon(tone === "info" ? "info" : "triangle-exclamation-point", 18), text, later),
     );
     let primary: HTMLButtonElement | undefined;
     let again: HTMLElement | undefined;

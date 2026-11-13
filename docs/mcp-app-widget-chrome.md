@@ -303,8 +303,8 @@ The pill is hidden while a state card owns the widget.
 | `live`             | `--success` dot "Live" + avatars (max 3 + "+N"; fullscreen adds "· N others here") | neutral | "Live — every edit syncs to everyone in this document." Then "Here now: Anna Berg, Tom Kraus, Claude for Dominik Horn" |
 | `reconnecting`     | spinner "Reconnecting…"                                                            | warning | "Live sync lost — reconnecting…" (lifecycle copy)                                                                      |
 | `saved`            | check (`--success`) "Saved"                                                        | neutral | Autosave note (below) + "Saved 14:02"                                                                                  |
-| `saved` + warnings | triangle-alert "Saved · 1 warning"                                                 | warning | Note + time + **every finding as a row** + "Warnings never block a save. The assistant in this chat sees them too."    |
-| `saved` + errors   | circle-alert "Saved · 2 errors"                                                    | danger  | Note + time + findings. The save still landed (`lint:"warn"`)                                                          |
+| `saved` + warnings | triangle-exclamation-point "Saved · 1 warning"                                     | warning | Note + time + **every finding as a row** + "Warnings never block a save. The assistant in this chat sees them too."    |
+| `saved` + errors   | circle-exclamation-point "Saved · 2 errors"                                        | danger  | Note + time + findings. The save still landed (`lint:"warn"`)                                                          |
 | `unsaved`          | `--primary` dot "Unsaved changes"                                                  | neutral | Note                                                                                                                   |
 | `saving`           | spinner "Saving…"                                                                  | neutral | Note                                                                                                                   |
 | `failed`           | group of two buttons `[● Not saved][Retry]`                                        | danger  | Lifecycle sentence ("Autosave failed: <msg> — retrying automatically") + the next retry time                           |
@@ -868,36 +868,36 @@ Per entry:
 
 ## 12. Lucide inventory (verbatim lucide-react 1.51.0 nodes in `icons.ts`; `widget-icons.test.ts` pins them)
 
-Kept: `check`, `circle-check`, `circle-x`, `circle-question-mark`, `circle-dashed`, `external-link`, `list-todo`, `play`, `plus`, `refresh-cw`, `send`, `triangle-alert`, `x`.
+Kept: `check`, `circle-check`, `circle-x`, `circle-question-mark`, `circle-dashed`, `external-link`, `list-todo`, `play`, `plus`, `refresh-cw`, `send`, `triangle-exclamation-point`, `x`.
 
 New (all are rendered in the final design):
 
-| Icon                  | Used for                            |
-| --------------------- | ----------------------------------- |
-| `menu`                | trigger                             |
-| `shapes`              | Tools                               |
-| `sticky-note`         | Workshop compact chip, menu         |
-| `list-plus`           | Add todo                            |
-| `shield-check`        | Checks                              |
-| `maximize-2`          | Open fullscreen                     |
-| `minimize-2`          | Exit fullscreen                     |
-| `minus`               | zoom out                            |
-| `scan`                | fit                                 |
-| `loader-circle`       | spinners                            |
-| `eye`                 | Read-only                           |
-| `circle-alert`        | errors                              |
-| `info`                | info cards and lines                |
-| `rotate-ccw`          | Try again, Reset                    |
-| `save`                | Save now                            |
-| `chevron-down`        | sections, selects                   |
-| `chevron-right`       | sections                            |
-| `network`             | DRD                                 |
-| `table-2`             | Table                               |
-| `message-square-text` | agent avatar                        |
-| `book-open`           | Legend (context map, team topology) |
-| `file-image`          | Export as PNG                       |
-| `file-code-corner`    | Export as SVG                       |
-| `keyboard`            | Keyboard shortcuts…                 |
+| Icon                       | Used for                            |
+| -------------------------- | ----------------------------------- |
+| `menu`                     | trigger                             |
+| `shapes`                   | Tools                               |
+| `sticky-note`              | Workshop compact chip, menu         |
+| `list-plus`                | Add todo                            |
+| `shield-check`             | Checks                              |
+| `maximize-2`               | Open fullscreen                     |
+| `minimize-2`               | Exit fullscreen                     |
+| `minus`                    | zoom out                            |
+| `scan`                     | fit                                 |
+| `loader-circle`            | spinners                            |
+| `eye`                      | Read-only                           |
+| `circle-exclamation-point` | errors                              |
+| `info`                     | info cards and lines                |
+| `rotate-ccw`               | Try again, Reset                    |
+| `save`                     | Save now                            |
+| `chevron-down`             | sections, selects                   |
+| `chevron-right`            | sections                            |
+| `network`                  | DRD                                 |
+| `table-2`                  | Table                               |
+| `message-square-text`      | agent avatar                        |
+| `book-open`                | Legend (context map, team topology) |
+| `file-image`               | Export as PNG                       |
+| `file-code-corner`         | Export as SVG                       |
+| `keyboard`                 | Keyboard shortcuts…                 |
 
 Phase 2: `git-pull-request` (Release → PR…), `undo-2`, `redo-2` (touch).
 

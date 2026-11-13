@@ -9,7 +9,7 @@
  *
  * The static HTML names its icons declaratively (`<button data-icon="x">`);
  * mountIcons fills them once at boot, so each geometry lives here only.
- * The SPA's Markdown view, plain DOM like the widgets, borrows circle-alert
+ * The SPA's Markdown view, plain DOM like the widgets, borrows circle-exclamation-point
  * for the error notice under a mermaid fence, chevron-right for a <details>
  * summary and corner-up-left for a footnote's link back to its reference.
  * Phase 2 adds git-pull-request (Release → PR) and undo-2 / redo-2 (touch).
@@ -21,7 +21,7 @@ export const LUCIDE_ICONS = {
     '<path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   "chevron-right": '<path d="m9 18 6-6-6-6"/>',
-  "circle-alert":
+  "circle-exclamation-point":
     '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>',
   // test case states (dmn-checks.ts): shape, not just colour, tells them apart
   "circle-check": '<circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/>',
@@ -107,7 +107,7 @@ export const LUCIDE_ICONS = {
     '<path d="M15 3v5a1 1 0 0 0 1 1h5"/>',
   // the DMN view switch: Table
   "table-2": '<path d="M3 9h18"/><path d="M9 3v18"/><rect x="3" y="3" width="18" height="18" rx="2"/>',
-  "triangle-alert":
+  "triangle-exclamation-point":
     '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>' +
     '<path d="M12 9v4"/><path d="M12 17h.01"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',

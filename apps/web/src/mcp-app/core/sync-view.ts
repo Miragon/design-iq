@@ -16,7 +16,8 @@ export type SyncTone = "neutral" | "warning" | "danger" | "muted";
 /** speak a change only when this class changes (pending is never spoken) */
 export type AnnounceClass = "ok" | "pending" | "problem" | "inactive" | "readonly";
 /** the Lucide icons a pill or popover heading draws (icons.ts names) */
-export type SyncIcon = "loader-circle" | "check" | "triangle-alert" | "circle-alert" | "eye" | "circle-dashed";
+export type SyncIcon =
+  "loader-circle" | "check" | "triangle-exclamation-point" | "circle-exclamation-point" | "eye" | "circle-dashed";
 /** a status dot instead of an icon — chrome.css `.dot.<class>` */
 export type SyncDot = "live" | "dirty" | "bad" | "warn";
 
@@ -153,8 +154,8 @@ export function syncView(state: SyncState, peers: readonly PeerLabel[] = []): Sy
       return { ...view, dot: "live", ariaLabel: aria, title: LIVE_TITLE };
     }
     case "saved":
-      if (state.findings?.errors.length) return { ...view, tone: "danger", icon: "circle-alert" };
-      if (state.findings?.warnings.length) return { ...view, tone: "warning", icon: "triangle-alert" };
+      if (state.findings?.errors.length) return { ...view, tone: "danger", icon: "circle-exclamation-point" };
+      if (state.findings?.warnings.length) return { ...view, tone: "warning", icon: "triangle-exclamation-point" };
       return { ...view, icon: "check" };
     case "unsaved":
       return { ...view, dot: "dirty" };

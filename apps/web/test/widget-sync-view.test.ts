@@ -66,9 +66,9 @@ test("labels, tones and icons — colour never alone: every state carries an ico
 
 test("saved with findings: the count joins the label, the tone and icon follow the worst", () => {
   const warn = syncView({ kind: "saved", findings: { errors: [], warnings: ["w"] } });
-  assert.deepEqual([warn.label, warn.tone, warn.icon], ["Saved · 1 warning", "warning", "triangle-alert"]);
+  assert.deepEqual([warn.label, warn.tone, warn.icon], ["Saved · 1 warning", "warning", "triangle-exclamation-point"]);
   const err = syncView({ kind: "saved", findings: { errors: ["a", "b"], warnings: [] } });
-  assert.deepEqual([err.label, err.tone, err.icon], ["Saved · 2 errors", "danger", "circle-alert"]);
+  assert.deepEqual([err.label, err.tone, err.icon], ["Saved · 2 errors", "danger", "circle-exclamation-point"]);
   const both = syncView({ kind: "saved", findings: { errors: ["a"], warnings: ["w", "x"] } });
   assert.equal(both.label, "Saved · 1 error · 2 warnings");
   assert.equal(syncView({ kind: "unsaved", findings: { errors: ["a"], warnings: [] } }).label, "Unsaved changes");

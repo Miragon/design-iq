@@ -57,7 +57,7 @@
     "@miragon/wardley-schema-model": "0.6.1",
     "@modelcontextprotocol/node": "2.1.2",
     "@modelcontextprotocol/server": "2.4.0",
-    "fast-xml-parser": "5.11.2",
+    "fast-xml-parser": "5.12.0",
     "yaml": "2.9.1",
     "zod": "4.6.7"
   },
@@ -68,6 +68,6 @@
     "@designiq/mcp-kit": "workspace:*",
     "@designiq/notations": "workspace:*",
     "@modelcontextprotocol/client": "2.4.0",
-    "tsdown": "0.23.3"
+    "tsdown": "0.23.7"
   }
 }
