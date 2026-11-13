@@ -28,7 +28,7 @@
     "@miragon/modeler-shell": "0.9.0",
     "@miragon/team-topologies-renderer": "0.17.0",
     "@miragon/value-chain-renderer": "0.10.0",
-    "@miragon/wardley-renderer": "0.15.0",
+    "@miragon/wardley-renderer": "0.16.1",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/ext-apps": "2.0.4",
     "@tailwindcss/vite": "4.3.3",

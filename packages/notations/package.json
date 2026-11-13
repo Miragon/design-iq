@@ -28,7 +28,7 @@
     "test": "node --test test/*.test.ts"
   },
   "dependencies": {
-    "@miragon/wardley-dsl": "0.8.1",
+    "@miragon/wardley-dsl": "0.10.0",
     "@miragon/wardley-schema-model": "0.6.1",
     "fast-xml-parser": "5.11.2",
     "yaml": "2.9.1",

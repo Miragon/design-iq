@@ -218,8 +218,8 @@ importers:
         specifier: 0.10.0
         version: 0.10.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/wardley-renderer':
-        specifier: 0.15.0
-        version: 0.15.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
+        specifier: 0.16.1
+        version: 0.16.1(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
       '@modelcontextprotocol/client':
         specifier: 2.4.0
         version: 2.4.0
@@ -453,8 +453,8 @@ importers:
   packages/mcp:
     dependencies:
       '@miragon/wardley-dsl':
-        specifier: 0.8.1
-        version: 0.8.1(zod@4.6.7)
+        specifier: 0.10.0
+        version: 0.10.0(zod@4.6.7)
       '@miragon/wardley-schema-model':
         specifier: 0.6.1
         version: 0.6.1(zod@4.6.7)
@@ -521,8 +521,8 @@ importers:
   packages/notations:
     dependencies:
       '@miragon/wardley-dsl':
-        specifier: 0.8.1
-        version: 0.8.1(zod@4.6.7)
+        specifier: 0.10.0
+        version: 0.10.0(zod@4.6.7)
       '@miragon/wardley-schema-model':
         specifier: 0.6.1
         version: 0.6.1(zod@4.6.7)
@@ -616,8 +616,8 @@ importers:
         specifier: 0.7.3
         version: 0.7.3(zod@4.6.7)
       '@miragon/wardley-dsl':
-        specifier: 0.8.1
-        version: 0.8.1(zod@4.6.7)
+        specifier: 0.10.0
+        version: 0.10.0(zod@4.6.7)
       '@miragon/wardley-schema-model':
         specifier: 0.6.1
         version: 0.6.1(zod@4.6.7)
@@ -1556,13 +1556,13 @@ packages:
     peerDependencies:
       zod: ^4.6.0
 
-  '@miragon/wardley-dsl@0.8.1':
-    resolution: {integrity: sha512-Ph/tJdfaKNHojUG0ClhfvgNx5oWOw5ZtQhxNzPSISNpcO7B3bDO8Mb6HJw4Q9XPfn+s0hf7F3OEDqczuIlxRsg==}
+  '@miragon/wardley-dsl@0.10.0':
+    resolution: {integrity: sha512-pkI//dYtj/GFObYztyfrh4bhUNndD1b7Qr23C0Vi3bwjs0P0hDmzQqkEHDeffvkT4nptEgAmdBAPhgB6b1pqlw==}
     peerDependencies:
       zod: ^4.6.0
 
-  '@miragon/wardley-renderer@0.15.0':
-    resolution: {integrity: sha512-fzwigTGl8iO0GnYUdwoDQVrjd6gbeu7B8st8Za7K5/kw+BnkUbeh88nWgnsguSuwOYMRa3oje0z+0bl+U9JsMw==}
+  '@miragon/wardley-renderer@0.16.1':
+    resolution: {integrity: sha512-kkIDdjSegdXVX/04y73g0Bpf+ACxEGSBfn+Sn4fKbW7XJhZjPZRJUlQgyH4eEdmP5vfUDfZ7PyRUuyy+lRxtrA==}
     peerDependencies:
       diagram-js: ^15.26.0
       didi: ^11.0.0 || ^12.0.0
@@ -5910,15 +5910,15 @@ snapshots:
     dependencies:
       zod: 4.6.7
 
-  '@miragon/wardley-dsl@0.8.1(zod@4.6.7)':
+  '@miragon/wardley-dsl@0.10.0(zod@4.6.7)':
     dependencies:
       '@miragon/wardley-schema-model': 0.6.1(zod@4.6.7)
       zod: 4.6.7
 
-  '@miragon/wardley-renderer@0.15.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/wardley-renderer@0.16.1(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
       '@miragon/modeler-api': 1.6.0
-      '@miragon/wardley-dsl': 0.8.1(zod@4.6.7)
+      '@miragon/wardley-dsl': 0.10.0(zod@4.6.7)
       '@miragon/wardley-schema-model': 0.6.1(zod@4.6.7)
       clsx: 2.1.1
       diagram-js: 15.28.1
