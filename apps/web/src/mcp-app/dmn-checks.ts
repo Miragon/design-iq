@@ -236,7 +236,7 @@ export function mountChecks(deps: {
     const chip: Chip = analysis
       ? findingsChip(analysis)
       : findingsError
-        ? { text: "Not checked", tone: "muted", icon: "circle-alert" }
+        ? { text: "Not checked", tone: "muted", icon: "circle-exclamation-point" }
         : { text: "Checking…", tone: "muted", spinner: true };
     s.sum.replaceChildren(chipNode(chip));
     if (findingsError && !analysis) {
@@ -479,7 +479,9 @@ export function mountChecks(deps: {
     if (summary) {
       form.strip.classList.toggle("miss", summary.miss || summary.violation !== undefined);
       const line = stripLine(summary);
-      form.stripIcon.replaceChildren(icon(summary.miss || summary.violation ? "triangle-alert" : "circle-check", 14));
+      form.stripIcon.replaceChildren(
+        icon(summary.miss || summary.violation ? "triangle-exclamation-point" : "circle-check", 14),
+      );
       form.stripText.replaceChildren(
         ...withCode(line),
         ...(summary.violation ? [h("span", { class: "why" }, summary.violation)] : []),

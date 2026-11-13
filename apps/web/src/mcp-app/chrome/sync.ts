@@ -165,7 +165,7 @@ export const mountSync: MountSync = (deps) => {
           h(
             "li",
             { class: f.tone === "danger" ? "finding danger" : "finding", tabindex: "0", "data-key": `finding:${i}` },
-            icon(f.tone === "danger" ? "circle-alert" : "triangle-alert", 14),
+            icon(f.tone === "danger" ? "circle-exclamation-point" : "triangle-exclamation-point", 14),
             h("span", {}, f.text),
           ),
         ),

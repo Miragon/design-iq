@@ -131,7 +131,7 @@ export function coverageLine(uncovered: string[], numbers: RuleNumbers, mainDeci
 const SEVERITY_ORDER: Record<DecisionFinding["severity"], number> = { ERROR: 0, WARN: 1, INFO: 2 };
 const SEVERITY_ICON: Record<DecisionFinding["severity"], IconName> = {
   ERROR: "circle-x",
-  WARN: "triangle-alert",
+  WARN: "triangle-exclamation-point",
   INFO: "info",
 };
 
@@ -140,7 +140,7 @@ export function findingsChip(analysis: Pick<DecisionAnalysis, "findings">): Chip
   const errors = analysis.findings.filter((f) => f.severity === "ERROR").length;
   if (errors > 0) return { text: plural(errors, "error"), tone: "bad", icon: "circle-x" };
   const others = analysis.findings.length;
-  if (others > 0) return { text: plural(others, "warning"), tone: "warn", icon: "triangle-alert" };
+  if (others > 0) return { text: plural(others, "warning"), tone: "warn", icon: "triangle-exclamation-point" };
   return { text: "Sound", tone: "ok", icon: "check" };
 }
 

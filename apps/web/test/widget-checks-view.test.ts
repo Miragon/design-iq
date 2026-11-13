@@ -92,7 +92,7 @@ test("the findings chip: Sound / N warnings / N errors (SPA parity)", () => {
   assert.deepEqual(findingsChip({ findings: [warn, info] }), {
     text: "2 warnings",
     tone: "warn",
-    icon: "triangle-alert",
+    icon: "triangle-exclamation-point",
   });
   assert.deepEqual(findingsChip({ findings: [warn, error] }), { text: "1 error", tone: "bad", icon: "circle-x" });
   assert.match(NO_FINDINGS, /^No findings: /);
@@ -111,7 +111,7 @@ test("finding rows: errors first, anchored by decision · rule number · column"
     rows.map((r) => [r.severity, r.icon, r.where]),
     [
       ["ERROR", "circle-x", "credit · Order value"],
-      ["WARN", "triangle-alert", "credit · rule 4"],
+      ["WARN", "triangle-exclamation-point", "credit · rule 4"],
       ["INFO", "info", ""],
     ],
   );

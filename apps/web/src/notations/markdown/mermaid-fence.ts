@@ -448,6 +448,6 @@ function errorNotice(doc: Document, error: MermaidRenderError, keptLastGood: boo
   const notice = doc.createElement("div");
   notice.className = "md-mermaid-notice";
   notice.setAttribute("role", "status");
-  notice.append(icon("circle-alert", 16, "md-mermaid-notice-icon", doc), body);
+  notice.append(icon("circle-exclamation-point", 16, "md-mermaid-notice-icon", doc), body);
   return notice;
 }
