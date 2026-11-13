@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.15.0](https://github.com/Miragon/design-iq/compare/v5.14.0...v5.15.0) (2026-11-13)
+
+
+### Features
+
+* **live-host:** move to @miragon/bpmn-cli 0.10.0 ([#392](https://github.com/Miragon/design-iq/issues/392)) ([1203fa0](https://github.com/Miragon/design-iq/commit/1203fa001dcd6790df8ceb2900be76fc90271ac2))
+
+
+### Bug Fixes
+
+* **ui:** track the miragon-brand 1.32.0 tokens and use their status colours as the design system prescribes ([#397](https://github.com/Miragon/design-iq/issues/397)) ([db1f3ec](https://github.com/Miragon/design-iq/commit/db1f3ec1722ddda1854ea32c0c2584ccbb2ae5b1))
+
 ## [5.14.0](https://github.com/Miragon/design-iq/compare/v5.13.3...v5.14.0) (2026-10-31)
 
 
