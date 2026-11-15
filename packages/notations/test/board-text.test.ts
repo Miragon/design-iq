@@ -58,9 +58,53 @@ describe("parseBoardText accepts", () => {
     const snapshot = accepted(`${HEADER}\n{"id":"constructor","kind":"node"}\n{"id":"toString","kind":"node"}`);
     assert.deepEqual(Object.keys(snapshot.elements).sort(), ["constructor", "toString"]);
   });
+
+  for (const [where, line] of [
+    [
+      "a note's text",
+      `{"height":160,"id":"n_a","kind":"node","text":"__proto__","type":"text","width":240,"x":0,"y":0,"z":"a"}`,
+    ],
+    ["an arrow's label", `{"id":"e_a","kind":"edge","label":"__proto__","source":"n_a","target":"n_b"}`],
+    [
+      "a group's name",
+      `{"height":420,"id":"n_g","kind":"node","text":"__proto__","type":"group","width":640,"x":0,"y":0,"z":"a"}`,
+    ],
+    [
+      "a model's file",
+      `{"file":"__proto__","height":540,"id":"n_m","kind":"node","type":"model","width":800,"x":0,"y":0,"z":"a"}`,
+    ],
+    ["a value inside a value", `{"id":"x_lane","kind":"swimlane","rows":["__proto__",{"deep":"__proto__"}]}`],
+  ] as const) {
+    it(`the value __proto__ as ${where}, and writes it back`, () => {
+      const text = `${HEADER}\n${line}\n`;
+      const snapshot = accepted(text);
+      assert.ok(JSON.stringify(Object.values(snapshot.elements)).includes(`"__proto__"`));
+      assert.equal(encodeBoard(snapshot), text);
+      assert.deepEqual(accepted(encodeBoard(snapshot)), snapshot);
+    });
+  }
+
+  it("the value __proto__ as the board's title, and writes it back", () => {
+    const text = `{"format":"structured-model","meta":{"title":"__proto__","version":1},"version":1}\n`;
+    const snapshot = accepted(text);
+    assert.equal(snapshot.meta.title, "__proto__");
+    assert.equal(encodeBoard(snapshot), text);
+    assert.deepEqual(accepted(encodeBoard(snapshot)), snapshot);
+  });
+
+  it("an arrow whose ends name __proto__: a value like any other, and written back", () => {
+    const text = `${HEADER}\n{"id":"e_a","kind":"edge","source":"__proto__","target":"__proto__"}\n`;
+    const snapshot = accepted(text);
+    assert.deepEqual(Object.keys(snapshot.elements), ["e_a"]);
+    assert.equal(encodeBoard(snapshot), text);
+  });
 });
 
 describe("parseBoardText refuses", () => {
+  it("an element whose id is __proto__: an id is a key wherever a board keeps its elements", () => {
+    assert.match(refused(`${HEADER}\n{"id":"__proto__","kind":"node"}`), /line 2 has the element id __proto__/);
+  });
+
   it("what is no board at all", () => {
     assert.match(refused("hello"), /line 1 is no JSON/);
     assert.match(refused(`<?xml version="1.0"?>\n<definitions/>`), /line 1 is no JSON/);
@@ -87,5 +131,26 @@ describe("parseBoardText refuses", () => {
     assert.match(refused(`${HEADER}\n{"id":"","kind":"node"}`), /neither the header nor an element/);
     assert.match(refused(`${HEADER}\n{"id":7,"kind":"node"}`), /neither the header nor an element/);
     assert.match(refused(`${HEADER}\n{"id":"n_a","__proto__":{"x":1}}`), /__proto__/);
+  });
+
+  it("a key named __proto__, at the top of a line and at every depth below", () => {
+    const named = (line: number): string => `line ${line} has a key named __proto__`;
+    assert.equal(refused(`${HEADER}\n{"id":"n_a","__proto__":{"x":1}}`), named(2));
+    assert.equal(refused(`${HEADER}\n{"id":"n_a","__proto__":"text"}`), named(2));
+    assert.equal(refused(`${HEADER}\n{"data":{"__proto__":1},"id":"n_a"}`), named(2));
+    assert.equal(refused(`${HEADER}\n{"id":"n_a","rows":[1,{"deep":{"__proto__":null}}]}`), named(2));
+    assert.equal(refused(`{"format":"structured-model","meta":{"__proto__":{}},"version":1}`), named(1));
+    assert.equal(refused(`{"__proto__":1,"format":"structured-model","meta":{},"version":1}`), named(1));
+    // deeper than the call stack is: JSON.parse reads such a line
+    const deep = 20_000;
+    assert.equal(
+      refused(`${HEADER}\n{"id":"n_a","rows":${"[".repeat(deep)}{"__proto__":1}${"]".repeat(deep)}}`),
+      named(2),
+    );
+  });
+
+  it("a key named __proto__ that the line spells with a JSON escape", () => {
+    assert.equal(refused(`${HEADER}\n{"id":"n_a","\\u005f_proto__":1}`), "line 2 has a key named __proto__");
+    assert.equal(refused(`${HEADER}\n{"data":{"__pr\\u006fto__":1},"id":"n_a"}`), "line 2 has a key named __proto__");
   });
 });
