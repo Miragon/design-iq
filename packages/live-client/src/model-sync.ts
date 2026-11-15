@@ -245,6 +245,62 @@ export interface SyncOptions {
    * (SyncAdapter.contract): its binding never reads this element.
    */
   canvasHost?: Element;
+  /**
+   * px the host's chrome covers along the edges of the canvas, read when the
+   * first import fits the view (the contract's free area, for an editor
+   * without the contract: bpmn-js, the DRD of dmn-js). The diagram is then
+   * fitted into what the insets leave free. For a canvas that is small
+   * beside its own palette (a model shown on a board). Absent = diagram-js's
+   * plain fit-viewport, edge to edge.
+   */
+  fitInsets?: () => FitInsets;
+}
+
+/** px covered along each edge of a canvas (the shape of @miragon/modeler-api's FreeAreaInsets) */
+export interface FitInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+interface FitBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+/** the slice of diagram-js's Canvas a fit reads and writes */
+export interface FitCanvas {
+  /** `inner` is the content's box in diagram units, `outer` the container's size in px; `false` recomputes */
+  viewbox(fresh?: false): FitBox & { inner?: FitBox; outer?: { width: number; height: number } };
+  viewbox(box: FitBox): void;
+  zoom(mode: "fit-viewport"): unknown;
+}
+
+/**
+ * The whole diagram in view: diagram-js's fit-viewport, or, with insets, the
+ * whole diagram inside what they leave free, its top left corner at the free
+ * area's. Like fit-viewport it never zooms in past 1. Insets that leave
+ * nothing free, and a canvas without content, get the plain fit.
+ */
+export function fitDiagram(canvas: FitCanvas, insets?: FitInsets): void {
+  const px = (value: number | undefined): number =>
+    typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+  const [top, right, bottom, left] = [px(insets?.top), px(insets?.right), px(insets?.bottom), px(insets?.left)];
+  if (top + right + bottom + left === 0) return void canvas.zoom("fit-viewport");
+  const { inner, outer } = canvas.viewbox(false);
+  const free = { width: (outer?.width ?? 0) - left - right, height: (outer?.height ?? 0) - top - bottom };
+  if (!inner || !outer || !(inner.width > 0) || !(inner.height > 0) || !(free.width > 0) || !(free.height > 0)) {
+    return void canvas.zoom("fit-viewport");
+  }
+  const scale = Math.min(1, free.width / inner.width, free.height / inner.height);
+  canvas.viewbox({
+    x: inner.x - left / scale,
+    y: inner.y - top / scale,
+    width: outer.width / scale,
+    height: outer.height / scale,
+  });
 }
 
 /** XML well-formedness — the looksRenderable gate of the XML notations (bpmn, dmn) */
@@ -256,9 +312,13 @@ export const NOT_WELL_FORMED_XML = "the document is not well-formed XML";
 /**
  * The diagram-js view-state recipe of a single-canvas modeler without a view
  * state of its own (bpmn-js): snapshot the canvas viewbox before an import,
- * restore it after a RE-import, fit the viewport on the first one.
+ * restore it after a RE-import, fit the viewport on the first one (into the
+ * free area where the host names one, SyncOptions.fitInsets).
  */
-export function keepDiagramViewbox(modeler: { get(service: string): any }): SyncAdapter["beforeImport"] {
+export function keepDiagramViewbox(
+  modeler: { get(service: string): any },
+  fitInsets?: () => FitInsets,
+): SyncAdapter["beforeImport"] {
   return (isFirstImport) => {
     const canvas = modeler.get("canvas");
     let viewbox: { x: number; y: number; width: number; height: number } | undefined;
@@ -269,7 +329,7 @@ export function keepDiagramViewbox(modeler: { get(service: string): any }): Sync
     }
     return () => {
       if (viewbox && viewbox.width > 0 && !isFirstImport) canvas.viewbox(viewbox);
-      else canvas.zoom("fit-viewport");
+      else fitDiagram(canvas, fitInsets?.());
     };
   };
 }

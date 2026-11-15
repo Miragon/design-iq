@@ -23,18 +23,28 @@ Registered in `packages/notations/index.ts` (id = the `notation` argument of the
 | Context Map    | `context-map`    | `.cm.json`         |
 | Value Chain    | `value-chain`    | `.vc.json`         |
 | Markdown       | `markdown`       | `.md`              |
+| Board          | `board`          | `.board`           |
 
 Every notation gets live sync, the generic MCP model tools, validation and release-as-PR.
 In the web client a notation's plugin (`apps/web/src/notations/registry.ts`) decides what a
 model opens in: a visual modeler (BPMN, DMN, the Miragon renderers: Wardley Map, Team Topology,
 Event Storming, Context Map, Value Chain) or a rendered, live read view (Markdown,
 `apps/web/src/notations/markdown/`, its `mermaid` fences drawn as diagrams); a notation without
-a plugin opens in Monaco alone. The Monaco source is one click away for every one of them.
+a plugin opens in Monaco alone. The Monaco source is one click away for every one of them
+but the board.
+A board (`apps/web/src/notations/board/`) is a canvas of the repository's own files: models,
+edited in place by their own editors and saved in their own files, beside notes, images and
+arrows. It is the one STRUCTURED notation (`docShape: "structured"`): its live document is
+element-wise (`@designiq/contracts/live` ELEMENTS_KEY, not one Y.Text), its file is JSON lines
+(one line per element, `@designiq/notations/codecs`), and it has no source view. A model on a
+board is a live session of its own on that model's room. The board's code also runs under the
+contract of `@miragon/modeler-api` (`notations/board/contract/`), for a host that holds the file
+as text.
 A diagram-as-code is no notation of its own: it is a `mermaid` fence in a Markdown document,
 next to the prose that explains it (`.mmd`/`.mermaid` files are plain repository files), and
 the validator checks each fence's diagram type (a WARN, `mermaid/diagram-type`).
 Todos (work items in the repo's issue tracker, anchored to a model and optionally its
-elements) are filed on every notation but DMN (the descriptor's `todos` flag).
+elements) are filed on every notation but DMN and the board (the descriptor's `todos` flag).
 BPMN and DMN have the deepest tooling (derived process and decision views, decision
 simulation and tests) and the BPMN/DMN hard rules below.
 

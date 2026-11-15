@@ -337,6 +337,7 @@ test("listRepos: modelCount/modelCounts cover every notation, keyed by registry 
   writeFileSync(join(ws, "models", "teams-v2.ttm.json"), "{}"); // the notation's second extension
   writeFileSync(join(ws, "models", "rabatt.dmn"), "<dmn/>");
   writeFileSync(join(ws, "models", "order.bpmn"), "<bpmn/>");
+  writeFileSync(join(ws, "models", "workshop.board"), ""); // the structured notation counts like any other
   writeFileSync(join(ws, "models", "rabatt.tests.yaml"), "cases: []"); // not a model
   writeFileSync(join(ws, "models", "data.json"), "{}"); // no registered extension → not a model
   // nor a standalone diagram (5.4.0 counted them; a diagram is a fence in a .md now)
@@ -347,7 +348,7 @@ test("listRepos: modelCount/modelCounts cover every notation, keyed by registry 
   });
   const [r] = await listRepos(deps, session("s1"));
   assert.ok(r);
-  assert.equal(r.modelCount, 9);
+  assert.equal(r.modelCount, 10);
   assert.deepEqual(r.modelCounts, {
     bpmn: 1,
     dmn: 1,
@@ -356,6 +357,7 @@ test("listRepos: modelCount/modelCounts cover every notation, keyed by registry 
     "context-map": 1,
     "value-chain": 1,
     markdown: 1,
+    board: 1,
   });
   assert.deepEqual(
     Object.keys(r.modelCounts ?? {}),

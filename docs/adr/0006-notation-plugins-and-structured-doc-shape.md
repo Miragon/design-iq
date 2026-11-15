@@ -99,6 +99,12 @@ notations whose defining scenario is many simultaneous writers.
    the notations exist for. The structured contract ships **dark** (test-only
    descriptor through seed→edit→persist→history→release in CI) before the
    first board notation uses it.
+   _Amended 2026-11-14:_ the board (`.board`, notation `board`) is the first
+   structured notation and registers the house codec (one JSON header line,
+   then one line per element). It is a canvas of the repository's own files,
+   not an Event Storming board: the models it shows keep their own files and
+   their own rooms, and the board holds one reference per model, which the
+   validator checks and a rename rewrites like a call activity's.
 
 5. **Editors are external modeler libraries behind a lazy browser registry.**
    A browser-only `WebNotationPlugin` registry (`mountEditor`, `panels`,

@@ -40,7 +40,7 @@ export function bindBpmn(
       looksRenderable: looksWellFormedXml,
       unrenderableReason: NOT_WELL_FORMED_XML,
 
-      beforeImport: keepDiagramViewbox(modeler),
+      beforeImport: keepDiagramViewbox(modeler, sync?.fitInsets),
 
       observeModel(onChanged) {
         modeler.on("commandStack.changed", onChanged);

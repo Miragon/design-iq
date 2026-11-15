@@ -35,6 +35,7 @@
     "@tanstack/react-query": "5.107.1",
     "@tanstack/react-router": "1.170.46",
     "@tanstack/react-table": "9.3.1",
+    "@xyflow/react": "12.12.1",
     "bpmn-js": "18.31.1",
     "bpmn-js-color-picker": "0.7.2",
     "bpmn-js-differ": "3.2.0",

@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
 import { byExtension, byId } from "@designiq/notations";
+import { parseBoardText } from "@designiq/notations/board";
 import { kindOf } from "@designiq/notations/bpmn-kinds";
 import { cliRoot, notContentRepoError } from "@designiq/notations/cli";
 import {
@@ -427,10 +428,17 @@ export function checkModelBaseline(raw: string, opts: { file?: string; notation:
   // (e.g. JSON lines), NOT a plain mediaKind document — the mediaKind parse
   // gate would false-positive on every valid file. Its codec's decode is
   // TOTAL by contract; real structure checks are the notation's own checker.
-  // DARK today (no registered notation is structured, byId has no injection
-  // point) — shipped now so #116's first board file does not trip the JSON
-  // gate the moment its descriptor flips; recorded on the ticket.
-  if (byId(opts.notation)?.docShape === "structured") return findings;
+  // The board is the one structured notation; its own check follows.
+  if (byId(opts.notation)?.docShape === "structured") {
+    // the board is read as strictly as its canvas reads it back
+    // (@designiq/notations/board): a line the codec would skip, a second
+    // header or a repeated id is content the next save would drop
+    if (opts.notation === "board") {
+      const parsed = parseBoardText(raw);
+      if (!parsed.ok) findings.push({ severity: "ERROR", ruleId: "board/parse", file, message: parsed.reason });
+    }
+    return findings;
+  }
   const err = (message: string): void => {
     findings.push({ severity: "ERROR", ruleId: "baseline/parse", file, message });
   };
@@ -633,6 +641,9 @@ function danglingMessage(ref: ModelRef): string {
   }
   if (ref.rel === "decides" && ref.fromElement) {
     return `businessRuleTask ${ref.fromElement} decides '${ref.to.id}', which is not a decision in this repo (external or dangling?)`;
+  }
+  if (ref.rel === "shows" && ref.fromElement) {
+    return `board node ${ref.fromElement} shows ${ref.to.notation ?? "model"} '${ref.to.id}', which is not a model in this repo (deleted or renamed?)`;
   }
   const target = ref.to.notation ? `${ref.to.notation} '${ref.to.id}'` : `'${ref.to.id}'`;
   return `${ref.fromElement ?? "the model"} references ${target}, which does not resolve in this repo (${ref.rel})`;

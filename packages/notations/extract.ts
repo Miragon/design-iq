@@ -20,6 +20,7 @@ import { XMLParser } from "fast-xml-parser";
 export { XMLValidator } from "fast-xml-parser";
 
 import { BPMN_DI_ARTIFACT_TAGS, BPMN_FLOW_NODE_TAGS, BPMN_SUB_CONTAINER_TAGS } from "./bpmn-kinds.ts";
+import { jsonLinesCodec } from "./codecs.ts";
 import { byExtension, byId, type NotationDescriptor } from "./index.ts";
 
 export interface ModelNode {
@@ -829,6 +830,35 @@ function extractValueChain(raw: string): ModelGraph {
   };
 }
 
+// ── the .board file (./codecs, ./board): JSON lines, one element per line ───
+// A node is a model of the repository shown in place (`file`), a note, an
+// image or a group; an edge is an arrow between two nodes. The decode is the
+// codec's total one: a graph is read from whatever the file holds.
+
+function extractBoard(raw: string): ModelGraph {
+  const { elements, meta } = jsonLinesCodec().decode(raw);
+  const text = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
+  const nodes: ModelNode[] = [];
+  const edges: ModelEdge[] = [];
+  for (const id of Object.keys(elements).sort()) {
+    const attrs = elements[id] ?? {};
+    if (attrs.kind === "node" && typeof attrs.type === "string") {
+      const file = text(attrs.file);
+      // a note is named by its first line, a file node by its path
+      const name =
+        file ??
+        text(attrs.text)
+          ?.split("\n")
+          .find((line) => line.trim() !== "");
+      nodes.push({ id, type: attrs.type, ...(name ? { name } : {}), ...(file ? { extra: { file } } : {}) });
+    } else if (attrs.kind === "edge" && typeof attrs.source === "string" && typeof attrs.target === "string") {
+      const name = text(attrs.label);
+      edges.push({ id, from: attrs.source, to: attrs.target, kind: "arrow", ...(name ? { name } : {}) });
+    }
+  }
+  return { notation: "board", meta: { title: text(meta.title) ?? null }, nodes, edges };
+}
+
 const EXTRACTORS: Record<string, (raw: string) => ModelGraph> = {
   bpmn: extractBpmn,
   dmn: extractDmn,
@@ -837,6 +867,7 @@ const EXTRACTORS: Record<string, (raw: string) => ModelGraph> = {
   "event-storming": extractEventStorming,
   "context-map": extractContextMap,
   "value-chain": extractValueChain,
+  board: extractBoard,
 };
 
 /** notation id or file path in, ModelGraph out; undefined = no extractor registered */

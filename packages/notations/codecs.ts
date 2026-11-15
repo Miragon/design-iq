@@ -5,10 +5,9 @@
  * the validator working on plain text while the LIVE document merges
  * element-wise (Y.Map, @designiq/contracts/live ELEMENTS_KEY/META_KEY).
  *
- * Dark-launched: the registry below is EMPTY — no shipped notation is
- * structured yet. The first canvas notation (event storming, #116) registers
- * its codec here; the pipeline (seed, write-through, stale-seed, CAS,
- * reconcile) is exercised in CI through injected test codecs until then.
+ * The board (`.board`) is the first structured notation and registers the
+ * house codec below. The pipeline (seed, write-through, stale-seed, CAS,
+ * reconcile) is also exercised in CI through injected test codecs.
  *
  * Pure + browser-safe like every capability module (no fs, no XML).
  */
@@ -103,9 +102,11 @@ export function jsonLinesCodec(): DocCodec {
   };
 }
 
-/** notation id → its doc codec — EMPTY until the first structured notation
- *  (#116) registers; registering here is the whole integration */
-const DOC_CODECS: Record<string, DocCodec> = {};
+/** notation id → its doc codec; registering here is the whole integration.
+ *  The board is the first structured notation and takes the house codec */
+const DOC_CODECS: Record<string, DocCodec> = {
+  board: jsonLinesCodec(),
+};
 
 export function docCodecFor(notation: string): DocCodec | undefined {
   return DOC_CODECS[notation];

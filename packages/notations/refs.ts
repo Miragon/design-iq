@@ -10,6 +10,7 @@
  * XML — same discipline as ./derive.
  */
 import type { ModelGraph } from "./extract.ts";
+import { byExtension, modelStem } from "./index.ts";
 
 /**
  * One outgoing cross-model reference, as emitted from a single model's graph.
@@ -50,6 +51,21 @@ const REF_EMITTERS: Record<string, (graph: ModelGraph) => ModelRef[]> = {
       if (n.type === "businessRuleTask" && typeof decides === "string" && decides) {
         refs.push({ fromElement: n.id, rel: "decides", to: { id: decides, notation: "dmn" }, strength: "required" });
       }
+    }
+    return refs;
+  },
+  // a board shows models of the repository in place: one reference per model
+  // node. A node names its model by PATH; like every reference it resolves by
+  // notation and id (the file stem), so a model that moved to another folder
+  // still resolves. An image or a file of no notation is no model
+  board: (graph) => {
+    const refs: ModelRef[] = [];
+    for (const n of graph.nodes) {
+      const file = n.extra?.file;
+      if (n.type !== "model" || typeof file !== "string" || file === "") continue;
+      const notation = byExtension(file)?.id;
+      if (!notation) continue;
+      refs.push({ fromElement: n.id, rel: "shows", to: { id: modelStem(file), notation }, strength: "required" });
     }
     return refs;
   },

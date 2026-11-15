@@ -7,7 +7,8 @@
 designIQ is a Git-native workspace where teams model their business and their architecture
 together, live: processes (BPMN), decisions (DMN), Wardley Maps, Team Topologies,
 Event Storming boards, Context Maps, Value Chains and plain Markdown, with Mermaid diagrams
-inside the documents. Every model is a file in your repository; edits sync in real time in
+inside the documents, and boards that bring several of these models onto one canvas. Every
+model is a file in your repository; edits sync in real time in
 the browser and in VS Code, and a release is a pull request, so review and governance stay
 where engineering already works. AI assistants join through MCP: they read the same live
 models, explain them, check them and propose changes.
@@ -26,6 +27,10 @@ integration and the decision records. The site is built from [`docs/`](docs/).
   documents (links between models open inside designIQ, `mermaid` fences drawn as
   diagrams), and a text view for every file. A Mermaid diagram lives as a `mermaid` fence
   in a document, next to the prose that explains it, and the validator checks its type.
+  A board (`.board`) is a canvas of the repository's own files: models are edited in place
+  and saved in their own files, next to notes, images and arrows. The board stores where a
+  file sits, never what is in it, and syncs element by element, so two people who move two
+  things at once both keep their move.
   Login authenticates, **repos authorize**: what you see and edit follows your git write
   permission.
 - **Release as PR**: one click cuts a branch from `origin/<default>`, pushes and opens

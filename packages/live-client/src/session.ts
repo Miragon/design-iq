@@ -25,7 +25,7 @@ import type * as Y from "yjs";
 import { sanitizeCanvas, sanitizeUser } from "./presence.ts";
 
 // what a consumer hands the canvas sync bridges from this session (its awareness)
-export type { PeerAwareness, SyncOptions } from "./model-sync.ts";
+export type { FitInsets, PeerAwareness, SyncOptions } from "./model-sync.ts";
 
 // re-exported so session consumers don't need a second import for the contract
 export { type CanvasPresence, CONTENT_KEY, type MovedNotice, type PresenceUser, roomName };
@@ -79,7 +79,10 @@ export interface LiveSession {
   onMoved(cb: (notice: MovedNotice) => void): () => void;
   /** promise form — resolves on first sync, rejects on auth failure or timeout */
   whenSynced(timeoutMs?: number): Promise<void>;
-  setUser(user: PresenceUser): void;
+  /** announce who this client is in the room's roster; null takes the
+   *  announcement back (a client that holds the room without being in it: a
+   *  board that shows a model nobody edits there right now) */
+  setUser(user: PresenceUser | null): void;
   /** publish the local canvas presence (cursor + selection, model coords) —
    *  its own awareness field, never colliding with y-monaco's "selection" */
   setCanvasPresence(presence: CanvasPresence | null): void;
@@ -89,7 +92,9 @@ export interface LiveSession {
    *  cursors/selections render from; calls back immediately, returns the
    *  unsubscribe */
   onAwarenessStates(cb: (peers: AwarenessPeer[]) => void): () => void;
-  /** tears down provider AND socket — always both */
+  /** tears down the provider, and the socket with it where the session owns
+   *  it (openLiveSession); a session of a group leaves the socket to the
+   *  others. Safe to call twice */
   destroy(): void;
 }
 
@@ -120,14 +125,63 @@ function keepPresenceAcrossReconnects(provider: HocuspocusProvider): void {
   });
 }
 
-export function openLiveSession(opts: LiveSessionOptions): LiveSession {
-  const socket = new HocuspocusProviderWebsocket({
+const openSocket = (opts: Pick<LiveSessionOptions, "url" | "WebSocketPolyfill">): HocuspocusProviderWebsocket =>
+  new HocuspocusProviderWebsocket({
     url: opts.url,
     // only forward the polyfill when given — an explicit `undefined` would
     // override the provider's own browser-WebSocket default
     ...(opts.WebSocketPolyfill !== undefined ? { WebSocketPolyfill: opts.WebSocketPolyfill } : {}),
   });
+
+export function openLiveSession(opts: LiveSessionOptions): LiveSession {
+  const socket = openSocket(opts);
+  // the session owns its socket: destroy() tears down both
+  return sessionOn(socket, opts, () => socket.destroy());
+}
+
+/** what every session of a group shares */
+export type LiveSessionGroupOptions = Pick<LiveSessionOptions, "url" | "token" | "WebSocketPolyfill">;
+
+/**
+ * Several sessions of ONE client over ONE socket: Hocuspocus carries any
+ * number of documents on a connection, each authenticated on its own. For a
+ * client that holds many rooms at once (a board shows the repository's
+ * models in place, one live document each): the Live Host counts sockets per
+ * address (LIVE_MAX_WS_PER_IP), and one per room would run into that cap.
+ */
+export interface LiveSessionGroup {
+  /** a session on `room` over the group's socket; its destroy() closes that
+   *  document alone and leaves the socket to the others */
+  open(room: string, options?: Pick<LiveSessionOptions, "onAuthenticationFailed">): LiveSession;
+  /** tears down every session still open AND the socket */
+  destroy(): void;
+}
+
+export function openLiveSessionGroup(opts: LiveSessionGroupOptions): LiveSessionGroup {
+  const socket = openSocket(opts);
+  const open = new Set<LiveSession>();
+  let destroyed = false;
+  return {
+    open(room, options = {}) {
+      if (destroyed) throw new Error("the session group was destroyed");
+      const session: LiveSession = sessionOn(socket, { ...opts, room, ...options }, () => open.delete(session));
+      open.add(session);
+      return session;
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      for (const session of [...open]) session.destroy();
+      socket.destroy();
+    },
+  };
+}
+
+/** one document on `socket`; `release` runs after the provider is gone (the
+ *  socket's teardown for a session that owns it, a group's bookkeeping else) */
+function sessionOn(socket: HocuspocusProviderWebsocket, opts: LiveSessionOptions, release: () => void): LiveSession {
   let authFailure: string | null = null;
+  let closed = false;
   const provider = new HocuspocusProvider({
     websocketProvider: socket,
     name: opts.room,
@@ -197,7 +251,7 @@ export function openLiveSession(opts: LiveSessionOptions): LiveSession {
       });
     },
 
-    setUser(user: PresenceUser): void {
+    setUser(user: PresenceUser | null): void {
       provider.setAwarenessField(AWARENESS_USER_KEY, user);
     },
 
@@ -253,8 +307,10 @@ export function openLiveSession(opts: LiveSessionOptions): LiveSession {
     },
 
     destroy(): void {
+      if (closed) return;
+      closed = true;
       provider.destroy();
-      socket.destroy();
+      release();
     },
   };
 }

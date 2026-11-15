@@ -14,7 +14,14 @@
  */
 import type * as Y from "yjs";
 
-import { bindModelSync, looksWellFormedXml, NOT_WELL_FORMED_XML, type SyncOptions } from "./model-sync.ts";
+import {
+  bindModelSync,
+  type FitCanvas,
+  fitDiagram,
+  looksWellFormedXml,
+  NOT_WELL_FORMED_XML,
+  type SyncOptions,
+} from "./model-sync.ts";
 
 export type { SyncOptions } from "./model-sync.ts";
 
@@ -25,11 +32,8 @@ interface DrdViewbox {
   height: number;
 }
 
-interface DrdCanvasLike {
-  viewbox(): DrdViewbox;
-  viewbox(box: DrdViewbox): void;
-  zoom(mode: string): void;
-}
+/** the DRD's diagram-js canvas: what the view recipe reads and writes (FitCanvas for the first fit) */
+type DrdCanvasLike = FitCanvas & { viewbox(): DrdViewbox };
 
 interface DmnViewerLike {
   get(service: string, strict?: boolean): unknown;
@@ -117,7 +121,7 @@ export function bindDmn(
           const canvas = drdCanvas();
           if (!canvas) return;
           if (viewbox && viewbox.width > 0 && !isFirstImport) canvas.viewbox(viewbox);
-          else canvas.zoom("fit-viewport");
+          else fitDiagram(canvas, sync?.fitInsets?.());
         };
       },
 

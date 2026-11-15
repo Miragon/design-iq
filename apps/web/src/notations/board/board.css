@@ -1,0 +1,1215 @@
+/* The board (src/notations/board): its page, React Flow on the CI tokens, the node frames, the
+   toolbar, the editor's host and the layer above the board, notes, images, groups and arrows.
+   Every colour, radius, shadow and duration is a token of the design system (ui-kit), every font
+   Geist. The measuring bench adds its own sheet (src/board-spike/board-spike.css). */
+/* ── foundation: page, React Flow on the CI tokens ────────────────────────── */
+
+.board-root {
+  display: flex;
+  height: 100%;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--designiq-font-sans);
+}
+.board-root__canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+/* the canvas takes the board's keys (board.tsx): a Tab into it shows where they go */
+.board-root .react-flow__pane:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+/* react-flow.md 8.2 and 8.4: the library reads --xy-NAME before its own default */
+.board-root .react-flow {
+  --xy-background-color: var(--secondary);
+  --xy-background-pattern-color: var(--input);
+  --xy-node-background-color: var(--card);
+  --xy-node-color: var(--card-foreground);
+  --xy-node-border: 1px solid var(--border);
+  --xy-node-border-radius: var(--cd-radius-md);
+  --xy-handle-background-color: var(--primary);
+  --xy-handle-border-color: var(--background);
+  --xy-edge-stroke: var(--input);
+  --xy-edge-stroke-selected: var(--primary);
+  --xy-edge-stroke-width: 1.5;
+  --xy-connectionline-stroke: var(--primary);
+  --xy-edge-label-background-color: var(--background);
+  --xy-edge-label-color: var(--foreground);
+  --xy-selection-background-color: var(--accent);
+  --xy-selection-border: 1px dashed var(--primary);
+  --xy-resize-background-color: var(--primary);
+  --xy-attribution-background-color: color-mix(in srgb, var(--background) 60%, transparent);
+  font-family: var(--designiq-font-sans);
+}
+/* the raw colours no variable of the library covers */
+.board-root .react-flow__attribution a {
+  color: var(--muted-foreground);
+}
+.board-root .react-flow__edge.updating .react-flow__edge-path {
+  stroke: var(--primary);
+}
+.board-root .react-flow__resize-control.handle {
+  border-color: var(--background);
+}
+.board-root .react-flow__edge-text {
+  font-family: var(--designiq-font-sans);
+}
+/* the board's group node is its own component: off with the look of the library's built-in "group" */
+.board-root .react-flow__node-group {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+/* a derived arrow is read from the models, not drawn by a person */
+.board-root .react-flow__edge-derived .react-flow__edge-path {
+  stroke-dasharray: 6 4;
+}
+/* handles show where an arrow can start, on hover and while connecting only */
+.board-root .react-flow__handle {
+  /* over the node's content, which comes after the handles in the DOM */
+  z-index: 1;
+  opacity: 0;
+  transition: opacity var(--cd-motion-fast) var(--cd-ease);
+}
+.board-root .react-flow__node:hover .react-flow__handle,
+.board-root .react-flow__handle.connectingfrom,
+.board-root .react-flow__handle.connectingto {
+  opacity: 1;
+}
+
+/* The overlay strategy's screen-space layer (BoardRuntime.overlayLayer): over the nodes (the
+   renderer is z-index 4 and comes first in the DOM), under the panels (5), clipped by the board.
+   It takes no pointer itself: what is put into it sets pointer-events: auto. */
+.board-overlay-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  /* clip, not hidden: a hidden box is still a scroll container, and the browser scrolls it to show
+     the caret of a label editor that crosses the board's edge. Measured in round 6: the armed host
+     then lay 15 to 16 px beside its node body (README, section 13) */
+  overflow: clip;
+  pointer-events: none;
+}
+
+/* ── foundation: the model node's frame ───────────────────────────────────── */
+
+.board-node {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--cd-radius-md);
+  background: var(--card);
+  /* a ring, not a border: the body is exactly the node minus the header (SurfaceProps) */
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--cd-shadow-1);
+}
+.react-flow__node.selected > .board-node {
+  box-shadow:
+    0 0 0 2px var(--primary),
+    var(--cd-shadow-1);
+}
+.board-node[data-armed="true"] {
+  box-shadow:
+    0 0 0 2px var(--primary),
+    var(--cd-shadow-2);
+}
+/* 32px: HEADER_HEIGHT in nodes/model-node.tsx */
+.board-node__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 6px 0 4px;
+  border-bottom: 1px solid var(--border);
+  background: var(--secondary);
+  font-size: 12px;
+  cursor: grab;
+  user-select: none;
+}
+.board-node__grip {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+}
+.board-node__title {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-node__notation {
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.board-node__arm {
+  display: inline-flex;
+  flex: none;
+  /* at the header's end, whatever stands before it */
+  margin-left: auto;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--input);
+  border-radius: var(--cd-radius-sm);
+  background: var(--background);
+  color: var(--link);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.board-node__arm svg {
+  width: 12px;
+  height: 12px;
+}
+.board-node[data-armed="true"] .board-node__arm {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.board-node__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--canvas-background);
+}
+/* armed (react-flow.md 3.6, item 7): the node's grab cursor and its user-select: none end here */
+.board-node__body.nodrag {
+  cursor: auto;
+}
+
+/* ── foundation: slots and stubs ──────────────────────────────────────────── */
+
+/* a slot while its module loads; with --error, the text of what it threw */
+.board-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  padding: 12px;
+  overflow: auto;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  text-align: center;
+}
+.board-slot--error {
+  align-items: flex-start;
+  justify-content: flex-start;
+  background: var(--destructive-soft);
+  color: var(--foreground);
+  text-align: left;
+}
+
+.board-stub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  padding: 12px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  text-align: center;
+}
+.board-stub strong {
+  color: var(--foreground);
+}
+.board-stub code {
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+/* preview: the body is inert, and the frame takes no pointer either */
+.board-node__body[inert] .board-frame {
+  pointer-events: none;
+}
+
+.board-text {
+  width: 100%;
+  height: 100%;
+  padding: 12px 14px;
+  overflow: hidden;
+  border-radius: var(--cd-radius-md);
+  background: var(--card);
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--cd-shadow-1);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.board-image {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  border: 1px dashed var(--input);
+  border-radius: var(--cd-radius-md);
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.board-group {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed var(--input);
+  border-radius: var(--cd-radius-lg);
+  background: color-mix(in srgb, var(--primary) 4%, transparent);
+}
+.board-group__label {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+.react-flow__node.selected > :is(.board-text, .board-image, .board-group) {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+
+/* ── foundation: toolbar and Files panel ──────────────────────────────────── */
+
+.board-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: var(--cd-radius-md);
+  background: var(--card);
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--cd-shadow-1);
+  font-size: 12px;
+}
+.board-toolbar label,
+.board-toolbar__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted-foreground);
+}
+.board-toolbar :is(select, button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--input);
+  border-radius: var(--cd-radius-sm);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  cursor: pointer;
+}
+.board-toolbar :is(select, button):not(:disabled):hover {
+  border-color: var(--primary);
+  background: var(--accent);
+  color: var(--link);
+}
+.board-toolbar :is(select, button):disabled {
+  /* Chromium dispatches no mouseup for a release over a disabled button, to nobody: a pan or a node
+     drag that ended there was never ended and the board followed the pointer (measured in round 6,
+     README section 13). Without pointer events the release goes to the toolbar's ground instead.
+     The price: no title on hover and no cursor of its own for a button that is off */
+  pointer-events: none;
+  opacity: 0.5;
+}
+.board-toolbar svg {
+  width: 14px;
+  height: 14px;
+}
+/* The Done control of the model that is being edited (toolbar.tsx). ONE box whatever it says and
+   whether it is on: the toolbar wraps the same way armed and unarmed, so the band the arm rules
+   keep free of the armed node never changes under a placement. 200 px holds the names of the
+   sample models; in a window up to 760 px wide (a board of 420 px and less beside the Files
+   panel) 130 px, which keeps it whole inside a board of 160 px and the toolbar at its four rows */
+.board-toolbar .board-toolbar__done {
+  /* the toolbar's last child in the document (one Shift + Tab from an overlaid editor), its first on screen */
+  order: -1;
+  flex: none;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 200px;
+  font-weight: 600;
+}
+@media (max-width: 760px) {
+  .board-toolbar .board-toolbar__done {
+    width: 130px;
+  }
+}
+.board-toolbar .board-toolbar__done:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.board-toolbar .board-toolbar__done:not(:disabled):hover {
+  border-color: var(--primary-hover);
+  background: var(--primary-hover);
+  color: var(--primary-foreground);
+}
+.board-toolbar__done > svg {
+  flex: none;
+}
+/* the model's name takes what is left and is cut with an ellipsis; the whole name is the button's title */
+.board-toolbar__done-model {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The zoom label keeps one width from 10% to 400%, for the same reason: arming changes the board
+   zoom, and a label that grew from "50%" to "100%" made the toolbar wrap where its row was full
+   to within 5 px. The band then grew after the node was placed and the arm rules moved the board
+   a second time (measured in round 6: two transitions for one arming at 5 of 15 window widths,
+   1412 to 1416 px; one at each of 25 widths with the label at one width) */
+.board-toolbar [data-board-zoom] {
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+.board-root :is(.board-toolbar select, .board-toolbar button, .board-node__arm):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ── in-page strategies (naive, counter, overlay, plugin, shim): the engine's host ── */
+
+/* what a strategy's surface renders into the node body: the slot the host lives in while it is in
+   the node, and (overlay, armed) the placeholder that stays behind */
+.board-surface,
+.board-surface__slot,
+.board-surface__placeholder {
+  position: absolute;
+  inset: 0;
+}
+.board-surface__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+/* The host: created by hand (engines/use-engine.ts), one per node for the node's life. Preview and
+   naive: it fills the slot. Counter, armed: an inline size of node x zoom and scale(1 / zoom).
+   Overlay, armed: in the board's layer with inline left / top / width / height. Twice the class:
+   the product sheet sizes the canvas classes (.bpmn-canvas ...) the host also carries */
+.board-engine.board-engine {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+  background: var(--canvas-background);
+  /* React Flow sets pointer-events: all on the node's wrapper, and the value is inherited. Under
+     `all` an SVG shape without a fill takes the pointer over its whole area: diagram-js's outline
+     around a selection of several shapes then swallows every press on them, and the selection
+     cannot be moved. An editor that stands alone has `auto`. A preview takes no pointer either
+     way: its body is inert */
+  pointer-events: auto;
+}
+.board-overlay-layer > .board-engine {
+  /* the layer itself takes no pointer */
+  pointer-events: auto;
+  cursor: auto;
+  box-shadow: 0 0 0 2px var(--primary);
+}
+/* Overlay: an editor's `position: fixed` popup is laid out against the window (no transformed
+   ancestor), but it is PAINTED inside the board's stacking context (.react-flow has z-index: 0).
+   Measured: where a popup reached over the Files panel, the panel's positioned parts covered it
+   and took its clicks. The board's box above the page's later siblings ends that */
+.board-root__canvas {
+  z-index: 1;
+}
+.board-engine--failed {
+  padding: 12px;
+  overflow: auto;
+  background: var(--destructive-soft);
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+/* Preview: the full modeler is mounted from the start, its editing chrome is not shown until the
+   node is armed. The bpmn.io mark (.bjs-powered-by) stays in every state: it is the licence's
+   condition for bpmn-js and dmn-js. Chrome that lies over the canvas (absolutely positioned, or
+   an empty box that holds such) is taken out */
+.board-engine:not([data-mount="product"])[data-armed="false"]
+  :is(
+    .djs-palette,
+    .djs-context-pad-parent,
+    .djs-popup-parent,
+    .djs-hover-tooltip-container,
+    .djs-direct-editing-parent,
+    .djs-search-container,
+    .dmn-definitions,
+    .dmn-sim-decision-requirements-diagram-panel,
+    .wardley-explore-hint
+  ) {
+  display: none !important;
+}
+/* Chrome in the layout flow keeps its room and is only not drawn, so that arming moves nothing:
+   the decision table's View DRD bar is 49 px of the flow above the table */
+.board-engine[data-armed="false"] .view-drd {
+  visibility: hidden !important;
+}
+/* The product's own editor in the node (overlay-product.tsx): hidden, not removed, as in the embed
+   frame. The product's first fit measures the palette and the cards and leaves their room free, so
+   the boxes keep their size and arming moves nothing */
+.board-engine[data-mount="product"][data-armed="false"]
+  :is(
+    .djs-palette,
+    .djs-context-pad,
+    .djs-popup-parent,
+    .djs-hover-tooltip,
+    .djs-direct-editing-parent,
+    .djs-search-container,
+    .dmn-definitions,
+    .dmn-sim-decision-requirements-diagram-panel,
+    .wardley-explore-hint
+  ) {
+  visibility: hidden !important;
+}
+
+/* ── board features (FE): notes, images, groups, arrows, add actions, Files panel ──
+   Everything from here to "end of board features" is the board features builder's. It also gives
+   the foundation's stubs above (.board-text, .board-image, .board-group, .board-files) their look. */
+
+/* handles: an 8px box that React Flow measures (an arrow ends at its outer edge) and, drawn by a
+   pseudo-element, a dot that keeps a size on screen one can see and grab when the board is zoomed
+   out. The box itself must not scale: its measured size is where arrows end. The step comes from
+   board-gestures.tsx (data-board-view). */
+.board-root .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: none;
+}
+.board-root .react-flow__handle::before,
+.board-root .react-flow__handle::after {
+  position: absolute;
+  border-radius: 50%;
+  content: "";
+}
+/* what the pointer has to hit */
+.board-root .react-flow__handle::before {
+  inset: -5px;
+}
+.board-root .react-flow__handle::after {
+  inset: -1px;
+  border: 2px solid var(--background);
+  background: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+.board-root .react-flow[data-board-view="mid"] .react-flow__handle::before,
+.board-root .react-flow[data-board-view="mid"] .react-flow__handle::after {
+  scale: 1.7;
+}
+.board-root .react-flow[data-board-view="far"] .react-flow__handle::before,
+.board-root .react-flow[data-board-view="far"] .react-flow__handle::after {
+  scale: 2.8;
+}
+/* a selected node shows where an arrow can start */
+.board-root .react-flow__node.selected .react-flow__handle {
+  opacity: 1;
+}
+/* An armed node (nokey) is being edited inside: its handles lie over the editor's rim, where a
+   press must reach the editor. No arrow starts there until the node is disarmed; one can still
+   END there (React Flow finds the handle by its place, my drop on the body by the node's box). */
+.board-root .react-flow__node.nokey .react-flow__handle {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ── text notes ── */
+
+.board-text {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: var(--note-ground, var(--card));
+  box-shadow:
+    0 0 0 1px var(--note-line, var(--border)),
+    var(--cd-shadow-1);
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: normal;
+}
+/* the CI's status tints: opaque grounds under text, their strong colour only as the line */
+.board-text[data-color="amber"] {
+  --note-ground: var(--warning-soft);
+  --note-line: color-mix(in srgb, var(--warning) 60%, var(--warning-soft));
+}
+.board-text[data-color="green"] {
+  --note-ground: var(--success-soft);
+  --note-line: color-mix(in srgb, var(--success) 60%, var(--success-soft));
+}
+.board-text[data-color="blue"] {
+  --note-ground: var(--cd-info-soft);
+  --note-line: color-mix(in srgb, var(--info) 35%, var(--cd-info-soft));
+}
+.board-text[data-color="red"] {
+  --note-ground: var(--destructive-soft);
+  --note-line: color-mix(in srgb, var(--destructive) 30%, var(--destructive-soft));
+}
+.board-text[data-editing="true"] {
+  box-shadow:
+    0 0 0 2px var(--ring),
+    var(--cd-shadow-2);
+  cursor: auto;
+}
+.board-text__body {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.board-text__body[data-empty="true"]::before {
+  color: var(--muted-foreground);
+  content: "Double-click to write";
+}
+/* the page's base sheet resets headings and lists: a note gets them back, small */
+.board-text__body > :first-child {
+  margin-top: 0;
+}
+.board-text__body > :last-child {
+  margin-bottom: 0;
+}
+.board-text__body :is(p, ul, ol, blockquote, pre, table) {
+  margin: 0 0 8px;
+}
+.board-text__body h1 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.board-text__body h2 {
+  margin: 12px 0 6px;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.board-text__body :is(h3, h4, h5, h6) {
+  margin: 10px 0 4px;
+  font-size: 14px;
+  font-weight: 650;
+}
+.board-text__body ul {
+  padding-left: 20px;
+  list-style: disc;
+}
+.board-text__body ol {
+  padding-left: 22px;
+  list-style: decimal;
+}
+.board-text__body li + li {
+  margin-top: 2px;
+}
+.board-text__body li > :is(ul, ol) {
+  margin: 2px 0 0;
+}
+.board-text__body strong {
+  font-weight: 650;
+}
+.board-text__body a[href] {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.board-text__body code {
+  padding: 1px 5px;
+  border-radius: calc(var(--cd-radius-sm) - 2px);
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
+  font-family: var(--designiq-font-mono);
+  font-size: 0.88em;
+}
+.board-text__body pre {
+  padding: 8px 10px;
+  overflow: hidden;
+  border-radius: var(--cd-radius-sm);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  white-space: pre-wrap;
+}
+.board-text__body pre code {
+  padding: 0;
+  background: none;
+}
+.board-text__body blockquote {
+  padding-left: 10px;
+  border-left: 3px solid var(--note-line, var(--border));
+  color: var(--muted-foreground);
+}
+.board-text__body hr {
+  margin: 10px 0;
+  border: 0;
+  border-top: 1px solid var(--note-line, var(--border));
+}
+.board-text__body :is(th, td) {
+  padding: 2px 8px 2px 0;
+  border-bottom: 1px solid var(--note-line, var(--border));
+  text-align: left;
+}
+.board-text__editor {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: inherit;
+  outline: 0;
+  background: none;
+  color: inherit;
+  font-family: var(--designiq-font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  cursor: text;
+  resize: none;
+}
+.board-text__editor::placeholder {
+  color: var(--muted-foreground);
+}
+
+/* the strip React Flow keeps above a selected node at its size on screen (NodeToolbar) */
+.board-node-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: var(--cd-radius-md);
+  background: var(--card);
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--cd-shadow-2);
+  color: var(--foreground);
+  font-family: var(--designiq-font-sans);
+  font-size: 12px;
+}
+.board-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid var(--swatch-line);
+  border-radius: 50%;
+  background: var(--swatch);
+  cursor: pointer;
+}
+.board-swatch[data-color="plain"] {
+  --swatch: var(--card);
+  --swatch-line: var(--input);
+}
+.board-swatch[data-color="amber"] {
+  --swatch: var(--warning-soft);
+  --swatch-line: var(--warning);
+}
+.board-swatch[data-color="green"] {
+  --swatch: var(--success-soft);
+  --swatch-line: var(--success);
+}
+.board-swatch[data-color="blue"] {
+  --swatch: var(--cd-info-soft);
+  --swatch-line: var(--info);
+}
+.board-swatch[data-color="red"] {
+  --swatch: var(--destructive-soft);
+  --swatch-line: var(--destructive);
+}
+.board-swatch[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 4px var(--primary);
+}
+.board-node-toolbar__rule {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--border);
+}
+.board-node-toolbar__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--input);
+  border-radius: var(--cd-radius-sm);
+  background: var(--background);
+  color: var(--link);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.board-node-toolbar__button:hover {
+  border-color: var(--primary);
+  background: var(--accent);
+}
+.board-node-toolbar__button svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ── images ── */
+
+.board-image {
+  position: relative;
+  display: block;
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  /* the ground an image with other proportions than its node is letterboxed on */
+  background: var(--secondary);
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--cd-shadow-1);
+}
+.board-image__picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+.board-image__missing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  border: 1px dashed var(--input);
+  border-radius: inherit;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  text-align: center;
+}
+.board-image__missing svg {
+  width: 20px;
+  height: 20px;
+}
+/* which repository file this is: on hover and on the selected node */
+.board-image__caption {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  display: flex;
+  gap: 8px;
+  max-width: calc(100% - 12px);
+  padding: 2px 7px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--border);
+  color: var(--muted-foreground);
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--cd-motion-fast) var(--cd-ease);
+}
+.board-image__path {
+  overflow: hidden;
+  color: var(--foreground);
+  text-overflow: ellipsis;
+}
+.react-flow__node:is(:hover, .selected) .board-image__caption,
+.board-image[data-missing="true"] .board-image__caption {
+  opacity: 1;
+}
+
+/* ── groups ── */
+
+/* Only the frame's border and its label take the pointer; the inside is board ground (a drag
+   pans, a click clears the selection). React Flow sets the wrapper's pointer-events inline. */
+.board-root .react-flow__node-group {
+  pointer-events: none !important;
+}
+.board-root .react-flow__node-group :is(.board-group__edge, .board-group__label, .react-flow__resize-control) {
+  pointer-events: all;
+}
+/* The border MOVES the group, selected or not: of the resizer only the four corners show (its
+   lines would lie on the border and resize where a moment ago the same drag moved). */
+.board-root .react-flow__node-group .react-flow__resize-control.line {
+  display: none;
+}
+.board-group {
+  position: relative;
+  border: 0;
+  outline: 1.5px dashed var(--input);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--primary) 4%, transparent);
+  transition:
+    background var(--cd-motion-fast) var(--cd-ease),
+    outline-color var(--cd-motion-fast) var(--cd-ease);
+}
+/* a node is dragged over it and would join if dropped now */
+.board-group[data-receiving="true"] {
+  outline: 2px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.board-group__edge {
+  position: absolute;
+  cursor: grab;
+}
+.board-group__edge:is([data-side="top"], [data-side="bottom"]) {
+  right: 0;
+  left: 0;
+  height: 14px;
+}
+.board-group__edge:is([data-side="left"], [data-side="right"]) {
+  top: 0;
+  bottom: 0;
+  width: 14px;
+}
+.board-group__edge[data-side="top"] {
+  top: -7px;
+}
+.board-group__edge[data-side="bottom"] {
+  bottom: -7px;
+}
+.board-group__edge[data-side="left"] {
+  left: -7px;
+}
+.board-group__edge[data-side="right"] {
+  right: -7px;
+}
+/* at least 13px on screen, however far the board is zoomed out (--board-zoom: useZoomVar) */
+.board-group__label {
+  position: absolute;
+  top: 14px;
+  left: 18px;
+  max-width: calc(100% - 36px);
+  padding: 2px 8px;
+  overflow: hidden;
+  border-radius: var(--cd-radius-sm);
+  color: var(--foreground);
+  font-size: clamp(16px, calc(13px / var(--board-zoom, 1)), 48px);
+  font-weight: 650;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: grab;
+}
+.board-group__label[data-empty="true"] {
+  color: var(--muted-foreground);
+}
+
+/* a name or a label while it is typed (nodes/inline-edit.tsx): the input stands where the text stood */
+.board-inline-input {
+  min-width: 6ch;
+  border: 0;
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  cursor: text;
+}
+
+/* ── arrows ── */
+
+/* a drawn arrow is ink; a derived one is quiet (the dashes: the foundation's rule above) */
+.board-root .react-flow__edge-arrow {
+  --xy-edge-stroke: var(--foreground);
+}
+.board-root .react-flow__edge-derived {
+  --xy-edge-stroke: var(--muted-foreground);
+}
+/* a line keeps its width on screen: at the zoom a whole board fits in, 1.5 board units are no line */
+.board-arrow__line,
+.board-derived__line,
+.board-derived__head {
+  vector-effect: non-scaling-stroke;
+}
+.board-root .react-flow__edge.selected .board-arrow__line {
+  stroke-width: 2.25;
+}
+.board-arrow[data-moving="true"] .board-arrow__line {
+  stroke: var(--primary);
+  stroke-dasharray: 5 4;
+}
+/* the heads keep a least size on screen (--board-zoom on the edge layers: board-gestures.tsx) */
+.board-arrow__head,
+.board-derived__head {
+  transform: scale(clamp(1, calc(0.8 / var(--board-zoom, 1)), 4));
+}
+.board-arrow__head {
+  fill: var(--xy-edge-stroke);
+  pointer-events: all;
+}
+.board-root .react-flow__edge.selected .board-arrow__head,
+.board-arrow[data-moving="true"] .board-arrow__head {
+  fill: var(--primary);
+}
+.board-derived__head {
+  fill: none;
+  stroke: var(--xy-edge-stroke);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* labels lie over the nodes: a label wider than the gap between two nodes is still read whole */
+.board-root .react-flow__edgelabel-renderer {
+  z-index: 2000;
+}
+.board-arrow-label,
+.board-derived-label {
+  position: absolute;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+/* at least 11px on screen */
+.board-arrow-label {
+  font-size: clamp(13px, calc(11px / var(--board-zoom, 1)), 44px);
+  pointer-events: all;
+  cursor: pointer;
+}
+.board-arrow-label__text {
+  display: block;
+  padding: 0.15em 0.6em;
+  border-radius: 0.45em;
+  background: var(--background);
+  box-shadow: 0 0 0 calc(1px / var(--board-zoom, 1)) var(--input);
+  color: var(--foreground);
+  font-weight: 500;
+}
+.board-arrow-label__text[data-empty="true"] {
+  color: var(--muted-foreground);
+  font-weight: 400;
+}
+.board-arrow-label[data-selected="true"] .board-arrow-label__text {
+  box-shadow: 0 0 0 calc(2px / var(--board-zoom, 1)) var(--primary);
+}
+.board-arrow-label .board-inline-input {
+  outline: 0;
+  box-shadow: 0 0 0 calc(2px / var(--board-zoom, 1)) var(--ring);
+}
+.board-derived-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.1em 0.6em;
+  border: calc(1px / var(--board-zoom, 1)) dashed var(--input);
+  border-radius: var(--cd-radius-pill);
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  font-family: var(--designiq-font-mono);
+  font-size: clamp(11px, calc(10px / var(--board-zoom, 1)), 40px);
+  pointer-events: none;
+}
+.board-derived-label svg {
+  width: 1em;
+  height: 1em;
+}
+/* the two grips of a selected arrow (edges/arrow-edge.tsx): 12px on screen at every zoom */
+.board-arrow-grip {
+  position: absolute;
+  width: calc(12px / var(--board-zoom, 1));
+  height: calc(12px / var(--board-zoom, 1));
+  border: calc(2px / var(--board-zoom, 1)) solid var(--primary);
+  border-radius: 50%;
+  background: var(--background);
+  pointer-events: all;
+  cursor: grab;
+  touch-action: none;
+}
+.board-arrow-grip:hover {
+  background: var(--primary);
+}
+
+/* ── toolbar: the add actions ── */
+
+.board-toolbar__group button {
+  gap: 5px;
+}
+.board-toolbar__models {
+  max-width: 104px;
+}
+.board-toolbar .board-toolbar__delete:not(:disabled):hover {
+  border-color: var(--destructive);
+  background: var(--destructive-soft);
+  color: var(--destructive);
+}
+/* what the board says about a file it took or refused: under the toolbar */
+.board-notices {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: max-content;
+  max-width: min(560px, 60vw);
+}
+.board-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 8px 8px 10px;
+  border-radius: var(--cd-radius-md);
+  background: var(--card);
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--cd-shadow-2);
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.board-notice > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  color: var(--primary);
+}
+.board-notice > span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.board-notice[data-kind="refused"] {
+  background: var(--destructive-soft);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--destructive) 40%, var(--destructive-soft)),
+    var(--cd-shadow-2);
+}
+.board-notice[data-kind="refused"] > svg {
+  color: var(--destructive);
+}
+.board-toolbar .board-notice button,
+.board-toolbar .board-notice button:not(:disabled):hover {
+  flex: none;
+  min-width: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted-foreground);
+}
+.board-toolbar .board-notice button:not(:disabled):hover {
+  color: var(--foreground);
+}
+/* while a file is dragged over the page: a frame around the board and a card that says what a drop does */
+.board-drop-hint {
+  position: absolute;
+  inset: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--primary);
+  border-radius: var(--cd-radius-lg);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  font-family: var(--designiq-font-sans);
+  pointer-events: none;
+}
+.board-drop-hint__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: 420px;
+  padding: 18px 24px;
+  border-radius: var(--cd-radius-lg);
+  background: var(--card);
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--cd-shadow-3);
+  color: var(--foreground);
+  font-size: 14px;
+  text-align: center;
+}
+.board-drop-hint__card svg {
+  width: 28px;
+  height: 28px;
+  color: var(--primary);
+}
+.board-drop-hint__card span {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ── end of board features ── */
+
+/* ── live presence: the other people on this board (board-presence.tsx) ── */
+
+/* in React Flow's viewport: board coordinates, above the nodes, never in the pointer's way */
+.board-presence {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.board-presence__outline {
+  position: absolute;
+  border-radius: var(--cd-radius-sm);
+  outline-style: solid;
+}
+/* an AI client has no pointer: what its last save changed, dashed, as on every canvas */
+.board-presence__outline[data-agent="true"] {
+  outline-style: dashed;
+}
+.board-presence__cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+.board-presence__arrow {
+  display: block;
+  overflow: visible;
+  fill: currentColor;
+  stroke: var(--primary-foreground);
+  stroke-width: 0.75;
+}
+.board-presence__name {
+  position: absolute;
+  top: 14px;
+  left: 12px;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: var(--cd-radius-sm);
+  color: var(--primary-foreground);
+  font: 600 10px/16px var(--designiq-font-sans);
+  white-space: nowrap;
+}

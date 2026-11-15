@@ -5,13 +5,17 @@ them, check them and propose changes. This page covers the ways tools _outside_ 
 repo's skill layer consume the models.
 
 The MCP tools start with the models of **any** notation (`@designiq/notations`: BPMN, DMN,
-Wardley Map, Team Topology, Event Storming, Context Map, Value Chain, Markdown). On both
-surfaces below, `list_models` covers every notation and `get_view` every one but Markdown; the
+Wardley Map, Team Topology, Event Storming, Context Map, Value Chain, Markdown, Board). On both
+surfaces below, `list_models` covers every notation and `get_view` every one but Markdown and
+the board; the
 read-only server adds graph analysis across notations (`get_model`, `enumerate_paths`,
 `find_cycles`, `which_models_use`); the Live Host reads, validates and saves any model's source
 text (`get_model_content`, `validate_model`, `save_model_content`, `create_model`) and renders
 seven of the notations as modelers inline in the chat. Todos are filed on the models of every
-notation but decisions, optionally anchored to their elements. BPMN and DMN
+notation but decisions and boards, optionally anchored to their elements. A board (`.board`) is
+read and saved as its text, one JSON line per element: a save whose text the board's canvas
+could not read back is refused, and a model the board shows that is not in the repository is a
+warning. BPMN and DMN
 have extra tools on top: the derived process and decision views, the XML round-trip, roles from
 lanes, decision simulation, analysis and tests.
 

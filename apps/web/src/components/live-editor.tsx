@@ -17,7 +17,7 @@
  * whose cleanup tears the whole live session down (provider, sockets, bindings).
  */
 import { type MovedNotice, type PresenceUser, roomName } from "@designiq/contracts/live";
-import { openLiveSession } from "@designiq/live-client";
+import { type LiveSessionGroup, openLiveSession, openLiveSessionGroup } from "@designiq/live-client";
 import { updateText } from "@designiq/live-client/text";
 import { byExtension, hasTodos as offersTodos, type MediaKind, modelStem } from "@designiq/notations";
 import { cn } from "@designiq/ui-kit/lib/utils";
@@ -309,6 +309,8 @@ export function LiveEditor({
     });
 
     let mounted: MountedEditor | undefined;
+    /** the one socket of every linked file the mounted editor opened (ctx.linkedFiles) */
+    let linkedSessions: LiveSessionGroup | undefined;
     let monacoBinding: MonacoBinding | undefined;
     let sourceEditor: monaco.editor.IStandaloneCodeEditor | undefined;
     let sourceModel: monaco.editor.ITextModel | undefined;
@@ -389,6 +391,25 @@ export function LiveEditor({
             ),
             onActionFailed: (message) => {
               if (!cancelled) toast.error(message);
+            },
+            // other files of this repository, live: one more socket for all of
+            // them, opened with the first, and the person in a file's roster
+            // only while they edit it there
+            linkedFiles: {
+              open: (path) => {
+                linkedSessions ??= openLiveSessionGroup({ url: config.wsUrl, token: me.wsToken });
+                return linkedSessions.open(roomName(repo, path));
+              },
+              present: (linked, present) =>
+                linked.setUser(
+                  present
+                    ? {
+                        name: me.user.name || me.user.login,
+                        color: presenceColor(me.user.login),
+                        avatarUrl: me.user.avatarUrl,
+                      }
+                    : null,
+                ),
             },
           });
         } catch (e) {
@@ -504,6 +525,8 @@ export function LiveEditor({
       offSourceLayout?.();
       sourceEditor?.dispose();
       sourceModel?.dispose();
+      // after the editor that opened them is gone: its linked files' socket
+      linkedSessions?.destroy();
       session.destroy(); // provider AND socket
     };
   }, [repo, docPath, me.wsToken]);

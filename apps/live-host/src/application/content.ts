@@ -277,7 +277,9 @@ async function saveGate(
  * room, broadcast to anyone who has it open, written through on disconnect.
  * No CAS and no validation gate: `edit` is a deterministic transformation of
  * whatever the document holds at that instant, applied inside one transact.
- * Text rooms only — a structured room is left as it is.
+ * A structured room (a board that shows the renamed model) is edited as its
+ * canonical text and reconciled element by element, so a co-editor's change
+ * of another element stays.
  */
 export async function editContent(
   opts: ContentDeps,
@@ -287,9 +289,22 @@ export async function editContent(
 ): Promise<void> {
   const safePath = modelPath(opts.registry, repo, path, "content/invalid-path");
   await assertOnDisk(opts, repo, safePath);
-  if ((opts.docCodec ?? docCodecForPath)(safePath)) return;
+  const codec = (opts.docCodec ?? docCodecForPath)(safePath);
   await withDoc(opts, repo, safePath, async (conn) => {
     await conn.transact((doc) => {
+      if (codec) {
+        const current = codec.encode(readSnapshot(doc));
+        const next = edit(current);
+        if (next === current) return;
+        if (Buffer.byteLength(next, "utf8") > opts.maxDocBytes) {
+          throw new AppError("content/too-large", `content exceeds the ${opts.maxDocBytes}-byte document cap`, {
+            status: 413,
+            expose: true,
+          });
+        }
+        reconcileSnapshot(doc, codec.decode(next));
+        return;
+      }
       const ytext = doc.getText(CONTENT_KEY);
       const next = edit(ytext.toString());
       if (Buffer.byteLength(next, "utf8") > opts.maxDocBytes) {

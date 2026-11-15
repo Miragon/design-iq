@@ -153,6 +153,19 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
     monacoLanguage: "markdown",
     todos: true,
   },
+  {
+    // a canvas of the repository's own files: its models (edited in place,
+    // each saved in its own file), notes, images and arrows. The first
+    // STRUCTURED notation: an element-wise live document, JSON lines at rest
+    // (./codecs). The board stores where a file sits, never what is in it
+    id: "board",
+    label: "Board",
+    noun: { singular: "board", plural: "boards" },
+    extensions: [".board"],
+    mediaKind: "json",
+    docShape: "structured",
+    monacoLanguage: "json",
+  },
 ];
 
 export function byId(id: string): NotationDescriptor | undefined {

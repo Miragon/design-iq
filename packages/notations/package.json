@@ -21,7 +21,8 @@
     "./mermaid": "./mermaid.ts",
     "./content": "./content.ts",
     "./cli": "./cli.ts",
-    "./codecs": "./codecs.ts"
+    "./codecs": "./codecs.ts",
+    "./board": "./board.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

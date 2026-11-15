@@ -15,9 +15,12 @@
  *   businessRuleTask  decisionRef / calledDecision / calledElement="x"
  *                     <calledDecision decisionId="x"/>            → a decision
  *
+ *   board             "file":"<folder>/x<extension>"              → the model it shows
+ *
  * Pure + browser-safe: string in, string out. Notations without refs return
  * their content untouched.
  */
+import { byExtension, modelStem } from "./index.ts";
 import { escapeXml } from "./templates.ts";
 
 /** the model a set of references is moved from one id to another */
@@ -45,11 +48,13 @@ function attributesFor(tag: string, notation: string): string[] {
 
 /**
  * `content` with every reference to `spec.from` (of `spec.notation`) pointing
- * at `spec.to` instead. `notation` is the notation of the CONTENT — only BPMN
- * emits references today; anything else comes back unchanged.
+ * at `spec.to` instead. `notation` is the notation of the CONTENT — BPMN and
+ * the board emit references; anything else comes back unchanged.
  */
 export function retargetRefs(notation: string, content: string, spec: RetargetSpec): string {
-  if (notation !== "bpmn" || spec.from === spec.to) return content;
+  if (spec.from === spec.to) return content;
+  if (notation === "board") return retargetBoard(content, spec);
+  if (notation !== "bpmn") return content;
   const from = escapeRegExp(escapeXml(spec.from));
   const to = escapeXml(spec.to);
   return content.replace(REF_TAGS, (startTag, tag: string) => {
@@ -61,5 +66,32 @@ export function retargetRefs(notation: string, content: string, spec: RetargetSp
       out = out.replace(value, (_m, lead: string, quote: string) => `${lead}${quote}${to}${quote}`);
     }
     return out;
+  });
+}
+
+/** the `file` attribute of a board element's line, as the JSON string it is written as */
+const BOARD_FILE = /"file":("(?:[^"\\]|\\.)*")/g;
+
+/**
+ * A board names the models it shows by path (`"file":"models/order.bpmn"`).
+ * Every path whose notation and file stem are the renamed model's gets the
+ * new stem; its folder and its extension stay, as the rename leaves them.
+ * Only that string changes: the line's other attributes and every other line
+ * of the file are untouched.
+ */
+function retargetBoard(content: string, spec: RetargetSpec): string {
+  return content.replace(BOARD_FILE, (whole, literal: string) => {
+    let path: unknown;
+    try {
+      path = JSON.parse(literal);
+    } catch {
+      return whole;
+    }
+    if (typeof path !== "string" || byExtension(path)?.id !== spec.notation || modelStem(path) !== spec.from)
+      return whole;
+    const slash = path.lastIndexOf("/");
+    const base = path.slice(slash + 1);
+    const renamed = `${path.slice(0, slash + 1)}${spec.to}${base.slice(spec.from.length)}`;
+    return `"file":${JSON.stringify(renamed)}`;
   });
 }

@@ -8,6 +8,7 @@
  * of ANY notation with a template becomes one registry lookup. Pure string
  * assembly, zero-dep and browser-safe like the package index.
  */
+import { jsonLinesCodec } from "./codecs.ts";
 
 /** escape a string for use inside an XML attribute value */
 export function escapeXml(value: string): string {
@@ -161,6 +162,12 @@ export function newMarkdownText(_id: string, name: string): string {
   return `# ${oneLine(name)}\n`;
 }
 
+/** the initial content of a new board: the header alone, with the title. A
+ *  board is a structured notation, so this is its codec's canonical text */
+export function newBoardText(_id: string, name: string): string {
+  return jsonLinesCodec().encode({ elements: {}, meta: { title: oneLine(name), version: 1 } });
+}
+
 const TEMPLATES: Record<string, (id: string, name: string) => string> = {
   bpmn: newBpmnXml,
   dmn: newDmnXml,
@@ -170,6 +177,7 @@ const TEMPLATES: Record<string, (id: string, name: string) => string> = {
   "context-map": newCmJson,
   "value-chain": newVcJson,
   markdown: newMarkdownText,
+  board: newBoardText,
 };
 
 /** whether a notation can be CREATED from the platform (drives the web
