@@ -1,0 +1,465 @@
+/* The measuring bench's additions to the board's sheet (src/notations/board/board.css): the
+   strategy label of a node, the Files panel, the embed frame's page of the iframe strategy and
+   what the counter strategy needs. Loaded after the board's sheet (page-styles.ts). */
+
+.board-root .board-files__file:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+/* the strategy label stands between the notation and the button and takes the room between them */
+.board-node__strategy + .board-node__arm {
+  margin-left: 0;
+}
+
+.board-root__files {
+  flex: none;
+  width: 340px;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: var(--card);
+}
+
+.board-node__strategy {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+}
+.board-files {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-size: 12px;
+}
+.board-files__title {
+  flex: none;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.board-files__list {
+  flex: none;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+}
+.board-files__file {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--cd-radius-sm);
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.board-files__file:hover,
+.board-files__file[aria-current="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.board-files__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-files__meta {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted-foreground);
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+}
+.board-files__text {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* ── iframe strategy (IF): the embed frame's page, board-spike-embed.html ─── */
+
+/* #root of the embed page: ONE editor that fills the frame's window. html, body and #root are
+   100% high (ui-kit theme.css), which the engines' popup menus measure against. */
+.board-embed {
+  position: relative;
+  overflow: hidden;
+  background: var(--canvas-background);
+}
+.board-embed__host {
+  position: absolute;
+  inset: 0;
+}
+/* Preview (embed-main.ts sets data-armed on <html>): the editing chrome is hidden, not removed.
+   Hidden boxes keep their size, so the product's first fit leaves the palette's room free as in
+   the SPA, and arming moves nothing. The bpmn.io mark stays visible in every state. */
+html[data-board-embed][data-armed="false"]
+  :is(
+    .djs-palette,
+    .djs-context-pad,
+    .djs-popup-parent,
+    .djs-hover-tooltip,
+    .djs-direct-editing-parent,
+    .djs-search-container,
+    .dmn-definitions,
+    .dmn-sim-decision-requirements-diagram-panel,
+    .view-drd,
+    .wardley-explore-hint
+  ) {
+  visibility: hidden;
+}
+
+/* Counter: the body-level home of an editor's `position: fixed` popups (diagram-js's popup menu
+   and palette tooltip), outside every transformed ancestor. It carries the editor's canvas class
+   (the engine sheets scope their rules under it) and inside it the classes of the editor's own
+   containers as empty boxes (engines/diagram.ts, mirrorAncestors) */
+.board-popup-host.board-popup-host {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  width: 0;
+  height: 0;
+  overflow: visible;
+}
+/* a box of the mirror must neither clip a popup nor become its containing block */
+.board-popup-host .board-popup-host__box {
+  position: static !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: visible !important;
+  contain: none !important;
+  container-type: normal !important;
+  transform: none !important;
+}
+/* Counter: a fixed box a renderer appends to its OWN container is laid out against the host (it
+   carries the transform). Shifted back by the host's client origin, it is where the renderer put
+   it (pointer-math-other.md 3.1). The individual property composes with a transform of the box */
+.board-engine[data-layout="counter"] .cm-pad-prompt {
+  translate: calc(var(--board-host-x, 0) * -1px) calc(var(--board-host-y, 0) * -1px);
+}
+
+/* ── Files panel ── */
+
+.board-root__files:has(.board-files[data-collapsed="true"]) {
+  width: 44px;
+}
+.board-files {
+  min-height: 0;
+  color: var(--foreground);
+}
+.board-files[data-collapsed="true"] {
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+}
+.board-files__rail {
+  color: var(--muted-foreground);
+  font-weight: 600;
+  writing-mode: vertical-rl;
+}
+.board-files__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.board-files__header > div {
+  flex: 1;
+  min-width: 0;
+}
+.board-files__title {
+  padding: 0;
+  border: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+.board-files__lead {
+  color: var(--muted-foreground);
+}
+.board-files__toggle,
+.board-files__follow {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--input);
+  border-radius: var(--cd-radius-sm);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  cursor: pointer;
+}
+.board-files__toggle {
+  width: 28px;
+  padding: 0;
+}
+.board-files :is(.board-files__toggle, .board-files__follow):hover {
+  border-color: var(--primary);
+  background: var(--accent);
+  color: var(--link);
+}
+.board-files__follow[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--accent);
+  color: var(--link);
+  font-weight: 600;
+}
+.board-files :is(.board-files__toggle, .board-files__follow) svg {
+  width: 14px;
+  height: 14px;
+}
+/* where the last change went: the one line that answers "which file did that write?" */
+.board-files__last {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  line-height: 1.35;
+}
+.board-files__last[data-any="true"] {
+  color: var(--foreground);
+}
+.board-files__last code {
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+/* green is an indicator here, never text */
+.board-files__pulse {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: board-files-pulse 1.4s var(--cd-ease-out) 1;
+}
+@keyframes board-files-pulse {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 70%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 9px transparent;
+  }
+}
+.board-files__list {
+  flex: none;
+  max-height: 48%;
+  padding: 2px 6px 8px;
+  overflow: auto;
+}
+.board-files__kind {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 10px 8px 2px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.board-files__kind span {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.board-files__file {
+  position: relative;
+  /* the flash lies under the row's text and over its ground */
+  isolation: isolate;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 8px;
+  overflow: hidden;
+}
+.board-files__file > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+}
+.board-files__file[aria-current="true"] {
+  font-weight: 600;
+}
+.board-files__file[aria-current="true"] > svg {
+  color: var(--primary);
+}
+.board-files__name {
+  flex: none;
+  max-width: 62%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-files__folder {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-files__count {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--cd-radius-pill);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+.board-files__size {
+  flex: none;
+  min-width: 54px;
+  color: var(--muted-foreground);
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  text-align: right;
+}
+.board-files__flash {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--brand);
+  opacity: 0;
+  animation: board-files-flash 1.8s var(--cd-ease-out) 1;
+  pointer-events: none;
+}
+@keyframes board-files-flash {
+  from {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.board-files__view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+.board-files__about {
+  flex: none;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.board-files__about code {
+  font-family: var(--designiq-font-mono);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.board-files__about p {
+  margin: 4px 0 0;
+  color: var(--muted-foreground);
+  line-height: 1.4;
+}
+.board-files__about .board-files__change[data-changed="true"] {
+  color: var(--foreground);
+  font-weight: 500;
+}
+/* the text, a numbered row per line of the file: a long line wraps inside its row */
+.board-files__lines {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 6px 0;
+  overflow: auto;
+  counter-reset: line;
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  list-style: none;
+}
+.board-files__lines li {
+  position: relative;
+  min-height: 1.55em;
+  padding: 0 12px 0 46px;
+  border-left: 3px solid transparent;
+  counter-increment: line;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.board-files__lines li::before {
+  position: absolute;
+  left: 0;
+  width: 34px;
+  color: var(--muted-foreground);
+  content: counter(line);
+  text-align: right;
+  user-select: none;
+}
+/* what the file's last change wrote */
+.board-files__lines li[data-changed="true"] {
+  border-left-color: var(--primary);
+  background: var(--accent);
+}
+.board-files__asset {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 0;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+}
+.board-files__asset img {
+  max-width: 100%;
+  max-height: 260px;
+  border-radius: var(--cd-radius-sm);
+  background: var(--secondary);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.board-files__asset figcaption {
+  color: var(--muted-foreground);
+  font-family: var(--designiq-font-mono);
+  font-size: 11px;
+}
+
+.board-root
+  :is(
+    .board-swatch,
+    .board-node-toolbar__button,
+    .board-files__toggle,
+    .board-files__follow,
+    .board-notice button
+  ):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

@@ -1,0 +1,11 @@
+/* The shim strategy's own rules, every one scoped under its surface (strategies/shim.tsx). */
+
+/* A `position: fixed` box is SIZED against its containing block as well as placed against it. In a
+   node that is the node's wrapper, so a shrink-to-fit popup that starts near the node's right edge
+   is squeezed (measured: Context Maps' type menu 263 px wide instead of 300), where in an unscaled
+   editor the window is the limit. Here the box's own content decides its width again; the engine's
+   max-width still caps it. No patch of a function reaches this: it is layout. Switched with the
+   modifier `css` of `&shim=`. */
+.board-surface[data-surface="shim"][data-shim-css="true"] :is(.djs-popup, .djs-hover-tooltip) {
+  width: max-content;
+}
