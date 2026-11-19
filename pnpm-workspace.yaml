@@ -39,15 +39,18 @@ minimumReleaseAgeExclude:
   - "@miragon/modeler-shell@0.14.1"
   - "@miragon/team-topologies-renderer@0.22.1"
   - "@miragon/team-topologies-schema-model@0.22.1"
+  # the Miragon docs kit as a package (@miragon/docs-starter 1.0.0, kit 1.32.0,
+  # Miragon/corporate-identity#102): published 2026-11-19, adopted on 2026-11-19
+  - "@miragon/docs-starter@1.0.0"
 overrides:
   # vitepress 1.6.4 (docs/) is the latest release and still requests vite
   # ^5.4.14, which is stuck below the dev-server fixes; 6.4.5 also closes the
   # advisories up to 6.4.3 (GHSA-rq7h-c2jc-7f22, GHSA-9jrq-w75r-8gcw and the
   # bundled launch-editor ones). Scoped to vitepress, so the vite of apps/web
   # is untouched. The pin comes with the Miragon docs kit
-  # (Miragon/corporate-identity, skill docs-site), whose package.json template
-  # has it as npm "overrides"; under pnpm it lives here. It changes with a CI
-  # release of the kit.
+  # (@miragon/docs-starter, Miragon/brand-toolbox kits/docs/example), whose
+  # package.json template has it as npm "overrides"; under pnpm it lives here.
+  # It changes with a release of the kit.
   vitepress>vite: 6.4.5
 patchedDependencies:
   # @emaarco/dmn-js-simulation 0.4.0 stopped coercing the value its DRD
@@ -66,9 +69,9 @@ patchedDependencies:
 peerDependencyRules:
   allowedVersions:
     # vitepress-plugin-mermaid 2.0.17 (docs/) is the latest release and still
-    # declares mermaid 10 || 11 as its peer, while the docs kit since 1.24.0
-    # pins mermaid 12.2.0, which the plugin renders unchanged. The kit's npm
-    # template gives the plugin its mermaid through "overrides"; under pnpm
-    # this rule keeps `pnpm peers check` clean. It changes with a CI release
-    # of the kit.
+    # declares mermaid 10 || 11 as its peer, while the docs kit
+    # (@miragon/docs-starter) pins mermaid 12, which the plugin renders
+    # unchanged. The kit's npm template gives the plugin its mermaid through
+    # "overrides"; under pnpm this rule keeps `pnpm peers check` clean. It
+    # changes with a release of the kit.
     vitepress-plugin-mermaid>mermaid: "12"
