@@ -49,7 +49,3 @@ CHANGELOG.md
 # against .miragon/brand-assets.sha256 in validate.yml
 packages/ui-kit/src/cd-tokens.generated.css
 .miragon/brand-assets.*
-
-# the Miragon docs kit, vendored verbatim from Miragon/corporate-identity (skill
-# docs-site); docs/.vitepress/miragon/check.mjs fails on any change to it
-docs/.vitepress/miragon/
