@@ -37,7 +37,7 @@
   "devDependencies": {
     "@miragon/context-maps-schema-model": "0.5.1",
     "@miragon/event-storming-dsl": "0.4.0",
-    "@miragon/team-topologies-schema-model": "0.22.1",
+    "@miragon/team-topologies-schema-model": "0.22.2",
     "@miragon/value-chain-schema-model": "0.7.3",
     "@types/node": "26.6.6"
   }

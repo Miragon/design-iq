@@ -212,8 +212,8 @@ importers:
         specifier: 0.14.1
         version: 0.14.1(@vscode/test-electron@3.1.0)(playwright-core@1.65.0)
       '@miragon/team-topologies-renderer':
-        specifier: 0.22.1
-        version: 0.22.1(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
+        specifier: 0.22.2
+        version: 0.22.2(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/value-chain-renderer':
         specifier: 0.11.0
         version: 0.11.0(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
@@ -540,8 +540,8 @@ importers:
         specifier: 0.4.0
         version: 0.4.0(zod@4.6.7)
       '@miragon/team-topologies-schema-model':
-        specifier: 0.22.1
-        version: 0.22.1(zod@4.6.7)
+        specifier: 0.22.2
+        version: 0.22.2(zod@4.6.7)
       '@miragon/value-chain-schema-model':
         specifier: 0.7.3
         version: 0.7.3(zod@4.6.7)
@@ -607,8 +607,8 @@ importers:
         specifier: 0.5.1
         version: 0.5.1(zod@4.6.7)
       '@miragon/team-topologies-schema-model':
-        specifier: 0.22.1
-        version: 0.22.1(zod@4.6.7)
+        specifier: 0.22.2
+        version: 0.22.2(zod@4.6.7)
       '@miragon/value-chain-schema-model':
         specifier: 0.7.3
         version: 0.7.3(zod@4.6.7)
@@ -1545,16 +1545,16 @@ packages:
       playwright-core:
         optional: true
 
-  '@miragon/team-topologies-renderer@0.22.1':
-    resolution: {integrity: sha512-tclJX+UePzuxodJ6o1YCj6iSftupWwJnw1KZvPGrqIfmqSgRXMnhnoS+u4J5vTtLC4ngNIXwRLt8Z6yLV/PmCQ==}
+  '@miragon/team-topologies-renderer@0.22.2':
+    resolution: {integrity: sha512-WGFAkWKJOa+TTc9BL8CUWqLRVwoTAYaTDXuHKnupBiJgwqxZ1TMY8w6pH0yuALY8cHlzwk89yrmKEGvf6klEdA==}
     peerDependencies:
       diagram-js: ^15.28.0
       didi: ^11.0.0 || ^12.0.0
       tiny-svg: ^4.1.4
       zod: ^4.6.0
 
-  '@miragon/team-topologies-schema-model@0.22.1':
-    resolution: {integrity: sha512-4f2JrWaoS4GI4V8VgAsIOfIwpywSnDOS1ERpjm0TD1rJIziJUS7lpUNl+WxlzJFcndrckSVcxbitCkg3qjDPMw==}
+  '@miragon/team-topologies-schema-model@0.22.2':
+    resolution: {integrity: sha512-PlKLUsafP0QElLT+cYAZEyD62FURrdJ0RDhs5XVdPgJuAxZPdiANyJxhGQUfW5rJBmLcI+21y30RFKd+WzbvkA==}
     peerDependencies:
       zod: ^4.6.0
 
@@ -5927,16 +5927,16 @@ snapshots:
       '@vscode/test-electron': 3.1.0
       playwright-core: 1.65.0
 
-  '@miragon/team-topologies-renderer@0.22.1(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/team-topologies-renderer@0.22.2(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
       '@miragon/modeler-api': 1.7.0
-      '@miragon/team-topologies-schema-model': 0.22.1(zod@4.6.7)
+      '@miragon/team-topologies-schema-model': 0.22.2(zod@4.6.7)
       diagram-js: 15.28.1
       didi: 11.0.1
       tiny-svg: 4.1.4
       zod: 4.6.7
 
-  '@miragon/team-topologies-schema-model@0.22.1(zod@4.6.7)':
+  '@miragon/team-topologies-schema-model@0.22.2(zod@4.6.7)':
     dependencies:
       nanoid: 6.0.2
       zod: 4.6.7
