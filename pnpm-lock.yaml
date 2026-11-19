@@ -209,8 +209,8 @@ importers:
         specifier: 1.7.0
         version: 1.7.0
       '@miragon/modeler-shell':
-        specifier: 0.14.1
-        version: 0.14.1(@vscode/test-electron@3.1.0)(playwright-core@1.65.0)
+        specifier: 0.14.2
+        version: 0.14.2(@vscode/test-electron@3.1.0)(playwright-core@1.65.0)
       '@miragon/team-topologies-renderer':
         specifier: 0.22.1
         version: 0.22.1(diagram-js@15.28.1)(didi@11.0.1)(tiny-svg@4.1.4)(zod@4.6.7)
@@ -1532,8 +1532,8 @@ packages:
     resolution: {integrity: sha512-jgPLT3/Hhzg9er2xKhNs/OWhSEV5ycxpzY4lIxSK5h5qxenEMzAbqd1G1d6Tb3JH6Pdunh2Pd4tcPHc7x1OfHw==}
     engines: {node: '>=22.13.0'}
 
-  '@miragon/modeler-shell@0.14.1':
-    resolution: {integrity: sha512-hjApcKRKC8DedE30bXbomQKa3mvHdGGdIv1b1t7MQAIS5Wl8HS2Mp//togAAWL5FwKiAi+9OJS1hGCcOom2SzQ==}
+  '@miragon/modeler-shell@0.14.2':
+    resolution: {integrity: sha512-01RvfCTmhLRcM3KJbW0gA5r7vX5Z1yofNiZdhUndeksVjXT+XtyqNCz5uvWy4085VjlgKJEad7CKvID+IzDGHw==}
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
@@ -5922,7 +5922,7 @@ snapshots:
 
   '@miragon/modeler-api@1.7.0': {}
 
-  '@miragon/modeler-shell@0.14.1(@vscode/test-electron@3.1.0)(playwright-core@1.65.0)':
+  '@miragon/modeler-shell@0.14.2(@vscode/test-electron@3.1.0)(playwright-core@1.65.0)':
     optionalDependencies:
       '@vscode/test-electron': 3.1.0
       playwright-core: 1.65.0
