@@ -1,0 +1,14 @@
+{
+  // esbuild (main, preload) and Vite (renderer) do the emit; tsc is the type gate.
+  // The core and the engine also run unbundled under Node's type stripping (the
+  // tests), so the base's erasableSyntaxOnly stays on.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src", "test"]
+}

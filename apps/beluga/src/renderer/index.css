@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "@designiq/ui-kit/theme.css";
+
+/* the kit's raw sources live under node_modules (not auto-scanned) */
+@source "../../node_modules/@designiq/ui-kit/src";
+
+html,
+body,
+#root {
+  height: 100%;
+}

@@ -437,7 +437,12 @@ export default {
     exclude: {
       // NB: scope the dist-exclusion to workspace paths — a bare "(^|/)dist/" also
       // matches node_modules/**/dist/ and silently turns npm imports "unknown".
-      path: ["\\.(css|svg|json)$", "^(apps|packages)/.*?/dist/", "^apps/vscode/(out|\\.vscode-test)/"],
+      path: [
+        "\\.(css|svg|json)$",
+        "^(apps|packages)/.*?/dist/",
+        "^apps/vscode/(out|\\.vscode-test)/",
+        "^apps/beluga/(out|release)/",
+      ],
     },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: "tsconfig.base.json" },

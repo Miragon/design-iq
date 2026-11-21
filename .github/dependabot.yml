@@ -95,6 +95,14 @@ updates:
           # add-on fails its update: outside the group it fails alone. Its next
           # release is taken by hand, dropping the patch or carrying it forward.
           - "@emaarco/dmn-js-simulation"
+          # Beluga's speech engine is a native addon whose API Beluga types by
+          # hand (apps/beluga/src/engine/sherpa-onnx-node.d.ts), and it runs in
+          # Beluga's Electron. CI runs neither the engine nor the app: both need
+          # the models, several hundred megabytes. So each bump is its own PR,
+          # taken with the engine test and test:e2e run locally against the
+          # models (apps/beluga/README.md, Tests) and the types checked again.
+          - "sherpa-onnx-node"
+          - "electron"
         update-types: ["minor", "patch"]
       # a renderer and its schema model move together (the renderer pins the
       # schema model exactly; packages/notations pins it as a devDependency to
