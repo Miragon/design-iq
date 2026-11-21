@@ -30,9 +30,10 @@
  * content instead of writing — a caller can never overwrite an edit it has
  * not seen.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 import { CONTENT_KEY, roomName } from "@designiq/contracts/live";
 import type {
@@ -61,7 +62,7 @@ import {
 import { type DiscoveredModel, discoverModels, loadContentConfig } from "../repos/content.ts";
 import type { ConnectedRepo } from "../repos/registry.ts";
 import { modelPath } from "./model-path.ts";
-import { assertRealInsideWorkspace } from "./workspace-paths.ts";
+import { modelFileRefusal } from "./workspace-paths.ts";
 
 /** the minimal direct-connection surface (structural — no @hocuspocus import) */
 export interface DirectDoc {
@@ -178,8 +179,8 @@ export async function putContent(
   } catch (e) {
     if (!codec || !(e instanceof AppError) || e.code !== UNREADABLE_MODEL) throw e;
   }
-  // the file on disk is one the room refuses to open: this save repairs it —
-  // unless that happened meanwhile, and the room opens after all
+  // the file on disk is one the room refuses to open: this save repairs it,
+  // unless that happened meanwhile and the room opens after all
   return (
     (await saveOverUnreadable(opts, repo, safePath, canonicalNext, body.baseVersion, codec, saved)) ??
     (await saveLive(opts, repo, safePath, text, body.baseVersion, codec, saved))
@@ -236,7 +237,7 @@ async function saveLive(
 
 /**
  * A save over a structured file the room refuses to open (its strict reader
- * refuses the text on disk) — besides git, the way to repair one. Nothing is
+ * refuses the text on disk): besides git, the way to repair one. Nothing is
  * live at that path (every load of it is refused, and a refused load leaves
  * no lineage), so the compare-and-set runs on the FILE: its token is the
  * baseVersion of the text on disk, which a save with any other token gets
@@ -256,9 +257,9 @@ async function saveOverUnreadable(
 ): Promise<PutOutcome | undefined> {
   const room = roomName(repo.fullName, safePath);
   return inRoomQueue(room, async () => {
-    const workspace = await assertOnDisk(opts, repo, safePath);
-    const disk = await toDiskPath(room, opts.registry, opts.workspaces, loadContentConfig);
-    assertRealInsideWorkspace(disk, workspace, `'${safePath}'`, "content/invalid-path");
+    // the model file guard every lane shares: no symlink, nothing outside
+    // the models folder or in .git is read back or written over
+    const { disk } = await assertOnDisk(opts, repo, safePath);
     const current = await readFile(disk, "utf8");
     const why = codec.check?.(current);
     if (why === undefined) return undefined;
@@ -279,10 +280,35 @@ async function saveOverUnreadable(
         },
       };
     }
-    await writeFile(disk, canonicalNext);
+    await replaceFile(disk, canonicalNext);
     console.log(`repaired: ${room} (an unreadable ${byExtension(safePath)?.id ?? "model"} saved over)`);
     return saved(current);
   });
+}
+
+/**
+ * Write `text` over the file at `disk` in one step: into a temp file beside
+ * it, renamed over it. The repair writes outside the room, and a ws load
+ * takes no part in content.ts's room queue: a file written in place is
+ * truncated before it is written, and a load reading it then would take the
+ * empty text for an empty board, seed the room with it, and its next store
+ * would write that over the repaired file. A load now reads the old text
+ * (refused) or the whole new one. The rename also replaces a symlink swapped
+ * in meanwhile instead of writing through it. The temp file's name starts
+ * with "." so no room ever maps to it (splitRoom), and `wx` never opens
+ * anything already there; it is removed when the write fails.
+ */
+async function replaceFile(disk: string, text: string): Promise<void> {
+  const temp = join(dirname(disk), `.${basename(disk)}.${randomUUID()}.tmp`);
+  // the file keeps its permission bits (git records the executable one)
+  const mode = (await stat(disk)).mode & 0o777;
+  try {
+    await writeFile(temp, text, { flag: "wx", mode });
+    await rename(temp, disk);
+  } catch (e) {
+    await rm(temp, { force: true }).catch(() => undefined);
+    throw e;
+  }
 }
 
 /** what a save of a text would do, without saving (checkContent): the
@@ -330,11 +356,11 @@ async function saveGate(
       expose: true,
     });
   }
-  const workspace = await assertOnDisk(opts, repo, safePath);
+  const { workspace } = await assertOnDisk(opts, repo, safePath);
 
   // a STRUCTURED document holds only what its codec writes back: a text its
   // strict reader refuses (a line that is no JSON, a repeated id) would lose
-  // exactly that in the live document, so no lint mode saves it — "warn"
+  // exactly that in the live document, so no lint mode saves it: "warn"
   // keeps what the validator flags, and this text cannot be kept as it is.
   // The validator's ERROR for it says the same (`<notation>/parse`)
   const refused = (opts.docCodec ?? docCodecForPath)(safePath)?.check?.(text);
@@ -458,14 +484,27 @@ export async function modelIdsOf(workspace: string): Promise<Map<string, Set<str
   return modelIds;
 }
 
-/** pre-flight: content repo + file exists (typed errors BEFORE any doc work).
- *  Returns the workspace root. The authoritative checks (incl. the realpath
- *  symlink guard) re-run inside onLoadDocument when the doc is opened. */
-async function assertOnDisk(opts: ContentDeps, repo: ConnectedRepo, safePath: string): Promise<string> {
+/** pre-flight: content repo + a path the model file guard lets through (no
+ *  symlink, inside the models folder, not in .git: workspace-paths.ts
+ *  modelFileRefusal) + the file exists, as typed errors BEFORE any doc work.
+ *  Returns the workspace root and the file on disk. The room's load and
+ *  write-through run the same guard again (collab.ts resolveRoom); the
+ *  repair, which reads and writes the file itself, relies on this one. */
+async function assertOnDisk(
+  opts: ContentDeps,
+  repo: ConnectedRepo,
+  safePath: string,
+): Promise<{ workspace: string; disk: string }> {
   const room = roomName(repo.fullName, safePath);
   let disk: string;
+  let workspace: string;
+  let models: string;
   try {
     disk = await toDiskPath(room, opts.registry, opts.workspaces, loadContentConfig);
+    workspace = await opts.workspaces.ensure(repo);
+    const cfg = loadContentConfig(workspace);
+    if (!cfg) throw new NotAContentRepoError(repo.fullName);
+    models = cfg.processes;
   } catch (e) {
     const message = (e as Error).message;
     if (e instanceof NotAContentRepoError) {
@@ -473,13 +512,21 @@ async function assertOnDisk(opts: ContentDeps, repo: ConnectedRepo, safePath: st
     }
     throw new AppError("content/invalid-path", message, { status: 400, expose: true });
   }
+  const refusal = modelFileRefusal(disk, workspace, models);
+  if (refusal !== undefined) {
+    throw new AppError(
+      "content/invalid-path",
+      `${safePath} ${refusal}: a model is read and saved only as a regular file inside the models folder (${models})`,
+      { status: 400, expose: true },
+    );
+  }
   if (!existsSync(disk)) {
     throw new AppError("content/not-found", `no such file: ${safePath} (${repo.fullName})`, {
       status: 404,
       expose: true,
     });
   }
-  return opts.workspaces.ensure(repo);
+  return { workspace, disk };
 }
 
 /** per-room operation queue: Hocuspocus unloads a doc ASYNCHRONOUSLY after the

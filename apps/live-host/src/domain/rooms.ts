@@ -141,9 +141,11 @@ export async function toDiskPath(
   if (!disk.startsWith(workspace + "/")) throw new Error(`path escapes workspace: ${documentName}`);
   // NB the lexical checks above are resolve()-based and therefore blind to
   // SYMLINKS — a *.bpmn symlink escaping the checkout passes here. The realpath
-  // guard lives in the application layer (collab.ts inline, workspace-paths.ts
-  // for the write paths), which is where filesystem access belongs; this
-  // domain module stays pure.
+  // guard lives in the application layer (workspace-paths.ts modelFileRefusal,
+  // which collab.ts resolveRoom and content.ts assertOnDisk both run: no model
+  // file that is a symlink, nothing outside the real models folder or inside
+  // .git), which is where filesystem access belongs; this domain module stays
+  // pure.
   return disk;
 }
 

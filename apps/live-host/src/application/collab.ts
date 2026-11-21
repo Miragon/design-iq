@@ -16,7 +16,7 @@
  * with fake payloads while server.ts spreads them into `new Server({...})`
  * (a hook taking a narrower payload accepts Hocuspocus' full one).
  */
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 
 import { AWARENESS_USER_KEY, CONTENT_KEY, ELEMENTS_KEY, META_KEY } from "@designiq/contracts/live";
@@ -31,6 +31,7 @@ import type { DocSizeGuard } from "../domain/doc-size-guard.ts";
 import {
   type ContentConfigLookup,
   docCodecForPath,
+  NotAContentRepoError,
   type RegistryLookup,
   splitRoom,
   toDiskPath,
@@ -42,6 +43,7 @@ import type { ConnectedRepo } from "../repos/registry.ts";
 import { type AwarenessAnnouncement, tieAnnouncedClients } from "./awareness-ties.ts";
 import type { RepoActivity } from "./repo-activity.ts";
 import type { RoomMigrations } from "./room-migrations.ts";
+import { modelFileRefusal } from "./workspace-paths.ts";
 
 /** per-message cap for doc-exempt (awareness/stateless) traffic — a real
  *  cursor+selection state is < 2 KB, this is headroom, not a target */
@@ -123,22 +125,21 @@ export function makeCollabHooks(deps: CollabDeps) {
     (deps.docCodec ?? docCodecForPath)(pathOf(documentName));
 
   /**
-   * Resolve a room to disk AND reject symlink escapes. toDiskPath (pure domain)
-   * does the lexical containment; resolve() is blind to symlinks, so a *.bpmn
-   * symlink escaping the checkout would otherwise be read/written through. Once
-   * the target exists, canonicalize it and re-check it stays inside the workspace
-   * (realpath lives here in the application layer — the domain module stays pure).
+   * Resolve a room to disk AND reject symlinks. toDiskPath (pure domain) does
+   * the lexical containment; resolve() is blind to symlinks, so a *.bpmn
+   * symlink to .git/config or out of the checkout would otherwise be read and
+   * written through, by the load and by every write-through. The model file
+   * guard every lane shares (workspace-paths.ts modelFileRefusal) runs here in
+   * the application layer, so the domain module stays pure.
    */
-
   const resolveRoom = async (documentName: string): Promise<string> => {
     const disk = await toDiskPath(documentName, registry, workspaces, contentConfig);
-    if (existsSync(disk)) {
-      const { repo } = splitRoom(documentName, registry);
-      const workspace = await workspaces.ensure(repo);
-      if (!realpathSync(disk).startsWith(realpathSync(workspace) + "/")) {
-        throw new Error(`path escapes workspace (symlink): ${documentName}`);
-      }
-    }
+    const { repo } = splitRoom(documentName, registry);
+    const workspace = await workspaces.ensure(repo);
+    const cfg = contentConfig(workspace);
+    if (!cfg) throw new NotAContentRepoError(repo.fullName);
+    const refusal = modelFileRefusal(disk, workspace, cfg.processes);
+    if (refusal !== undefined) throw new Error(`${documentName} ${refusal}: it is never read or written`);
     return disk;
   };
 
@@ -233,7 +234,7 @@ export function makeCollabHooks(deps: CollabDeps) {
           // a structured file is read as strictly as its codec writes it back:
           // the total decode skips what it cannot read (a line that is no
           // JSON, a repeated id), and the first store would write exactly that
-          // loss to disk — a REST read included (its direct connection stores
+          // loss to disk, a REST read included (its direct connection stores
           // on disconnect). The room stays closed and the file untouched; the
           // error tells the client which line (UnreadableDocumentError)
           const refused = codec?.check?.(content);
