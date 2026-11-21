@@ -393,11 +393,11 @@ test("the contract check: another notation or another major fails at bind time, 
     /expected a 'team-topologies' modeler, got 'context-maps'/,
   );
   assert.throws(
-    () => assertContract(fakeModeler({ apiVersion: "2.0.0" }), "wardley"),
-    /implements @miragon\/modeler-api 2\.0\.0, designIQ speaks 1\./,
+    () => assertContract(fakeModeler({ apiVersion: "3.0.0" }), "wardley"),
+    /implements @miragon\/modeler-api 3\.0\.0, designIQ speaks 2\./,
   );
-  assert.throws(() => assertContract(fakeModeler({ apiVersion: "0.1.0" }), "wardley"), /0\.1\.0/);
-  for (const apiVersion of ["1.0.0", "1.9.3"]) {
+  assert.throws(() => assertContract(fakeModeler({ apiVersion: "1.7.0" }), "wardley"), /1\.7\.0/);
+  for (const apiVersion of ["2.0.0", "2.9.3"]) {
     assert.doesNotThrow(() => assertContract(fakeModeler({ apiVersion }), "wardley"), apiVersion);
   }
 });

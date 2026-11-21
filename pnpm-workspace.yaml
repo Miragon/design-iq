@@ -11,34 +11,30 @@ allowBuilds:
   inferno: false
 minimumReleaseAgeExclude:
   # the Miragon releases with modeler-shell 0.9.0 and contract 1.6
-  # (Miragon/modeler-suite#170): published 2026-10-30, adopted on 2026-10-31
-  - "@miragon/modeler-api@1.6.0"
-  - "@miragon/wardley-renderer@0.15.0"
+  # (Miragon/modeler-suite#170): published 2026-10-30, adopted on 2026-10-31.
+  # The entries of the packages that moved on since are in the list below
   - "@miragon/wardley-dsl@0.8.1"
   - "@miragon/wardley-schema-model@0.6.1"
-  - "@miragon/event-storming-renderer@0.9.0"
   - "@miragon/event-storming-dsl@0.3.4"
   - "@miragon/event-storming-schema-model@0.3.1"
   - "@miragon/context-maps-schema-model@0.5.1"
   - "@miragon/context-maps-cml@0.1.8"
-  - "@miragon/value-chain-renderer@0.10.0"
   - "@miragon/value-chain-schema-model@0.7.3"
-  # context-maps-renderer 0.9.1, its palette whole on a short canvas
-  # (Miragon/modeler-suite#511): published 2026-10-31, adopted on 2026-10-31.
-  # It takes 0.9.0's place in the list above, as pnpm reads only the first
-  # entry that names a package
-  - "@miragon/context-maps-renderer@0.9.1"
   # the BPMN editing engine (ADR 0009), 0.10 (Miragon/bpmn-cli#140): published 2026-11-02, adopted on 2026-11-02
   - "@miragon/bpmn-cli@0.10.0"
-  # modeler-shell 0.14.1 and team-topologies 0.22.1, the latest Miragon
-  # releases next to modeler-api 1.7.0 and its three-way merge
-  # (Miragon/modeler-suite#539, #645): published 2026-11-12, adopted on
-  # 2026-11-13. They take the place of modeler-shell 0.9.0 and
-  # team-topologies 0.17.0 in the first list, as pnpm reads only the first
-  # entry that names a package
-  - "@miragon/modeler-shell@0.14.1"
-  - "@miragon/team-topologies-renderer@0.22.1"
-  - "@miragon/team-topologies-schema-model@0.22.1"
+  # the Miragon releases on modeler-api 2.0.0 (Miragon/modeler-suite#676,
+  # released in #677): the contract, the shell and every renderer designIQ
+  # mounts, published 2026-11-20, adopted on 2026-11-20. They take the place of the entries of modeler-api 1.6.0, the
+  # renderers before them and modeler-shell 0.14.1 above, as pnpm reads only
+  # the first entry that names a package
+  - "@miragon/modeler-api@2.0.0"
+  - "@miragon/modeler-shell@0.15.0"
+  - "@miragon/wardley-renderer@0.19.0"
+  - "@miragon/event-storming-renderer@0.11.0"
+  - "@miragon/context-maps-renderer@0.10.1"
+  - "@miragon/value-chain-renderer@0.11.1"
+  - "@miragon/team-topologies-renderer@0.23.0"
+  - "@miragon/team-topologies-schema-model@0.23.0"
   # the Miragon docs kit as a package (@miragon/docs-starter 1.0.0, kit 1.32.0,
   # Miragon/corporate-identity#102): published 2026-11-19, adopted on 2026-11-19
   - "@miragon/docs-starter@1.0.0"
