@@ -99,8 +99,11 @@ its `.dmn`. There is NO `process.yaml`, landscape, glossary or portal — the pr
 
 ## Skills — prefer them over ad-hoc approaches
 
-The example content repo's skills are BPMN process skills:
+The example content repo's skills are the BPMN process skills and one skill for workshops
+in any notation:
 
+- **collaborative-modeling** — prepare, assist and wrap up a modeling workshop of any
+  notation: a brief agreed with the facilitator, proposals instead of unasked modeling
 - **process-navigator** — any question about existing processes (flow, roles, calls, impact)
 - **capture-process** — interview a process owner to elicit a process from tacit knowledge
 - **import-process** — turn legacy docs (Visio/Word/Confluence/images) into a draft `.bpmn`
