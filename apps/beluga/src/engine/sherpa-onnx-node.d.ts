@@ -49,7 +49,11 @@ declare module "sherpa-onnx-node" {
   export interface OfflineRecognizerConfig {
     featConfig: { sampleRate: number; featureDim: number };
     modelConfig: OfflineModelConfig;
+    /** `greedy_search` (the default) or `modified_beam_search`, which a glossary needs */
     decodingMethod?: string;
+    maxActivePaths?: number;
+    /** how much a glossary phrase is boosted, per token */
+    hotwordsScore?: number;
   }
   export interface OfflineStream {
     acceptWaveform(input: { sampleRate: number; samples: Float32Array }): void;
@@ -57,7 +61,12 @@ declare module "sherpa-onnx-node" {
     setOption(key: string, value: string): void;
   }
   export interface OfflineRecognizer {
-    createStream(): OfflineStream;
+    /**
+     * `hotwords`: phrases to boost in this stream (transducer models with
+     * `modified_beam_search` only), each a sequence of tokens from tokens.txt
+     * separated by spaces, phrases separated by `/`
+     */
+    createStream(hotwords?: string): OfflineStream;
     decode(stream: OfflineStream): void;
     /** decodes on a worker thread, the event loop stays free */
     decodeAsync(stream: OfflineStream): Promise<{ text: string }>;

@@ -29,6 +29,39 @@ several people in a room said something, Beluga does not know.
 The file goes to `Documents/Beluga` unless you choose another folder, one file per session
 (`beluga-2026-11-21-1430.txt`; a second session in the same minute gets `-2`).
 
+## The glossary
+
+Speech recognition breaks names and technical terms first. Put them in the glossary, one
+per line: the participants' names, the company's products, the terms of the domain
+("Rabattstaffel", "Skontofrist"). Parakeet then listens for them while it decodes. On test
+sentences it got 13 of 16 such terms right instead of 8, and in noise 13 instead of 4. **Take
+from a workshop brief** adds the first column of the glossary table of a brief written by
+the `collaborative-modeling` skill, or a plain list, one entry per line.
+
+- Up to 1000 entries, each up to 60 characters. A thousand cost no more time than ten.
+- An entry with a number or a slash, or with a letter outside Parakeet's alphabet (such as
+  the Turkish ı), is left out, and Beluga says which.
+- The glossary stays on this computer, names included. It is not part of the transcript.
+- A name that sounds almost like an everyday word can take its place ("Zweig" for "zwei").
+  The default weight was chosen so that this did not happen in the tests; a higher weight
+  under Advanced finds more terms and risks more of it.
+- Whisper does not use the glossary: sherpa-onnx gives it no prompt.
+
+## Advanced
+
+Under **Advanced** in the window, each with the measured default:
+
+| Setting                | Default     | What it changes                                                                 |
+| ---------------------- | ----------- | ------------------------------------------------------------------------------- |
+| Glossary weight        | 2.5         | How hard Parakeet leans towards a glossary entry.                               |
+| Pause that ends a line | 0.5 s       | Longer gives the model more context; the line comes later.                      |
+| Longest line           | 20 s        | Talk without a pause is cut here (at most 25 s: Whisper stops at 30).           |
+| Speech detection       | 0.5         | Lower hears quiet voices, higher ignores more background noise.                 |
+| Processor cores        | 4           | More is quicker and leaves less for the meeting app.                            |
+| Microphone             | on, on, off | Noise suppression, automatic level, echo cancellation (for a call on speakers). |
+
+Beluga keeps the glossary and these settings between sessions.
+
 ## Run it
 
 ```
@@ -80,21 +113,21 @@ refused as damaged; it needs a Developer ID signature, or on a test machine
   slower on a CPU: with both channels busy it falls behind. Beluga says when the transcript
   runs more than 5 seconds behind, and Stop, closing the window and quitting all wait until
   the engine has caught up. Both run
-  through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); neither takes a glossary
-  here, so names and technical terms are corrected by whoever reads the transcript.
+  through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx). Only Parakeet takes the
+  glossary; what it still gets wrong is corrected by whoever reads the transcript.
 - **The times are the times the words were heard**, also after the laptop slept during a
   break. A line is written when its utterance ends, so a long statement on one channel
   can follow a shorter, later one on the other.
 
 ## Layout
 
-| Path            | What it is                                                                                                                                                   |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/core/`     | The transcript format, the model list, the message types. No Electron, no engine.                                                                            |
-| `src/engine/`   | The speech engine: pause detection, recognition, the clock of the samples. Only `sherpa.ts` knows sherpa-onnx; `files.ts` checks a model on disk without it. |
-| `src/main/`     | Electron main process: window, permissions, model download, the transcript file. The engine runs in a process of its own (`engine-host.ts`).                 |
-| `src/preload/`  | The bridge into the page, `window.beluga`.                                                                                                                   |
-| `src/renderer/` | The window: capture of both channels, level meters, the running transcript.                                                                                  |
+| Path            | What it is                                                                                                                                                                                                            |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/core/`     | The transcript format, the model list, the glossary, the settings, the message types. No Electron, no engine.                                                                                                         |
+| `src/engine/`   | The speech engine: pause detection, recognition, the clock of the samples. Only `sherpa.ts` knows sherpa-onnx; `files.ts` checks a model on disk without it; `hotwords.ts` cuts the glossary into the model's pieces. |
+| `src/main/`     | Electron main process: window, permissions, model download, the transcript file. The engine runs in a process of its own (`engine-host.ts`).                                                                          |
+| `src/preload/`  | The bridge into the page, `window.beluga`.                                                                                                                                                                            |
+| `src/renderer/` | The window: capture of both channels, level meters, the running transcript.                                                                                                                                           |
 
 Another speech runtime (whisper.cpp, a hosted service) is another class with the `Engine`
 interface of `src/engine/sherpa.ts`.
@@ -102,14 +135,17 @@ interface of `src/engine/sherpa.ts`.
 ## Tests
 
 ```
-pnpm --filter @designiq/beluga test                      # format and clock; the engine tests are skipped without models
-BELUGA_MODELS_DIR=<models> pnpm --filter @designiq/beluga test       # plus the engine on a German recording
+pnpm --filter @designiq/beluga test                      # format, clock, glossary, settings; the model tests are skipped without models
+BELUGA_MODELS_DIR=<models> pnpm --filter @designiq/beluga test       # plus the engine on German recordings, and the glossary's pieces
 BELUGA_MODELS_DIR=<models> pnpm --filter @designiq/beluga test:e2e   # the whole app with a simulated microphone
 ```
 
 `<models>` is a folder that holds the Parakeet model and `silero_vad.onnx`, for example the
 app's own models folder after a download in the app (the download brings the German
-sample the tests play). `test:e2e` needs a display (`xvfb-run -a` on a headless machine)
+sample the tests play). `test/fixtures/glossary.wav` is a sentence with two terms Parakeet
+gets wrong without the glossary, spoken by Piper with the Thorsten voice (CC0);
+`test/fixtures/parakeet-v3-pieces.json` holds glossary entries as Parakeet's original
+tokenizer cuts them. `test:e2e` needs a display (`xvfb-run -a` on a headless machine)
 and runs the app with Chromium's sandbox on.
 
 A new version of `sherpa-onnx-node` or `electron` is taken by hand: CI runs neither the

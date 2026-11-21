@@ -7,23 +7,20 @@
  * This is the one module that knows sherpa-onnx. Another runtime (whisper.cpp, a
  * hosted service) is another class with the `Engine` interface below.
  */
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import sherpa, { type OfflineRecognizer, type OfflineRecognizerConfig, type Vad } from "sherpa-onnx-node";
 
 import { type Language, type ModelId, modelSpec, VAD } from "../core/models.ts";
+import { DEFAULT_TUNING, type Tuning } from "../core/settings.ts";
 import type { Channel, Utterance } from "../core/transcript.ts";
 import { SampleClock } from "./clock.ts";
 import { missingFiles } from "./files.ts";
+import { hotwords, PieceEncoder } from "./hotwords.ts";
 
 /** every stage works on 16 kHz mono float samples */
 export const SAMPLE_RATE = 16000;
-/**
- * The longest utterance: someone who talks this long without a pause is cut
- * here. The detector alone does not cut (its own limit only makes it look
- * harder for a short pause), and Whisper drops everything after 30 seconds.
- */
-export const MAX_UTTERANCE_SECONDS = 20;
 /**
  * The detector's frame at 16 kHz. It takes pieces of any length, but then
  * places the start of an utterance 64 ms late (sherpa-onnx 2.0.2), which cuts off
@@ -40,13 +37,18 @@ const MIN_SEGMENT = SAMPLE_RATE / 10;
  * speech exceeds: the end of such a line went missing.
  */
 const WHISPER_TOKENS_PER_SECOND = "10";
+/** the hypotheses Parakeet follows at once while it decodes with a glossary */
+const GLOSSARY_PATHS = 4;
 
 export interface EngineConfig {
   /** the models folder, which holds each model's folder and the detector */
   modelsDir: string;
   model: ModelId;
   language?: Language;
-  threads?: number;
+  /** names and terms to listen for; Parakeet takes them, Whisper does not here */
+  glossary?: readonly string[];
+  /** what the facilitator tuned; the rest is the default */
+  tuning?: Partial<Tuning>;
 }
 
 /**
@@ -54,6 +56,8 @@ export interface EngineConfig {
  * runs off the caller's thread, so the caller stays free in between.
  */
 export interface Engine {
+  /** the glossary entries this engine does not listen for */
+  readonly left: readonly string[];
   /**
    * feed audio of one channel: 16 kHz mono, any length, `at` the time its last
    * sample was captured (milliseconds since the epoch)
@@ -63,10 +67,11 @@ export interface Engine {
   flush(): Promise<void>;
 }
 
-function recognizerConfig(config: EngineConfig): OfflineRecognizerConfig {
+/** `withGlossary`: decode with a beam, which a glossary needs; without one, greedy is as good and quicker */
+function recognizerConfig(config: EngineConfig, tuning: Tuning, withGlossary: boolean): OfflineRecognizerConfig {
   const spec = modelSpec(config.model);
   const at = (file: string): string => join(config.modelsDir, spec.dir, file);
-  const common = { numThreads: config.threads ?? 4, provider: "cpu", debug: 0 };
+  const common = { numThreads: tuning.threads, provider: "cpu", debug: 0 };
   const featConfig = { sampleRate: SAMPLE_RATE, featureDim: 80 };
   switch (config.model) {
     case "parakeet-v3":
@@ -82,6 +87,13 @@ function recognizerConfig(config: EngineConfig): OfflineRecognizerConfig {
           modelType: "nemo_transducer",
           ...common,
         },
+        ...(withGlossary
+          ? {
+              decodingMethod: "modified_beam_search",
+              maxActivePaths: GLOSSARY_PATHS,
+              hotwordsScore: tuning.glossaryWeight,
+            }
+          : {}),
       };
     case "whisper-turbo": {
       const language = config.language && config.language !== "auto" ? config.language : "";
@@ -114,15 +126,36 @@ interface ChannelState {
 }
 
 export class SherpaEngine implements Engine {
+  readonly left: readonly string[];
   readonly #recognizer: OfflineRecognizer;
+  /** the glossary as sherpa-onnx takes it for a stream; empty without one */
+  readonly #hotwords: string;
   readonly #channels: Record<Channel, ChannelState>;
   readonly #onUtterance: (utterance: Utterance) => void;
   readonly #whisper: boolean;
+  /**
+   * The longest utterance in samples: someone who talks this long without a
+   * pause is cut here. The detector alone does not cut (its own limit only
+   * makes it look harder for a short pause).
+   */
+  readonly #longest: number;
 
   constructor(config: EngineConfig, onUtterance: (utterance: Utterance) => void) {
     const missing = missingFiles(config.modelsDir, config.model);
     if (missing.length > 0) throw new Error(`model files missing in ${config.modelsDir}: ${missing.join(", ")}`);
-    this.#recognizer = new sherpa.OfflineRecognizer(recognizerConfig(config));
+    const tuning: Tuning = { ...DEFAULT_TUNING, ...config.tuning };
+    this.#longest = tuning.longestLine * SAMPLE_RATE;
+    const glossary = config.glossary ?? [];
+    if (config.model === "parakeet-v3" && glossary.length > 0) {
+      const tokens = readFileSync(join(config.modelsDir, modelSpec(config.model).dir, "tokens.txt"), "utf8");
+      const heard = hotwords(glossary, new PieceEncoder(tokens));
+      this.#hotwords = heard.text;
+      this.left = heard.left;
+    } else {
+      this.#hotwords = "";
+      this.left = [...glossary];
+    }
+    this.#recognizer = new sherpa.OfflineRecognizer(recognizerConfig(config, tuning, this.#hotwords !== ""));
     this.#onUtterance = onUtterance;
     this.#whisper = config.model === "whisper-turbo";
     const channel = (): ChannelState => ({
@@ -130,13 +163,13 @@ export class SherpaEngine implements Engine {
         {
           sileroVad: {
             model: join(config.modelsDir, VAD.file.name),
-            threshold: 0.5,
+            threshold: tuning.speechThreshold,
             // a pause this long ends an utterance
-            minSilenceDuration: 0.5,
+            minSilenceDuration: tuning.pause,
             minSpeechDuration: 0.25,
             windowSize: VAD_FRAME,
             // from here on the detector takes a shorter pause as the end
-            maxSpeechDuration: 15,
+            maxSpeechDuration: tuning.longestLine * 0.75,
           },
           sampleRate: SAMPLE_RATE,
           numThreads: 1,
@@ -168,7 +201,7 @@ export class SherpaEngine implements Engine {
     }
     state.pending = buffer.slice(offset);
     state.speech = state.vad.isDetected() ? state.speech + samples.length : 0;
-    if (state.speech >= MAX_UTTERANCE_SECONDS * SAMPLE_RATE) {
+    if (state.speech >= this.#longest) {
       // no pause in sight: end the utterance here, the next one begins with the next sample
       state.vad.flush();
       state.speech = 0;
@@ -196,7 +229,7 @@ export class SherpaEngine implements Engine {
       state.vad.pop();
       state.speech = 0;
       if (segment.samples.length < MIN_SEGMENT) continue;
-      const stream = this.#recognizer.createStream();
+      const stream = this.#hotwords ? this.#recognizer.createStream(this.#hotwords) : this.#recognizer.createStream();
       if (this.#whisper) stream.setOption("max_tokens_per_second", WHISPER_TOKENS_PER_SECOND);
       stream.acceptWaveform({ sampleRate: SAMPLE_RATE, samples: segment.samples });
       const text = (await this.#recognizer.decodeAsync(stream)).text.trim();

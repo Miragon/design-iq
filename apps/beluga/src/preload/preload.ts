@@ -13,6 +13,7 @@ const api: BelugaApi = {
   init: () => ipcRenderer.invoke("beluga:init"),
   chooseFolder: (current) => ipcRenderer.invoke("beluga:choose-folder", current),
   installModel: (model) => ipcRenderer.invoke("beluga:install-model", model),
+  importGlossary: () => ipcRenderer.invoke("beluga:import-glossary"),
   start: (options) => ipcRenderer.invoke("beluga:start", options),
   stop: () => ipcRenderer.invoke("beluga:stop"),
   audio: (channel, samples, at) => ipcRenderer.send("beluga:audio", channel, samples, at),

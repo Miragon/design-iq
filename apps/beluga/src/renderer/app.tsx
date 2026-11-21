@@ -1,14 +1,19 @@
 import { Badge } from "@designiq/ui-kit/components/badge";
-import { Button, focusRing } from "@designiq/ui-kit/components/button";
+import { Button } from "@designiq/ui-kit/components/button";
 import { Input } from "@designiq/ui-kit/components/input";
+import { Textarea } from "@designiq/ui-kit/components/textarea";
 import { cn } from "@designiq/ui-kit/lib/utils";
-import { CircleAlert, Download, FolderOpen, Mic, MonitorSpeaker, Square } from "lucide-react";
+import { CircleAlert, Download, FileText, FolderOpen, Mic, MonitorSpeaker, Square } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import { MAX_ENTRIES, parseGlossary } from "../core/glossary.ts";
 import type { DownloadProgress, InitialState, WrittenLine } from "../core/ipc.ts";
 import type { Language, ModelId } from "../core/models.ts";
+import { readSettings, type Settings } from "../core/settings.ts";
 import type { Channel, SpeakerLabels } from "../core/transcript.ts";
+import { Advanced } from "./advanced.tsx";
 import { type Capture, startCapture } from "./capture.ts";
+import { checkboxClass, Field, selectClass } from "./fields.tsx";
 
 type Phase = "idle" | "starting" | "listening" | "stopping";
 
@@ -19,13 +24,36 @@ const SHOWN = 200;
 /** seconds the transcript may run behind before Beluga says so */
 const BEHIND_AFTER = 5;
 
+/** where the glossary and the advanced settings are kept between sessions: in this window's storage, on this computer */
+const GLOSSARY_KEY = "beluga.glossary";
+const SETTINGS_KEY = "beluga.settings";
+
+function stored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function store(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // without storage the value lasts until the window closes
+  }
+}
+
+function storedSettings(): Settings {
+  try {
+    return readSettings(JSON.parse(stored(SETTINGS_KEY) ?? "null"));
+  } catch {
+    return readSettings(null);
+  }
+}
+
 /** a line on screen, with a key that stays with it while older lines drop off */
 type ShownLine = WrittenLine & { id: number };
-
-const selectClass = cn(
-  "border-input bg-background h-9 rounded-md border px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50",
-  focusRing,
-);
 
 /** the message itself: Electron puts its own words in front of an error from the main process */
 const reason = (error: unknown): string =>
@@ -33,15 +61,6 @@ const reason = (error: unknown): string =>
     /^Error invoking remote method '[^']+': (Error: )?/,
     "",
   );
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      {children}
-    </label>
-  );
-}
 
 function Meter({ icon, name, level, quiet }: { icon: ReactNode; name: string; level: number; quiet: boolean }) {
   return (
@@ -84,6 +103,10 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [download, setDownload] = useState<DownloadProgress | null>(null);
   const [behind, setBehind] = useState(0);
+  const [glossary, setGlossary] = useState(() => stored(GLOSSARY_KEY) ?? "");
+  const [settings, setSettings] = useState(storedSettings);
+  /** glossary entries the running model does not listen for */
+  const [left, setLeft] = useState<string[]>([]);
 
   const capture = useRef<Capture | null>(null);
   const lastSound = useRef<Record<Channel, number>>({ mic: 0, system: 0 });
@@ -138,6 +161,9 @@ export function App() {
     if (list && following.current) list.scrollTop = list.scrollHeight;
   }, [lines]);
 
+  useEffect(() => store(GLOSSARY_KEY, glossary), [glossary]);
+  useEffect(() => store(SETTINGS_KEY, JSON.stringify(settings)), [settings]);
+
   // a channel that stays silent is the one failure macOS does not report
   useEffect(() => {
     if (phase !== "listening") return;
@@ -154,6 +180,24 @@ export function App() {
   const selected = state?.models.find((m) => m.id === model);
   const busy = phase === "starting" || phase === "stopping" || download !== null;
   const running = phase === "listening" || phase === "stopping";
+  const entries = parseGlossary(glossary);
+  const whisper = model === "whisper-turbo";
+
+  async function importGlossary(): Promise<void> {
+    setError(null);
+    setNotice(null);
+    try {
+      const imported = await window.beluga.importGlossary();
+      if (imported === null) return;
+      if (imported.length === 0) {
+        setNotice("That file holds no glossary: no table under a Glossary heading, and no list.");
+        return;
+      }
+      setGlossary(parseGlossary(`${glossary}\n${imported.join("\n")}`).join("\n"));
+    } catch (e) {
+      setError(`The glossary could not be read. ${reason(e)}`);
+    }
+  }
 
   async function install(): Promise<void> {
     setError(null);
@@ -171,6 +215,7 @@ export function App() {
   async function start(): Promise<void> {
     setError(null);
     setNotice(null);
+    setLeft([]);
     setLines([]);
     setBehind(0);
     following.current = true;
@@ -179,12 +224,20 @@ export function App() {
     let opened: Capture | null = null;
     try {
       // the model first, then the devices: what is said while the model loads would be lost
-      const path = await window.beluga.start({ model, language, labels, folder });
-      setFile(path);
+      const started = await window.beluga.start({
+        model,
+        language,
+        labels,
+        folder,
+        glossary: entries,
+        tuning: settings.tuning,
+      });
+      setFile(started.path);
+      if (!whisper) setLeft(started.left);
       const now = Date.now();
       lastSound.current = { mic: now, system: now };
       setQuiet({ mic: false, system: false });
-      opened = await startCapture(withSystem, {
+      opened = await startCapture(withSystem, settings.mic, {
         onAudio: (channel, samples, at) => window.beluga.audio(channel, samples, at),
         onLevel: (channel, value) => {
           if (value > 0.05) lastSound.current[channel] = Date.now();
@@ -263,7 +316,7 @@ export function App() {
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            className={cn("accent-primary size-4 rounded-sm", focusRing)}
+            className={checkboxClass}
             checked={withSystem}
             disabled={running || busy}
             onChange={(e) => setWithSystem(e.target.checked)}
@@ -289,8 +342,8 @@ export function App() {
             <select
               className={selectClass}
               value={language}
-              disabled={running || busy || model !== "whisper-turbo"}
-              title={model === "whisper-turbo" ? undefined : "Parakeet detects the language itself"}
+              disabled={running || busy || !whisper}
+              title={whisper ? undefined : "Parakeet detects the language itself"}
               onChange={(e) => setLanguage(e.target.value as Language)}
             >
               <option value="de">German</option>
@@ -300,6 +353,38 @@ export function App() {
           </Field>
         </div>
         {selected ? <p className="text-muted-foreground -mt-2 text-xs">{selected.note}</p> : null}
+        <div className="flex flex-col gap-1.5 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="glossary" className="font-medium">
+              Glossary
+            </label>
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto p-0"
+              disabled={running || busy}
+              onClick={() => void importGlossary()}
+            >
+              <FileText />
+              Take from a workshop brief
+            </Button>
+          </div>
+          <Textarea
+            id="glossary"
+            rows={4}
+            value={glossary}
+            disabled={running || busy}
+            placeholder={"Names and terms, one per line\nAnna Wiśniewski\nRabattstaffel"}
+            onChange={(e) => setGlossary(e.target.value)}
+          />
+          <p className="text-muted-foreground text-xs">
+            {whisper
+              ? "Whisper does not use the glossary. Parakeet does."
+              : `${entries.length === 1 ? "1 entry" : `${entries.length} entries`}${
+                  entries.length >= MAX_ENTRIES ? " (the most Beluga takes)" : ""
+                }. Parakeet listens for them. They stay on this computer.`}
+          </p>
+        </div>
         <Field label="Transcripts go to">
           <div className="flex gap-2">
             <Input value={folder} readOnly className="font-mono text-xs" />
@@ -314,6 +399,13 @@ export function App() {
             </Button>
           </div>
         </Field>
+        <Advanced
+          settings={settings}
+          cores={state.cores}
+          disabled={running || busy}
+          whisper={whisper}
+          onChange={setSettings}
+        />
       </section>
 
       {selected && !selected.installed ? (
@@ -350,10 +442,17 @@ export function App() {
           {notice}
         </p>
       ) : null}
+      {left.length > 0 ? (
+        <p className="bg-warning-soft rounded-md p-3 text-sm" role="status">
+          Parakeet does not listen for {left.length === 1 ? "this glossary entry" : "these glossary entries"}:{" "}
+          {left.join(", ")}. It takes no entry with a number or a slash, or with a letter outside its alphabet (such as
+          the Turkish ı).
+        </p>
+      ) : null}
       {phase === "listening" && behind >= BEHIND_AFTER ? (
         <p className="bg-warning-soft rounded-md p-3 text-sm" role="status">
           The transcript runs {behind} seconds behind the conversation.
-          {model === "whisper-turbo" ? " Parakeet keeps up more easily." : " It catches up in the pauses."}
+          {whisper ? " Parakeet keeps up more easily." : " It catches up in the pauses."}
         </p>
       ) : null}
 

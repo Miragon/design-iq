@@ -4,7 +4,8 @@
  */
 import type { WriteStream } from "node:fs";
 import { constants } from "node:fs";
-import { access, mkdir, open, rm } from "node:fs/promises";
+import { access, mkdir, open, readFile, rm, stat } from "node:fs/promises";
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,8 +24,10 @@ import {
   utilityProcess,
 } from "electron";
 
-import type { EngineReply, EngineRequest, InitialState, StartOptions } from "../core/ipc.ts";
+import { checkGlossary, glossaryFromFile } from "../core/glossary.ts";
+import type { EngineReply, EngineRequest, InitialState, Started, StartOptions } from "../core/ipc.ts";
 import { DEFAULT_MODEL, megabytes, type ModelId, MODELS, modelSpec } from "../core/models.ts";
+import { checkTuning } from "../core/settings.ts";
 import {
   DEFAULT_LABELS,
   fileName,
@@ -43,6 +46,8 @@ const modelsDir = (): string => process.env.BELUGA_MODELS_DIR ?? join(app.getPat
 const HUNG_AFTER_MS = 30_000;
 /** while finishing, an engine that gets no further for this long is stuck, though it still answers */
 const STUCK_AFTER_MS = 5 * 60_000;
+/** a glossary file larger than this is no brief and no list of terms */
+const GLOSSARY_FILE_BYTES = 1_000_000;
 
 let window: BrowserWindow | null = null;
 
@@ -112,6 +117,7 @@ function initialState(): InitialState {
     model: DEFAULT_MODEL,
     folder: process.env.BELUGA_FOLDER ?? join(app.getPath("documents"), "Beluga"),
     labels: DEFAULT_LABELS,
+    cores: availableParallelism(),
   };
 }
 
@@ -151,7 +157,7 @@ function write(into: Session, utterance: Utterance): void {
   send("beluga:line", { channel: utterance.channel, line });
 }
 
-async function start(options: StartOptions): Promise<string> {
+async function start(options: StartOptions): Promise<Started> {
   if (current || starting || stopping) throw new Error("A session is already running.");
   starting = true;
   try {
@@ -161,8 +167,10 @@ async function start(options: StartOptions): Promise<string> {
   }
 }
 
-async function begin(options: StartOptions): Promise<string> {
+async function begin(options: StartOptions): Promise<Started> {
   modelSpec(options.model);
+  const glossary = checkGlossary(options.glossary);
+  const tuning = checkTuning(options.tuning);
   if (process.platform === "darwin" && !(await systemPreferences.askForMediaAccess("microphone"))) {
     throw new Error("Beluga has no access to the microphone. Allow it in System Settings, Privacy & Security.");
   }
@@ -177,11 +185,11 @@ async function begin(options: StartOptions): Promise<string> {
   // a fatal error in the engine is followed by its exit, which ends the session
   engine.on("error", (type, location) => console.error(`speech engine: ${type} at ${location}`));
   let listening: Session | null = null;
-  const ready = new Promise<void>((resolve, reject) => {
+  const ready = new Promise<string[]>((resolve, reject) => {
     engine.on("message", (reply: EngineReply) => {
       switch (reply.type) {
         case "ready":
-          resolve();
+          resolve(reply.left);
           break;
         case "utterance":
           if (listening) write(listening, reply);
@@ -209,9 +217,12 @@ async function begin(options: StartOptions): Promise<string> {
     modelsDir: modelsDir(),
     model: options.model,
     language: options.language,
+    glossary,
+    tuning,
   } satisfies EngineRequest);
+  let left: string[];
   try {
-    await ready;
+    left = await ready;
   } catch (error) {
     engine.kill();
     throw error;
@@ -233,7 +244,21 @@ async function begin(options: StartOptions): Promise<string> {
   listening = { engine, ...transcript, labels: options.labels, newest: startedAt, heard: false };
   current = listening;
   lastPath = transcript.path;
-  return transcript.path;
+  return { path: transcript.path, left };
+}
+
+/** the glossary of a file the facilitator picks: a workshop brief's table, or a list one entry per line */
+async function importGlossary(): Promise<string[] | null> {
+  if (!window) return null;
+  const result = await dialog.showOpenDialog(window, {
+    title: "Take the glossary from a workshop brief or a list",
+    properties: ["openFile"],
+    filters: [{ name: "Workshop brief or list", extensions: ["md", "txt"] }],
+  });
+  const path = result.canceled ? undefined : result.filePaths[0];
+  if (!path) return null;
+  if ((await stat(path)).size > GLOSSARY_FILE_BYTES) throw new Error("This file is too large for a glossary.");
+  return glossaryFromFile(await readFile(path, "utf8"));
 }
 
 /** ends the session: the engine transcribes what it still holds, then the file is closed */
@@ -357,6 +382,7 @@ void app.whenReady().then(() => {
       installing = null;
     }
   });
+  handle("beluga:import-glossary", importGlossary);
   handle("beluga:start", start);
   handle("beluga:stop", stop);
   ipcMain.on("beluga:audio", (event, channel: unknown, samples: unknown, at: unknown) => {

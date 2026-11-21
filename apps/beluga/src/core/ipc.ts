@@ -3,6 +3,7 @@
  * preload script exposes exactly this API as `window.beluga`.
  */
 import type { Language, ModelId } from "./models.ts";
+import type { Tuning } from "./settings.ts";
 import type { Channel, SpeakerLabels } from "./transcript.ts";
 
 export interface ModelInfo {
@@ -19,6 +20,8 @@ export interface InitialState {
   /** the folder new transcripts go to */
   folder: string;
   labels: SpeakerLabels;
+  /** the processor cores of this machine, the most the recognizer may use */
+  cores: number;
 }
 
 export interface StartOptions {
@@ -26,6 +29,16 @@ export interface StartOptions {
   language: Language;
   labels: SpeakerLabels;
   folder: string;
+  /** names and terms to listen for (Parakeet only), one entry each */
+  glossary: string[];
+  tuning: Tuning;
+}
+
+export interface Started {
+  /** the transcript file of the session */
+  path: string;
+  /** glossary entries the model cannot write, so it does not listen for them */
+  left: string[];
 }
 
 export interface DownloadProgress {
@@ -44,8 +57,10 @@ export interface BelugaApi {
   init(): Promise<InitialState>;
   chooseFolder(current: string): Promise<string | null>;
   installModel(model: ModelId): Promise<void>;
-  /** begins a session and answers the path of its transcript file */
-  start(options: StartOptions): Promise<string>;
+  /** the entries of a glossary file the facilitator picks: a workshop brief or a plain list; null when none was picked */
+  importGlossary(): Promise<string[] | null>;
+  /** begins a session and answers where its transcript goes */
+  start(options: StartOptions): Promise<Started>;
   /** ends the session once the engine has transcribed what it still holds */
   stop(): Promise<void>;
   /** 16 kHz mono samples of one channel, `at` the time the last one was captured */
@@ -63,13 +78,14 @@ export interface BelugaApi {
 
 /** messages into the engine process */
 export type EngineRequest =
-  | { type: "start"; modelsDir: string; model: ModelId; language: Language }
+  | { type: "start"; modelsDir: string; model: ModelId; language: Language; glossary: string[]; tuning: Tuning }
   | { type: "audio"; channel: Channel; samples: Float32Array; at: number }
   | { type: "stop" };
 
 /** messages out of the engine process */
 export type EngineReply =
-  | { type: "ready" }
+  /** the model runs; `left` are the glossary entries it cannot write */
+  | { type: "ready"; left: string[] }
   | { type: "utterance"; channel: Channel; startedAt: number; text: string }
   /**
    * every second while a session runs: the engine is through with the audio

@@ -3,6 +3,7 @@
  * machine plays (the other side of an online meeting). Both are brought to
  * 16 kHz mono by the audio context and handed on in pieces of 100 ms.
  */
+import type { MicProcessing } from "../core/settings.ts";
 import type { Channel } from "../core/transcript.ts";
 import type { Piece } from "./capture-worklet.ts";
 import workletUrl from "./capture-worklet.ts?worker&url";
@@ -77,13 +78,14 @@ async function systemStream(): Promise<MediaStream> {
   return stream;
 }
 
-export async function startCapture(withSystem: boolean, handlers: CaptureHandlers): Promise<Capture> {
+export async function startCapture(
+  withSystem: boolean,
+  processing: MicProcessing,
+  handlers: CaptureHandlers,
+): Promise<Capture> {
   let mic: MediaStream;
   try {
-    // echo cancellation off: it is tuned for calls and eats quiet speakers in a room
-    mic = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true },
-    });
+    mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, ...processing } });
   } catch (error) {
     throw explain(error, "microphone");
   }

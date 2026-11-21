@@ -24,11 +24,17 @@ async function handle(request: EngineRequest): Promise<void> {
   switch (request.type) {
     case "start":
       engine = new SherpaEngine(
-        { modelsDir: request.modelsDir, model: request.model, language: request.language },
+        {
+          modelsDir: request.modelsDir,
+          model: request.model,
+          language: request.language,
+          glossary: request.glossary,
+          tuning: request.tuning,
+        },
         (utterance) => reply({ type: "utterance", ...utterance }),
       );
       through = null;
-      reply({ type: "ready" });
+      reply({ type: "ready", left: [...engine.left] });
       break;
     case "audio":
       await engine?.push(request.channel, request.samples, request.at);

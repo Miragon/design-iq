@@ -1,14 +1,16 @@
 /**
  * Beluga end to end, without a microphone: Chromium plays a recording as the
- * capture device, the app transcribes it, and the line must be on screen and in
- * the transcript file. A second session is ended the way Cmd+Q ends it, in the
+ * capture device, the app transcribes it with the glossary and the advanced
+ * settings set in the window, and the line must be on screen and in the
+ * transcript file, with the glossary's terms. Glossary and settings must
+ * survive a reload. A second session is ended the way Cmd+Q ends it, in the
  * middle of the sentence, which must still reach a file of its own.
  *
  *     BELUGA_MODELS_DIR=<folder with the models> pnpm test:e2e
  *
  * Needs a display (on a headless machine: `xvfb-run -a pnpm test:e2e`) and the
- * Parakeet model, whose archive brings the German sample this test plays. Not
- * part of `pnpm test`: the models are a download of several hundred megabytes.
+ * Parakeet model. Not part of `pnpm test`: the models are a download of several
+ * hundred megabytes.
  */
 import assert from "node:assert/strict";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -20,7 +22,6 @@ import { fileURLToPath } from "node:url";
 import { _electron } from "playwright";
 import sherpa from "sherpa-onnx-node";
 
-import { modelSpec } from "../../src/core/models.ts";
 import { missingFiles } from "../../src/engine/files.ts";
 
 const app = fileURLToPath(new URL("../..", import.meta.url));
@@ -30,9 +31,14 @@ if (!modelsDir || missingFiles(modelsDir, "parakeet-v3").length > 0) {
   process.exit(1);
 }
 
-/** the recording Chromium plays as the microphone: a second of silence, the sentence, three seconds of silence */
+/**
+ * The recording Chromium plays as the microphone: a second of silence, the
+ * sentence of fixtures/glossary.wav ("Die Rabattstaffel steht in der DMN Tabelle,
+ * und modelliert wird das Ganze in Camunda.", which Parakeet gets wrong without
+ * the glossary), three seconds of silence.
+ */
 function fakeMicrophone(target: string): void {
-  const wav = sherpa.readWave(join(modelsDir as string, modelSpec("parakeet-v3").dir, "test_wavs", "de.wav"), false);
+  const wav = sherpa.readWave(fileURLToPath(new URL("../fixtures/glossary.wav", import.meta.url)), false);
   const rate = wav.sampleRate;
   const samples = new Float32Array(rate + wav.samples.length + rate * 3);
   samples.set(wav.samples, rate);
@@ -71,9 +77,15 @@ const electron = await _electron.launch({
 let running = true;
 try {
   const page = await electron.firstWindow();
+  // a glossary with an entry Parakeet cannot write, and a longer pause under Advanced
+  await page.getByLabel("Glossary", { exact: true }).fill("Rabattstaffel\nCamunda\nYılmaz");
+  await page.getByText("Advanced").click();
+  await page.getByLabel("Pause that ends a line").selectOption("0.8");
   await page.getByRole("button", { name: "Start listening" }).click();
+  await page.getByText(/does not listen for this glossary entry: Yılmaz/).waitFor({ timeout: 60_000 });
   await page
-    .getByText(/Alles hat ein Ende/)
+    .getByRole("region", { name: "Transcript" })
+    .getByText(/Camunda/)
     .first()
     .waitFor({ timeout: 60_000 });
   await page.getByRole("button", { name: "Stop" }).click();
@@ -85,10 +97,21 @@ try {
   const lines = linesOf(first);
   assert.match(lines[0] as string, /^# Beluga transcript, started \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   assert.ok(lines.length > 1, "the sentence was written");
-  for (const line of lines.slice(1)) assert.match(line, /^\d{2}:\d{2}:\d{2} (Me|Others): .*Alles hat ein Ende/);
-  console.log(`ok: ${lines.length - 1} line(s) in ${first}`);
+  for (const line of lines.slice(1)) assert.match(line, /^\d{2}:\d{2}:\d{2} (Me|Others): \S/);
+  const said = lines.slice(1).join("\n");
+  assert.match(said, /Rabattstaffel/, "the glossary's term, not what Parakeet hears without it");
+  assert.match(said, /Camunda/, "the glossary's term, not what Parakeet hears without it");
+  console.log(`ok: ${lines.length - 1} line(s) in ${first}, with the glossary's terms`);
 
-  // quit while the sentence is being spoken (it runs from 1 s to 3.75 s of the recording)
+  // glossary and settings are still there after a reload
+  await page.reload();
+  await page.getByRole("button", { name: "Start listening" }).waitFor({ timeout: 30_000 });
+  assert.equal(await page.getByLabel("Glossary", { exact: true }).inputValue(), "Rabattstaffel\nCamunda\nYılmaz");
+  await page.getByText("Advanced").click();
+  assert.equal(await page.getByLabel("Pause that ends a line").inputValue(), "0.8");
+  console.log("ok: glossary and settings kept");
+
+  // quit while the sentence is being spoken (it runs from 1 s to 5.8 s of the recording)
   await page.getByRole("button", { name: "Start listening" }).click();
   await page.getByRole("button", { name: "Stop" }).waitFor({ timeout: 30_000 });
   await page.waitForTimeout(2500);
