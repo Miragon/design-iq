@@ -8,6 +8,8 @@ packages:
   # postinstall build scripts pnpm may run (blocked by default for security)
 allowBuilds:
   esbuild: true
+  # a dependency of electron-builder for Windows installers, which Beluga does not build
+  electron-winstaller: false
   inferno: false
 minimumReleaseAgeExclude:
   # the Miragon releases with modeler-shell 0.9.0 and contract 1.6

@@ -1,0 +1,41 @@
+{
+  "name": "@designiq/beluga",
+  "version": "0.0.1",
+  "private": true,
+  "productName": "Beluga",
+  "type": "module",
+  "description": "Beluga: a small desktop app that listens to a meeting on the facilitator's machine (microphone and system audio), transcribes it locally and appends the transcript line by line to a text file an assistant reads along. No audio leaves the machine. Nothing in the platform depends on it.",
+  "main": "out/main/main.cjs",
+  "scripts": {
+    "build:main": "esbuild src/main/main.ts src/main/engine-host.ts src/preload/preload.ts --bundle --platform=node --format=cjs --external:electron --external:sherpa-onnx-node --outbase=src --outdir=out --out-extension:.js=.cjs --sourcemap",
+    "build:renderer": "vite build",
+    "build": "pnpm build:main && pnpm build:renderer",
+    "start": "electron .",
+    "dev": "pnpm build && electron .",
+    "package": "pnpm build && electron-builder --dir",
+    "test": "node --test test/*.test.ts",
+    "test:e2e": "pnpm build && install-electron && node test/e2e/listen.e2e.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "sherpa-onnx-node": "2.0.2"
+  },
+  "devDependencies": {
+    "@designiq/ui-kit": "workspace:*",
+    "@tailwindcss/vite": "4.3.5",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
+    "lucide-react": "1.70.0",
+    "playwright": "1.65.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tailwindcss": "4.3.5",
+    "typescript": "6.0.3",
+    "vite": "8.3.7"
+  }
+}

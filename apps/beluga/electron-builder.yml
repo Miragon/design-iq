@@ -1,0 +1,30 @@
+appId: de.miragon.designiq.beluga
+productName: Beluga
+directories:
+  output: release
+files:
+  - out/**
+  - dist/**
+  - package.json
+# the speech engine is a native addon: it cannot be loaded from inside the archive
+asarUnpack:
+  - "**/node_modules/sherpa-onnx-*/**"
+mac:
+  target: dir
+  category: public.app-category.productivity
+  # signed ad hoc for this machine: the bundle gets its own identity
+  # (de.miragon.designiq.beluga), which the microphone and system audio
+  # permissions are bound to. A build for other Macs needs a Developer ID,
+  # notarization and, with the hardened runtime, an entitlements file that
+  # grants com.apple.security.device.audio-input
+  identity: "-"
+  hardenedRuntime: false
+  extendInfo:
+    NSMicrophoneUsageDescription: Beluga transcribes what you say in the meeting. The audio stays on this Mac.
+    NSAudioCaptureUsageDescription: Beluga transcribes what the other participants say in the meeting. The audio stays on this Mac.
+win:
+  target: dir
+linux:
+  target: dir
+  # the npm name would make it @designiqbeluga
+  executableName: beluga
