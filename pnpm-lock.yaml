@@ -196,6 +196,9 @@ importers:
       '@fontsource-variable/geist-mono':
         specifier: 5.3.0
         version: 5.3.0
+      '@miragon/board-renderer':
+        specifier: 0.2.1
+        version: 0.2.1(@types/react@19.3.0)(@xyflow/react@12.12.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(yjs@13.6.33)
       '@miragon/context-maps-cml':
         specifier: 0.1.8
         version: 0.1.8(zod@4.6.7)
@@ -238,6 +241,9 @@ importers:
       '@tanstack/react-table':
         specifier: 9.3.1
         version: 9.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@xyflow/react':
+        specifier: 12.12.1
+        version: 12.12.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       bpmn-js:
         specifier: 18.31.1
         version: 18.31.1
@@ -449,6 +455,9 @@ importers:
 
   packages/mcp:
     dependencies:
+      '@miragon/board-schema-model':
+        specifier: 0.2.0
+        version: 0.2.0
       '@miragon/wardley-dsl':
         specifier: 0.10.0
         version: 0.10.0(zod@4.6.7)
@@ -517,6 +526,9 @@ importers:
 
   packages/notations:
     dependencies:
+      '@miragon/board-schema-model':
+        specifier: 0.2.0
+        version: 0.2.0
       '@miragon/wardley-dsl':
         specifier: 0.10.0
         version: 0.10.0(zod@4.6.7)
@@ -603,6 +615,9 @@ importers:
 
   packages/validator:
     dependencies:
+      '@miragon/board-schema-model':
+        specifier: 0.2.0
+        version: 0.2.0
       '@miragon/context-maps-schema-model':
         specifier: 0.5.1
         version: 0.5.1(zod@4.6.7)
@@ -1477,6 +1492,17 @@ packages:
   '@mermaid-js/parser@2.0.1':
     resolution: {integrity: sha512-j37dj/h6p6pots1L7pLPPNuABEEu9WP4OYg9pW1g+nYG331j0+3canE9OagtYdytYvdSAMG+2fKU5cxep6LgjA==}
     engines: {node: '>=22.12.0'}
+
+  '@miragon/board-renderer@0.2.1':
+    resolution: {integrity: sha512-6Vo4oZdvQr/wYa/KXeJoo9AtAq+2ku51G9NBy91b8ZFUBysDjoB1Zyoo2wY9qkWni73ap0RyK26YXdgLRyQrsA==}
+    peerDependencies:
+      '@xyflow/react': ~12.12.1
+      react: ^19.0.0
+      react-dom: ^19.0.0
+      yjs: ^13.6.0
+
+  '@miragon/board-schema-model@0.2.0':
+    resolution: {integrity: sha512-WTKRqeDcu91XM48DvvGgucZxF+DhkIs4OMPznZ4AIGg/dQoMbxX7sBhEcQrbYo4TIyuw8DnycVIkqoxjwfB3qw==}
 
   '@miragon/bpmn-cli@0.10.0':
     resolution: {integrity: sha512-GITEDEK5dNZHd+Yi/lOAq6RDurNGBs635mo3yJg/nPdOCWe4+4p+1XNcB7KtJDkU+zX3BvCcn8BVX2VRqZH4gw==}
@@ -2818,6 +2844,22 @@ packages:
   '@vueuse/shared@12.8.2':
     resolution: {integrity: sha512-dznP38YzxZoNloI0qpEfpkms8knDtaoQ6Y/sfS0L7Yki4zh40LFHEhur0odJC6xTHG5dxWVPiUWBXn+wCG2s5w==}
 
+  '@xyflow/react@12.12.1':
+    resolution: {integrity: sha512-g41OHmP+GL5wDBQKpgYt8AF6RlB4CrABtiStXhCMqdItK6gPdSpsuDk8V0YtdyvIvMPTjDJvkuLkz0JbSYu5Cw==}
+    peerDependencies:
+      '@types/react': '>=17'
+      '@types/react-dom': '>=17'
+      react: '>=17'
+      react-dom: '>=17'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      '@types/react-dom':
+        optional: true
+
+  '@xyflow/system@0.0.84':
+    resolution: {integrity: sha512-96zfGFjH3oZ3T0MRdH4gJ0SlXuCIxbBuHVevZ4xry5UTxqjzjt010+LRdholgepq7jhrcaz1JNtzrETscwnkEA==}
+
   '@yuku-toolchain/darwin-arm64@0.27.0':
     resolution: {integrity: sha512-A3v83rNyHWlnJeeMBsWggZ+RZDP2BEMHIiMk+j23LqtVch24MXwg8veflkQgZ2GtCtZOxcG+NkztnsSUS4rWEQ==}
     cpu: [arm64]
@@ -3001,6 +3043,9 @@ packages:
 
   class-variance-authority@0.7.1:
     resolution: {integrity: sha512-Ka+9Trutv7G8M6WT6SeiRWz792K5qEqIGEGzXKhAE6xOWAY6pPH8U+9IY3oCMv6kqTmLsv7Xh/2w2RigkePMsg==}
+
+  classcat@5.0.5:
+    resolution: {integrity: sha512-JhZUT7JFcQy/EzW605k/ktHtncoo9vnyW/2GspNYwFlN1C/WmjuV/xtS04e9SOkL2sTdw0VAZ2UGCcQ9lR6p6w==}
 
   cli-cursor@5.0.0:
     resolution: {integrity: sha512-aCj4O5wKyszjMmDT4tZj93kxyydN/K5zPWSCe6/0AV/AA1pqe5ZBIw0a2ZfPQV7lL5/yb5HsUreJ6UFAF1tEQw==}
@@ -5027,6 +5072,21 @@ packages:
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
+  zustand@4.5.7:
+    resolution: {integrity: sha512-CHOUy7mu3lbD6o6LJLfllpjkzhHXSBlX8B9+qPddUsIfeF5S/UZ5q0kmCsnRqT1UHFQZchNFDDzMbQsuesHWlw==}
+    engines: {node: '>=12.7.0'}
+    peerDependencies:
+      '@types/react': '>=16.8'
+      immer: '>=9.0.6'
+      react: '>=16.8'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      immer:
+        optional: true
+      react:
+        optional: true
+
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
@@ -5846,6 +5906,22 @@ snapshots:
   '@mermaid-js/parser@2.0.1':
     dependencies:
       '@chevrotain/types': 13.2.0
+
+  '@miragon/board-renderer@0.2.1(@types/react@19.3.0)(@xyflow/react@12.12.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(yjs@13.6.33)':
+    dependencies:
+      '@miragon/board-schema-model': 0.2.0
+      '@miragon/modeler-api': 2.0.0
+      '@xyflow/react': 12.12.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      dompurify: 3.4.17
+      lucide-react: 1.70.0(@types/react@19.3.0)(react@19.3.1)
+      markdown-it: 15.0.3
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
+      yjs: 13.6.33
+    transitivePeerDependencies:
+      - '@types/react'
+
+  '@miragon/board-schema-model@0.2.0': {}
 
   '@miragon/bpmn-cli@0.10.0':
     dependencies:
@@ -7092,6 +7168,31 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
+  '@xyflow/react@12.12.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+    dependencies:
+      '@xyflow/system': 0.0.84
+      classcat: 5.0.5
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
+      zustand: 4.5.7(@types/react@19.3.0)(react@19.3.1)
+    optionalDependencies:
+      '@types/react': 19.3.0
+      '@types/react-dom': 19.3.0(@types/react@19.3.0)
+    transitivePeerDependencies:
+      - immer
+
+  '@xyflow/system@0.0.84':
+    dependencies:
+      '@types/d3-drag': 3.0.7
+      '@types/d3-interpolate': 3.0.4
+      '@types/d3-selection': 3.0.12
+      '@types/d3-transition': 3.0.9
+      '@types/d3-zoom': 3.0.9
+      d3-drag: 3.0.1
+      d3-interpolate: 3.0.2
+      d3-selection: 3.0.1
+      d3-zoom: 3.0.1
+
   '@yuku-toolchain/darwin-arm64@0.27.0':
     optional: true
 
@@ -7288,6 +7389,8 @@ snapshots:
   class-variance-authority@0.7.1:
     dependencies:
       clsx: 2.1.1
+
+  classcat@5.0.5: {}
 
   cli-cursor@5.0.0:
     dependencies:
@@ -9305,5 +9408,12 @@ snapshots:
   zod@4.4.3: {}
 
   zod@4.6.7: {}
+
+  zustand@4.5.7(@types/react@19.3.0)(react@19.3.1):
+    dependencies:
+      use-sync-external-store: 1.7.0(react@19.3.1)
+    optionalDependencies:
+      '@types/react': 19.3.0
+      react: 19.3.1
 
   zwitch@2.0.4: {}

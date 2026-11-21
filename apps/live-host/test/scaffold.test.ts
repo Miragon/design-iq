@@ -14,6 +14,9 @@ import { CONTENT_KEY } from "@designiq/contracts/live";
 import type { TodoModelRef } from "@designiq/contracts/todo-anchor";
 import { AppError } from "@designiq/http-kit";
 import { type NotationDescriptor, NOTATIONS } from "@designiq/notations";
+import { docCodecFor } from "@designiq/notations/codecs";
+import { retargetRefs } from "@designiq/notations/retarget";
+import { templateFor } from "@designiq/notations/templates";
 import * as Y from "yjs";
 
 import {
@@ -24,7 +27,9 @@ import {
   deleteModels,
   duplicateModel,
   listFolders,
+  type MoveDeps,
   moveModels,
+  type PreviewRooms,
   type RenameDeps,
   renameModel,
 } from "../src/application/scaffold.ts";
@@ -303,6 +308,19 @@ test("createNotationModel: event storming board from the title-only .storm templ
   assert.equal(created.path, "processes/order-checkout.storm");
   assert.equal(created.notation, "event-storming");
   assert.equal(readFileSync(join(ws, created.path), "utf8"), "title Order Checkout\n");
+});
+
+test("createNotationModel: a board from its header-only template — the codec's canonical text, no phantom diff", async () => {
+  const ws = workspace();
+  const created = await createNotationModel(REPO, ws, { notation: "board", name: "Workshop  Board" });
+  assert.equal(created.path, "processes/workshop-board.board");
+  assert.equal(created.notation, "board");
+  const text = readFileSync(join(ws, created.path), "utf8");
+  assert.equal(text, templateFor("board", "workshop-board", "Workshop  Board"));
+  const codec = docCodecFor("board")!;
+  assert.equal(codec.check?.(text), undefined, "its own reader takes it");
+  assert.equal(codec.encode(codec.decode(text)), text, "canonical: the first write-through changes nothing");
+  assert.deepEqual(codec.decode(text), { elements: {}, meta: { title: "Workshop Board", version: 1 } });
 });
 
 test("createNotationModel: context map from the schema-model's canonical empty document", async () => {
@@ -854,4 +872,290 @@ test("deleteModels: closeTodos closes the deleted models' todos — only when as
     out.todoJobs?.map((j) => j.id),
     ["close:bpmn:order", "close:bpmn:check-credit", "close:markdown:handbook"],
   );
+});
+
+// ── boards: a board names the models it shows by PATH ───────────────────────
+
+const boardCodec = docCodecFor("board")!;
+/** a board with one model node per path (n_<i>) and a note */
+const boardShowing = (...files: string[]): string =>
+  boardCodec.encode({
+    meta: { title: "Wall", version: 1 },
+    elements: {
+      ...Object.fromEntries(
+        files.map((file, i) => [
+          `n_${i}`,
+          { kind: "node", type: "model", file, x: i * 300, y: 0, width: 280, height: 200, z: "a" },
+        ]),
+      ),
+      n_note: { kind: "node", type: "text", text: "Open questions", x: 0, y: 300, width: 200, height: 100, z: "b" },
+    },
+  });
+const shownFiles = (text: string): string[] =>
+  Object.values(boardCodec.decode(text).elements)
+    .filter((e) => e.type === "model")
+    .map((e) => String(e.file));
+
+/** MoveDeps with an editContent spy that rewrites the files themselves */
+function boardMoveDeps(ws: string, opts: { failEdit?: string[] } = {}) {
+  const edited: string[] = [];
+  const deps: MoveDeps = {
+    ...moveDeps().deps,
+    editContent: async (path, edit) => {
+      if (opts.failEdit?.includes(path)) throw new Error("boom");
+      edited.push(path);
+      writeFileSync(join(ws, path), edit(readFileSync(join(ws, path), "utf8")));
+    },
+  };
+  return { deps, edited };
+}
+
+test("renameModel: a board that shows the renamed model is rewritten — only its model node's file", async () => {
+  const ws = workspace();
+  writeFileSync(join(ws, "processes", "wall.board"), boardShowing("processes/subprocesses/check-credit.bpmn"));
+  const spy = renameDeps();
+  const deps: RenameDeps = {
+    ...spy.deps(ws),
+    // the real retarget over the board's text (content.ts editContent hands it the canonical text)
+    editContent: async (path, edit) => void spy.edits.set(path, edit(readFileSync(join(ws, path), "utf8"))),
+  };
+  const out = await renameModel(
+    REPO,
+    ws,
+    { path: "processes/subprocesses/check-credit.bpmn", name: "Credit Check" },
+    "Petra",
+    deps,
+  );
+  assert.deepEqual(out.updatedReferences, ["processes/wall.board"]);
+  const after = spy.edits.get("processes/wall.board") ?? "";
+  assert.deepEqual(shownFiles(after), ["processes/subprocesses/credit-check.bpmn"]);
+  assert.equal(boardCodec.decode(after).elements.n_note?.text, "Open questions", "the rest of the board stays");
+  // the same retarget a closed board's text gets from retargetRefs directly
+  assert.equal(
+    after,
+    retargetRefs("board", boardShowing("processes/subprocesses/check-credit.bpmn"), {
+      notation: "bpmn",
+      from: "check-credit",
+      to: "credit-check",
+    }),
+  );
+});
+
+test("moveModels: the boards that show a moved model follow it to its new path, a stale path included", async () => {
+  const ws = workspace();
+  writeFileSync(
+    join(ws, "processes", "wall.board"),
+    boardShowing("processes/order.bpmn", "processes/subprocesses/check-credit.bpmn"),
+  );
+  // names order.bpmn where it was before an earlier move: it still shows that model (by id)
+  writeFileSync(join(ws, "processes", "stale.board"), boardShowing("processes/archive/order.bpmn"));
+  writeFileSync(join(ws, "processes", "other.board"), boardShowing("processes/subprocesses/check-credit.bpmn"));
+  const { deps, edited } = boardMoveDeps(ws);
+  const out = await moveModels(REPO, ws, { paths: ["processes/order.bpmn"], folder: "sales" }, deps);
+  assert.deepEqual(out.moved, [{ from: "processes/order.bpmn", to: "processes/sales/order.bpmn" }]);
+  assert.deepEqual(out.updatedReferences.sort(), ["processes/stale.board", "processes/wall.board"]);
+  assert.deepEqual(out.failedReferences, []);
+  assert.deepEqual(
+    edited.sort(),
+    ["processes/stale.board", "processes/wall.board"],
+    "a board that shows no moved model is left alone",
+  );
+  const wall = readFileSync(join(ws, "processes", "wall.board"), "utf8");
+  assert.deepEqual(shownFiles(wall), ["processes/sales/order.bpmn", "processes/subprocesses/check-credit.bpmn"]);
+  assert.equal(boardCodec.decode(wall).elements.n_note?.text, "Open questions");
+  assert.deepEqual(shownFiles(readFileSync(join(ws, "processes", "stale.board"), "utf8")), [
+    "processes/sales/order.bpmn",
+  ]);
+});
+
+/** a workspace whose boards also name order.bpmn's stem by paths that are not that model */
+function sameStemWorkspace(): string {
+  const ws = workspace();
+  // a duplicate stem git brought in: discovery keeps processes/order.bpmn (the first by path),
+  // so the index resolves every node named order.bpmn to it
+  mkdirSync(join(ws, "processes", "v2"));
+  writeFileSync(join(ws, "processes", "v2", "order.bpmn"), "<bpmn/>");
+  writeFileSync(
+    join(ws, "processes", "wall.board"),
+    boardShowing(
+      "processes/order.bpmn",
+      "processes/v2/order.bpmn", // another file with the same stem
+      "docs/order.bpmn", // outside the models folder, no file there
+      "processes/archive/order.bpmn", // stale: where order.bpmn was before an earlier move
+    ),
+  );
+  // shows only the other file
+  writeFileSync(join(ws, "processes", "v2.board"), boardShowing("processes/v2/order.bpmn"));
+  return ws;
+}
+
+test("moveModels: a node showing another file with the same stem, or a path outside the models folder, keeps its path", async () => {
+  const ws = sameStemWorkspace();
+  const { deps, edited } = boardMoveDeps(ws);
+  const out = await moveModels(REPO, ws, { paths: ["processes/order.bpmn"], folder: "sales" }, deps);
+  assert.deepEqual(out.updatedReferences, ["processes/wall.board"], "the board that shows only the other file is none");
+  assert.deepEqual(edited, ["processes/wall.board"]);
+  assert.deepEqual(shownFiles(readFileSync(join(ws, "processes", "wall.board"), "utf8")), [
+    "processes/sales/order.bpmn",
+    "processes/v2/order.bpmn",
+    "docs/order.bpmn",
+    "processes/sales/order.bpmn",
+  ]);
+  assert.deepEqual(shownFiles(readFileSync(join(ws, "processes", "v2.board"), "utf8")), ["processes/v2/order.bpmn"]);
+});
+
+test("renameModel: a node showing another file with the same stem, or a path outside the models folder, keeps its path", async () => {
+  const ws = sameStemWorkspace();
+  const spy = renameDeps();
+  const deps: RenameDeps = {
+    ...spy.deps(ws),
+    editContent: async (path, edit) => void spy.edits.set(path, edit(readFileSync(join(ws, path), "utf8"))),
+  };
+  const out = await renameModel(REPO, ws, { path: "processes/order.bpmn", name: "Billing" }, "Petra", deps);
+  assert.deepEqual(
+    out.updatedReferences,
+    ["processes/wall.board"],
+    "the board that shows only the other file is no caller",
+  );
+  assert.deepEqual([...spy.edits.keys()], ["processes/wall.board"]);
+  assert.deepEqual(shownFiles(spy.edits.get("processes/wall.board") ?? ""), [
+    "processes/billing.bpmn",
+    "processes/v2/order.bpmn",
+    "docs/order.bpmn",
+    "processes/archive/billing.bpmn",
+  ]);
+});
+
+test("moveModels: a board moved along is rewritten at its new path; one that cannot be rewritten is reported", async () => {
+  const ws = workspace();
+  writeFileSync(join(ws, "processes", "wall.board"), boardShowing("processes/order.bpmn"));
+  writeFileSync(join(ws, "processes", "broken.board"), boardShowing("processes/order.bpmn"));
+  const { deps } = boardMoveDeps(ws, { failEdit: ["processes/broken.board"] });
+  const out = await moveModels(
+    REPO,
+    ws,
+    { paths: ["processes/order.bpmn", "processes/wall.board"], folder: "sales" },
+    deps,
+  );
+  assert.deepEqual(out.updatedReferences, ["processes/sales/wall.board"]);
+  assert.deepEqual(out.failedReferences, ["processes/broken.board"], "the move stands, the board is named");
+  assert.deepEqual(shownFiles(readFileSync(join(ws, "processes", "sales", "wall.board"), "utf8")), [
+    "processes/sales/order.bpmn",
+  ]);
+  assert.ok(existsSync(join(ws, "processes", "sales", "order.bpmn")));
+});
+
+/** PreviewRooms over in-memory rooms: who is in each loaded room, and its live text */
+function previewSpy(rooms: Record<string, { attended: boolean; content?: string }>) {
+  const retired: Array<[string, string | undefined]> = [];
+  const held: string[][] = [];
+  const saved: string[] = [];
+  let released = 0;
+  const previews: PreviewRooms = {
+    attended: (room) => rooms[room]?.attended ?? false,
+    retire: (room, notice) => {
+      retired.push([room, notice]);
+      const content = rooms[room]?.content;
+      if (content === undefined) return undefined;
+      const doc = new Y.Doc();
+      doc.getText(CONTENT_KEY).insert(0, content);
+      return Y.encodeStateAsUpdate(doc);
+    },
+    hold: (r) => {
+      held.push(r);
+      return () => void released++;
+    },
+    saveLineage: (room) => void saved.push(room),
+    by: "Petra",
+  };
+  return { previews, retired, held, saved, released: () => released };
+}
+
+test("moveModels: a room only a board previews moves along — notice, live state to the new file, lineage", async () => {
+  const ws = workspace();
+  const room = "acme/models/processes/order.bpmn";
+  const spy = previewSpy({ [room]: { attended: false, content: "<bpmn>live, not yet written</bpmn>" } });
+  const { renamed, deps } = moveDeps([room]);
+  const out = await moveModels(
+    REPO,
+    ws,
+    { paths: ["processes/order.bpmn"], folder: "sales" },
+    { ...deps, previews: spy.previews },
+  );
+  assert.deepEqual(out.moved, [{ from: "processes/order.bpmn", to: "processes/sales/order.bpmn" }]);
+  // the board's session is told where the model went (it opens it there)
+  assert.deepEqual(spy.retired, [
+    [
+      room,
+      JSON.stringify({
+        type: "bpmiq/moved", // legacy-name-ok: frozen wire type (MOVED_NOTICE), clients match it
+        to: "processes/sales/order.bpmn",
+        room: "acme/models/processes/sales/order.bpmn",
+        by: "Petra",
+      }),
+    ],
+  ]);
+  // what the room held, ahead of the debounced write-through, is the moved file
+  assert.equal(
+    readFileSync(join(ws, "processes", "sales", "order.bpmn"), "utf8"),
+    "<bpmn>live, not yet written</bpmn>",
+  );
+  assert.deepEqual(renamed, [[room, "acme/models/processes/sales/order.bpmn"]]);
+  assert.deepEqual(spy.saved, ["acme/models/processes/sales/order.bpmn"], "the final state is the new room's lineage");
+  // the new room's loads waited until the file was in place
+  assert.deepEqual(spy.held, [["acme/models/processes/sales/order.bpmn"]]);
+  assert.equal(spy.released(), 1);
+});
+
+test("moveModels: a room a person is in still refuses (409), previews or not — and nothing moves", async () => {
+  const ws = workspace();
+  const order = "acme/models/processes/order.bpmn";
+  const credit = "acme/models/processes/subprocesses/check-credit.bpmn";
+  const spy = previewSpy({ [order]: { attended: false, content: "<bpmn/>" }, [credit]: { attended: true } });
+  const { renamed, deps } = moveDeps([order, credit]);
+  await assert.rejects(
+    () =>
+      moveModels(
+        REPO,
+        ws,
+        { paths: ["processes/order.bpmn", "processes/subprocesses/check-credit.bpmn"], folder: "archive" },
+        { ...deps, previews: spy.previews },
+      ),
+    rejectsWith("move/live-session", 409),
+  );
+  assert.deepEqual(spy.retired, [], "not even the previewed room was retired");
+  assert.deepEqual(renamed, []);
+  assert.ok(existsSync(join(ws, "processes", "order.bpmn")));
+  // without a presence read, every loaded room refuses as before
+  await assert.rejects(
+    () => moveModels(REPO, ws, { paths: ["processes/order.bpmn"], folder: "archive" }, deps),
+    rejectsWith("move/live-session", 409),
+  );
+});
+
+test("deleteModels: a room only a board previews is retired with its file; one a person is in refuses", async () => {
+  const ws = workspace();
+  const order = "acme/models/processes/order.bpmn";
+  const credit = "acme/models/processes/subprocesses/check-credit.bpmn";
+  const spy = previewSpy({ [order]: { attended: false, content: "<bpmn/>" }, [credit]: { attended: true } });
+  const dropped: string[] = [];
+  const deps = { liveDocs: () => [order, credit], dropLineage: (room: string) => void dropped.push(room) };
+  await assert.rejects(
+    () =>
+      deleteModels(
+        REPO,
+        ws,
+        { paths: ["processes/order.bpmn", "processes/subprocesses/check-credit.bpmn"] },
+        { ...deps, previews: spy.previews },
+      ),
+    rejectsWith("delete/live-session", 409),
+  );
+  assert.deepEqual(spy.retired, []);
+  assert.ok(existsSync(join(ws, "processes", "order.bpmn")));
+  const out = await deleteModels(REPO, ws, { paths: ["processes/order.bpmn"] }, { ...deps, previews: spy.previews });
+  assert.deepEqual(out.deleted, ["processes/order.bpmn"]);
+  // retired without a notice (there is nowhere to send the board), so it never writes the file back
+  assert.deepEqual(spy.retired, [[order, undefined]]);
+  assert.ok(!existsSync(join(ws, "processes", "order.bpmn")));
+  assert.deepEqual(dropped, [order]);
 });

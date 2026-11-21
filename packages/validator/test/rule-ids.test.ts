@@ -6,7 +6,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { checkBpmnXml, checkDmnXml, checkModelBaseline, checkSchemaModel, type Finding } from "../src/validate.ts";
+import {
+  checkBpmnXml,
+  checkDmnXml,
+  checkModel,
+  checkModelBaseline,
+  checkSchemaModel,
+  type Finding,
+} from "../src/validate.ts";
 
 const ruleOf = (findings: Finding[], pattern: RegExp): string | undefined =>
   findings.find((f) => pattern.test(f.message))?.ruleId;
@@ -60,6 +67,23 @@ test("baseline rule family", () => {
     ruleOf(checkModelBaseline("{ nope", { file: "t.tt", notation: "team-topology" }), /not parseable as JSON/),
     "baseline/parse",
   );
+});
+
+test("board rule families", () => {
+  const header = `{"format":"structured-model","meta":{},"version":1}`;
+  assert.equal(
+    ruleOf(checkModelBaseline(`${header}\n{`, { file: "a.board", notation: "board" }), /is no JSON/),
+    "board/parse",
+  );
+  const nested = `${header}\n{"file":"b.board","id":"n","kind":"node","type":"model"}\n`;
+  assert.equal(
+    ruleOf(checkModel(nested, { path: "a.board" }) ?? [], /cannot be shown on a board/),
+    "board/nested-board",
+  );
+  const shown = `${header}\n{"file":"old/m.bpmn","id":"n","kind":"node","type":"model"}\n`;
+  const models = [{ path: "new/m.bpmn", notation: "bpmn", id: "m" }];
+  assert.equal(ruleOf(checkModel(shown, { path: "a.board", models }) ?? [], /moved to/), "refs/stale-path");
+  assert.equal(ruleOf(checkModel(shown, { path: "a.board", models: [] }) ?? [], /deleted or renamed/), "refs/dangling");
 });
 
 test("schema-model rule families", () => {

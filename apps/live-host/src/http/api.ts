@@ -141,6 +141,7 @@ import {
   duplicateModel,
   listFolders,
   moveModels,
+  type PreviewRooms,
   type RenameDeps,
   renameModel,
 } from "../application/scaffold.ts";
@@ -197,8 +198,10 @@ export interface ApiOptions {
   /** re-key a room's Yjs lineage — a moved model keeps its unreleased history */
   renameLineage: (from: string, to: string) => void;
   /** a renamed model's room migration (#208): retire a loaded room (notice
-   *  its peers, close it, hand back its state) and hold the new room's loads */
-  rooms: RenameDeps["rooms"];
+   *  its peers, close it, hand back its state) and hold the new room's loads.
+   *  A moved or deleted model's room a board holds only as a preview is
+   *  retired the same way (PreviewRooms), a deleted one's without a notice */
+  rooms: { retire: PreviewRooms["retire"]; hold: RenameDeps["rooms"]["hold"] };
   /** write a room's lineage outright — a renamed OPEN model's final state */
   saveLineage: (room: string, state: Uint8Array) => void;
   /** provider seam for the connected-repo set: connect URL + webhook verification */
@@ -260,6 +263,12 @@ export interface ApiOptions {
   presence?: Pick<AgentPresence, "touch">;
   /** who is in a room (get_presence) — the raw peers of a LOADED room */
   peersOf?: RoomPresenceDeps["peersOf"];
+  /** whether a person may be in a LOADED room (room-presence.ts
+   *  attendedDocument, failing closed): a move or delete retires a room
+   *  nobody is in (a board's preview of the model) instead of refusing, and
+   *  the overview does not count it as a live session. Absent: every loaded
+   *  room refuses and counts */
+  attended?: (room: string) => boolean;
   /** a person's favorites and recently opened repositories (#213,
    *  application/favorites.ts) — absent: the /api/me/favorites|recent routes
    *  answer 501 and the overview rows carry neither field */
@@ -275,6 +284,21 @@ export interface ApiOptions {
 // whitespace-tolerant (`"key": *"value"`), verified before the switch.
 // listProcesses/listRepos (the overview read-models) live in application/overview.ts —
 // ApiOptions structurally satisfies their injected OverviewDeps surface.
+
+/** the loaded rooms nobody is in, as a move or delete handles them
+ *  (scaffold.ts PreviewRooms); undefined without a presence read, when every
+ *  loaded room keeps refusing */
+function previewRooms(opts: ApiOptions, by: string): PreviewRooms | undefined {
+  const attended = opts.attended;
+  if (!attended) return undefined;
+  return {
+    attended,
+    retire: opts.rooms.retire,
+    hold: opts.rooms.hold,
+    saveLineage: opts.saveLineage,
+    by,
+  };
+}
 
 /** parse a JSON request body; sends the 400/413 itself and returns undefined */
 async function jsonBody<T>(req: IncomingMessage, res: ServerResponse, maxBytes?: number): Promise<T | undefined> {
@@ -801,7 +825,9 @@ export function startApi(port: number, opts: ApiOptions): Server {
           return send(res, 200, (await listFolders(workspace)) satisfies FolderListWire);
         }
         // move model files into another folder (#182) — a workspace write like
-        // the creates; 409 while a moved file is open in a live session
+        // the creates; 409 while a person has a moved file open in a live
+        // session (a board's preview of it moves along); the boards that show
+        // a moved model follow its new path
         if (repoRoute[2] === "move") {
           if (req.method !== "POST") return send(res, 405, { error: "method not allowed" });
           const body = await jsonBody<MoveModelsBody>(req, res);
@@ -814,6 +840,8 @@ export function startApi(port: number, opts: ApiOptions): Server {
           const result = await moveModels(repo, workspace, body, {
             ...opts,
             recordRenames: (pairs) => opts.workspaces.recordRenames(repo, pairs),
+            editContent: (path, edit) => editContent(opts, repo, path, edit),
+            previews: previewRooms(opts, session.user.name || session.user.login),
           });
           for (const m of result.moved) {
             console.log(`moved in ${repo.fullName} by @${session.user.login}: ${m.from} → ${m.to}`);
@@ -866,7 +894,8 @@ export function startApi(port: number, opts: ApiOptions): Server {
           console.log(`duplicated in ${repo.fullName} by @${session.user.login}: ${body.path} → ${result.model.path}`);
           return send(res, 201, result satisfies DuplicateModelResult);
         }
-        // delete models (#210) — all or nothing; 409 while one is open live
+        // delete models (#210), all or nothing; 409 while a person has one
+        // open live (a board's preview of it is closed with it)
         if (repoRoute[2] === "delete") {
           if (req.method !== "POST") return send(res, 405, { error: "method not allowed" });
           const body = await jsonBody<DeleteModelsBody>(req, res);
@@ -880,6 +909,7 @@ export function startApi(port: number, opts: ApiOptions): Server {
           }
           const result = await deleteModels(repo, workspace, body, {
             ...opts,
+            previews: previewRooms(opts, session.user.name || session.user.login),
             todos: opts.todoJobs && { close: (from) => opts.todoJobs!.close(repo.fullName, from, session.user.login) },
           });
           for (const path of result.deleted) {

@@ -160,15 +160,46 @@ test("the layers on screen: one alone, or both side by side while Split has room
   assert.deepEqual(editorLayers("split", { ...MARKDOWN, splitAvailable: false }), editorLayers("canvas", MARKDOWN));
 });
 
-test("a document without a visual editor shows its source, a structured one its canvas, whatever was chosen", () => {
+test("a document without a visual editor shows its source, whatever was chosen", () => {
   for (const view of ["canvas", "split", "source"] as const) {
-    const text = editorLayers(view, { visual: false, structured: false, splitAvailable: false });
-    assert.equal(text.shown, "source", view);
-    assert.equal(text.canvasShown, false, view);
-    const structured = editorLayers(view, { visual: true, structured: true, splitAvailable: true });
-    assert.equal(structured.shown, "canvas", view);
-    assert.equal(structured.sourceShown, false, view);
+    for (const structured of [false, true]) {
+      const layers = editorLayers(view, { visual: false, structured, splitAvailable: false });
+      assert.equal(layers.shown, "source", `${view}, structured: ${structured}`);
+      assert.equal(layers.canvasShown, false, `${view}, structured: ${structured}`);
+    }
   }
+});
+
+const BOARD = { visual: true, structured: true, splitAvailable: true };
+
+test("a structured document shows its canvas or its read-only source, never both: it has no split view", () => {
+  assert.deepEqual(editorLayers("canvas", BOARD), editorLayers("canvas", MARKDOWN));
+  assert.deepEqual(editorLayers("source", BOARD), editorLayers("source", MARKDOWN));
+  // Split, even with the room for it, shows the canvas
+  assert.deepEqual(editorLayers("split", BOARD), editorLayers("canvas", MARKDOWN));
+  for (const view of ["canvas", "split", "source"] as const) {
+    const layers = editorLayers(view, BOARD);
+    assert.equal(layers.split, false, view);
+    assert.notEqual(layers.sourceShown, layers.canvasShown, view);
+  }
+});
+
+test("the shell's fallback brings a structured document's source forward, read-only, and remembers nothing", () => {
+  const storage = memoryStorage();
+  let view: EditorView = "canvas";
+  // a structured document has no split view: the shell remembers no choice for it
+  const views = editorViews(
+    (update) => {
+      view = typeof update === "function" ? update(view) : update;
+    },
+    undefined,
+    storage,
+  );
+  views.fallBack();
+  assert.equal(editorLayers(view, BOARD).shown, "source", "the engine did not load: its text shows");
+  views.reveal();
+  assert.equal(editorLayers(view, BOARD).shown, "canvas");
+  assert.equal(storage.items.size, 0);
 });
 
 test("a hidden layer only turns invisible, inert keeps it out of reach: no pointer-events: none, which a modal dialog in it inherits", () => {

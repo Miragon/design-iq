@@ -1,9 +1,9 @@
 # @designiq/web
 
 The collaborative web client of designIQ — the SPA (bpmn-js / dmn-js / the Miragon
-renderers + Monaco on a shared Y.Text, the repo overview) **and** the MCP-App
-modeler widgets the Live Host serves inline in AI chats (claude.ai, Claude
-Desktop, ChatGPT).
+renderers + Monaco on a shared Y.Text, the board on `@miragon/board-renderer`, the
+repo overview) **and** the MCP-App modeler widgets the Live Host serves inline in AI
+chats (claude.ai, Claude Desktop, ChatGPT).
 
 ## Scripts
 
@@ -14,6 +14,14 @@ Desktop, ChatGPT).
 | `pnpm --filter @designiq/web test`         | `node --test test/*.test.ts`: the DOM-free suites (widget core: lifecycle, live upgrade, engines; the Markdown renderer, the fence parity and Insert diagram) and, under jsdom, the Markdown view, its Mermaid fences, the starter diagrams, the mermaid engine's configuration and what it makes of hostile sources, the Mermaid frame and the Miragon renderers themselves (`test/renderer-dom.ts`).                                                                                                                                                                                                                                |
 | `pnpm --filter @designiq/web typecheck`    | `tsc --noEmit` over `src/` and `test/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `pnpm --filter @designiq/web test:browser` | Vitest in headless Chromium, on the app's Vite config (`vitest.browser.config.ts`): `@miragon/modeler-api`'s conformance kit against the five Miragon renderers as the SPA's editor and the MCP-App widget mount them (`test/browser/`, issue 301), and the DMN simulation add-on's Simulate DRD card as both mount it, on InputData of dmn-js's default type `Any` (`dmn-simulation.browser.test.ts`). Chromium once: `pnpm --filter @designiq/web exec playwright install --only-shell chromium`. CI runs it in the `validate` job for a change that moves a Miragon package, the code that mounts one or a dependency of apps/web. |
+
+`test:browser` also holds the board (`.board`, below): the conformance kit against the board
+as designIQ mounts it (`board-conformance.browser.test.ts`, the seven cases the board skips
+pinned with the kit's own reasons, a list that may only shrink) and the board with the real
+bpmn-js, dmn-js, Wardley Map and Team Topology editors in its model nodes
+(`board.browser.test.ts`). `test` runs the board host's modules under `node --test`
+(`test/board-*.test.ts`), the shell's linked files (`linked-files.test.ts`), a live document
+as its file's text (`live-doc-text.test.ts`) and the `jsonl` grammar (`jsonl-monarch.test.ts`).
 
 Eight checks run by hand in headless Chromium, outside CI: `test/hostile-mermaid-chromium.ts`,
 `test/markdown-view-chromium.ts` and `test/wide-mermaid-chromium.ts` (all three under the Markdown view
@@ -315,6 +323,94 @@ own chunk when a document opens (ADR 0006). `pnpm arch` holds every other module
   names the document's line. `test/markdown-fences.test.ts` holds it against the markdown-it
   this view renders with, footnote definitions included, so a bump of markdown-it or
   markdown-it-footnote that reads fences differently fails there.
+
+## The board
+
+A board (`.board`) is a canvas of the repository's own files: models shown in place, each
+edited by its own editor and saved in its own file, beside notes, images, groups and arrows.
+It opens on the file route in `@miragon/board-renderer` (React Flow on React, the board's own
+toolbar and keys), which works on the room's element maps in place (`liveDocument: ctx.doc`; a
+board has no Y.Text). `src/notations/board/plugin.ts` is the light manifest, a factory the
+registry hands its own lookup (`boardPlugin(webPlugin)`), so no board module imports the
+registry back. Its lazy entry `editor.ts` loads the renderer, its one sheet
+(`@miragon/board-renderer/assets/board.css`) and designIQ's host for it as their own chunk;
+`pnpm arch` holds every other module to `import()` (`web-board-engine-loads-lazily`) and keeps
+all of it out of the widgets (`widgets-carry-no-board`). The New menu of the repo overview
+creates a board from its template, the header with the title.
+
+designIQ's host (`host.ts`, the renderer's `BoardHost`, built once per board):
+
+- **models** (`models.ts`, `open-model.ts`, `product-mount.ts`): the model picker offers the
+  repository's listed models of every notation a board shows in place, BPMN, DMN and the five
+  Miragon renderers; a Markdown document, another board or a file of no notation reads
+  "cannot be shown here". A model node opens its model's own room through
+  `EditorContext.linkedFiles` (`src/lib/linked-files.ts`: one more socket for every model of
+  the board, `openLiveSessionGroup`, and only the listed models, so a room of a path that is no
+  model never starts an empty file). Once the room has synced it mounts the editor that model's
+  own page mounts (`webPlugin(id).mountEditor`, unmodified). `ready` is the first import that
+  editor drew (`SyncOptions.onImported`), a task later for the first fit a Miragon editor
+  schedules; bpmn-js and the DRD fit clear of their palette and name card in the node's layout
+  px (`SyncOptions.fitInsets`), since the board scales a preview with a CSS transform. A node
+  says what is wrong with its file in a state line of its own (`model-state.ts`): loading, not
+  in the repository (the board keeps its place), cannot be shown as it is, could not be opened
+  (a room that does not sync within 20 s included). A node whose model was renamed or moved
+  follows it, on the room's moved notice or the model list.
+- **preview and armed**: every node mounts the full editor from the start. As a preview
+  (`.board-engine[data-armed="false"]`) the editor's own chrome is hidden with its box kept
+  (`board.css`), so arming moves nothing, and the bpmn.io mark stays in every state. The board
+  arms a node (a double-click) at board zoom 1 in a layer above the board, and only the armed
+  editor takes keys: the child `EditorContext.visibility` is "armed and the board on screen".
+  Before a node becomes a preview again, `release.ts` ends what is open in its editor through
+  the DOM (an Escape, a click on the empty canvas, a blur), as `@miragon/modeler-api` 2.0 has no
+  call for it.
+- **presence** (`presence.ts`): the people who have the board open, from the board's room, an
+  agent's outline included. In a model's room the person is announced (`LinkedFiles.present`)
+  and publishes a cursor only while that model's node is armed; a preview is nobody there.
+- **images** (`images.ts`): read-only from the Live Host's repository image route. There is no
+  `store` and no `taken`, so the toolbar has no Image button, and a pasted or dropped picture
+  gets the board's notice.
+- **references** (`references.ts`, `derived-refs.ts`): what the models on the board say about
+  each other (`calls`, `decides`), read from their live texts through `@designiq/notations`
+  after a 300 ms rest, drawn as arrows the board never stores.
+
+The end: the board's `destroy()` returns before its editors are gone. `MountedEditor.unmounted`
+settles once every node let go of its editor and then its session, and only then does the shell
+end the linked socket (`live-editor.tsx`); a late `linkedFiles.open()` is refused.
+
+In the shell a board is its canvas or its source, never split. The source is the board's JSON
+lines, read-only, in the Monaco language `jsonl` (`src/lib/jsonl-monarch.ts`: Monaco's JSON
+language would mark every line after the first), following the canvas after a 300 ms rest
+(`src/lib/live-doc-text.ts`). History compares that text and restores a version element by
+element; a version the board's strict reader refuses is not restored, and a toast says why. If
+the engine chunk fails to load, the source shows, read-only. A board has no todos, no Analyse
+with AI menu (no widget), no visual History diff and no menu content of its own: the shell's ⋯
+menu keeps its generic entries, without Keyboard shortcuts…, and the armed model's own menu
+(the Miragon Model and Export groups, the BPMN Workshop toggle, the DMN Checks panel) is not
+reachable on a board.
+
+The renderer takes `react`, `react-dom`, `yjs` and `@xyflow/react` as peers, and apps/web pins
+each exactly, one copy each (`test/shared-runtimes.test.ts`): the board's store tells its
+elements by `instanceof Y.Map`, and a second React or React Flow breaks it. React Flow stays at
+12.12.1, since the renderer peers on `~12.12.1` and reads React Flow's internal store: it moves
+only in the PR of a board-renderer release on a newer one. The renderer pins
+`@miragon/modeler-api` exactly, like every Miragon renderer, so a contract move takes it along.
+
+Known limits of this first board:
+
+- A node whose model was renamed or moved mounts its editor anew at the new path: its view,
+  its undo history and its selection go, and an open label edit too while it is armed.
+- Every model node is a full editor and a live session from the moment the board opens. The
+  rooms a board shows stay loaded while it is open: the Live Host's catch-up of those files
+  waits, and the release dialog marks them active (a conflict's "Use main's version" disabled).
+  The model and repo listings do not count them, and a move or a delete takes them along.
+- An editor whose session announces nobody never repairs a merge of crossing writes (#296). A
+  node writes only while it is armed, so this is a merge broken by writes made on a board and
+  left with Done: when none of their writers is announced any more, it stays unrepaired until
+  such a node is armed again, and the model's canvases say meanwhile that it cannot be shown.
+- Not built yet: image upload, todos on a board, a board on a board, Markdown on a board, a
+  board widget, a Keyboard shortcuts… dialog for the board.
+- The board's sheet carries React Flow's sheet (MIT), whose notice the renderer ships only in
+  its package's `dist/THIRD_PARTY_NOTICES.md`: the built SPA carries no notice for it yet.
 
 ## The MCP-App widgets
 

@@ -36,12 +36,18 @@ suggests `git mv bpmiq.yml designiq.yml`), and so does the legacy key `processes
   | Context Map    | `.cm.json`         | a Context Map           |
   | Value Chain    | `.vc.json`         | a Value Chain           |
   | Markdown       | `.md`              | a document              |
+  | Board          | `.board`           | a board                 |
 
 - A Mermaid diagram (a diagram as code) is no model of its own: it is a
   `mermaid` fence in a Markdown document, next to the prose that explains it. A
   process, a decision, a Wardley Map or any other model in the table is a model
   of its own: the document links it, a model not there yet is created as one,
   and none is redrawn in Mermaid.
+
+- A board is a canvas of this repo's own files: it shows other models in place
+  (each edited by its own modeler and saved in its own file) beside notes,
+  images, groups and arrows. It names each file by its path from the repo root
+  and never holds what is in it, so a model it shows stays a model of its own.
 
 - A model's **id** is its file name without the extension
   (`processes/order-to-cash.bpmn` → `order-to-cash`).

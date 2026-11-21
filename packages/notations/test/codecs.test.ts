@@ -1,13 +1,15 @@
 /**
  * The doc-codec capability (codecs.ts, epic #118 step 8) — the properties
  * everything downstream leans on: deterministic canonical encode (git diffs,
- * the sha256 baseVersion), TOTAL decode (a seed must never fail), and the
- * fractional-index ordering laws.
+ * the sha256 baseVersion), TOTAL decode (a seed must never fail), the
+ * registry agreeing with the descriptors' docShape, and the fractional-index
+ * ordering laws. The board's codec itself: board-text.test.ts.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { docCodecFor, fractionalIndexBetween, jsonLinesCodec, type StructuredSnapshot } from "../codecs.ts";
+import { byId, type NotationDescriptor, NOTATIONS } from "../index.ts";
 
 const codec = jsonLinesCodec();
 
@@ -70,19 +72,47 @@ test("reserved keys: attr 'id' never re-keys, a format-attr element survives, __
   assert.equal(({} as Record<string, unknown>).x, undefined, "Object.prototype untouched");
 });
 
-test("docCodecFor: the registry is EMPTY (dark launch) — no shipped notation is structured", () => {
-  for (const id of [
-    "bpmn",
-    "dmn",
-    "wardley",
-    "team-topology",
-    "event-storming",
-    "context-map",
-    "value-chain",
-    "markdown",
-  ]) {
-    assert.equal(docCodecFor(id), undefined);
+/**
+ * The notations whose descriptor and codec registry disagree: a structured
+ * notation without a codec (the Live Host would silently open its files as
+ * text rooms and its canvas would draw nothing), a codec without a strict
+ * reader (a room or a save could not refuse a text it would write back
+ * lossy), or a codec on a text notation (never used, so never tested).
+ */
+function codecMismatches(notations: readonly NotationDescriptor[]): string[] {
+  return notations.flatMap((n) => {
+    const codec = docCodecFor(n.id);
+    if (n.docShape === "structured" && !codec) return [`${n.id}: structured without a codec`];
+    if (n.docShape === "structured" && typeof codec?.check !== "function") return [`${n.id}: a codec without check`];
+    if (n.docShape !== "structured" && codec) return [`${n.id}: a codec on a text notation`];
+    return [];
+  });
+}
+
+test("docCodecFor: every structured notation, and only those, has a codec with a strict reader", () => {
+  assert.deepEqual(codecMismatches(NOTATIONS), []);
+  assert.deepEqual(
+    NOTATIONS.filter((n) => n.docShape === "structured").map((n) => n.id),
+    ["board"],
+  );
+  for (const id of ["bpmn", "dmn", "wardley", "team-topology", "event-storming", "context-map", "value-chain"]) {
+    assert.equal(docCodecFor(id), undefined, id);
   }
+});
+
+test("docCodecFor: the check above catches a structured descriptor that has no codec", () => {
+  const board = byId("board");
+  assert.ok(board);
+  // a second structured notation registered in index.ts alone
+  const unregistered: NotationDescriptor = { ...board, id: "canvas", label: "Canvas", extensions: [".canvas"] };
+  assert.deepEqual(codecMismatches([...NOTATIONS, unregistered]), ["canvas: structured without a codec"]);
+  // and the board turned into a text notation keeps a codec nobody reads
+  assert.deepEqual(codecMismatches([{ ...board, docShape: "text" }]), ["board: a codec on a text notation"]);
+});
+
+test("docCodecFor: a member of Object.prototype names no codec", () => {
+  for (const id of ["toString", "constructor", "__proto__", "hasOwnProperty"])
+    assert.equal(docCodecFor(id), undefined, id);
 });
 
 test("fractionalIndexBetween: ordering laws", () => {

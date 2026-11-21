@@ -11,20 +11,31 @@
  * unlike the vector it survives doc unload/reseed cycles between read and save.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
 
-import { CONTENT_KEY } from "@designiq/contracts/live";
-import { type AppError } from "@designiq/http-kit";
+import { CONTENT_KEY, ELEMENTS_KEY } from "@designiq/contracts/live";
+import { AppError } from "@designiq/http-kit";
+import { readSnapshot } from "@designiq/live-client/structured";
+import { docCodecFor } from "@designiq/notations/codecs";
+import { retargetMovedPaths } from "@designiq/notations/retarget";
 import { Server } from "@hocuspocus/server";
+import * as Y from "yjs";
 
 import { LineageStore } from "../src/adapters/sqlite/lineage-store.ts";
 import { makeCollabHooks } from "../src/application/collab.ts";
-import { type ContentDeps, getContent, putContent } from "../src/application/content.ts";
+import {
+  baseVersionOf,
+  checkContent,
+  type ContentDeps,
+  editContent,
+  getContent,
+  putContent,
+} from "../src/application/content.ts";
 import { newBpmnXml } from "../src/domain/bpmn-template.ts";
 import { newDmnXml } from "../src/domain/dmn-template.ts";
 import { DocSizeGuard } from "../src/domain/doc-size-guard.ts";
@@ -465,4 +476,162 @@ test("the content wire is notation-neutral: `content` on GET/409, `xml` only as 
   assert.ok(!stale.ok);
   assert.equal(stale.conflict.currentContent, VALID);
   assert.equal(stale.conflict.currentXml, stale.conflict.currentContent, "deprecated alias mirrors currentContent");
+});
+
+// ── the board: the structured notation, through the registry's own codec ───
+
+const BOARD_PATH = "processes/workshop.board";
+const BOARD_ROOM = `${REPO.fullName}/${BOARD_PATH}`;
+const board = docCodecFor("board")!;
+const node = (attrs: Record<string, unknown>) => ({
+  kind: "node",
+  x: 0,
+  y: 0,
+  width: 240,
+  height: 160,
+  z: "a",
+  ...attrs,
+});
+const BOARD = board.encode({
+  meta: { title: "Workshop", version: 1 },
+  elements: {
+    n_model: node({ type: "model", file: "processes/order.bpmn" }),
+    n_note: node({ type: "text", text: "Ask finance", x: 300 }),
+  },
+});
+/** what the board's reader refuses: line 4 repeats an id, line 5 is no JSON
+ *  — the total decode would keep one n_note and skip the rest */
+const UNREADABLE = `${BOARD}{"id":"n_note","kind":"node","text":"Ask legal","type":"text"}\nnot json\n`;
+const unreadable = (e: unknown) =>
+  e instanceof AppError &&
+  e.code === "content/unreadable-model" &&
+  e.status === 422 &&
+  e.expose &&
+  /workshop\.board is not a board this host can open without losing content: line 4 repeats the element id n_note/.test(
+    e.message,
+  );
+
+test("editContent on a board: element by element — a co-editor's concurrent change of another element stays", async () => {
+  const { ws, deps, hp } = setup();
+  writeFileSync(join(ws, BOARD_PATH), BOARD);
+  // a co-editor has the board open and moves the NOTE; its update reaches the
+  // room only after the server-side edit of the MODEL node (a move's retarget)
+  const peer = await openPeer(hp, BOARD_ROOM);
+  const coEditor = new Y.Doc();
+  await peer.transact((doc) => Y.applyUpdate(coEditor, Y.encodeStateAsUpdate(doc)));
+  (coEditor.getMap(ELEMENTS_KEY).get("n_note") as Y.Map<unknown>).set("x", 777);
+
+  const moves = new Map([["processes/order.bpmn", "processes/sales/order.bpmn"]]);
+  await editContent(deps, REPO, BOARD_PATH, (content) => retargetMovedPaths("board", content, moves));
+  await peer.transact((doc) => Y.applyUpdate(doc, Y.encodeStateAsUpdate(coEditor, Y.encodeStateVector(doc))));
+  await peer.transact((doc) => {
+    const { elements } = readSnapshot(doc);
+    assert.equal(elements.n_model?.file, "processes/sales/order.bpmn", "the server's edit landed");
+    assert.equal(elements.n_note?.x, 777, "the co-editor's change of another element merged instead of being replaced");
+    assert.equal(elements.n_note?.text, "Ask finance");
+  });
+  await peer.disconnect();
+  const onDisk = board.decode(readFileSync(join(ws, BOARD_PATH), "utf8"));
+  assert.equal(onDisk.elements.n_model?.file, "processes/sales/order.bpmn");
+  assert.equal(onDisk.elements.n_note?.x, 777);
+});
+
+test("editContent on a board: nothing to change keeps the file's bytes; over the cap is a 413", async () => {
+  const { ws, deps } = setup({ maxDocBytes: 2_000 });
+  // a valid board in another form than the canonical one (other key order)
+  const valid = '{"version":1,"meta":{"title":"Workshop"},"format":"structured-model"}\n';
+  writeFileSync(join(ws, BOARD_PATH), valid);
+  await editContent(deps, REPO, BOARD_PATH, (content) => content);
+  assert.equal(readFileSync(join(ws, BOARD_PATH), "utf8"), valid, "no edit, no rewrite into the canonical form");
+  await assert.rejects(
+    () =>
+      editContent(deps, REPO, BOARD_PATH, (content) =>
+        board.encode({
+          ...board.decode(content),
+          elements: { n_big: node({ type: "text", text: "x".repeat(5_000) }) },
+        }),
+      ),
+    (e: AppError) => e.code === "content/too-large" && e.status === 413,
+  );
+  assert.equal(readFileSync(join(ws, BOARD_PATH), "utf8"), valid);
+});
+
+test("a board file its reader refuses is not opened: 422 naming the line, the file untouched, nothing left loaded", async () => {
+  const { ws, deps, liveDocs, lineage } = setup();
+  writeFileSync(join(ws, BOARD_PATH), UNREADABLE);
+  await assert.rejects(() => getContent(deps, REPO, BOARD_PATH), unreadable);
+  // a rename's or a move's retarget of it fails the same way (reported, not fatal)
+  await assert.rejects(() => editContent(deps, REPO, BOARD_PATH, (c) => c), unreadable);
+  assert.equal(readFileSync(join(ws, BOARD_PATH), "utf8"), UNREADABLE, "no line was dropped");
+  assert.equal(liveDocs.size, 0, "the refused room never went live");
+  assert.equal(lineage.load(BOARD_ROOM), undefined, "and left no lineage to resume");
+});
+
+test("putContent refuses a board text its reader refuses in EVERY lint mode — the dry run says the same", async () => {
+  const { ws, deps } = setup();
+  writeFileSync(join(ws, BOARD_PATH), BOARD);
+  const got = await getContent(deps, REPO, BOARD_PATH);
+  for (const lint of [undefined, "block", "warn"] as const) {
+    await assert.rejects(
+      () => putContent(deps, REPO, BOARD_PATH, { content: UNREADABLE, baseVersion: got.baseVersion, lint }),
+      (e: AppError) =>
+        e.code === "content/invalid-model" &&
+        e.status === 422 &&
+        /line 4 repeats the element id n_note/.test(e.message) &&
+        /whatever `lint` says/.test(e.message),
+      `lint: ${lint}`,
+    );
+    const dry = await checkContent(deps, REPO, BOARD_PATH, { content: UNREADABLE, ...(lint ? { lint } : {}) });
+    assert.deepEqual(dry.ok ? [] : [dry.code, dry.status], ["content/invalid-model", 422], `dry run, lint: ${lint}`);
+  }
+  assert.equal(readFileSync(join(ws, BOARD_PATH), "utf8"), BOARD, "nothing was saved");
+  // a board its reader takes saves under lint:"warn" as under "block"
+  const next = BOARD.replace("Ask finance", "Ask legal");
+  const saved = await putContent(deps, REPO, BOARD_PATH, { content: next, baseVersion: got.baseVersion, lint: "warn" });
+  assert.ok(saved.ok);
+  assert.equal(readFileSync(join(ws, BOARD_PATH), "utf8"), next);
+});
+
+test("a save over a board file its reader refuses repairs it: the conflict carries the file, its token writes", async () => {
+  const { ws, deps, liveDocs } = setup();
+  writeFileSync(join(ws, BOARD_PATH), UNREADABLE);
+  const repaired = BOARD.replace("Workshop", "Workshop, repaired");
+  // a save without the file's token: a conflict holding the text on disk
+  const stale = await putContent(deps, REPO, BOARD_PATH, { content: repaired, baseVersion: "bogus.token" });
+  assert.ok(!stale.ok);
+  assert.equal(stale.conflict.currentContent, UNREADABLE, "the text on disk, not a lossy decode of it");
+  assert.equal(stale.conflict.baseVersion, baseVersionOf(UNREADABLE));
+  assert.match(stale.conflict.error, /line 4 repeats the element id n_note/);
+  assert.equal(readFileSync(join(ws, BOARD_PATH), "utf8"), UNREADABLE);
+  // a text the reader refuses repairs nothing
+  await assert.rejects(
+    () => putContent(deps, REPO, BOARD_PATH, { content: UNREADABLE, baseVersion: stale.conflict.baseVersion }),
+    (e: AppError) => e.code === "content/invalid-model",
+  );
+  // with the file's token, the valid board is written — canonical, so the room opens again
+  const saved = await putContent(deps, REPO, BOARD_PATH, {
+    content: repaired,
+    baseVersion: stale.conflict.baseVersion,
+  });
+  assert.ok(saved.ok);
+  assert.equal(saved.previous, UNREADABLE);
+  assert.equal(readFileSync(join(ws, BOARD_PATH), "utf8"), repaired);
+  const after = await getContent(deps, REPO, BOARD_PATH);
+  assert.equal(after.content, repaired);
+  assert.equal(after.baseVersion, saved.result.baseVersion, "the returned token is the repaired board's");
+  assert.equal(liveDocs.size, 0);
+});
+
+test("an empty board stays an empty file when read; the first edit writes its canonical text", async () => {
+  const { ws, deps } = setup();
+  writeFileSync(join(ws, BOARD_PATH), "");
+  const got = await getContent(deps, REPO, BOARD_PATH);
+  assert.equal(got.content, board.encode({ elements: {}, meta: {} }), "read as the empty board it is");
+  // the read's direct connection stores on disconnect: the file is not rewritten into a dirty one
+  assert.equal(readFileSync(join(ws, BOARD_PATH), "utf8"), "");
+  assert.equal((await getContent(deps, REPO, BOARD_PATH)).baseVersion, got.baseVersion);
+  assert.equal(readFileSync(join(ws, BOARD_PATH), "utf8"), "");
+  const saved = await putContent(deps, REPO, BOARD_PATH, { content: BOARD, baseVersion: got.baseVersion });
+  assert.ok(saved.ok);
+  assert.equal(readFileSync(join(ws, BOARD_PATH), "utf8"), BOARD);
 });

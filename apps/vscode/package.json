@@ -1,7 +1,7 @@
 {
   "name": "design-iq",
   "displayName": "designIQ",
-  "description": "Collaborative modeling and architecture with AI, in your editor: opens the live models of a designIQ Live Host (designiq://), synced in real time — BPMN in the Miragon BPMN Modeler, every other notation as text.",
+  "description": "Collaborative modeling and architecture with AI, in your editor: opens the live models of a designIQ Live Host (designiq://), synced in real time — BPMN in the Miragon BPMN Modeler, a board read-only (it is edited in the web app), every other notation as text.",
   "version": "0.0.1",
   "private": true,
   "publisher": "miragon-gmbh",

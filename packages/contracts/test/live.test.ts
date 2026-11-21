@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  isUnreadableRefusal,
   MOVED_NOTICE,
   movedNotice,
   parseMovedNotice,
@@ -15,6 +16,7 @@ import {
   REPO_IMAGE_TYPES,
   repoImageRoute,
   repoImageType,
+  UNREADABLE_DOCUMENT,
 } from "../src/live.ts";
 
 test("presenceColor: deterministic per principal, always a hex color", () => {
@@ -132,4 +134,14 @@ test("repository images (#290): image types only, by extension, on the one route
     repoImageRoute("acme/models", "docs/a b/map.png"),
     "/api/repos/acme/models/image?path=docs%2Fa%20b%2Fmap.png",
   );
+});
+
+test("isUnreadableRefusal: a board the host would not open whole is told from a denied access", () => {
+  // the Live Host's refusal of a board on disk its strict reader refuses (domain/rooms.ts)
+  const unreadable = `processes/workshop.board is not a board ${UNREADABLE_DOCUMENT}: line 3 is no JSON`;
+  assert.equal(isUnreadableRefusal(unreadable), true);
+  assert.equal(isUnreadableRefusal(`auth failed: ${unreadable}`), true);
+  for (const denied of ["permission-denied", "token expired", "no access to acme/models", ""]) {
+    assert.equal(isUnreadableRefusal(denied), false, denied);
+  }
 });

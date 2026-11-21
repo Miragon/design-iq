@@ -190,6 +190,20 @@ export interface MovedNotice {
   by: string;
 }
 
+/** The words a Live Host refuses a room with when the file on disk is a
+ *  structured document (a board) its strict reader would not write back
+ *  whole: "<path> is not a board this host can open without losing content:
+ *  line 3 is no JSON". The refusal reaches a client as its authentication
+ *  failure's reason, so a client tells it from a denied access by this phrase:
+ *  the web shows the reason as text, with no "access denied" before it; VS
+ *  Code shows a fixed sentence with the room and the line, since its
+ *  notifications read link syntax in the reason (an element id it quotes). */
+export const UNREADABLE_DOCUMENT = "this host can open without losing content";
+
+/** whether a room's refusal reason says its file cannot be opened without
+ *  losing content (UNREADABLE_DOCUMENT), not that access was denied */
+export const isUnreadableRefusal = (reason: string): boolean => reason.includes(UNREADABLE_DOCUMENT);
+
 /** the stateless payload the Live Host broadcasts into the old room */
 export const movedNotice = (repoFullName: string, to: string, by: string): string =>
   JSON.stringify({ type: MOVED_NOTICE, to, room: roomName(repoFullName, to), by });

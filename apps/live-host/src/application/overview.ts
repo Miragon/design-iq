@@ -12,6 +12,11 @@
  *                   for locally-present workspaces, the caller's favorite flag
  *                   and last visit, and the repo's last change (#213)
  *
+ * A live session is a room a PERSON may have open (room-presence.ts
+ * attendedDocument): a room a board holds only as a preview of a model it
+ * shows is loaded, yet nobody is in it, so the model and repo rows do not
+ * count it. listChanges counts every loaded room (see there).
+ *
  * Pure orchestration over injected surfaces: the dirty check goes through
  * WorkspaceManager.changedPaths (the git subprocess lives behind that seam,
  * never here). The returned object shapes ARE the wire format
@@ -53,12 +58,25 @@ export interface OverviewDeps {
   access: { canWrite(session: Session, repo: ConnectedRepo): Promise<boolean> };
   /** repo-qualified document names of live rooms */
   liveDocs: () => string[];
+  /** whether a person may be in a loaded room (room-presence.ts
+   *  attendedDocument, failing closed): a loaded room nobody is in (a
+   *  board's preview of a model) is no live session. Absent: every loaded
+   *  room counts */
+  attended?: (room: string) => boolean;
   /** the caller's favorites and visits (application/favorites.ts) — absent:
    *  the rows carry neither `favorite` nor `lastOpenedAt` */
   favorites?: Pick<FavoritesStore, "favorites" | "visits">;
   /** when each repo last changed (application/repo-activity.ts) — absent:
    *  the rows carry no `lastChangeAt` */
   activity?: Pick<RepoActivity, "view">;
+}
+
+/** the loaded rooms a person has open: the live sessions of the model and
+ *  repo rows (a board's preview of a model is loaded, and nobody is in it) */
+function openRooms(opts: OverviewDeps): string[] {
+  const attended = opts.attended;
+  const live = opts.liveDocs();
+  return attended ? live.filter((room) => attended(room)) : live;
 }
 
 /** the row shape both model kinds share — wire mapping stays per wrapper */
@@ -87,7 +105,7 @@ async function listModels(
 ): Promise<ModelRow[]> {
   const cfg = loadContentConfig(workspace);
   if (!cfg) return [];
-  const live = opts.liveDocs();
+  const live = openRooms(opts);
   // m.path is repo-root-relative; the folder the UI groups by is relative
   // to the processes root ("" = directly inside it)
   const rootPrefix = cfg.processes === "." ? "" : `${cfg.processes}/`;
@@ -210,6 +228,10 @@ export async function decisionUsers(workspace: string, decisionId: string): Prom
  * colleague currently has open, so the release dialog can warn before
  * shipping somebody's work in progress; conflict marks files the default
  * branch changed meanwhile, which the release refuses until resolved.
+ * Here liveSessions counts every LOADED room, a board's preview included: it
+ * also gates "use main's version" (application/conflicts.ts), which must not
+ * rewrite a file under any loaded room (its next store would put the old
+ * state back).
  */
 export async function listChanges(
   opts: OverviewDeps,
@@ -270,7 +292,7 @@ function countByNotation(models: ReadonlyArray<{ notation: string }>): Record<st
  * visit of a repository the caller can no longer access simply has no row.
  */
 export async function listRepos(opts: OverviewDeps, session: Session): Promise<RepoInfo[]> {
-  const live = opts.liveDocs();
+  const live = openRooms(opts);
   const mine = opts.favorites ? personalView(opts.favorites, session) : undefined;
   const activity = opts.activity?.view();
   const rows = await mapBounded(opts.registry.list(), REPO_CONCURRENCY, async (repo): Promise<RepoInfo | null> => {

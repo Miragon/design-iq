@@ -240,7 +240,8 @@ export async function discoverModels(root: string, cfg: ContentConfig): Promise<
 export interface ResolvedReference {
   from: { path: string; notation: string; element?: string };
   rel: string;
-  to: { id: string; notation?: string; element?: string };
+  /** as the model names it (ModelRef.to): a board's "shows" also by path */
+  to: { id: string; notation?: string; element?: string; path?: string };
   strength: "required" | "informative";
   /** the artifact the reference resolves to; undefined = dangling/external */
   resolved?: DiscoveredModel;

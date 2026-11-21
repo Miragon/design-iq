@@ -18,8 +18,13 @@
  * come back as WorkspaceEdits, dirty or not, and the document is kept clean.
  * Documents nobody has open only exist on the host; writeFile (a save) is the
  * same minimal diff, a no-op once bound.
+ *
+ * A STRUCTURED room (a board) has no Y.Text to bind: VS Code shows it
+ * read-only, as its canonical codec text, re-read once the room rests after a
+ * change (structured-room.ts). A write is refused with the web app's link,
+ * where a board is edited.
  */
-import type { MovedNotice, PresenceUser } from "@designiq/contracts/live";
+import { isUnreadableRefusal, type MovedNotice, type PresenceUser } from "@designiq/contracts/live";
 import type { Me, ModelInfo, RepoInfo } from "@designiq/contracts/live-host";
 import { type LiveSession, openLiveSession } from "@designiq/live-client";
 import { updateText } from "@designiq/live-client/text";
@@ -33,7 +38,9 @@ import { LEGACY_SECTION, legacyCopies } from "./legacy-settings.ts";
 import { LiveBinding } from "./live-binding.ts";
 import { hostUrls } from "./login-flow.ts";
 import { modelItems, modelUri, repoItems } from "./model-picker.ts";
+import { plainText, unreadableNotice } from "./notice-text.ts";
 import { SCHEME } from "./scheme.ts";
+import { followStructured, structuredCodec, structuredNoun, structuredText, webEditorLink } from "./structured-room.ts";
 
 /** set per target (globalState / workspaceState) once the legacy settings
  *  were carried over — a key the user clears afterwards stays cleared */
@@ -44,7 +51,11 @@ const roomOf = (uri: vscode.Uri): string => uri.path.replace(/^\//, "");
 
 interface LiveDoc {
   session: LiveSession;
-  ytext: Y.Text;
+  /** the room's Y.Text, bound two-way to an open document; absent in a
+   *  structured room, which VS Code shows read-only */
+  ytext: Y.Text | undefined;
+  /** the document as the file system serves it */
+  text(): string;
   mtime: number;
 }
 
@@ -58,6 +69,10 @@ interface LiveDeps {
   /** the document was renamed on the host (#208) — its room is closed; the
    *  document now lives in `notice.room` */
   onMoved(room: string, notice: MovedNotice): void;
+  /** the web app's editor of a room's file */
+  webLink(room: string): string;
+  /** a document of a structured room was opened: VS Code shows it read-only */
+  onReadOnly(room: string, noun: string): void;
 }
 
 class LiveFileSystem implements vscode.FileSystemProvider {
@@ -122,11 +137,34 @@ class LiveFileSystem implements vscode.FileSystemProvider {
       await session.whenSynced(10_000);
     } catch (err) {
       session.destroy(); // a failed session must not leak its socket either
-      throw toFsError(err);
+      throw toFsError(err, name);
+    }
+
+    const codec = structuredCodec(name);
+    if (codec) {
+      // a structured room: never CONTENT_KEY. The read-only document is CLEAN
+      // for good, so the Changed event is what makes VS Code re-read it.
+      const doc: LiveDoc = {
+        session,
+        ytext: undefined,
+        text: () => structuredText(session.doc, codec),
+        mtime: Date.now(),
+      };
+      const changed = () => this.emitter.fire([{ type: vscode.FileChangeType.Changed, uri }]);
+      followStructured(session.doc, () => {
+        if (this.docs.get(name) !== doc) return; // dropped meanwhile (sign-out, rename)
+        doc.mtime = Math.max(Date.now(), doc.mtime + 1);
+        changed();
+      });
+      this.docs.set(name, doc);
+      // a document already open on this uri (a session re-opened after
+      // sign-out or an auth failure) re-reads what changed in between
+      if (vscode.workspace.textDocuments.some((d) => d.uri.scheme === SCHEME && roomOf(d.uri) === name)) changed();
+      return doc;
     }
 
     const ytext = session.content;
-    const doc: LiveDoc = { session, ytext, mtime: Date.now() };
+    const doc: LiveDoc = { session, ytext, text: () => ytext.toString(), mtime: Date.now() };
     ytext.observe(() => {
       doc.mtime = Date.now();
       // a bound document follows the room itself (WorkspaceEdit); the Changed
@@ -151,11 +189,14 @@ class LiveFileSystem implements vscode.FileSystemProvider {
     this.bindings.delete(name);
   }
 
-  /** an opened TextDocument of ours → bind it two-way to its room */
+  /** an opened TextDocument of ours → bind it two-way to its room; a
+   *  structured room's document stays unbound and read-only */
   async bind(textDoc: vscode.TextDocument): Promise<void> {
     if (textDoc.uri.scheme !== SCHEME) return;
+    const name = roomOf(textDoc.uri);
     const doc = await this.ensure(textDoc.uri);
-    this.attach(roomOf(textDoc.uri), textDoc, doc.ytext);
+    if (doc.ytext) this.attach(name, textDoc, doc.ytext);
+    else this.deps.onReadOnly(name, structuredNoun(name));
   }
 
   /** a closed TextDocument of ours → drop the binding (the session stays for
@@ -171,6 +212,16 @@ class LiveFileSystem implements vscode.FileSystemProvider {
 
   async stat(uri: vscode.Uri): Promise<vscode.FileStat> {
     const doc = await this.ensure(uri);
+    if (!doc.ytext) {
+      const size = new TextEncoder().encode(doc.text()).byteLength;
+      return {
+        type: vscode.FileType.File,
+        ctime: 0,
+        mtime: doc.mtime,
+        size,
+        permissions: vscode.FilePermission.Readonly,
+      };
+    }
     return { type: vscode.FileType.File, ctime: 0, mtime: doc.mtime, size: doc.ytext.length };
   }
 
@@ -180,11 +231,21 @@ class LiveFileSystem implements vscode.FileSystemProvider {
 
   async readFile(uri: vscode.Uri): Promise<Uint8Array> {
     const doc = await this.ensure(uri);
-    return new TextEncoder().encode(doc.ytext.toString());
+    return new TextEncoder().encode(doc.text());
   }
 
   async writeFile(uri: vscode.Uri, content: Uint8Array): Promise<void> {
     const doc = await this.ensure(uri);
+    if (!doc.ytext) {
+      // a structured room has no text lane that would carry a write into its file
+      const name = roomOf(uri);
+      const file = name.split("/").pop() ?? name;
+      throw vscode.FileSystemError.NoPermissions(
+        plainText(
+          `${file} is a ${structuredNoun(name)}: VS Code shows it read-only. Edit it in the web app: ${this.deps.webLink(name)}`,
+        ),
+      );
+    }
     // minimal diff into the shared Y.Text (concept sync rule 2) — a full replace
     // would clobber concurrent remote edits; no-ops when the content matches
     updateText(doc.ytext, new TextDecoder().decode(content));
@@ -214,11 +275,14 @@ class LiveFileSystem implements vscode.FileSystemProvider {
   }
 }
 
-function toFsError(err: unknown): vscode.FileSystemError {
+/** a failed open as VS Code's error; its message can end up in a
+ *  notification, so a refusal that quotes the file gets the fixed sentence */
+function toFsError(err: unknown, room: string): vscode.FileSystemError {
   const message = err instanceof Error ? err.message : String(err);
-  return message.startsWith("auth failed")
-    ? vscode.FileSystemError.NoPermissions(message)
-    : vscode.FileSystemError.Unavailable(message);
+  if (!message.startsWith("auth failed")) return vscode.FileSystemError.Unavailable(plainText(message));
+  return vscode.FileSystemError.NoPermissions(
+    isUnreadableRefusal(message) ? unreadableNotice(room, message.replace(/^auth failed: /, "")) : plainText(message),
+  );
 }
 
 /** carry the host URL of a pre-rename dev build over to the new key, once
@@ -245,14 +309,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const config = () => vscode.workspace.getConfiguration("designiq");
   const serverUrl = () => config().get<string>("serverUrl") ?? "http://localhost:8301";
   const auth = new LiveAuth(context, serverUrl);
+  /** the repos the picker listed: where a room name's repo ends (webEditorLink) */
+  const knownRepos = new Set<string>();
+  /** the rooms whose read-only notice was shown since activation */
+  const toldReadOnly = new Set<string>();
+  const webLink = (room: string) => webEditorLink(hostUrls(serverUrl()).http, room, knownRepos);
 
   const fsProvider = new LiveFileSystem({
     wsUrl: () => hostUrls(serverUrl()).ws,
     token: () => auth.token(),
     presence: () => auth.presence(),
     onAuthFailed: (room, reason) => {
+      // a board on disk its reader would not write back whole: no sign-in helps, the file needs a repair.
+      // The reason quotes the file (an element id), so the notice is a fixed sentence (notice-text.ts).
+      if (isUnreadableRefusal(reason)) {
+        void vscode.window.showErrorMessage(`designIQ: ${unreadableNotice(room, reason)}`);
+        return;
+      }
       void vscode.window
-        .showErrorMessage(`designIQ: access to ${room} denied (${reason}).`, "Sign in")
+        .showErrorMessage(plainText(`designIQ: access to ${room} denied (${reason}).`), "Sign in")
         .then((choice) => {
           if (choice) void vscode.commands.executeCommand("designiq.login");
         });
@@ -261,9 +336,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const from = room.split("/").pop() ?? room;
       const to = notice.to.split("/").pop() ?? notice.to;
       void vscode.window
-        .showInformationMessage(`designIQ: ${notice.by || "Someone"} renamed ${from} to ${to}.`, `Open ${to}`)
+        .showInformationMessage(
+          plainText(`designIQ: ${notice.by || "Someone"} renamed ${from} to ${to}.`),
+          `Open ${to}`,
+        )
         .then((choice) => {
           if (choice) void vscode.commands.executeCommand("vscode.open", vscode.Uri.parse(`${SCHEME}:/${notice.room}`));
+        });
+    },
+    webLink,
+    // once per room and activation: the document itself says read-only on every keystroke
+    onReadOnly: (room, noun) => {
+      if (toldReadOnly.has(room)) return;
+      toldReadOnly.add(room);
+      const file = room.split("/").pop() ?? room;
+      void vscode.window
+        .showInformationMessage(
+          plainText(
+            `designIQ: ${file} is a ${noun}. VS Code shows it read-only and follows it live; edit it in the web app.`,
+          ),
+          "Open in the web app",
+        )
+        .then((choice) => {
+          if (choice) void vscode.env.openExternal(vscode.Uri.parse(webLink(room)));
         });
     },
   });
@@ -318,9 +413,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       try {
         const me = await auth.login();
         rebindOpen();
-        void vscode.window.showInformationMessage(`designIQ: signed in as ${me.user.name || me.user.login}.`);
+        void vscode.window.showInformationMessage(
+          plainText(`designIQ: signed in as ${me.user.name || me.user.login}.`),
+        );
       } catch (err) {
-        void vscode.window.showErrorMessage(`designIQ: sign-in failed — ${(err as Error).message}`);
+        void vscode.window.showErrorMessage(plainText(`designIQ: sign-in failed — ${(err as Error).message}`));
       }
     }),
     // the manual route: a session token pasted from a browser login — for hosts
@@ -329,7 +426,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("designiq.loginWithToken", async () => {
       const { http } = hostUrls(serverUrl());
       const token = await vscode.window.showInputBox({
-        prompt: `Session token for ${http}: sign in there in the browser, open ${http}/api/me and paste its wsToken`,
+        prompt: plainText(
+          `Session token for ${http}: sign in there in the browser, open ${http}/api/me and paste its wsToken`,
+        ),
         password: true,
         ignoreFocusOut: true,
       });
@@ -337,9 +436,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       try {
         const me = await auth.useToken(token.trim());
         rebindOpen();
-        void vscode.window.showInformationMessage(`designIQ: signed in as ${me.user.name || me.user.login}.`);
+        void vscode.window.showInformationMessage(
+          plainText(`designIQ: signed in as ${me.user.name || me.user.login}.`),
+        );
       } catch (err) {
-        void vscode.window.showErrorMessage(`designIQ: the token was not accepted — ${(err as Error).message}`);
+        void vscode.window.showErrorMessage(
+          plainText(`designIQ: the token was not accepted — ${(err as Error).message}`),
+        );
       }
     }),
     vscode.commands.registerCommand("designiq.logout", async () => {
@@ -359,8 +462,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         return offerSignIn(`could not list the repositories on ${http} — ${(err as Error).message}`);
       }
       const repoChoices = repoItems(repos);
+      for (const r of repos) knownRepos.add(r.fullName);
       if (repoChoices.length === 0) {
-        void vscode.window.showWarningMessage(`designIQ: no repository with write access on ${http}.`);
+        void vscode.window.showWarningMessage(plainText(`designIQ: no repository with write access on ${http}.`));
         return;
       }
       const repo =
@@ -384,16 +488,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const path =
         pick.value?.path ??
         (await vscode.window.showInputBox({
-          prompt: `Model path in ${repo.fullName} (repo-relative)`,
+          prompt: plainText(`Model path in ${repo.fullName} (repo-relative)`),
           value: "processes/",
         }));
       if (!path) return;
+      // a board opens like every model: the file system shows it read-only
+      // and its notice offers the web app
       await vscode.commands.executeCommand("vscode.open", vscode.Uri.parse(modelUri(repo.fullName, path)));
     }),
   );
 
   function offerSignIn(message: string): void {
-    void vscode.window.showErrorMessage(`designIQ: ${message}`, "Sign in").then((choice) => {
+    void vscode.window.showErrorMessage(plainText(`designIQ: ${message}`), "Sign in").then((choice) => {
       if (choice) void vscode.commands.executeCommand("designiq.login");
     });
   }

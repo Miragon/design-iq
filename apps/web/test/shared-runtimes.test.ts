@@ -10,6 +10,12 @@
  * dependencies and those of the workspace packages it links. devDependencies
  * are left out: they are build and test tools, never bundled (#300).
  *
+ * The board renderer (@miragon/board-renderer) takes React, React DOM, Yjs
+ * and React Flow as peers the same way: its store tells elements by
+ * `instanceof Y.Map`, a second React has hooks of its own, and a second React
+ * Flow a store the board's parts cannot read. So the test finds them by
+ * itself and holds them to one copy too.
+ *
  * didi and tiny-svg are the exception: the renderers share them with the
  * diagram-js they draw with, so one copy has to hold there, in what the
  * renderers reach. A library outside that may bring its own copy without
@@ -136,6 +142,8 @@ const movesWith: Record<string, string> = {
   "tiny-svg": followsDiagramJs("tiny-svg"),
   "@miragon/modeler-api":
     "every Miragon renderer pins the contract exactly: move the renderers, apps/web and packages/live-client in one PR",
+  "@xyflow/react":
+    "@miragon/board-renderer peers on ~12.12 (it reads React Flow internals): move React Flow only in the PR of a board renderer release on it",
 };
 
 for (const runtime of sharedRuntimes) {

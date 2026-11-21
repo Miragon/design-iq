@@ -2,13 +2,16 @@
  * The "Open Live Model" picker's data — pure (no vscode API), fed by the Live
  * Host's overview routes: GET /api/repos (the repos this session may write)
  * and GET /api/repos/<repo>/models (every model of every registered notation).
- * Unit-tested in src/test/unit/model-picker.test.ts.
+ * A structured model (a board) is listed too and marked read-only: VS Code
+ * shows it as its canonical text, it is edited in the web app
+ * (structured-room.ts). Unit-tested in src/test/unit/model-picker.test.ts.
  */
 import { roomName } from "@designiq/contracts/live";
 import type { ModelInfo, RepoInfo } from "@designiq/contracts/live-host";
 import { repoCountsLine } from "@designiq/notations/counts";
 
 import { SCHEME } from "./scheme.ts";
+import { structuredCodec } from "./structured-room.ts";
 
 /** a QuickPick item carrying its value — the shape vscode.window.showQuickPick
  *  renders (label with $(icon) syntax, description, detail) */
@@ -43,24 +46,35 @@ function describeRepo(r: RepoInfo): Pick<PickItem<RepoInfo>, "description" | "de
   return { description: `${counts.summary}${live}`, ...(counts.breakdown ? { detail: counts.breakdown } : {}) };
 }
 
-/** models by folder, then name; the description says what it is and who is
- *  on it, the detail is the repo-relative path (searchable) */
+/** models by folder, then name; the description says what it is, whether
+ *  VS Code shows it read-only and who is on it, the detail is the
+ *  repo-relative path (searchable) */
 export function modelItems(models: ModelInfo[]): PickItem<ModelInfo>[] {
   return [...models]
     .sort((a, b) => a.folder.localeCompare(b.folder) || a.name.localeCompare(b.name))
-    .map((m) => ({
-      label: `$(file) ${m.name}`,
-      description: [
-        m.notation,
-        m.folder || undefined,
-        m.liveSessions > 0 ? `${m.liveSessions} live` : undefined,
-        m.dirty ? "unreleased changes" : undefined,
-      ]
-        .filter((p): p is string => p !== undefined)
-        .join(" · "),
-      detail: m.path,
-      value: m,
-    }));
+    .map((m) => {
+      const readOnly = opensReadOnly(m);
+      return {
+        label: `${readOnly ? "$(lock)" : "$(file)"} ${m.name}`,
+        description: [
+          m.notation,
+          readOnly ? "read-only" : undefined,
+          m.folder || undefined,
+          m.liveSessions > 0 ? `${m.liveSessions} live` : undefined,
+          m.dirty ? "unreleased changes" : undefined,
+        ]
+          .filter((p): p is string => p !== undefined)
+          .join(" · "),
+        detail: m.path,
+        value: m,
+      };
+    });
+}
+
+/** whether VS Code shows the model read-only: a structured room (a board),
+ *  whose edits go through the web app */
+export function opensReadOnly(model: Pick<ModelInfo, "path">): boolean {
+  return structuredCodec(model.path) !== undefined;
 }
 
 /** the live URI of a model — the path IS the room name */

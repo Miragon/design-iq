@@ -6,18 +6,23 @@
  *   3. local edit + save → the remote guest must receive it
  *   4. if the Miragon BPMN Modeler is installed: open the SAME virtual doc with the
  *      custom editor (openWith) and assert the custom-editor tab is live
+ *   5. a board (a structured room) opens read-only as its canonical text, follows
+ *      a guest's element edit, refuses a write and leaves the room's Y.Text empty
  *
  * Server contract (multi-repo): HTTP + ws share ONE port (8301), room names are
  * repo-qualified (<owner>/<repo>/<path>). Needs the Live Host running with
  * LIVE_AUTH=none.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 
-import { CONTENT_KEY } from "@designiq/contracts/live";
+import { CONTENT_KEY, ELEMENTS_KEY } from "@designiq/contracts/live";
 import type { Me, ModelInfo } from "@designiq/contracts/live-host";
+import { readSnapshot } from "@designiq/live-client/structured";
+import { docCodecFor } from "@designiq/notations/codecs";
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/provider";
 import * as vscode from "vscode";
 import WebSocket from "ws";
+import type * as Y from "yjs";
 
 import { hostJson } from "../host-api.ts";
 import { modelItems } from "../model-picker.ts";
@@ -33,6 +38,10 @@ const CONTENT_ROOT = process.env.LIVE_HOST_CONTENT_DIR;
 if (!CONTENT_ROOT)
   throw new Error("LIVE_HOST_CONTENT_DIR must point at the content-repo checkout the Live Host serves");
 const MIRAGON = "miragon-gmbh.vs-code-bpmn-modeler";
+/** step 5's board: the example content has none (a board names models by
+ *  repo-relative path, which differs in the starter mirror), so the step
+ *  writes this one and removes it afterwards */
+const BOARD = "process-documentation/processes/vscode-e2e.board";
 const results: string[] = [];
 const pass = (m: string) => results.push(`PASS  ${m}`);
 const fail = (m: string) => results.push(`FAIL  ${m}`);
@@ -191,6 +200,8 @@ export async function run(): Promise<void> {
     if (!readFileSync(`${CONTENT_ROOT}/${FILE}`, "utf8").includes("vscode-e2e")) pass("cleanup: working tree clean");
     else fail("cleanup: markers left on disk");
     if (!autoReverted) results.push("NOTE  auto-revert path needed manual revert");
+
+    await boardStep();
   } catch (err) {
     fail(`unexpected: ${(err as Error).message}`);
   }
@@ -198,4 +209,87 @@ export async function run(): Promise<void> {
   console.log("\n=== VS Code E2E ===");
   for (const r of results) console.log(r);
   if (results.some((r) => r.startsWith("FAIL"))) throw new Error("VS Code E2E failed");
+}
+
+/** 5 — a structured room has no Y.Text: VS Code shows the board read-only as
+ *  its canonical text, re-reads it after a guest's element edit, refuses a
+ *  write, and nothing lands in the room's CONTENT_KEY */
+async function boardStep(): Promise<void> {
+  const codec = docCodecFor("board");
+  if (!codec) {
+    fail("board: no codec for the board notation");
+    return;
+  }
+  const disk = `${CONTENT_ROOT}/${BOARD}`;
+  const text = codec.encode({
+    elements: {
+      n_note: { kind: "node", type: "text", text: "vscode-e2e", x: 0, y: 0, width: 240, height: 160, z: "a" },
+    },
+    meta: { title: "VS Code e2e" },
+  });
+  writeFileSync(disk, text);
+  const socket = new HocuspocusProviderWebsocket({ url: "ws://localhost:8301", WebSocketPolyfill: WebSocket as never });
+  const guest = new HocuspocusProvider({
+    websocketProvider: socket,
+    name: `${HOST_REPO}/${BOARD}`,
+    token: "e2e-guest",
+  });
+  try {
+    guest.attach();
+    await new Promise<void>((res, rej) => {
+      guest.on("synced", () => res());
+      setTimeout(() => rej(new Error("board guest sync timeout")), 8000);
+    });
+    const uri = vscode.Uri.parse(`${SCHEME}:/${HOST_REPO}/${BOARD}`);
+    const doc = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(doc, { preview: false });
+    if (doc.getText() === text) pass("board: the document is the board's canonical text");
+    else fail(`board: content mismatch, doc ${doc.getText().length} chars vs file ${text.length}`);
+
+    const stat = await vscode.workspace.fs.stat(uri);
+    if (stat.permissions === vscode.FilePermission.Readonly) pass("board: the file system serves it read-only");
+    else fail("board: the file system serves it writable");
+
+    try {
+      await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(`${text}{"id":"n_typed"}\n`));
+      fail("board: a write was accepted");
+    } catch (err) {
+      if (err instanceof vscode.FileSystemError && err.code === "NoPermissions")
+        pass(`board: a write is refused (${err.message})`);
+      else fail(`board: a write failed otherwise, ${(err as Error).message}`);
+    }
+
+    // a guest's canvas edit: one attribute of one element
+    const note = guest.document.getMap(ELEMENTS_KEY).get("n_note") as Y.Map<unknown> | undefined;
+    if (!note) {
+      fail("board: the guest does not see the board's note");
+      return;
+    }
+    note.set("text", "vscode-e2e moved");
+    try {
+      const t = await until(
+        "the board's element edit in the open document",
+        () => doc.getText().includes("moved"),
+        6000,
+      );
+      pass(`board: a guest's element edit reached the read-only document after ${t}ms`);
+    } catch {
+      fail("board: a guest's element edit did not reach the document");
+    }
+    if (doc.getText() === codec.encode(readSnapshot(guest.document)))
+      pass("board: the document stays the canonical text after the edit");
+    else fail("board: the document is not the canonical text after the edit");
+    if (guest.document.getText(CONTENT_KEY).length === 0) pass("board: nothing landed in the room's Y.Text");
+    else fail("board: the room's Y.Text holds text");
+
+    // the room keeps its edited lineage in live.db: back to the file's text, so
+    // the next run opens the same board
+    note.set("text", "vscode-e2e");
+    await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+    await new Promise((r) => setTimeout(r, 3000)); // let write-through settle before the file goes
+  } finally {
+    guest.destroy();
+    socket.destroy();
+    if (existsSync(disk)) unlinkSync(disk);
+  }
 }

@@ -17,7 +17,7 @@ export function assertRealInsideWorkspace(
   target: string,
   workspace: string,
   what: string,
-  code: "scaffold/outside-processes-root" | "decision-tests/outside-workspace",
+  code: "scaffold/outside-processes-root" | "decision-tests/outside-workspace" | "content/invalid-path",
 ): void {
   let probe = target;
   while (!existsSync(probe)) probe = dirname(probe);

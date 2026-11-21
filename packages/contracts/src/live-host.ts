@@ -152,6 +152,12 @@ export interface MoveModelsResult {
   /** every file that moved, companions (tests sidecars) included; a model
    *  already in the target folder is skipped, not listed */
   moved: Array<{ from: string; to: string }>;
+  /** models whose paths to a moved model now name its new path (a board
+   *  names the models it shows by path) */
+  updatedReferences: string[];
+  /** models that could not be rewritten: they still name the old path (the
+   *  validator warns "moved to …"); empty when every one followed */
+  failedReferences: string[];
 }
 
 /**

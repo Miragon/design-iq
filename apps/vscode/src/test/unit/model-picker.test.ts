@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import type { ModelInfo, RepoInfo } from "@designiq/contracts/live-host";
 
-import { modelItems, modelUri, repoItems } from "../../model-picker.ts";
+import { modelItems, modelUri, opensReadOnly, repoItems } from "../../model-picker.ts";
 
 const repo = (over: Partial<RepoInfo>): RepoInfo => ({
   fullName: "acme/models",
@@ -88,6 +88,12 @@ test("repoItems: a current host — the models of every notation, the per-notati
   assert.equal(uncloned?.detail, undefined);
 });
 
+test("repoItems: a board counts as a board, next to an Event Storming board", () => {
+  const [item] = repoItems([repo({ modelCount: 5, modelCounts: { bpmn: 2, dmn: 1, "event-storming": 1, board: 1 } })]);
+  assert.equal(item?.description, "5 models");
+  assert.equal(item?.detail, "2 BPMN processes · 1 DMN decision · 1 Event Storming board · 1 board");
+});
+
 test("repoItems: an older host without modelCount — the process/decision line, pluralized", () => {
   const [both, oneProcess] = repoItems([
     repo({ fullName: "a/both", liveSessions: 2 }),
@@ -118,6 +124,21 @@ test("modelItems: folder then name; description carries notation, folder, live p
   assert.equal(items[0]?.description, "bpmn");
   assert.equal(items[0]?.detail, "processes/alpha.bpmn");
   assert.equal(items[2]?.description, "bpmn · subprocesses · 1 live · unreleased changes");
+});
+
+test("modelItems: a board is listed read-only (VS Code shows its text, the web app edits it)", () => {
+  const [process, board] = modelItems([
+    model({ name: "overview", path: "processes/overview.board", notation: "board", liveSessions: 2 }),
+    model({ name: "order", path: "processes/order.bpmn" }),
+  ]);
+  assert.equal(board?.label, "$(lock) overview");
+  assert.equal(board?.description, "board · read-only · 2 live");
+  assert.equal(board?.detail, "processes/overview.board");
+  assert.equal(process?.label, "$(file) order", "a text model keeps its two-way binding");
+  assert.equal(process?.description, "bpmn");
+  assert.equal(opensReadOnly({ path: "processes/overview.board" }), true);
+  assert.equal(opensReadOnly({ path: "processes/order.bpmn" }), false);
+  assert.equal(opensReadOnly({ path: "processes/order-to-cash.storm" }), false);
 });
 
 test("modelUri: the path is the room name", () => {

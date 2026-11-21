@@ -6,7 +6,10 @@ This extension brings its live models into the editor: it opens the Live Host's
 model documents as `designiq://` files — the same live Y.Text the web app and
 the MCP tools edit. The Miragon BPMN Modeler
 (`miragon-gmbh.vs-code-bpmn-modeler`) opens them like any other `.bpmn` file;
-every other notation opens as text.
+every other notation opens as text. A board (`.board`) has no such text: it
+syncs element by element, so it opens read-only, as its file's text (one JSON
+line per element), and follows the live board. Boards are edited in the web
+app.
 
 ## Run it (development)
 
@@ -36,7 +39,8 @@ Commands:
 - **designIQ: Open Live Model** — pick a repository (the ones you may write),
   then a model of any notation; the list shows folder, notation, who is on it
   and whether it carries unreleased changes. _Enter a path…_ at the end takes
-  a repo-relative path by hand.
+  a repo-relative path by hand. A board is listed with a lock and `read-only`;
+  it opens read-only, and its notice offers **Open in the web app**.
 - **designIQ: Sign in** / **Sign in with a session token…** / **Sign out**. The
   status-bar item runs the sign-in while signed out and the open command once
   signed in.
@@ -71,6 +75,12 @@ others change comes back as an edit into your open document — dirty or not —
 and the document is kept clean, because a live document has no unsaved state
 (the Live Host holds the working copy; releases go through git).
 
+A board is the exception. Its live document is a set of elements, not a text,
+so nothing is bound: the file system serves the board's canonical text (the
+bytes git and the validator see) read-only and re-reads it once the board has
+rested for a moment after a change. A write to it is refused, and the notice
+shown when a board opens offers it in the web app.
+
 ## Presence
 
 Each open live document announces you (name, avatar, the same color as in
@@ -85,12 +95,21 @@ its local principal (`LIVE_LOCAL_USER`) — no sign-in needed there.
   web app has no such window (Monaco edits are synchronous with Yjs).
 - No Explorer tree yet: models are opened through the picker, not browsed as
   a workspace folder.
+- A board cannot be edited in VS Code: it opens read-only, edits go through
+  the web app.
+- A build of this extension that predates boards lists a board like any
+  model but opens it as an empty text document, and what is typed there never
+  reaches the file (the Live Host does not guard against it). Update the
+  extension before you open boards in VS Code.
 
 ## Tests
 
 - `pnpm --filter design-iq test` — unit tests of the sign-in, picker and
-  settings helpers, and of the manifest against the ids the code relies on.
+  settings helpers, of the board's read-only lane (`structured-room.ts`), and
+  of the manifest against the ids the code relies on.
 - `pnpm --filter design-iq test:e2e` — a real VS Code (downloaded once) with
   the Miragon modeler, against a running Live Host on `localhost:8301` with
   `LIVE_AUTH=none`; asserts the picker's data path, content sync both
-  ways, presence and the custom editor.
+  ways, presence and the custom editor. Its board step writes a board into the
+  content checkout, removes it afterwards, and asserts that it opens read-only
+  as its canonical text, follows a guest's element edit and refuses a write.

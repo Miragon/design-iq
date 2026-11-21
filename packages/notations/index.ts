@@ -12,6 +12,13 @@
  *   - ./derive     ModelGraph → derived views (deriveView + the rich per-
  *                  notation views deriveProcess/deriveDecision)
  *   - ./templates  blank-model file content (templateFor)
+ *   - ./refs       the typed cross-model references a model emits (refsOf):
+ *                  calls, decides, and the models a board shows
+ *   - ./retarget   the write side of ./refs: a rename (retargetRefs) and a
+ *                  move (retargetMovedPaths) rewrite the models that point at it
+ *   - ./codecs     the canonical at-rest text of a STRUCTURED notation's live
+ *                  document (docCodecFor): encode, a total decode and a strict
+ *                  check; the board's comes from @miragon/board-schema-model
  *   - ./counts     a repo's model-count line (repoCountsLine) — web cards + VS Code picker
  *   - ./content    content-repo discovery over any checkout (Node-only)
  *   - ./markdown   the fenced code blocks of a Markdown document, as
@@ -26,14 +33,18 @@
  *
  * Adding a notation = one descriptor here + one entry per capability it
  * offers. A descriptor with no capabilities still gets everything generic:
- * live room, Monaco editing, discovery, listing, release, history.
+ * live room, Monaco editing, discovery, listing, release, history. A
+ * structured one needs its codec (./codecs) as well; its source in Monaco is
+ * read-only.
  */
 
 export type MediaKind = "xml" | "json" | "dsl" | "markdown";
 
 /** the CRDT strategy of a notation's live document — "text" is one shared
- *  Y.Text (today's contract); "structured" (element-wise Y.Map, epic #118
- *  step 8) is reserved for canvas notations */
+ *  Y.Text; "structured" (element-wise Y.Map, epic #118 step 8) is a canvas
+ *  whose elements merge one by one, the board's. A structured notation needs
+ *  a codec in ./codecs (DOC_CODECS): its at-rest text is the codec's, and
+ *  without one the Live Host would open its files as text */
 export type DocShape = "text" | "structured";
 
 export interface NotationDescriptor {
@@ -49,7 +60,8 @@ export interface NotationDescriptor {
   extensions: string[];
   mediaKind: MediaKind;
   docShape: DocShape;
-  /** Monaco language id for the text view of this notation */
+  /** Monaco language id for the text view of this notation (a structured
+   *  notation's is read-only: the canonical text of its codec) */
   monacoLanguage: string;
   /** what "flow" means in this notation's ModelGraph — lets generic graph
    *  analyses (path enumeration, cycles) work per notation instead of
@@ -152,6 +164,22 @@ export const NOTATIONS: readonly NotationDescriptor[] = [
     docShape: "text",
     monacoLanguage: "markdown",
     todos: true,
+  },
+  {
+    // a canvas of the repository's own files: its models (each edited in
+    // place by its own editor and saved in its own file), notes, images,
+    // groups and arrows. It stores where a file sits, never what is in it.
+    // STRUCTURED: an element-wise live document, one JSON line per element at
+    // rest (./codecs, @miragon/board-schema-model). "jsonl" is a small Monarch
+    // language the web shell registers: JSON lines are no single JSON value,
+    // so "json" would mark every line after the first as an error
+    id: "board",
+    label: "Board",
+    noun: { singular: "board", plural: "boards" },
+    extensions: [".board"],
+    mediaKind: "json",
+    docShape: "structured",
+    monacoLanguage: "jsonl",
   },
 ];
 

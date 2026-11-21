@@ -122,6 +122,12 @@ Nothing today records where the app is installed; `/setup/installed` discards
   workspace's (`POST /api/repos/:owner/:repo/conflicts`). The catch-up only waits
   while a file it would rewrite is open in a live session. The decision per file is
   `apps/live-host/src/domain/catch-up.ts`; the in-place host checkout never catches up.
+  _As built (the board):_ an open board keeps a live room of every model it shows, also
+  while nobody edits that model there, so the catch-up of those files waits until the
+  board is closed, and "use main's version" refuses them meanwhile (both ask whether a
+  room is loaded, not whether a person is in it). The model and repo listings count only
+  rooms a person is in, and a move or a delete of such a model takes the board's room
+  along (`apps/live-host/src/application/scaffold.ts`, `PreviewRooms`).
 
 ### D. Repo-namespaced collaboration protocol (client/server lockstep)
 

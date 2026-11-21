@@ -1,6 +1,6 @@
 /**
- * The validator checks a Team Topology, a Context Map or a Value Chain with
- * the schema model its canvas parses it with. The renderer apps/web draws
+ * The validator checks a Team Topology, a Context Map, a Value Chain or a
+ * board with the schema model its canvas parses it with. The renderer apps/web draws
  * with pins its schema model exactly, so a renderer bump without the
  * validator's pin would let the save gate pass files the new canvas refuses
  * (#266): both move in one PR.
@@ -40,6 +40,8 @@ for (const [renderer, schemaModel] of [
   ["@miragon/team-topologies-renderer", "@miragon/team-topologies-schema-model"],
   ["@miragon/context-maps-renderer", "@miragon/context-maps-schema-model"],
   ["@miragon/value-chain-renderer", "@miragon/value-chain-schema-model"],
+  // the board's codec (@designiq/notations/codecs, inlined here) checks a board with it
+  ["@miragon/board-renderer", "@miragon/board-schema-model"],
 ] as const) {
   test(`the validator pins the ${schemaModel} that apps/web's ${renderer} draws with`, () => {
     assert.equal(validator.dependencies[schemaModel], schemaModelOf(renderer, schemaModel));

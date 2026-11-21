@@ -6,10 +6,12 @@
  * ModelGraph and automatically cover every notation that implements extract —
  * instead of one parser per tool per notation.
  *
- * Node-safe: fast-xml-parser, JSON, regex and the DOM-free Wardley DSL parser
- * and schema model (@miragon/wardley-dsl, @miragon/wardley-schema-model)
- * only, no DOM, no editor libraries.
+ * Node-safe: fast-xml-parser, JSON, regex, the DOM-free Wardley DSL parser
+ * and schema model (@miragon/wardley-dsl, @miragon/wardley-schema-model) and
+ * the board's schema model (@miragon/board-schema-model) only, no DOM, no
+ * editor libraries.
  */
+import { decodeBoard } from "@miragon/board-schema-model";
 import { parseDSL as parseWardleyDsl } from "@miragon/wardley-dsl";
 import { evolutionStage } from "@miragon/wardley-schema-model";
 import { XMLParser } from "fast-xml-parser";
@@ -20,7 +22,7 @@ import { XMLParser } from "fast-xml-parser";
 export { XMLValidator } from "fast-xml-parser";
 
 import { BPMN_DI_ARTIFACT_TAGS, BPMN_FLOW_NODE_TAGS, BPMN_SUB_CONTAINER_TAGS } from "./bpmn-kinds.ts";
-import { byExtension, byId, type NotationDescriptor } from "./index.ts";
+import { byExtension, byId, modelStem, type NotationDescriptor } from "./index.ts";
 
 export interface ModelNode {
   id: string;
@@ -829,6 +831,50 @@ function extractValueChain(raw: string): ModelGraph {
   };
 }
 
+// ── the .board file (@miragon/board-schema-model): JSON lines, one element per line ──
+// A node (`kind` node) is a model of the repository shown in place, an image
+// (both name their file by its repo-relative `file`), a note (`text`, its
+// Markdown) or a group (`text`, its label); an edge (`kind` edge) is an arrow
+// from `source` to `target`. The decode is the total one of a listing: a graph
+// is read from whatever the file holds, and an element of a kind the board
+// does not know is no node and no edge. A model node carries the notation
+// and the model id its file names (`extra.notation`, `extra.model`) where the
+// file is a model of a registered notation; a group's member its `parent`.
+
+function extractBoard(raw: string): ModelGraph {
+  const { elements, meta } = decodeBoard(raw);
+  const text = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
+  const nodes: ModelNode[] = [];
+  const edges: ModelEdge[] = [];
+  for (const id of Object.keys(elements).sort()) {
+    const attrs = elements[id] ?? {};
+    if (attrs.kind === "node" && typeof attrs.type === "string") {
+      const file = text(attrs.file);
+      const body = text(attrs.text);
+      const parent = text(attrs.parent);
+      const notation = attrs.type === "model" && file ? byExtension(file)?.id : undefined;
+      // a model or an image is named by its path, a note by its first line, a group by its label
+      const name = file ?? body?.split("\n").find((line) => line.trim() !== "");
+      const extra = {
+        ...(file ? { file } : {}),
+        ...(notation && file ? { notation, model: modelStem(file) } : {}),
+        ...(body && attrs.type === "text" ? { text: body } : {}),
+        ...(parent ? { parent } : {}),
+      };
+      nodes.push({
+        id,
+        type: attrs.type,
+        ...(name ? { name } : {}),
+        ...(Object.keys(extra).length > 0 ? { extra } : {}),
+      });
+    } else if (attrs.kind === "edge" && typeof attrs.source === "string" && typeof attrs.target === "string") {
+      const name = text(attrs.label);
+      edges.push({ id, from: attrs.source, to: attrs.target, kind: "arrow", ...(name ? { name } : {}) });
+    }
+  }
+  return { notation: "board", meta: { title: text(meta.title) ?? null }, nodes, edges };
+}
+
 const EXTRACTORS: Record<string, (raw: string) => ModelGraph> = {
   bpmn: extractBpmn,
   dmn: extractDmn,
@@ -837,6 +883,7 @@ const EXTRACTORS: Record<string, (raw: string) => ModelGraph> = {
   "event-storming": extractEventStorming,
   "context-map": extractContextMap,
   "value-chain": extractValueChain,
+  board: extractBoard,
 };
 
 /** notation id or file path in, ModelGraph out; undefined = no extractor registered */

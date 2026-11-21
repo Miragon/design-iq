@@ -39,11 +39,12 @@ jobs:
       - name: Tests (notations, validator, web sync merge, live-host release flow)
         run: pnpm test
       # The conformance kit of @miragon/modeler-api against the Miragon renderers as
-      # designIQ mounts them (#301), in headless Chromium: only for a change that moves a
-      # Miragon package (a bump changes its lines in the lockfile), the code that mounts
-      # one or a dependency of apps/web, which pins the renderers' peers, the Vite plugins
-      # its config loads and the suite's own runner. In this job, so the required check
-      # holds it.
+      # designIQ mounts them (#301), the board's renderer among them, in headless Chromium:
+      # only for a change that moves a Miragon package (a bump changes its lines in the
+      # lockfile and in every package.json that pins it), the code that mounts one (the
+      # board's host in apps/web/src/notations/board) or a dependency of apps/web, which
+      # pins the renderers' peers (React Flow for the board), the Vite plugins its config
+      # loads and the suite's own runner. In this job, so the required check holds it.
       - name: Does the change move a Miragon renderer, the code that mounts one or the suite's runner?
         id: miragon
         env:
@@ -51,6 +52,7 @@ jobs:
         run: |
           mounting=(
             apps/web/src/notations/miragon
+            apps/web/src/notations/board
             apps/web/src/mcp-app/engines/miragon.ts
             apps/web/src/mcp-app/engines/diagram-js.ts
             apps/web/src/mcp-app/engines/fit.ts
@@ -65,7 +67,7 @@ jobs:
           if ! git fetch --no-tags --depth=1 origin "$BASE_SHA"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif ! git diff --quiet "$BASE_SHA" HEAD -- "${mounting[@]}" ||
-            git diff "$BASE_SHA" HEAD -- pnpm-lock.yaml ':(glob)**/package.json' | grep -qE '^[-+].*@miragon/(wardley|event-storming|team-topologies|context-maps|value-chain|modeler)-'; then
+            git diff "$BASE_SHA" HEAD -- pnpm-lock.yaml ':(glob)**/package.json' | grep -qE '^[-+].*@miragon/(wardley|event-storming|team-topologies|context-maps|value-chain|modeler|board)-'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"

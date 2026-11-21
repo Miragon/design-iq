@@ -12,14 +12,21 @@
  *   no plugin    → Monaco text editor on the shared Y.Text, language from the
  *                  registry (YAML files live-edit as text)
  *
+ * A STRUCTURED document (a board) keeps its elements in the room's maps, not
+ * in a text: its canvas edits it, its source is the codec's text of those
+ * maps, read-only, and its history compares and restores through the codec
+ * (lib/live-doc-text.ts). An editor that shows other files of the repository
+ * in place (a board's models) opens them through ctx.linkedFiles, over one
+ * more socket that ends after the editor let go of them (lib/linked-files.ts).
+ *
  * React owns the shell (toolbar, presence, release); the editor ENGINES stay
  * imperative — the mounted plugin / Monaco / Yjs live in refs inside one effect
  * whose cleanup tears the whole live session down (provider, sockets, bindings).
  */
-import { type MovedNotice, type PresenceUser, roomName } from "@designiq/contracts/live";
-import { openLiveSession } from "@designiq/live-client";
-import { updateText } from "@designiq/live-client/text";
+import { isUnreadableRefusal, type MovedNotice, type PresenceUser, roomName } from "@designiq/contracts/live";
+import { openLiveSession, openLiveSessionGroup } from "@designiq/live-client";
 import { byExtension, hasTodos as offersTodos, type MediaKind, modelStem } from "@designiq/notations";
+import { docCodecFor } from "@designiq/notations/codecs";
 import { cn } from "@designiq/ui-kit/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { History, ListTodo } from "lucide-react";
@@ -42,8 +49,10 @@ import { TodoPanel } from "@/components/todo-panel";
 import {
   config,
   fetchFileAtCommit,
+  fetchModels,
   type FileCommitWire,
   type Me,
+  type ModelInfo,
   presenceColor,
   type TodoElementWire,
   type TodoModelRef,
@@ -59,6 +68,8 @@ import {
   rememberViewChoice,
   type ViewChoice,
 } from "@/lib/editor-view";
+import { linkedFiles } from "@/lib/linked-files";
+import { type LiveDocText, liveDocText, textEdits } from "@/lib/live-doc-text";
 import { modelTarget, useOpenModel, wasExpected } from "@/lib/model-target";
 import { installMonacoLanguages } from "@/lib/monaco-languages";
 import { installMonacoTheme, MONACO_OPTIONS } from "@/lib/monaco-theme";
@@ -96,6 +107,25 @@ function monacoLanguage(docPath: string): string {
   return "plaintext";
 }
 
+/** how long a structured document's source waits for its canvas to rest before it shows the change */
+const SOURCE_REST_MS = 300;
+
+const upperFirst = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** `model` brought to `text` by its changed parts alone (lib/live-doc-text
+ *  textEdits): whoever reads a read-only source keeps their place while a
+ *  co-editor moves an element */
+function showText(model: monaco.editor.ITextModel, text: string): void {
+  const edits = textEdits(model.getValue(), text);
+  if (edits.length === 0) return;
+  model.applyEdits(
+    edits.map(({ start, end, text: insert }) => ({
+      range: monaco.Range.fromPositions(model.getPositionAt(start), model.getPositionAt(end)),
+      text: insert,
+    })),
+  );
+}
+
 export function LiveEditor({
   repo,
   processId,
@@ -116,10 +146,10 @@ export function LiveEditor({
   const notation = byExtension(docPath);
   const plugin = webPlugin(notation?.id);
   const isVisual = plugin?.mountEditor !== undefined;
-  // a STRUCTURED room's truth lives in the element maps, NOT in CONTENT_KEY —
+  // a STRUCTURED room's truth lives in the element maps, NOT in CONTENT_KEY:
   // a writable Monaco bound there would sync typed text to peers but never
-  // reach disk/REST/history (silent loss). No text tab until the structured
-  // text lane is properly wired (dark today: every shipped notation is text).
+  // reach disk/REST/history (silent loss). Its source is the codec's text of
+  // the maps instead, read-only (only its canvas edits it), and never split.
   const structuredDoc = notation?.docShape === "structured";
   // cosmetic special case: bpmn is the platform's primary notation — its label
   // badge stays hidden and the title shows the process id alone
@@ -198,6 +228,15 @@ export function LiveEditor({
   // models): the list arrives after the mount and changes with the repository
   const modelPathsRef = useRef<ReadonlySet<string> | undefined>(undefined);
   const modelListenersRef = useRef(new Set<() => void>());
+  // the list they were made from: a list loaded anew that equals it (the
+  // query shares what did not change) keeps their version
+  const modelListRef = useRef<readonly ModelInfo[] | undefined>(undefined);
+  const showModelsRef = useRef((list: readonly ModelInfo[] | undefined): void => {
+    if (list === modelListRef.current) return;
+    modelListRef.current = list;
+    modelPathsRef.current = list ? new Set(list.map((m) => m.path)) : undefined;
+    for (const cb of modelListenersRef.current) cb();
+  });
   // ... and where the repository lives on GitHub (links to its models there),
   // once the host's configuration and the repository list have arrived
   const repoWebRef = useRef<RepoWeb | undefined>(undefined);
@@ -230,8 +269,10 @@ export function LiveEditor({
   const activePanelSpec = plugin?.panels?.find((p) => p.id === panel);
   // default-branch commit history of THIS file — fetched while the panel is open
   const historyQuery = useFileHistory(repo, docPath, panel === "history");
-  // the shared Y.Text, exposed from the session effect for Compare/Restore
+  // the shared Y.Text, exposed from the session effect for the plugin panels
   const contentRef = useRef<Y.Text | null>(null);
+  // the document as its file's text, by the room's shape, for Compare/Restore
+  const docTextRef = useRef<LiveDocText | null>(null);
   const [diff, setDiff] = useState<{ commit: FileCommitWire; historical: string; current: string } | null>(null);
 
   const todoList = todosQuery.data;
@@ -261,14 +302,30 @@ export function LiveEditor({
       token: me.wsToken,
       onAuthenticationFailed: (reason) => {
         if (cancelled) return;
-        setError(`Access denied: ${reason}`);
+        // a board on disk its reader would not write back whole is refused as well: say why, not "denied"
+        setError(isUnreadableRefusal(reason) ? reason : `Access denied: ${reason}`);
         setStatus("error");
       },
     });
-    session.setUser({
+    // the person, the same in this room and in every linked one they edit in
+    const user: PresenceUser = {
       name: me.user.name || me.user.login,
       color: presenceColor(me.user.login),
       avatarUrl: me.user.avatarUrl,
+    };
+    session.setUser(user);
+    // other files of this repository the mounted editor shows in place (a
+    // board's models), live: one more socket for all of them, opened with the
+    // first, and the person in a file's roster only while they edit it there
+    const linked = linkedFiles({
+      listed: () => modelPathsRef.current,
+      room: (path) => roomName(repo, path),
+      openGroup: () => openLiveSessionGroup({ url: config.wsUrl, token: me.wsToken }),
+      user,
+      // a model the board shows was renamed or moved: the list learns its new path
+      onMoved: () => {
+        if (!cancelled) void qc.invalidateQueries({ queryKey: ["models", repo] });
+      },
     });
     // the model was renamed (#208): the Live Host closes this room right
     // after the notice — the screen follows the document to its new path
@@ -309,11 +366,14 @@ export function LiveEditor({
     });
 
     let mounted: MountedEditor | undefined;
+    /** the editor's mount while its chunk loads: a teardown meanwhile waits for it */
+    let mounting: Promise<MountedEditor> | undefined;
     let monacoBinding: MonacoBinding | undefined;
     let sourceEditor: monaco.editor.IStandaloneCodeEditor | undefined;
     let sourceModel: monaco.editor.ITextModel | undefined;
     let sourceTools: AttachedSource | undefined;
     let offSourceLayout: (() => void) | undefined;
+    let offSourceFollow: (() => void) | undefined;
     let offPresence: (() => void) | undefined;
     let attached = false;
 
@@ -325,14 +385,20 @@ export function LiveEditor({
       attached = true;
       const ytext = session.content;
       contentRef.current = ytext;
+      // a structured document's file text is its codec's (every structured
+      // notation has one, packages/notations/codecs.ts holds them together)
+      const codec = structuredDoc && notation ? docCodecFor(notation.id) : undefined;
+      const docText = structuredDoc ? (codec ? liveDocText(session, codec) : undefined) : liveDocText(session);
+      docTextRef.current = docText ?? null;
       if (plugin?.mountEditor && canvasRef.current) {
         // the engine chunk loads HERE — the eager bundle carries no editor
         // engine. A failed chunk load (offline, stale deploy rotating hashed
         // asset URLs) must NOT strand the session: fall back to the text view
         // below — the ytext is already synced, editing works without the engine.
+        // A structured document's source only shows: it is read-only.
         let editor: MountedEditor | undefined;
         try {
-          editor = await plugin.mountEditor(canvasRef.current, {
+          mounting = plugin.mountEditor(canvasRef.current, {
             ytext,
             doc: session.doc,
             repo,
@@ -363,6 +429,18 @@ export function LiveEditor({
                 modelListenersRef.current.add(cb);
                 return () => modelListenersRef.current.delete(cb);
               },
+              // whatever the cached list's age: a board asks before it
+              // follows a model the list no longer shows
+              refresh: async () => {
+                // a list request already on its way may have left before the
+                // move: fetchQuery would join it, so it goes first and the
+                // answer comes from a request sent after the board asked
+                await qc.cancelQueries({ queryKey: ["models", repo], exact: true });
+                await qc.fetchQuery({ queryKey: ["models", repo], queryFn: () => fetchModels(repo), staleTime: 0 });
+                // the cache's copy, not the fetched one: it keeps what did
+                // not change, so a list that loads as it was is no new version
+                if (!cancelled) showModelsRef.current(qc.getQueryData<ModelInfo[]>(["models", repo]));
+              },
             },
             repoWeb: plugin.githubLinks
               ? {
@@ -390,17 +468,26 @@ export function LiveEditor({
             onActionFailed: (message) => {
               if (!cancelled) toast.error(message);
             },
+            // throws once this effect's cleanup ran (lib/linked-files.ts)
+            linkedFiles: linked.files,
           });
+          editor = await mounting;
         } catch (e) {
           if (!cancelled) {
+            const failure = `${notation?.label ?? "Model"} editor failed to load (${e instanceof Error ? e.message : String(e)})`;
             toast.error(
-              `${notation?.label ?? "Model"} editor failed to load (${e instanceof Error ? e.message : String(e)}) — falling back to the text view.`,
+              structuredDoc
+                ? `${failure}. Its source shows, read-only: reload the page to edit the ${noun}.`
+                : `${failure} — falling back to the text view.`,
             );
             views.fallBack(); // not a choice: never remembered
           }
+        } finally {
+          mounting = undefined;
         }
         if (cancelled) {
-          // unmounted while the chunk loaded — tear the late editor down
+          // unmounted while the chunk loaded — tear the late editor down (the
+          // cleanup ends the linked files once it let go of them)
           editor?.destroy();
           return;
         }
@@ -420,10 +507,17 @@ export function LiveEditor({
         }
       }
       if (cancelled) return;
-      if (sourceRef.current && !structuredDoc) {
-        // before the model: a Markdown source tokenizes its fences in the languages it names
+      // a structured document's source is the text it is saved as, read-only:
+      // no binding to CONTENT_KEY, it follows the element maps instead
+      const readOnlySource = structuredDoc ? docText : undefined;
+      if (sourceRef.current && (!structuredDoc || readOnlySource)) {
+        // before the model: a Markdown source tokenizes its fences in the
+        // languages it names, a structured one's lines are "jsonl"
         installMonacoLanguages(monaco.languages);
-        sourceModel = monaco.editor.createModel(ytext.toString(), monacoLanguage(docPath));
+        sourceModel = monaco.editor.createModel(
+          readOnlySource ? readOnlySource.read() : ytext.toString(),
+          monacoLanguage(docPath),
+        );
         installMonacoTheme(monaco.editor);
         sourceEditor = monaco.editor.create(sourceRef.current, {
           ...MONACO_OPTIONS,
@@ -432,6 +526,12 @@ export function LiveEditor({
           // prose: a paragraph is one line, and half the width (the split
           // view) must not scroll it sideways
           wordWrap: sourceModel.getLanguageId() === "markdown" ? "on" : "off",
+          ...(readOnlySource
+            ? {
+                readOnly: true,
+                readOnlyMessage: { value: `A ${noun} is edited on its canvas. This is the text it is saved as.` },
+              }
+            : {}),
         });
         offSourceLayout = layoutBesideSidePanels(
           sourceEditor,
@@ -441,7 +541,17 @@ export function LiveEditor({
             () => sourceRef.current,
           ),
         );
-        monacoBinding = new MonacoBinding(ytext, sourceModel, new Set([sourceEditor]), session.awareness ?? undefined);
+        if (readOnlySource) {
+          const model = sourceModel;
+          offSourceFollow = readOnlySource.follow((text) => showText(model, text), SOURCE_REST_MS);
+        } else {
+          monacoBinding = new MonacoBinding(
+            ytext,
+            sourceModel,
+            new Set([sourceEditor]),
+            session.awareness ?? undefined,
+          );
+        }
       }
       offPresence = session.onPresence(setPresence);
       setStatus("live");
@@ -477,9 +587,10 @@ export function LiveEditor({
       setStatus("live");
       setError(null);
     });
-    // still connecting after 10s → tell the user it's taking a while, keep waiting
+    // still connecting after 10s → tell the user it's taking a while, keep
+    // waiting; a room the host refused or closed meanwhile stays Offline
     const slow = setTimeout(() => {
-      if (!cancelled && !attached) setStatus("slow");
+      if (!cancelled && !attached) setStatus((now) => (now === "error" ? now : "slow"));
     }, 10_000);
 
     return () => {
@@ -492,6 +603,7 @@ export function LiveEditor({
       offDocClose();
       caretStyles.destroy();
       contentRef.current = null;
+      docTextRef.current = null;
       todoCanvasRef.current = null;
       mountedRef.current = undefined;
       setEditorActions([]);
@@ -499,8 +611,22 @@ export function LiveEditor({
       setSourceMenus([]);
       setUnrenderable(null);
       mounted?.destroy();
+      // the linked files' socket goes once the editor that opened them let go
+      // of them (MountedEditor.unmounted): the mounted one, or one whose mount
+      // is still on its way, which attach() destroys when it arrives. open()
+      // refuses from here on
+      const late = mounting;
+      linked.close(
+        mounted
+          ? mounted.unmounted
+          : late?.then(
+              (editor) => editor.unmounted,
+              () => undefined,
+            ),
+      );
       sourceTools?.dispose();
       monacoBinding?.destroy();
+      offSourceFollow?.();
       offSourceLayout?.();
       sourceEditor?.dispose();
       sourceModel?.dispose();
@@ -541,10 +667,7 @@ export function LiveEditor({
   const qc = useQueryClient();
   const knownModels = models.data;
   // the mounted editor's model paths follow the list
-  useEffect(() => {
-    modelPathsRef.current = knownModels ? new Set(knownModels.map((m) => m.path)) : undefined;
-    for (const cb of modelListenersRef.current) cb();
-  }, [knownModels]);
+  useEffect(() => showModelsRef.current(knownModels), [knownModels]);
   // only an editor that reads links to the repository on GitHub looks its
   // default branch up: the repository list is the overview's costly read model
   const githubBase = useConfig().data?.githubBaseUrl;
@@ -610,26 +733,39 @@ export function LiveEditor({
     mutationFn: fetchCommitContent,
     onSuccess: ({ commit, historical, seq }) => {
       if (seq !== actionSeqRef.current || !aliveRef.current) return; // superseded or editor gone
-      const current = contentRef.current?.toString();
+      // the live document as its file's text (a structured one: its codec's)
+      const current = docTextRef.current?.read();
       if (current === undefined) return; // session not attached — nothing to diff against
       setDiff({ commit, historical, current });
     },
     onError: onActionError,
   });
 
-  // Restore: write the commit's content into the shared Y.Text — updateText's
-  // minimal diff syncs to every client, the canvas binding re-imports the view
+  // Restore: write the commit's content into the live document for every
+  // client (lib/live-doc-text): a minimal diff into the shared Y.Text, which
+  // the canvas binding re-imports, or a structured document's elements one
+  // by one. A version that cannot be written back whole is refused, and a
+  // restore that changes nothing says so instead of reporting a write
   const restore = useMutation({
     mutationFn: fetchCommitContent,
     onSuccess: ({ commit, historical, seq }) => {
       if (seq !== actionSeqRef.current || !aliveRef.current) return; // superseded or editor gone
-      const ytext = contentRef.current;
-      if (!ytext) {
+      const doc = docTextRef.current;
+      if (!doc) {
         return void toast.error("Restore cancelled — the live session ended before the commit content arrived.");
       }
-      updateText(ytext, historical);
+      const version = commit.sha.slice(0, 7);
+      const outcome = doc.restore(historical);
+      if (outcome.kind === "refused") {
+        return void toast.error(`${fileName} cannot be restored to ${version}`, {
+          description: `${upperFirst(outcome.reason)}. Restoring it would drop that content, so nothing was written.`,
+        });
+      }
       setDiff(null);
-      toast.success(`Restored ${fileName} to ${commit.sha.slice(0, 7)}`, { description: commit.subject });
+      if (outcome.kind === "unchanged") {
+        return void toast(`${fileName} already matches ${version}`, { description: "Nothing to restore." });
+      }
+      toast.success(`Restored ${fileName} to ${version}`, { description: commit.subject });
     },
     onError: onActionError,
   });
@@ -711,7 +847,8 @@ export function LiveEditor({
         modeActions={editorActions}
         sourceMenus={sourceShown ? sourceMenus : []}
         view={
-          isVisual && !structuredDoc
+          // a structured document: its canvas or its read-only source (never split)
+          isVisual
             ? {
                 canvas: plugin?.canvasView,
                 sourceLabel,

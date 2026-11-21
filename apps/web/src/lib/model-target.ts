@@ -47,8 +47,10 @@ export function pathUnderId(target: Pick<ModelTarget, "path" | "id">, id: string
   return `${target.path.slice(0, slash + 1)}${id}${file.slice(target.id.length)}`;
 }
 
-/** references resolve by id — only these notations can be pointed at */
-export const isReferenceable = (notation: string): boolean => notation === "bpmn" || notation === "dmn";
+/** references resolve by id: a process points at the processes it calls and the decisions it
+ *  takes, a board at every model it shows, of any notation but a board (a board is shown on no
+ *  board, @designiq/notations/refs shownNotation) */
+export const isReferenceable = (notation: string): boolean => byId(notation) !== undefined && notation !== "board";
 
 /**
  * Open a model by path: a process on its /p/<id> route, everything else on

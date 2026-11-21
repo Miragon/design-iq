@@ -227,6 +227,84 @@ test("a writer that leaves without ranking first changes nothing: the first-rank
   b.unbind();
 });
 
+// a board shows a model through a full canvas of it, whose session announces
+// its person only while they edit there: when they are done, they take it
+// back, and a person who only looks at a model never writes into it
+for (const takesBackAfter of [100, 1100, undefined]) {
+  const when =
+    takesBackAfter === undefined ? "never takes it back" : `takes it back ${takesBackAfter} ms after the drop`;
+  test(`the first-ranked writer ${when}: ${takesBackAfter === undefined ? "it repairs" : "the next-ranked writer repairs"}`, async () => {
+    mockClock();
+    const net = relay();
+    const room = roomOf(XML);
+    const host = hostCopy(net, room);
+    const people = presence();
+    const a = bpmnPeer(net, room, 200, people.of(200));
+    const b = bpmnPeer(net, room, 100, people.of(100));
+    await advance(50);
+
+    net.hold();
+    a.modeler.move("Task_b", 40, 30);
+    b.modeler.move("Task_d", 35, -20);
+    await advance(20);
+    a.own = a.ytext.toString();
+    b.own = b.ytext.toString();
+    net.release();
+    assert.ok(!wellFormed(host.ytext.toString()), "the precondition of #274");
+    if (takesBackAfter !== undefined) {
+      await advance(takesBackAfter);
+      // b ranks first (equal footing, the lower client id); its node on the board is done
+      people.announce(100, null);
+    }
+    await advance(4000);
+
+    assert.ok(wellFormed(host.ytext.toString()), when);
+    const repairer = takesBackAfter === undefined ? b : a;
+    assert.equal(host.ytext.toString(), repairer.own, `${when}: the repairer's export`);
+    assert.deepEqual(host.log.repairs, [takesBackAfter === undefined ? 100 : 200], `${when}: one repair`);
+    assert.equal(b.modeler.canvas(), host.ytext.toString(), `${when}: b shows the room's text`);
+    a.unbind();
+    b.unbind();
+  });
+}
+
+test("the only writer left in the room announces no user: nobody repairs and the canvas is told; announced again, it repairs", async () => {
+  mockClock();
+  const net = relay();
+  const room = roomOf(XML);
+  const host = hostCopy(net, room);
+  const people = presence();
+  const a = bpmnPeer(net, room, 200, people.of(200));
+  const b = bpmnPeer(net, room, 100, people.of(100));
+  await advance(50);
+
+  net.hold();
+  a.modeler.move("Task_b", 40, 30);
+  b.modeler.move("Task_d", 35, -20);
+  await advance(20);
+  b.own = b.ytext.toString();
+  net.release();
+  // b only shows the model now; a's tab closes
+  people.announce(100, null);
+  await advance(100);
+  a.unbind();
+  people.close(200);
+  await advance(6000);
+
+  assert.ok(!wellFormed(host.ytext.toString()), "nobody wrote over the merge");
+  assert.deepEqual(host.log.repairs, []);
+  assert.equal(b.modeler.canvas(), b.own, "b keeps its last good state");
+  assert.deepEqual(b.notices, [NOTICE], "and says the text does not render");
+
+  // its person edits there again
+  people.announce(100, { name: "Bea", color: "#335de5" });
+  await advance(3000);
+  assert.equal(host.ytext.toString(), b.own, "b repairs once it announces a user");
+  assert.deepEqual(host.log.repairs, [100]);
+  assert.deepEqual(b.notices, [NOTICE, null]);
+  b.unbind();
+});
+
 test("typing in the source view crosses two drops: no repair, and after the notice delay every canvas is told until a text renders", async () => {
   mockClock();
   const net = relay();

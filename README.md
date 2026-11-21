@@ -7,7 +7,8 @@
 designIQ is a Git-native workspace where teams model their business and their architecture
 together, live: processes (BPMN), decisions (DMN), Wardley Maps, Team Topologies,
 Event Storming boards, Context Maps, Value Chains and plain Markdown, with Mermaid diagrams
-inside the documents. Every model is a file in your repository; edits sync in real time in
+inside the documents, and boards that bring several of these models onto one canvas. Every
+model is a file in your repository; edits sync in real time in
 the browser and in VS Code, and a release is a pull request, so review and governance stay
 where engineering already works. AI assistants join through MCP: they read the same live
 models, explain them, check them and propose changes.
@@ -21,11 +22,18 @@ integration and the decision records. The site is built from [`docs/`](docs/).
 
 - **Model live**: every model file (`.bpmn`, `.dmn`, `.owm`, `.tt`, `.storm`, `.cm.json`,
   `.vc.json`, `.yaml`, `.md`) syncs as a shared Y.Text document; the web client and VS Code
-  bind their editors to it. The browser has a visual modeler for BPMN, DMN, Wardley Maps,
-  Team Topologies, Event Storming boards, Context Maps and Value Chains, a rendered view for Markdown
+  bind their editors to it. A board (`.board`) syncs element by element instead. The browser
+  has a visual modeler for BPMN, DMN, Wardley Maps, Team Topologies, Event Storming boards,
+  Context Maps, Value Chains and boards, a rendered view for Markdown
   documents (links between models open inside designIQ, `mermaid` fences drawn as
-  diagrams), and a text view for every file. A Mermaid diagram lives as a `mermaid` fence
+  diagrams), and a text view for every file (a board's is read-only: a board is edited on
+  its canvas). A Mermaid diagram lives as a `mermaid` fence
   in a document, next to the prose that explains it, and the validator checks its type.
+  A board is a canvas of the repository's own files: models are shown and edited in place,
+  each by its own editor and saved in its own file, next to notes, images, groups and arrows.
+  The board stores where a file sits, never what is in it, and as it syncs element by element,
+  two people who move two things at once both keep their move. Its images come from the
+  repository (no upload yet), and VS Code shows a board read-only.
   Login authenticates, **repos authorize**: what you see and edit follows your git write
   permission.
 - **Release as PR**: one click cuts a branch from `origin/<default>`, pushes and opens
@@ -148,11 +156,11 @@ but the cell mode it drives is. The code you read here is the code the SaaS runs
 | Path                     | Package                        | What it is                                                                                                                                                                                                                                                                                                                       |
 | ------------------------ | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/live-host/`        | `@designiq/live-host`          | The platform server: Hocuspocus (Yjs) sync + REST API + web app on **one port**. Multi-repo, per-(user,repo) authz, release-as-PR. Published as `ghcr.io/miragon/designiq-live-host`.                                                                                                                                            |
-| `apps/web/`              | `@designiq/web`                | Collaborative web client: visual modelers (bpmn-js, dmn-js, the Miragon renderers), the rendered Markdown view (Mermaid fences drawn as diagrams) + Monaco on a shared Y.Text, repo overview, and the MCP-App widgets.                                                                                                           |
-| `apps/vscode/`           | `design-iq`                    | VS Code extension: opens `designiq://` model documents synced through the Live Host; signs in through the host's own login (editor sign-in).                                                                                                                                                                                     |
+| `apps/web/`              | `@designiq/web`                | Collaborative web client: visual modelers (bpmn-js, dmn-js, the Miragon renderers), the board (`@miragon/board-renderer`, every model on it in its own editor), the rendered Markdown view (Mermaid fences drawn as diagrams) + Monaco on a shared Y.Text, repo overview, and the MCP-App widgets.                               |
+| `apps/vscode/`           | `design-iq`                    | VS Code extension: opens `designiq://` model documents synced through the Live Host, a board read-only; signs in through the host's own login (editor sign-in).                                                                                                                                                                  |
 | `packages/mcp/`          | `@miragon/design-iq-mcp`       | Read-only MCP server exposing a content repo's models of every notation (discovered from `designiq.yml`; the process views derived from BPMN), over stdio + Streamable HTTP, `npx @miragon/design-iq-mcp --root <path>`. Read-only, against a checkout; the live, writable MCP endpoint lives in the Live Host (`/mcp`).         |
-| `packages/notations/`    | `@designiq/notations`          | Notation registry + model analysis: one descriptor per notation (extensions, editor language), `extract` (file→graph), `derive` (graph→view, incl. the rich process and decision views), and the `designiq.yml` content discovery (legacy `bpmiq.yml` still read).                                                               |
-| `packages/validator/`    | `@miragon/design-iq-validator` | Platform validator (bin `designiq-validate`): `designiq.yml` discovery + BPMN/DMN structure and BPMNDI/DMNDI coverage + cross-model reference integrity + the schema check of `.tt`/`.cm.json`/`.vc.json` + a parse check for every other notation. Runs against any checkout via `--root`.                                      |
+| `packages/notations/`    | `@designiq/notations`          | Notation registry + model analysis: one descriptor per notation (extensions, editor language), `extract` (file→graph), `derive` (graph→view, incl. the rich process and decision views), `codecs` (a board's JSON lines), and the `designiq.yml` content discovery (legacy `bpmiq.yml` still read).                              |
+| `packages/validator/`    | `@miragon/design-iq-validator` | Platform validator (bin `designiq-validate`): `designiq.yml` discovery + BPMN/DMN structure and BPMNDI/DMNDI coverage + cross-model reference integrity + the schema check of `.tt`/`.cm.json`/`.vc.json` + the strict read of a `.board` + a parse check for every other notation. Runs against any checkout via `--root`.      |
 | `packages/…`             | —                              | Shared foundations: `http-kit`, `github-app`, `contracts`, `live-client`, `ui-kit`, `api-client`; see `CLAUDE.md` for the full map.                                                                                                                                                                                              |
 | `process-documentation/` | —                              | Example content repo (`designiq.yml` + BPMN/DMN example models and an Event Storming board + the AI skills in `.claude/skills`): the MCP/validator example AND the content-repo contract, mirrored to [`Miragon/process-documentation-starter`](https://github.com/Miragon/process-documentation-starter) ("Use this template"). |
 | `deploy/`                | —                              | Docker Compose reference for self-hosting.                                                                                                                                                                                                                                                                                       |

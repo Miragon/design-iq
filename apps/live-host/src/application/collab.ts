@@ -5,7 +5,9 @@
  *   onAuthenticate   → session (from OAuth login) + PER-REPO write permission
  *                      for the room being joined (AccessCache)
  *   onLoadDocument   → restore Yjs lineage from SQLite, else seed from the
- *                      repo's workspace tree (persisting the seed eagerly — #103)
+ *                      repo's workspace tree (persisting the seed eagerly — #103);
+ *                      a structured file its codec's strict reader refuses is
+ *                      not opened at all (UnreadableDocumentError)
  *   onStoreDocument  → persist lineage + debounced write-through to the tree
  *   onChange         → the repo's last live edit (repo-activity.ts, #213)
  *
@@ -32,6 +34,7 @@ import {
   type RegistryLookup,
   splitRoom,
   toDiskPath,
+  UnreadableDocumentError,
   type WorkspaceEnsure,
 } from "../domain/rooms.ts";
 import { growsDocument } from "../domain/sync-message.ts";
@@ -65,8 +68,9 @@ export interface CollabDeps {
    * (application/ws-tickets.ts) — absent = the ticket path is off */
   wsTickets?: { redeem(ticket: string, room: string): { login: string; provider: string } | undefined };
   /** the STRUCTURED lane's codec per room path (epic #118 step 8) — defaults
-   * to the registry resolution (domain/rooms.ts docCodecForPath: undefined
-   * for every shipped notation, the lane is dark); tests inject their own */
+   * to the registry resolution (domain/rooms.ts docCodecForPath: the board's
+   * codec for a .board, undefined for every text notation); tests inject
+   * their own */
   docCodec?: (path: string) => DocCodec | undefined;
   /** rename bookkeeping (#208): a retired room never persists again, a held
    *  room's load waits for its migration — absent = no renames in flight */
@@ -74,6 +78,18 @@ export interface CollabDeps {
   /** the start page's "Updated X ago" (#213): a real edit in a room marks
    *  its repo as changed (throttled there) — absent = not recorded */
   activity?: Pick<RepoActivity, "liveEdit">;
+}
+
+/** whether the file at `disk` already reads as `content` through `codec`
+ *  (false when it cannot be read: the write-through then recreates it) */
+async function holdsDocument(disk: string, content: string, codec: DocCodec): Promise<boolean> {
+  let onDisk: string;
+  try {
+    onDisk = await readFile(disk, "utf8");
+  } catch {
+    return false;
+  }
+  return onDisk === content || codec.encode(codec.decode(onDisk)) === content;
 }
 
 export function makeCollabHooks(deps: CollabDeps) {
@@ -99,6 +115,13 @@ export function makeCollabHooks(deps: CollabDeps) {
    *  once per loaded room, dropped on unload (the map stays bounded) */
   const roomRepos = new Map<string, string>();
 
+  /** the repo-relative path of a room */
+  const pathOf = (documentName: string): string =>
+    documentName.slice(splitRoom(documentName, registry).repo.fullName.length + 1);
+
+  const codecOf = (documentName: string): DocCodec | undefined =>
+    (deps.docCodec ?? docCodecForPath)(pathOf(documentName));
+
   /**
    * Resolve a room to disk AND reject symlink escapes. toDiskPath (pure domain)
    * does the lexical containment; resolve() is blind to symlinks, so a *.bpmn
@@ -106,10 +129,6 @@ export function makeCollabHooks(deps: CollabDeps) {
    * the target exists, canonicalize it and re-check it stays inside the workspace
    * (realpath lives here in the application layer — the domain module stays pure).
    */
-  const codecOf = (documentName: string): DocCodec | undefined => {
-    const path = documentName.slice(splitRoom(documentName, registry).repo.fullName.length + 1);
-    return (deps.docCodec ?? docCodecForPath)(path);
-  };
 
   const resolveRoom = async (documentName: string): Promise<string> => {
     const disk = await toDiskPath(documentName, registry, workspaces, contentConfig);
@@ -176,7 +195,14 @@ export function makeCollabHooks(deps: CollabDeps) {
         Y.applyUpdate(seedDoc, new Uint8Array(stored));
         const codec = codecOf(documentName);
         const seedContent = codec ? codec.encode(readSnapshot(seedDoc)) : seedDoc.getText(CONTENT_KEY).toString();
-        if (seedContent !== (await readFile(disk, "utf8"))) {
+        seedDoc.destroy();
+        const onDisk = await readFile(disk, "utf8");
+        // a structured file is compared as its codec reads it: a valid file in
+        // another form (an empty board, other key order) is the same document,
+        // not a changed one. A file the strict reader refuses always counts as
+        // changed, so the seed below refuses it instead of resuming a seed
+        const current = codec && codec.check?.(onDisk) === undefined ? codec.encode(codec.decode(onDisk)) : onDisk;
+        if (seedContent !== current) {
           lineage.drop(documentName);
           stored = undefined;
           console.log(`stale seed dropped: ${documentName} (workspace file changed since the seed)`);
@@ -193,17 +219,27 @@ export function makeCollabHooks(deps: CollabDeps) {
             `WARN: ${documentName} restored at ${stored.length}B (> ${maxDocBytes}B cap) — ws edits will be refused`,
           );
         }
-        console.log(`restored: ${documentName} (${document.getText(CONTENT_KEY).length} chars from live.db)`);
+        const size = codecOf(documentName)
+          ? `${document.getMap(ELEMENTS_KEY).size} elements`
+          : `${document.getText(CONTENT_KEY).length} chars`;
+        console.log(`restored: ${documentName} (${size} from live.db)`);
       } else {
         const codec = codecOf(documentName);
-        const ytext = document.getText(CONTENT_KEY);
         const unseeded = codec
           ? document.getMap(ELEMENTS_KEY).size === 0 && document.getMap(META_KEY).size === 0
-          : ytext.length === 0;
+          : document.getText(CONTENT_KEY).length === 0;
         if (unseeded) {
           const content = await readFile(disk, "utf8");
+          // a structured file is read as strictly as its codec writes it back:
+          // the total decode skips what it cannot read (a line that is no
+          // JSON, a repeated id), and the first store would write exactly that
+          // loss to disk — a REST read included (its direct connection stores
+          // on disconnect). The room stays closed and the file untouched; the
+          // error tells the client which line (UnreadableDocumentError)
+          const refused = codec?.check?.(content);
+          if (refused !== undefined) throw new UnreadableDocumentError(pathOf(documentName), refused);
           if (codec) reconcileSnapshot(document, codec.decode(content));
-          else ytext.insert(0, content);
+          else document.getText(CONTENT_KEY).insert(0, content);
           // Persist the seed EAGERLY, not only via the debounced onStoreDocument
           // (2s/10s): a host dying inside that window loses the row while every
           // connected client still holds the seed's history — the next start
@@ -302,7 +338,14 @@ export function makeCollabHooks(deps: CollabDeps) {
       lineage.save(documentName, update);
       const codec = codecOf(documentName);
       const content = codec ? codec.encode(readSnapshot(document)) : document.getText(CONTENT_KEY).toString();
-      await writeFile(await resolveRoom(documentName), content);
+      const disk = await resolveRoom(documentName);
+      // a structured file that already holds this document, as its codec reads
+      // it, keeps its bytes: merely opening or reading a board (a REST read's
+      // direct connection always stores on disconnect) must not turn an empty
+      // or otherwise valid but non-canonical file into a changed one. A text
+      // room's write-through is its bytes, written as always
+      if (codec && (await holdsDocument(disk, content, codec))) return;
+      await writeFile(disk, content);
       console.log(`write-through: ${documentName} (${content.length} chars)`);
     },
 

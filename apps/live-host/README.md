@@ -98,10 +98,27 @@ registers no write tools at all. Non-MCP clients use the REST twins:
 key is still accepted and emitted as a deprecated alias for one release), validates the
 notation via `@miragon/design-iq-validator` (ERROR findings → 422, WARN returned as warnings), enforces
 the doc size cap (413), and CASes (stale `baseVersion` → 409 with the current state). Writes land
-in the live Y.Text (the `@designiq/live-client/text` minimal-diff writer over a Hocuspocus
-direct connection), so every open editor sees them instantly — git is only reached through
-the release-as-PR flow. Beside it, `GET /api/repos/:owner/:repo/image?path=<repo path>`
-serves the repository images a Markdown document shows (`src/application/repo-image.ts`):
+in the live document, a text notation's Y.Text through the `@designiq/live-client/text`
+minimal-diff writer, over a Hocuspocus direct connection, so every open editor sees them
+instantly; git is only reached through the release-as-PR flow. A board (`.board`, the structured notation) travels as its codec's
+canonical JSON lines and is written element by element into its live document, so a
+co-editor's change of another element stays. Its strict reader (`DocCodec.check`) guards
+both ways: a board file it refuses is not opened (422 `content/unreadable-model`, the file
+untouched; a PUT with the `baseVersion` of its text on disk, which a stale PUT answers with,
+repairs it), and a board text it refuses is never saved, `lint: "warn"` included (422
+`content/invalid-model`). Opening or reading a valid board in another form (an empty file)
+leaves its bytes alone until an edit. An open board holds a live session of every model it
+shows, announcing nobody until a node is armed; a room whose every connection announced a
+state without a user (a board's preview) is no live session in the model and repo listings,
+and a move or delete takes it along (a move tells it the new path) instead of answering 409.
+It fails closed: a connection that has not announced itself yet, one whose presence lapsed
+while it stayed connected (a background tab), and the host's own direct connection of a
+REST or MCP read or save on its way all count as a person, so the move or delete is refused. The catch-up with the default branch and
+"use main's version" (`listChanges`, `application/conflicts.ts`) still wait for every loaded
+room, a board's preview included. A move also rewrites the boards that show a
+moved model to its new path, as a rename rewrites a renamed model's callers. Beside it,
+`GET /api/repos/:owner/:repo/image?path=<repo path>` serves the repository images a Markdown
+document and a board show (`src/application/repo-image.ts`):
 the same authorization, image types only (`REPO_IMAGE_TYPES` in `@designiq/contracts/live`),
 10 MiB at most, no dot segment and no symlink out of the checkout, an SVG with a sandboxing
 CSP so that opened on its own it runs no script. Full doc: docs/mcp-integration.md; decision record:

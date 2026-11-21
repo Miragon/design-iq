@@ -24,7 +24,8 @@ minimumReleaseAgeExclude:
   - "@miragon/bpmn-cli@0.10.0"
   # the Miragon releases on modeler-api 2.0.0 (Miragon/modeler-suite#676,
   # released in #677): the contract, the shell and every renderer designIQ
-  # mounts, published 2026-11-20, adopted on 2026-11-20. They take the place of the entries of modeler-api 1.6.0, the
+  # mounts, the board's renderer included, published 2026-11-20, adopted on
+  # 2026-11-20. They take the place of the entries of modeler-api 1.6.0, the
   # renderers before them and modeler-shell 0.14.1 above, as pnpm reads only
   # the first entry that names a package
   - "@miragon/modeler-api@2.0.0"
@@ -35,6 +36,7 @@ minimumReleaseAgeExclude:
   - "@miragon/value-chain-renderer@0.11.1"
   - "@miragon/team-topologies-renderer@0.23.0"
   - "@miragon/team-topologies-schema-model@0.23.0"
+  - "@miragon/board-renderer@0.2.1"
   # the Miragon docs kit as a package (@miragon/docs-starter 1.0.0, kit 1.32.0,
   # Miragon/corporate-identity#102): published 2026-11-19, adopted on 2026-11-19
   - "@miragon/docs-starter@1.0.0"

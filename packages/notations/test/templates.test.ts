@@ -8,11 +8,13 @@
  * Context Map and Value Chain templates are also held against their schema
  * model's own serializer here (devDependencies at the versions the renderers
  * apps/web pins depend on), so a format change fails in this package's suite
- * too.
+ * too. The board's template is its schema model's new board, and the codec's
+ * canonical text (./codecs).
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { newBoardText as boardSchemaNewBoard, parseBoardText } from "@miragon/board-schema-model";
 import {
   emptyDocument as emptyContextMap,
   serializeDocumentText as serializeContextMap,
@@ -23,10 +25,12 @@ import {
   serializeDocument as serializeValueChain,
 } from "@miragon/value-chain-schema-model";
 
+import { docCodecFor } from "../codecs.ts";
 import { modelElements } from "../elements.ts";
 import { extractModelGraph } from "../extract.ts";
 import {
   hasTemplate,
+  newBoardText,
   newBpmnXml,
   newCmJson,
   newDmnXml,
@@ -47,6 +51,7 @@ test("templateFor: dispatches to the notation's builder, undefined without one",
   assert.equal(templateFor("context-map", "map", "Map"), newCmJson("map", "Map"));
   assert.equal(templateFor("value-chain", "chain", "Chain"), newVcJson("chain", "Chain"));
   assert.equal(templateFor("markdown", "notes", "Notes"), newMarkdownText("notes", "Notes"));
+  assert.equal(templateFor("board", "workshop", "Workshop"), newBoardText("workshop", "Workshop"));
   assert.equal(templateFor("no-such", "x", "X"), undefined);
 });
 
@@ -60,6 +65,7 @@ test("hasTemplate mirrors templateFor — it drives the New menu and the create 
     "context-map",
     "value-chain",
     "markdown",
+    "board",
   ]) {
     assert.equal(hasTemplate(id), true, id);
   }
@@ -137,6 +143,33 @@ test("the value-chain template is the schema-model's CANONICAL empty document (b
   }
   assert.ok(newVcJson("chain", "Porter Value Chain").endsWith("}\n"));
   assert.equal((JSON.parse(newVcJson("x", "A\nB")) as { meta: { name: string } }).meta.name, "A B");
+});
+
+test("the board template is the schema model's new board, and its codec's canonical text (byte-stable first save)", () => {
+  const codec = docCodecFor("board");
+  assert.ok(codec?.check);
+  for (const name of ["Workshop", "Orders & Billing", 'Quote " and \\ backslash', "Ünïcödé 漢字"]) {
+    const text = newBoardText("workshop", name);
+    assert.equal(text, boardSchemaNewBoard(name), name);
+    assert.equal(codec.check(text), undefined, name);
+    assert.equal(codec.encode(codec.decode(text)), text, name);
+    assert.deepEqual(codec.decode(text), { elements: {}, meta: { title: name, version: 1 } }, name);
+  }
+  assert.equal(
+    newBoardText("workshop", "Workshop"),
+    `{"format":"structured-model","meta":{"title":"Workshop","version":1},"version":1}\n`,
+  );
+  const parsed = parseBoardText(newBoardText("x", "X"));
+  assert.ok(parsed.ok && Object.keys(parsed.snapshot.elements).length === 0, "the header alone");
+});
+
+test("the board template's title is one line: white space folded, control characters out", () => {
+  const title = (name: string): unknown => docCodecFor("board")?.decode(newBoardText("x", name)).meta.title;
+  assert.equal(title("A\nB"), "A B");
+  assert.equal(title("  A \u2028 B\r\n"), "A B");
+  // the schema model folds a run of white space; control characters are oneLine's
+  assert.equal(title("a  b\u00a0c"), "a b c");
+  assert.equal(title("a\u0001b\u007fc"), "a b c");
 });
 
 test("template names are forced onto one line — control chars would break OWM and JSON alike", () => {

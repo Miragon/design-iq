@@ -59,6 +59,7 @@ import { notationIcon } from "@/components/notation-icon";
 import { ReleaseDialog } from "@/components/release-dialog";
 import { RenameModelDialog } from "@/components/rename-model-dialog";
 import { SyncRepoDialog } from "@/components/sync-repo-dialog";
+import type { MoveModelsResult } from "@/lib/api";
 import { type ModelTarget, modelTarget, useOpenModel } from "@/lib/model-target";
 import {
   useDecisions,
@@ -272,9 +273,17 @@ export function ProcessList() {
   const allFolders = useMemo(() => [...folderSet].sort(), [folderSet]);
 
   // the view stays on this level; the toast leads to the models' new home
-  const announceMove = (models: MovableModel[], folder: string) => {
+  const announceMove = (models: MovableModel[], folder: string, result: MoveModelsResult) => {
     const what = models.length === 1 ? `'${models[0]?.name}'` : `${models.length} models`;
+    // a board names the models it shows by path: the move rewrote the boards that show one
+    const updated = result.updatedReferences.length;
     toast.success(`Moved ${what} to ${folder ? `${folder}/` : "the root"}`, {
+      description:
+        result.failedReferences.length > 0
+          ? `The path in ${result.failedReferences.join(", ")} could not be updated. Fix it by hand.`
+          : updated > 0
+            ? `Updated the path in ${updated} board${updated === 1 ? "" : "s"}.`
+            : undefined,
       action: {
         label: "Open folder",
         onClick: () => void navigate({ to: "/r/$owner/$repo", params: { owner, repo: name }, search: { dir: folder } }),
@@ -308,9 +317,9 @@ export function ProcessList() {
       move.mutate(
         { paths: models.map((m) => m.path), folder },
         {
-          onSuccess: () => {
+          onSuccess: (result) => {
             setSelected(new Set());
-            announceMove(models, folder);
+            announceMove(models, folder, result);
           },
           onError: (err) => toast.error(err.message),
         },
@@ -865,10 +874,10 @@ export function ProcessList() {
           models={moving}
           folders={allFolders}
           onClose={() => setMoving(null)}
-          onMoved={(folder) => {
+          onMoved={(folder, result) => {
             setMoving(null);
             setSelected(new Set());
-            announceMove(moving, folder);
+            announceMove(moving, folder, result);
           }}
         />
       )}

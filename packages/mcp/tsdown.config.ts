@@ -14,9 +14,11 @@ export default defineConfig({
   dts: false,
   // @designiq/notations, @designiq/contracts, @designiq/http-kit and @designiq/mcp-kit are
   // workspace-only (never published) — inline them into the bundle; every
-  // other dependency stays external and installs from npm (fast-xml-parser and
-  // @miragon/wardley-dsl are declared as dependencies here because the inlined
-  // notations/extract imports them at runtime; @modelcontextprotocol/node
-  // because the inlined mcp-kit/mount does).
+  // other dependency stays external and installs from npm (fast-xml-parser,
+  // @miragon/wardley-dsl and @miragon/board-schema-model are declared as
+  // dependencies here because the inlined notations imports them at runtime;
+  // @modelcontextprotocol/node because the inlined mcp-kit/mount does). Only a
+  // DECLARED dependency stays external: tsdown copies an undeclared one into
+  // dist/ without a word.
   deps: { alwaysBundle: [/^@designiq\/(notations|contracts|http-kit|mcp-kit|github-app)/] },
 });

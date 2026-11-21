@@ -7,18 +7,22 @@
  * editable: well-formed XML, sound BPMN flow structure, and a COMPLETE BPMNDI
  * section (every flow node has a shape — Hard Rule 2, or the visual editor
  * breaks). It also cross-checks callActivity → calledElement against the other
- * processes in the repo. Nothing else about the layout is assumed.
+ * processes in the repo. Nothing else about the layout is assumed. Every other
+ * notation gets its own check through checkModel: the schema model of a
+ * Miragon JSON notation, the strict reader of a board (its codec's check),
+ * the parse baseline of the rest.
  *
  * Library use:  import { checkBpmnXml } from "@miragon/design-iq-validator" — a PURE function
  * over a single BPMN XML string (no filesystem, no process.exit). The CLI lives
  * in src/cli.ts (a dedicated entry, so importing this module never runs it).
  */
 import { readFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { posix, relative, resolve } from "node:path";
 
-import { byExtension, byId } from "@designiq/notations";
+import { byExtension, byId, movedModelPath } from "@designiq/notations";
 import { kindOf } from "@designiq/notations/bpmn-kinds";
 import { cliRoot, notContentRepoError } from "@designiq/notations/cli";
+import { docCodecFor } from "@designiq/notations/codecs";
 import {
   asArray,
   extractModelGraph,
@@ -424,13 +428,18 @@ export function checkModelBaseline(raw: string, opts: { file?: string; notation:
   const file = opts.file ?? `<${opts.notation}>`;
   const findings: Finding[] = [];
   // a STRUCTURED notation's at-rest text is its codec's canonical format
-  // (e.g. JSON lines), NOT a plain mediaKind document — the mediaKind parse
-  // gate would false-positive on every valid file. Its codec's decode is
-  // TOTAL by contract; real structure checks are the notation's own checker.
-  // DARK today (no registered notation is structured, byId has no injection
-  // point) — shipped now so #116's first board file does not trip the JSON
-  // gate the moment its descriptor flips; recorded on the ticket.
-  if (byId(opts.notation)?.docShape === "structured") return findings;
+  // (the board's JSON lines), NOT a plain mediaKind document: the mediaKind
+  // parse gate would false-positive on every valid file. The text is read as
+  // strictly as its canvas reads it back (the codec's check): a line the
+  // total decode would skip, a second header or a repeated id is content the
+  // next save would drop, an ERROR under `<notation>/parse` ("board/parse")
+  if (byId(opts.notation)?.docShape === "structured") {
+    const reason = docCodecFor(opts.notation)?.check?.(raw);
+    if (reason !== undefined) {
+      findings.push({ severity: "ERROR", ruleId: `${opts.notation}/parse`, file, message: reason });
+    }
+    return findings;
+  }
   const err = (message: string): void => {
     findings.push({ severity: "ERROR", ruleId: "baseline/parse", file, message });
   };
@@ -569,15 +578,25 @@ export interface CheckContext {
   notation?: string;
   /** repo-wide model ids per notation id (discoverModels) — enables the
    *  cross-model link warnings (callActivity → process, decisionRef →
-   *  decision); absent = link checks are skipped */
+   *  decision); absent = link checks are skipped (unless `models` is given,
+   *  whose ids then stand in) */
   modelIds?: ReadonlyMap<string, ReadonlySet<string>>;
+  /** the repo's listed models (discoverModels): lets a reference that names
+   *  its target by path (a board's model node) tell a model that moved to
+   *  another folder ("moved to …") from one that is gone */
+  models?: ReadonlyArray<{ path: string; notation: string; id: string }>;
+  /** the models folder designiq.yml names ("." = the root, as
+   *  loadContentConfig normalizes it): a path a reference names outside it
+   *  is said to be there, since only the files in it are models */
+  modelsFolder?: string;
 }
 
 /**
  * THE one check dispatch: the platform check for whatever notation `ctx.path`
  * is — full checkers for BPMN/DMN, the schema model for the Miragon JSON
- * notations, the mediaKind baseline for everything else, plus the generic
- * dangling-reference rule for ANY notation with a refs emitter; `undefined`
+ * notations, the codec's strict reader for a board (and what it shows that
+ * its canvas cannot), the mediaKind baseline for everything else, plus the
+ * generic dangling-reference rule for ANY notation with a refs emitter; `undefined`
  * when the path matches no registered notation (the file is not a model;
  * nothing to check) or `ctx.notation` names none (a mistyped id must not
  * pass a file unchecked). Consumed by the CLI (runCli) AND the Live Host's
@@ -592,20 +611,54 @@ export function checkModel(raw: string, ctx: CheckContext): Finding[] | undefine
       : notation === "dmn"
         ? checkDmnXml(raw, { file: ctx.path }).findings
         : checkSchemaModel(raw, { file: ctx.path, notation });
-  return [...base, ...checkRefs(notation, raw, ctx)];
+  // what a board shows that its canvas cannot, on a board its reader takes
+  const board = notation === "board" && !base.some((f) => f.severity === "ERROR") ? checkBoardNodes(raw, ctx.path) : [];
+  return [...base, ...board, ...checkRefs(notation, raw, ctx)];
+}
+
+/**
+ * A board shows the repository's models, never another board: the board
+ * renderer has no editor for one and draws the node as a file it cannot
+ * show. A WARN, as everything else on the board opens and saves; such a
+ * node is no "shows" reference either (@designiq/notations/refs).
+ */
+function checkBoardNodes(raw: string, file: string): Finding[] {
+  const graph = extractModelGraph("board", raw);
+  return (graph?.nodes ?? [])
+    .filter((n) => n.type === "model" && n.extra?.notation === "board")
+    .map((n) => ({
+      severity: "WARN",
+      ruleId: "board/nested-board",
+      file,
+      message: `board node ${n.id} shows the board '${String(n.extra?.file)}', and a board cannot be shown on a board`,
+    }));
+}
+
+/** the model ids per notation of a list of models (CheckContext.models) */
+function idsOf(models: NonNullable<CheckContext["models"]>): Map<string, Set<string>> {
+  const ids = new Map<string, Set<string>>();
+  for (const m of models) (ids.get(m.notation) ?? ids.set(m.notation, new Set()).get(m.notation)!).add(m.id);
+  return ids;
 }
 
 /**
  * The generic dangling-reference rule: every REQUIRED reference the model
  * emits (@designiq/notations/refs) must resolve against the repo-wide ids —
  * ONE rule for every notation, replacing the bespoke processIds/decisionIds
- * plumbing. Skipped without ctx.modelIds (single-file use has no repo view).
+ * plumbing. Skipped without ctx.modelIds or ctx.models (single-file use has
+ * no repo view). A reference that names its target by path as well (a
+ * board's) is also checked against the models folder (ctx.modelsFolder) and
+ * where the model is now (ctx.models).
  */
 function checkRefs(notation: string, raw: string, ctx: CheckContext): Finding[] {
-  if (!ctx.modelIds || !hasRefs(notation)) return []; // no emitter → skip the extract entirely
+  const modelIds = ctx.modelIds ?? (ctx.models ? idsOf(ctx.models) : undefined);
+  if (!modelIds || !hasRefs(notation)) return []; // no emitter → skip the extract entirely
   // mirror the xml checkers' early return: no refs verdict on a file whose
   // well-formedness already failed (the lenient parser would still see nodes)
   if (byId(notation)?.mediaKind === "xml" && XMLValidator.validate(raw) !== true) return [];
+  // the same for a structured text its strict reader refuses: the total
+  // decode would still see the lines it kept
+  if (byId(notation)?.docShape === "structured" && docCodecFor(notation)?.check?.(raw) !== undefined) return [];
   let graph;
   try {
     graph = extractModelGraph(notation, raw);
@@ -617,17 +670,63 @@ function checkRefs(notation: string, raw: string, ctx: CheckContext): Finding[] 
   for (const ref of refsOf(graph)) {
     if (ref.strength !== "required") continue;
     const resolved = ref.to.notation
-      ? (ctx.modelIds.get(ref.to.notation)?.has(ref.to.id) ?? false)
-      : [...ctx.modelIds.values()].some((ids) => ids.has(ref.to.id));
-    if (resolved) continue;
-    findings.push({ severity: "WARN", ruleId: "refs/dangling", file: ctx.path, message: danglingMessage(ref) });
+      ? (modelIds.get(ref.to.notation)?.has(ref.to.id) ?? false)
+      : [...modelIds.values()].some((ids) => ids.has(ref.to.id));
+    // a path outside the models folder names no model, even where one of its
+    // notation and stem is in the folder: that one is not the file the
+    // source names, and nothing moved
+    if (!resolved || outsideModelsFolder(ref, ctx)) {
+      findings.push({ severity: "WARN", ruleId: "refs/dangling", file: ctx.path, message: danglingMessage(ref, ctx) });
+      continue;
+    }
+    // resolved by id, but named by a path that is no listed model: the model
+    // moved (a move keeps the id), and the source still names where it was
+    const moved = ref.to.path !== undefined && ctx.models ? movedModelPath(ref.to.path, ctx.models) : undefined;
+    if (moved !== undefined) {
+      findings.push({
+        severity: "WARN",
+        ruleId: "refs/stale-path",
+        file: ctx.path,
+        message: stalePathMessage(ref, moved),
+      });
+    }
   }
   return findings;
 }
 
+/** whether a repo-relative path lies in the models folder, after its `.`
+ *  and `..` segments (a path that climbs out of the repo lies nowhere in it) */
+function inModelsFolder(path: string, folder: string): boolean {
+  const normal = posix.normalize(path);
+  if (normal === ".." || normal.startsWith("../") || normal.startsWith("/")) return false;
+  return folder === "." || normal.startsWith(`${folder}/`);
+}
+
+/** whether a reference names its target by a path outside the models folder */
+const outsideModelsFolder = (ref: ModelRef, ctx: CheckContext): boolean =>
+  ref.to.path !== undefined && ctx.modelsFolder !== undefined && !inModelsFolder(ref.to.path, ctx.modelsFolder);
+
+/** the source element as the messages name it */
+const sourceOf = (ref: ModelRef): string =>
+  ref.rel === "shows" && ref.fromElement ? `board node ${ref.fromElement}` : (ref.fromElement ?? "the model");
+
+function stalePathMessage(ref: ModelRef, moved: string): string {
+  const verb = ref.rel === "shows" ? "shows" : "names";
+  return `${sourceOf(ref)} ${verb} '${ref.to.path}', which moved to '${moved}'`;
+}
+
 /** rel-specific wording, pinned to the historical link warnings — the texts
  *  are wire-visible (save results, CLI output) and must not drift */
-function danglingMessage(ref: ModelRef): string {
+function danglingMessage(ref: ModelRef, ctx: CheckContext): string {
+  // only the files in the models folder are models: one outside it is not
+  // missing, it is somewhere the platform does not look
+  if (outsideModelsFolder(ref, ctx)) {
+    const verb = ref.rel === "shows" ? "shows" : "names";
+    return `${sourceOf(ref)} ${verb} '${ref.to.path}', which is outside the models folder '${ctx.modelsFolder}' (only the files there are models of this repo)`;
+  }
+  if (ref.rel === "shows" && ref.fromElement) {
+    return `board node ${ref.fromElement} shows ${ref.to.notation ?? "model"} '${ref.to.id}', which is not a model in this repo (deleted or renamed?)`;
+  }
   if (ref.rel === "calls") {
     return `callActivity calls '${ref.to.id}', which is not a process in this repo (external or dangling?)`;
   }
@@ -705,7 +804,8 @@ export async function runCli(): Promise<void> {
   }
   for (const model of [...processes, ...decisions, ...others]) {
     const abs = resolve(ROOT, model.path);
-    findings.push(...(checkModel(readFileSync(abs, "utf8"), { path: rel(abs), modelIds }) ?? []));
+    const ctx = { path: rel(abs), modelIds, models, modelsFolder: cfg.models };
+    findings.push(...(checkModel(readFileSync(abs, "utf8"), ctx) ?? []));
   }
 
   for (const f of findings.sort((a, b) => a.file.localeCompare(b.file))) {

@@ -10,6 +10,7 @@ import {
   ChartNetwork,
   ChevronsRight,
   FileText,
+  LayoutDashboard,
   type LucideIcon,
   Shapes,
   StickyNote,
@@ -27,6 +28,7 @@ const NOTATION_ICONS = new Map<string, LucideIcon>([
   ["context-map", Boxes],
   ["value-chain", ChevronsRight],
   ["markdown", FileText],
+  ["board", LayoutDashboard],
 ]);
 
 /** the icon of a notation registry id */

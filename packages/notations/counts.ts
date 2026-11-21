@@ -21,9 +21,10 @@ const qualifier = (n: NotationDescriptor): string =>
 /**
  * "2 BPMN processes", "1 Event Storming board", "3 Markdown documents" — the
  * registry noun of the notation, counted. A noun that already names its
- * notation ("Event Storming board") takes the label's spelling for those
- * words; any other noun gets the label in front ("processes" → "BPMN
- * processes"). An id this build does not know (a newer host) still counts.
+ * notation ("Event Storming board", and the Board's plain "board") takes the
+ * label's spelling for the words before its last; any other noun gets the
+ * label in front ("processes" → "BPMN processes"). An id this build does not
+ * know (a newer host) still counts.
  */
 export function notationCount(notation: string, count: number): string {
   const n = byId(notation);
@@ -31,7 +32,8 @@ export function notationCount(notation: string, count: number): string {
   const noun = count === 1 ? n.noun.singular : n.noun.plural;
   const words = noun.split(" ");
   const labelWords = qualifier(n).split(" ");
-  if (words.length > 1 && words[0]?.toLowerCase() === labelWords[0]?.toLowerCase()) {
+  // by the singular: a one-word noun that is the label ("board") has a plural that no longer equals it
+  if (n.noun.singular.split(" ")[0]?.toLowerCase() === labelWords[0]?.toLowerCase()) {
     const head = words
       .slice(0, -1)
       .map((w, i) => (labelWords[i]?.toLowerCase() === w.toLowerCase() ? labelWords[i] : w));

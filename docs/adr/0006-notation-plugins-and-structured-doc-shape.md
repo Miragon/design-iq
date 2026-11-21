@@ -1,6 +1,8 @@
 # ADR 0006. Notation plugins: capability slots, a reference meta-model, and the structured doc shape
 
-- **Status:** accepted (2026-08-20)
+- **Status:** accepted (2026-08-20), amended (2026-11-20: the board is the first structured
+  notation, see [the amendment](#amendment-2026-11-20-the-board-the-first-structured-notation);
+  it corrects what decision 4 says of VS Code and what decision 5 assumes of a canvas editor)
 - **Context:** synthesized from three fully drafted alternatives (evolutionary
   slot extension, versioned plugin SDK, meta-model-first) that were
   adversarially judged against the codebase; every load-bearing claim below was
@@ -99,6 +101,9 @@ notations whose defining scenario is many simultaneous writers.
    the notations exist for. The structured contract ships **dark** (test-only
    descriptor through seed→edit→persist→history→release in CI) before the
    first board notation uses it.
+   _Amended 2026-11-20:_ the board (`.board`) is that first notation, and VS
+   Code does not see the same bytes as a text notation's: it shows a
+   structured room read-only, as its canonical text. See the amendment below.
 
 5. **Editors are external modeler libraries behind a lazy browser registry.**
    A browser-only `WebNotationPlugin` registry (`mountEditor`, `panels`,
@@ -113,6 +118,9 @@ notations whose defining scenario is many simultaneous writers.
    same manner (#116). Sync reuses their battle-tested webview recipe
    (echo suppression, serialized import chain, viewport preservation,
    last-good-diagram on invalid text) on top of the minimal-diff writer.
+   _Amended 2026-11-20:_ the board's editor is no diagram-js renderer and
+   writes no text: `@miragon/board-renderer` (React Flow on React) works on
+   the room's element maps in place. See the amendment below.
 
 6. **Third-party runtime plugin loading is deferred, with a named trigger.**
    No versioned plugin-API semver gating, no boot-time npm loading, no
@@ -166,3 +174,71 @@ notations whose defining scenario is many simultaneous writers.
   core and the published validator's graph; see Decision 2); `ModelGraph` as
   the universal validation substrate (too lossy; the BPMN checker needs its
   rich reader; see Decision 3).
+
+## Amendment (2026-11-20): the board, the first structured notation
+
+The structured shape goes live with the **board** (`.board`, notation `board`): a canvas of the
+repository's own files. A board shows models of the repository in place, each edited by the
+editor of its own notation and saved in its own file, beside notes, images, groups and arrows;
+it names a file by its repository-relative path and never holds what is in it. It is not an
+Event Storming board: Event Storming, the canvas notation decisions 4 and 5 had in mind, shipped
+as a text notation on its DSL (`.storm`) with a Miragon renderer. The board's own suite (Miragon/modeler-suite, `modelers/board`)
+publishes the format and the canvas; designIQ takes both as dependencies.
+
+**Decided:**
+
+- **The codec is the board's own, and it can say no.** `@designiq/notations/codecs` registers
+  `@miragon/board-schema-model`'s `encodeBoard` and `decodeBoard` for `board`: one JSON header
+  line, then one line per element sorted by id, the bytes the house codec (`jsonLinesCodec`)
+  writes for the same snapshot, which the tests compare. `DocCodec` gains an optional strict
+  reader, `check(text)`: nothing when the codec writes the text back whole, otherwise why not
+  (`line 3 repeats the element id n_a`). The total `decode` a seed and a listing need skips what
+  it cannot read, and the next write-through would make that loss the file, so every writer
+  asks `check` first: the validator (an ERROR, `board/parse`), the Live Host (a file it refuses
+  is not opened live, `content/unreadable-model`, the reason told to a ws client; a save it
+  refuses is refused in every lint mode, `content/invalid-model`; a save over such a file is the
+  repair besides git) and the web's History restore (refused, nothing written). A descriptor of
+  `docShape: "structured"` without a codec fails the notations tests.
+- **One `shows` reference per model node**, by notation and file stem like every reference, the
+  node's path riding along. The validator warns on one that is gone (`refs/dangling`), one that
+  names where a model was before a move (`refs/stale-path`), and a board shown on a board
+  (`board/nested-board`, no reference). A rename (`retargetRefs`) and a move
+  (`retargetMovedPaths`) rewrite the `file` of the model nodes and nothing else, read strictly
+  and written canonically; the Live Host edits a structured room element by element
+  (`editContent`), so a co-editor's change of another element stays.
+- **VS Code shows a structured room read-only** (correcting decision 4): its canonical codec
+  text, the bytes git, history and the validator see, followed live once the room rests; a
+  write is refused with a link to the web app. A two-way text lane would have to decode and
+  reconcile half-typed JSON lines on every keystroke. The Live Host has no guard against an
+  extension build that predates the board: it shows a board empty, and what is typed there
+  lands in a Y.Text the host never writes to the file. The web shell's source of a structured
+  document is the same read-only text (Monaco language `jsonl`), never split with the canvas,
+  and its History compares and restores through the codec.
+- **The editor is `@miragon/board-renderer`** (amending decision 5 for the board): React Flow
+  on React, no diagram-js, mounted with `liveDocument` on the room's own `Y.Doc`, so it reads
+  and writes the element and meta maps in place: no text import, no minimal-diff writer. It
+  implements `@miragon/modeler-api`'s collaborative-modeler contract; its conformance harness
+  in `apps/web` pins the seven cases the board skips. designIQ's host for it lives in
+  `apps/web/src/notations/board/`: every model node is the product editor that model's own page
+  mounts (BPMN, DMN, the five Miragon renderers), on a live session of that model's own room.
+  The sessions of one board share one more socket (`openLiveSessionGroup`, session-aware
+  providers, so two nodes may show one model). The person is announced in a model's room only
+  while its node is armed; a room nobody is announced in is no live session in the model and
+  repo listings, and a move or a delete takes it along instead of refusing. Of all the editors
+  on a board only the armed one takes keys, and the shell ends the linked socket only after the
+  board let go of its editors (`MountedEditor.unmounted`). The canvas and its host load as a
+  chunk of their own (`web-board-engine-loads-lazily`), and no widget carries them
+  (`widgets-carry-no-board`): a board has no MCP-App widget.
+- **Decision 6's single-instance hazard applies to an installed package.** `yjs`, `react`,
+  `react-dom` and `@xyflow/react` are peers of the renderer and must resolve to the one copy
+  `apps/web` ships: the board's store tells its elements by `instanceof Y.Map`, a second React
+  has hooks of its own, a second React Flow a store the board cannot read.
+  `test/shared-runtimes.test.ts` holds them to one copy. React Flow stays on 12.12 (the renderer
+  peers on `~12.12.1` and reads its internal store); Dependabot holds back `>=12.13` and groups
+  `@miragon/board-*` on their own.
+
+**Not in this step:** image upload (a board's images are read-only from the repository's image
+route), todos on a board, a board on a board, a Markdown document on a board, a board widget, an
+example board in `process-documentation/` (a board names repository-relative paths, which differ
+between this monorepo and the starter it is mirrored to), and the suite's editor hand-over on a
+move (a node whose model moved mounts its editor anew at the new path).

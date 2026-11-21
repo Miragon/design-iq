@@ -45,7 +45,16 @@ function makeFakeViewer() {
         ? {
             viewbox: (vb?: unknown) => {
               if (vb) canvasCalls.push("viewbox:set");
-              return { x: 0, y: 0, width: 100, height: 100 };
+              if (vb === false) canvasCalls.push("viewbox:measure");
+              // diagram-js's read: the view, the content's box and the container's size
+              return {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+                inner: { x: 0, y: 0, width: 400, height: 200 },
+                outer: { width: 100, height: 100 },
+              };
             },
             zoom: () => {
               canvasCalls.push("zoom:fit");
@@ -208,6 +217,40 @@ test("remote change re-imports; DRD restores the viewbox, table views are left a
   await wait(500);
   assert.ok(modeler.xml().includes("Beta-REMOTE-2"));
   assert.deepEqual(drd.canvasCalls, ["zoom:fit", "viewbox:set"], "no canvas calls while a table is active");
+  unbind();
+});
+
+test("with the host's fitInsets the DRD's first import fits into the free area; a re-import restores, a table reads no insets", async () => {
+  const { doc, ytext, modeler } = setup();
+  let reads = 0;
+  const fitInsets = () => {
+    reads++;
+    return { top: 10, right: 10, bottom: 10, left: 40 };
+  };
+  const unbind = bindDmn(modeler as never, ytext, doc, undefined, undefined, { fitInsets });
+  await wait(100);
+  const drd = modeler.viewer("drd");
+  assert.deepEqual(drd.canvasCalls, ["viewbox:measure", "viewbox:set"], "a fit into the free area, no fit-viewport");
+  assert.equal(reads, 1);
+
+  const remote = BASE.replace('name="Beta"', 'name="Beta-REMOTE"');
+  doc.transact(() => {
+    ytext.delete(0, ytext.length);
+    ytext.insert(0, remote);
+  }, "remote-user");
+  await wait(500);
+  assert.deepEqual(drd.canvasCalls, ["viewbox:measure", "viewbox:set", "viewbox:set"], "a re-import restores the view");
+  assert.equal(reads, 1, "a re-import reads no insets");
+
+  modeler.openView("decisionTable");
+  doc.transact(() => {
+    ytext.delete(0, ytext.length);
+    ytext.insert(0, remote.replace("Beta-REMOTE", "Beta-REMOTE-2"));
+  }, "remote-user");
+  await wait(500);
+  assert.ok(modeler.xml().includes("Beta-REMOTE-2"));
+  assert.equal(drd.canvasCalls.length, 3, "no canvas call while a table is active");
+  assert.equal(reads, 1);
   unbind();
 });
 

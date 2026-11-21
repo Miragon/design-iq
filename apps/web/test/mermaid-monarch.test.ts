@@ -150,8 +150,12 @@ function family(source: string): string {
 }
 
 test("registration: Monaco's own lazy pattern for its languages, once per page", async () => {
-  assert.deepEqual(registered, [{ id: "mermaid", aliases: ["Mermaid", "mermaid"] }]);
-  assert.deepEqual([...factories.keys()], ["mermaid"]);
+  // jsonl beside it: test/jsonl-monarch.test.ts
+  assert.deepEqual(registered, [
+    { id: "mermaid", aliases: ["Mermaid", "mermaid"] },
+    { id: "jsonl", aliases: ["JSON Lines", "jsonl"] },
+  ]);
+  assert.deepEqual([...factories.keys()], ["mermaid", "jsonl"]);
   // the factory loads the grammar; the language configuration waits for the
   // first fence Monaco meets (onLanguageEncountered: a fence is no model, so
   // onLanguage would never fire)

@@ -16,7 +16,9 @@ answer in them.**
   file name without the extension. `.bpmn` is a process, `.dmn` a decision; the
   folder can also hold Wardley Maps (`.owm`, `.wmap`), Team Topologies (`.tt`,
   `.ttm.json`), Event Storming boards (`.storm`), Context Maps (`.cm.json`),
-  Value Chains (`.vc.json`) and Markdown documents (`.md`).
+  Value Chains (`.vc.json`), Markdown documents (`.md`) and boards (`.board`: a
+  canvas that shows other models of the repo in place, named by their path from
+  the repo root, beside notes, images and arrows; it never holds their content).
 - A Mermaid diagram (a diagram as code) is no model of its own: it is a
   `mermaid` fence in a Markdown document, next to the prose that explains it. A
   process, a decision, a Wardley Map or any other model above is a model of its

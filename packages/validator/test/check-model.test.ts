@@ -2,8 +2,9 @@
  * checkModel — THE one check dispatch (epic #118 step 3), consumed by the CLI
  * and the Live Host's save gate. Pinned here: notation selection by path,
  * full-checker parity for BPMN/DMN, the schema model for the Miragon JSON
- * notations, the baseline for everything else, and `undefined` for
- * non-model files and unknown notation ids.
+ * notations, the codec's strict reader for a board, the baseline for
+ * everything else, and `undefined` for non-model files and unknown notation
+ * ids. The board's own checks: board.test.ts.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -99,6 +100,21 @@ test("checkModel: the Miragon JSON notations run their schema model", () => {
       path,
     );
   }
+});
+
+test("checkModel: a board runs its codec's strict reader, the baseline of a structured notation", () => {
+  const header = `{"format":"structured-model","meta":{"title":"B","version":1},"version":1}`;
+  for (const raw of ["", `${header}\n`, `${header}\nnot json\n`, `${header}\n${header}\n`]) {
+    const findings = checkModel(raw, { path: "boards/a.board" });
+    assert.deepEqual(findings, checkModelBaseline(raw, { file: "boards/a.board", notation: "board" }), raw);
+  }
+  assert.deepEqual(checkModel(`${header}\n`, { path: "boards/a.board" }), []);
+  assert.deepEqual(checkModel(`${header}\nnot json\n`, { path: "boards/a.board" })?.[0], {
+    severity: "ERROR",
+    ruleId: "board/parse",
+    file: "boards/a.board",
+    message: "line 2 is no JSON",
+  });
 });
 
 test("checkModel: other notations run the baseline, non-models are undefined", () => {

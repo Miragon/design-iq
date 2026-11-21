@@ -19,6 +19,7 @@ import * as vscode from "vscode";
 
 import { hostJson } from "./host-api.ts";
 import { hostUrls, loginStartUrl, parseLoginCallback } from "./login-flow.ts";
+import { plainText } from "./notice-text.ts";
 
 const LOGIN_TIMEOUT_MS = 5 * 60_000;
 /** the credential while not signed in — meaningless to an authenticated host
@@ -130,7 +131,8 @@ export class LiveAuth implements vscode.Disposable {
     const code = await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `designIQ: finish signing in via ${provider.label} in your browser…`,
+        // the provider's label comes from the host: VS Code reads link syntax in a progress title
+        title: plainText(`designIQ: finish signing in via ${provider.label} in your browser…`),
         cancellable: true,
       },
       (_progress, cancel) =>

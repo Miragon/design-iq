@@ -69,7 +69,14 @@ import {
   type OutlineRequest,
   triggersList,
 } from "../application/bpmn-edit.ts";
-import { checkContent, type ContentDeps, getContent, modelIdsOf, putContent } from "../application/content.ts";
+import {
+  checkContent,
+  type ContentDeps,
+  getContent,
+  modelIdsOf,
+  putContent,
+  refContextOf,
+} from "../application/content.ts";
 import { readDecisionTests, runTestsFor, saveTestsFor } from "../application/decision-tests.ts";
 import { findDecisionPath, findModelPath, findProcessPath } from "../application/find-model.ts";
 import {
@@ -85,7 +92,8 @@ import { roomPresence, type RoomPresenceDeps } from "../application/room-presenc
 import { createDecision, createNotationModel, createProcess } from "../application/scaffold.ts";
 import { closeTodoFor, fileTodo, listOpenTodos, listTodoTypesFor, todoListModel } from "../application/todos.ts";
 import type { WsTicketStore } from "../application/ws-tickets.ts";
-import { changedElementIds } from "../domain/model-diff.ts";
+import { changedElementIds, changedSnapshotIds } from "../domain/model-diff.ts";
+import { docCodecForPath } from "../domain/rooms.ts";
 import type { GitProvider } from "../ports/git-provider.ts";
 import type { IssueTracker } from "../ports/issue-tracker.ts";
 import { release, type ReleaseDeps, releaseFiles } from "../release.ts";
@@ -210,6 +218,23 @@ const SCHEMA_REFUSALS =
   "beyond 1,000,000; in a Value Chain extra keys in bounds or waypoints, coordinates beyond ±1e9 and __proto__ " +
   "keys. A Context Map's strategic-DDD rules are WARNs only.";
 
+/** what an agent writes into a board, which it cannot see drawn: the format,
+ *  and what the board's strict reader refuses (@miragon/board-schema-model
+ *  parseBoardText): a text it refuses is never saved, whatever `lint` says,
+ *  since the live board could not hold what the reader skips */
+const BOARD_FORMAT =
+  "A board (.board) is JSON lines: one header line " +
+  '{"format":"structured-model","meta":{"title":…},"version":1}, then one line per element, sorted by id, keys ' +
+  'sorted. A node: "id", "kind":"node", "type" model, text (a note, Markdown in "text"), image or group (its label ' +
+  'in "text"), integer "x", "y", "width", "height", "z" (paint order, a string such as "a" or "am"), "parent" (a ' +
+  'group\'s id; positions inside a group are relative to it) and for a model or an image "file", the ' +
+  'repository-relative path. An arrow: "id", "kind":"edge", "source", "target", "sourceHandle"/"targetHandle" ' +
+  '(top, right, bottom, left), "label". A node without numeric x, y, width, height and a string z is kept but not ' +
+  "drawn. A model node shows another model of the repository in place (never a board), which is read and changed " +
+  "in its own file. The board's reader refuses these, and no save takes them, whatever `lint` says: a line " +
+  "that is no JSON object, no header or a second one, a repeated id, a header version other than 1 or header " +
+  "keys other than format, version and meta, and a key named __proto__.";
+
 /** edit_process's copy: the contract, then the op table and the kinds the
  *  engine derives from its own schema (they follow the pinned version) */
 const EDIT_PROCESS_DESCRIPTION = [
@@ -311,7 +336,9 @@ const DMN_WIDGET: WidgetSpec = {
 };
 /** the notations whose widget is a Miragon renderer on the widget core
  *  (apps/web/src/mcp-app/miragon-main.ts). Adding one = this id + its renderer
- *  spec in apps/web/src/notations/miragon (the build derives the bundle). */
+ *  spec in apps/web/src/notations/miragon (the build derives the bundle).
+ *  The board is deliberately absent: it holds a live session per model it
+ *  shows, and a widget's ws ticket (mint_ws_ticket) admits one room. */
 const GENERATED_WIDGET_NOTATIONS = [
   "wardley",
   "team-topology",
@@ -391,6 +418,8 @@ function liveInstructions(on: {
       `through these tools you ${write ? "read, check and change" : "read and check"} the same models they work on.`,
     `Each connected repository keeps its models as files, one model per file with the file stem as its id, in these notations: ${NOTATION_FILES}.`,
     DIAGRAMS_IN_DOCUMENTS,
+    "A board shows other models of the repository in place, by their paths, beside notes, images, groups and " +
+      "arrows: `get_view` lists what a board shows, and each model on it is read and changed in its own file.",
     "Start with `list_repos`, then `list_models` to see which models a repository holds.",
     `These tools are notation-neutral: ${andList(neutralTools)}.`,
     `BPMN and DMN have deeper tooling: for processes ${named(["get_process", ...(on.bpmnEdit ? ["get_process_outline"] : []), "get_bpmn_xml", "validate_bpmn"])}; ` +
@@ -528,14 +557,19 @@ export function createLiveMcpServer(
     seen(r, content.path);
     return content;
   };
+  /** the elements a save changed: a structured document's by their
+   *  attributes (a board node an agent only moved counts), any other by its
+   *  ModelGraph */
+  const changedIds = (path: string, previous: string, next: string): string[] => {
+    const codec = (opts.docCodec ?? docCodecForPath)(path);
+    if (codec) return changedSnapshotIds(codec.decode(previous), codec.decode(next));
+    return changedElementIds(graphOf(path, previous), graphOf(path, next));
+  };
   const writeContent = async (r: ConnectedRepo, path: string, body: Parameters<typeof putContent>[3]) => {
     const out = await putContent(opts, r, path, body);
     if (out.ok) {
       const saved = out.result.path;
-      seen(r, saved, () => ({
-        cursor: null,
-        selection: changedElementIds(graphOf(saved, out.previous), graphOf(saved, out.next)),
-      }));
+      seen(r, saved, () => ({ cursor: null, selection: changedIds(saved, out.previous, out.next) }));
     }
     return out;
   };
@@ -561,12 +595,13 @@ export function createLiveMcpServer(
     return findModelPath(opts, repo, a.id, a.notation);
   };
 
-  /** repo-wide model ids per notation — the link-check context of checkModel
-   *  (the same aggregation the save gate runs); undefined without a repo */
-  const repoModelIds = async (repo?: string): Promise<Map<string, Set<string>> | undefined> => {
+  /** the repo's models and models folder: the reference-check context of
+   *  checkModel (the same the save gate and the CLI pass); undefined without
+   *  a repo */
+  const repoRefContext = async (repo?: string) => {
     if (!repo) return undefined;
     const r = await requireRepo(repo);
-    return modelIdsOf(await opts.workspaces.ensure(r));
+    return refContextOf(await opts.workspaces.ensure(r));
   };
 
   /** parse a .dmn into the decision view — one message for every "not DMN" case.
@@ -958,7 +993,8 @@ export function createLiveMcpServer(
         "The derived view of ANY live model — its own name, a one-line summary, stats, and the " +
         "rich notation payload in `detail` where one exists (the process view for BPMN, the decision " +
         "tables for DMN, the elements of a canvas model under the ids its canvas uses, which todos anchor " +
-        "to). Works for every notation with extract+derive capabilities " +
+        "to; for a board the models it shows with their path, notation and id, and its notes, images, groups " +
+        "and arrows). Works for every notation with extract+derive capabilities " +
         `(${NOTATIONS.filter((n) => hasDeriver(n.id))
           .map((n) => n.id)
           .join(", ")}). Read this before the source text when you need the structure.`,
@@ -1032,10 +1068,10 @@ export function createLiveMcpServer(
     safe(async ({ xml, repo, path }: { xml: string; repo?: string; path?: string }) => {
       // THE one check dispatch (incl. the generic dangling-reference rule) —
       // the same path the CLI and the save gate run, so all three agree
-      const modelIds = await repoModelIds(repo);
+      const refs = await repoRefContext(repo);
       const file = path ?? "<bpmn>";
       const findings = [
-        ...(checkModel(xml, { path: file, notation: "bpmn", modelIds }) ?? []),
+        ...(checkModel(xml, { path: file, notation: "bpmn", ...refs }) ?? []),
         ...(await engineFindings(xml, file)),
       ];
       return ok({ ok: !findings.some((f) => f.severity === "ERROR"), findings });
@@ -1055,7 +1091,9 @@ export function createLiveMcpServer(
     description:
       `The current LIVE source text of a model of ANY notation (${NOTATION_IDS}) plus the baseVersion token ` +
       "save_model_content requires for conflict-safe writes. For BPMN and DMN this is the same XML " +
-      "get_bpmn_xml / get_dmn_xml return. Read get_view first when you need the derived structure, not the source.",
+      "get_bpmn_xml / get_dmn_xml return; for a board its JSON lines (canonical: sorted, one element per line). " +
+      "A board file whose text the board's reader refuses is not opened and answers an error naming the line. " +
+      "Read get_view first when you need the derived structure, not the source.",
     ref: modelRef,
     resolve: resolveModelPath,
     legacyAlias: false,
@@ -1069,8 +1107,9 @@ export function createLiveMcpServer(
         "Dry-run the platform validator on the text of a model of ANY notation WITHOUT writing anything — " +
         "the same check every save and the designiq-validate CLI run (structure + DI coverage for the XML " +
         "notations, the schema model for Team Topology, Context Map and Value Chain JSON, the baseline parse " +
-        "for the others, dangling references against the repo's models when `repo` is given). " +
-        `${SCHEMA_REFUSALS} ` +
+        "for the others, the board's strict reader for a board, dangling references against the repo's models " +
+        "when `repo` is given, and a board node naming a model that moved by its old path). " +
+        `${SCHEMA_REFUSALS} ${BOARD_FORMAT} ` +
         "The notation comes from `path`'s extension or an explicit `notation`. " +
         "Iterate here until ok before calling save_model_content.",
       inputSchema: z.object({
@@ -1099,8 +1138,8 @@ export function createLiveMcpServer(
         path?: string;
         notation?: string;
       }) => {
-        const modelIds = await repoModelIds(repo);
-        const findings = checkModel(content, { path: path ?? `<${notation ?? "model"}>`, notation, modelIds });
+        const refs = await repoRefContext(repo);
+        const findings = checkModel(content, { path: path ?? `<${notation ?? "model"}>`, notation, ...refs });
         if (!findings) {
           return fail(
             notation
@@ -1382,8 +1421,9 @@ export function createLiveMcpServer(
           `Create a new model of ANY template-capable notation (${CREATABLE_IDS}) from its blank template. ` +
           "Returns its ModelInfo incl. the path for get_model_content/save_model_content. A notation without " +
           "a template answers with an error: its files arrive via git only. create_process / create_decision " +
-          "are the BPMN- and DMN-specific variants. A Mermaid diagram is no model of its own: it goes as a " +
-          "```mermaid fence into a markdown document.",
+          "are the BPMN- and DMN-specific variants. A new board holds only its header with the title: add its " +
+          "elements with save_model_content (validate_model describes the format). A Mermaid diagram is no " +
+          "model of its own: it goes as a ```mermaid fence into a markdown document.",
         inputSchema: z.object({
           repo: repoArg,
           notation: z.string().describe(`registry notation id — one of: ${CREATABLE_IDS}`),
@@ -1415,13 +1455,15 @@ export function createLiveMcpServer(
         "baseline parse for the others, dangling references against the repo); its ERROR findings refuse the " +
         "save. A .tt/.ttm.json, .cm.json or .vc.json its schema model rejects is refused that way, since its " +
         "canvas could not open it: a duplicate id, a reserved id (tt-root, cm-root, vc-root, __implicitroot…, " +
-        "assoc_<annotation id>, constructor) and the other rejections validate_model lists. " +
+        "assoc_<annotation id>, constructor) and the other rejections validate_model lists. A board text the " +
+        "board's reader refuses (validate_model lists what) is refused whatever `lint` says; a save over a " +
+        "board file the host cannot open repairs it (its conflict answer carries the file's text). " +
         "baseVersion (from get_model_content) is REQUIRED; a stale one returns {conflict:true, " +
         "currentContent} instead of overwriting — re-derive your edit against currentContent and retry. " +
         "For BPMN and DMN, save_bpmn_xml / save_dmn_xml do the same.",
       ref: modelRef,
       payloadKey: "content",
-      payloadDoc: "the complete document text in the notation's own format (XML, DSL, JSON, …)",
+      payloadDoc: "the complete document text in the notation's own format (XML, DSL, JSON, JSON lines for a board, …)",
       baseVersionDoc: "the baseVersion from a prior get_model_content — call that first",
       resolve: resolveModelPath,
     });

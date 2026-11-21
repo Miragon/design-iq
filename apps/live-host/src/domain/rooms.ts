@@ -8,6 +8,7 @@
  */
 import { resolve } from "node:path";
 
+import { UNREADABLE_DOCUMENT } from "@designiq/contracts/live";
 import { byExtension, EDITABLE_EXTENSIONS } from "@designiq/notations";
 import { type DocCodec, docCodecFor } from "@designiq/notations/codecs";
 
@@ -39,6 +40,35 @@ export class NotAContentRepoError extends Error {
   constructor(repoFullName: string) {
     super(`${repoFullName} has no usable designiq.yml (or legacy bpmiq.yml) at its root — not a content repo`); // legacy-name-ok: names the legacy file it still reads
     this.name = "NotAContentRepoError";
+  }
+}
+
+/**
+ * A STRUCTURED room whose file its codec's strict reader refuses
+ * (DocCodec.check: a line that is no JSON, a repeated id …). Seeding the live
+ * document from it would keep only what the total decode reads, and the next
+ * write-through would make that loss the file; so the room is not opened, and
+ * the file stays as it is until it is repaired (through git, or a valid save
+ * over it). A class like NotAContentRepoError: the content use-case answers it
+ * with its own status. `reason` is what Hocuspocus tells a ws client whose
+ * load failed (it forwards an error's `reason` as the permission-denied
+ * reason), so an editor can say which line it is.
+ */
+export class UnreadableDocumentError extends Error {
+  /** the repo-relative path of the file */
+  readonly path: string;
+  /** the strict reader's verdict, e.g. "line 3 repeats the element id n_a" */
+  readonly why: string;
+  /** the ws client's refusal reason: the message */
+  readonly reason: string;
+
+  constructor(path: string, why: string) {
+    const noun = byExtension(path)?.noun.singular ?? "model";
+    super(`${path} is not a ${noun} ${UNREADABLE_DOCUMENT}: ${why}`);
+    this.name = "UnreadableDocumentError";
+    this.path = path;
+    this.why = why;
+    this.reason = this.message;
   }
 }
 
@@ -119,8 +149,8 @@ export async function toDiskPath(
 
 /**
  * The doc codec of a room's file — defined iff the notation is STRUCTURED
- * (docShape, epic #118 step 8) and has a registered codec. Text rooms (every
- * shipped notation today) resolve undefined and stay on the Y.Text lane.
+ * (docShape, epic #118 step 8) and has a registered codec: the board's. Every
+ * other notation resolves undefined and stays on the Y.Text lane.
  */
 export function docCodecForPath(path: string): DocCodec | undefined {
   const notation = byExtension(path);

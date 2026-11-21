@@ -23,6 +23,7 @@ import type { TodoType } from "@designiq/contracts/todo-types";
 import { DIAGRAMS_IN_DOCUMENTS } from "@designiq/mcp-kit";
 import { toolNamesIn, toolText } from "@designiq/mcp-kit/testing";
 import { NOTATIONS } from "@designiq/notations";
+import { docCodecFor } from "@designiq/notations/codecs";
 import { templateFor } from "@designiq/notations/templates";
 import { Server as HocuspocusServer } from "@hocuspocus/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
@@ -1817,6 +1818,116 @@ test("generic model tools: get/save ANY notation with CAS, validate_model, creat
   // the widget's live ticket mints for any notation's room
   const ticket = await callJson("mint_ws_ticket", { repo: REPO.fullName, path: OWM_PATH });
   assert.match(ticket.room, /strategy\.owm$/);
+});
+
+test("generic model tools: a board — created, filled through its JSON lines, read as a view, guarded by its reader", async () => {
+  const touches: Array<{ room: string; selection?: string[] }> = [];
+  const { call, callJson } = await connect(
+    deps({
+      presence: {
+        touch: (room, _principal, canvas) => {
+          const c = canvas?.();
+          touches.push({ room, ...(c ? { selection: c.selection } : {}) });
+        },
+      },
+    }),
+  );
+  const codec = docCodecFor("board")!;
+  const created = await callJson("create_model", { repo: REPO.fullName, notation: "board", name: "Workshop" });
+  assert.equal(created.model.path, "processes/workshop.board");
+  const empty = await callJson("get_model_content", { repo: REPO.fullName, path: created.model.path });
+  assert.equal(empty.content, templateFor("board", "workshop", "Workshop"));
+  assert.equal((await callJson("get_view", { repo: REPO.fullName, id: "workshop" })).summary, "Board with no elements");
+
+  // the elements an agent writes: a model node showing the process, a note
+  const node = (attrs: Record<string, unknown>) => ({
+    kind: "node",
+    x: 0,
+    y: 0,
+    width: 280,
+    height: 200,
+    z: "a",
+    ...attrs,
+  });
+  const filled = codec.encode({
+    meta: { title: "Workshop", version: 1 },
+    elements: {
+      n_order: node({ type: "model", file: PATH }),
+      n_note: node({ type: "text", text: "Ask finance", x: 320 }),
+    },
+  });
+  const saved = await callJson("save_model_content", {
+    repo: REPO.fullName,
+    path: created.model.path,
+    content: filled,
+    baseVersion: empty.baseVersion,
+  });
+  assert.equal(saved.ok, true);
+  assert.deepEqual(saved.warnings, [], "the process it shows exists");
+  const view = await callJson("get_view", { repo: REPO.fullName, path: created.model.path });
+  assert.equal(view.name, "Workshop");
+  assert.deepEqual(view.detail.models, [
+    { element: "n_order", path: PATH, notation: "bpmn", id: "order", group: null },
+  ]);
+
+  // a node only MOVED is what the agent's presence outlines (no ModelGraph field changes)
+  const current = await callJson("get_model_content", { repo: REPO.fullName, path: created.model.path });
+  const moved = codec.decode(current.content);
+  moved.elements.n_note = { ...moved.elements.n_note, x: 640 };
+  await callJson("save_model_content", {
+    repo: REPO.fullName,
+    path: created.model.path,
+    content: codec.encode(moved),
+    baseVersion: current.baseVersion,
+  });
+  assert.deepEqual(touches.at(-1), { room: `${REPO.fullName}/${created.model.path}`, selection: ["n_note"] });
+
+  // the board's reader refuses a repeated id: never saved, whatever `lint` says
+  const now = await callJson("get_model_content", { repo: REPO.fullName, path: created.model.path });
+  const repeated = `${now.content}{"id":"n_note","kind":"node","text":"twice","type":"text"}\n`;
+  for (const lint of ["block", "warn"]) {
+    const refused = await call("save_model_content", {
+      repo: REPO.fullName,
+      path: created.model.path,
+      content: repeated,
+      baseVersion: now.baseVersion,
+      lint,
+    });
+    assert.ok(refused.isError && /line 4 repeats the element id n_note/.test(refused.text), refused.text);
+  }
+  const check = await callJson("validate_model", { content: repeated, notation: "board" });
+  assert.deepEqual(
+    check.findings.map((f: { severity: string; ruleId: string }) => [f.severity, f.ruleId]),
+    [["ERROR", "board/parse"]],
+  );
+  // with the repo: a node naming a moved model by its old path, and one outside the models folder
+  const stale = await callJson("validate_model", {
+    repo: REPO.fullName,
+    path: created.model.path,
+    content: codec.encode({
+      meta: {},
+      elements: {
+        n_old: node({ type: "model", file: "processes/archive/order.bpmn" }),
+        n_out: node({ type: "model", file: "docs/x.bpmn" }),
+      },
+    }),
+  });
+  assert.equal(stale.ok, true, "WARNs only");
+  const messages = stale.findings.map((f: { message: string }) => f.message).join("\n");
+  assert.match(
+    messages,
+    /board node n_old shows 'processes\/archive\/order\.bpmn', which moved to 'processes\/order\.bpmn'/,
+  );
+  assert.match(messages, /board node n_out shows 'docs\/x\.bpmn', which is outside the models folder 'processes'/);
+
+  // the tool texts say what a board is and how it is written
+  const { client } = await connect(deps());
+  const tools = new Map((await client.listTools()).tools.map((t) => [t.name, t.description ?? ""]));
+  assert.match(tools.get("validate_model") ?? "", /A board \(\.board\) is JSON lines/);
+  assert.match(tools.get("create_model") ?? "", /board/);
+  assert.match(tools.get("get_view") ?? "", /board/);
+  assert.match(client.getInstructions() ?? "", /A board shows other models of the repository in place/);
+  assert.ok(![...tools.keys()].some((name) => name.includes("board_modeler")), "no widget for the board");
 });
 
 test("generic model tools: a diagram is a mermaid fence in a document, its WARN never refuses a save", async () => {

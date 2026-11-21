@@ -2,8 +2,9 @@
 
 **designIQ** is collaborative modeling and architecture with AI: a Git-native workspace where
 teams model processes (BPMN), decisions (DMN), Wardley Maps, Team Topologies, Event Storming
-boards, Context Maps, Value Chains and Markdown documents (their diagrams as `mermaid` fences)
-together, live. Every model is a file in a content repo, a release is a pull request, and AI
+boards, Context Maps, Value Chains and Markdown documents (their diagrams as `mermaid` fences),
+and boards that bring several of these models onto one canvas, together, live. Every model is
+a file in a content repo, a release is a pull request, and AI
 clients read, check and edit the same live models through MCP. It is a **pnpm monorepo**.
 For any question about a model, the model files are the source of truth (here: the example
 content under `process-documentation/`)
@@ -23,18 +24,36 @@ Registered in `packages/notations/index.ts` (id = the `notation` argument of the
 | Context Map    | `context-map`    | `.cm.json`         |
 | Value Chain    | `value-chain`    | `.vc.json`         |
 | Markdown       | `markdown`       | `.md`              |
+| Board          | `board`          | `.board`           |
 
 Every notation gets live sync, the generic MCP model tools, validation and release-as-PR.
 In the web client a notation's plugin (`apps/web/src/notations/registry.ts`) decides what a
 model opens in: a visual modeler (BPMN, DMN, the Miragon renderers: Wardley Map, Team Topology,
-Event Storming, Context Map, Value Chain) or a rendered, live read view (Markdown,
-`apps/web/src/notations/markdown/`, its `mermaid` fences drawn as diagrams); a notation without
-a plugin opens in Monaco alone. The Monaco source is one click away for every one of them.
+Event Storming, Context Map, Value Chain; the board) or a rendered, live read view (Markdown,
+`apps/web/src/notations/markdown/`, its `mermaid` fences drawn as diagrams); a text notation
+without a plugin opens in Monaco alone. The Monaco source is one click away for every one of
+them; a board's is read-only (the text it is saved as) and never split.
+A board (`.board`) is a canvas of the repository's own files: models shown in place, each
+edited by the editor of its own notation and saved in its own file, beside notes, images,
+groups and arrows. It names a file by its repo-relative path and never holds what is in it. It
+is the one STRUCTURED notation (`docShape: "structured"`): its live document is element-wise
+(`ELEMENTS_KEY`/`META_KEY` of `@designiq/contracts/live`, no Y.Text), its file is JSON lines (a
+header, then one line per element), and its codec (`@designiq/notations/codecs`) is
+`@miragon/board-schema-model`'s, whose strict reader (`DocCodec.check`) keeps a text it would
+not write back whole out of the live document: such a file is not opened, such a save refused.
+The canvas is `@miragon/board-renderer` (React Flow on React) on the room's own `Y.Doc`;
+`apps/web/src/notations/board/` is designIQ's host for it: every model node a live session of
+that model's own room (`EditorContext.linkedFiles`, one more socket per open board,
+`openLiveSessionGroup`) with the editor that model's own page mounts (BPMN, DMN and the five
+Miragon renderers; a Markdown document or a board "cannot be shown here"), images read-only
+from the repo image route, arrows from the references of the models on it. VS Code shows a
+board read-only. Not built yet: image upload, todos on a board, a board on a board, Markdown on
+a board, a board widget, an example board in `process-documentation/`.
 A diagram-as-code is no notation of its own: it is a `mermaid` fence in a Markdown document,
 next to the prose that explains it (`.mmd`/`.mermaid` files are plain repository files), and
 the validator checks each fence's diagram type (a WARN, `mermaid/diagram-type`).
 Todos (work items in the repo's issue tracker, anchored to a model and optionally its
-elements) are filed on every notation but DMN (the descriptor's `todos` flag).
+elements) are filed on every notation but DMN and the board (the descriptor's `todos` flag).
 BPMN and DMN have the deepest tooling (derived process and decision views, decision
 simulation and tests) and the BPMN/DMN hard rules below.
 
@@ -43,18 +62,18 @@ simulation and tests) and the BPMN/DMN hard rules below.
 | Path                                    | What it is                                                                                                                                                                                                                                                                                                                                                   |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `apps/live-host/`                       | The platform server (`@designiq/live-host`): Hocuspocus sync + REST API + web app on one port, plus `/mcp` (official MCP SDK) + REST content routes for AI clients (OIDC-JWT auth). Multi-repo, per-(user,repo) authz, release-as-PR. Cell mode: env-gated, see ADR 0002/0004; leave unset when self-hosting. Opt-in semantic BPMN edit tools: ADR 0009.     |
-| `apps/web/`                             | The collaborative web client (`@designiq/web`): visual modelers (bpmn-js, dmn-js, the Miragon renderers) and the rendered Markdown view (its `mermaid` fences drawn as diagrams) + Monaco on a shared Y.Text, repo overview, the MCP-App widgets. The DMN editor carries the simulation add-on + a Checks panel (`@designiq/decisions`, in-browser).         |
-| `apps/vscode/`                          | VS Code extension (`design-iq`, id `miragon-gmbh.design-iq`): open `designiq://` model docs synced through the Live Host; editor sign-in via the host's login routes.                                                                                                                                                                                        |
+| `apps/web/`                             | The collaborative web client (`@designiq/web`): visual modelers (bpmn-js, dmn-js, the Miragon renderers, the board) and the rendered Markdown view (`mermaid` fences drawn as diagrams) + Monaco on a shared Y.Text, repo overview, the MCP-App widgets. The DMN editor carries the simulation add-on + a Checks panel (`@designiq/decisions`, in-browser).  |
+| `apps/vscode/`                          | VS Code extension (`design-iq`, id `miragon-gmbh.design-iq`): open `designiq://` model docs synced through the Live Host, a board read-only as its JSON lines (`src/structured-room.ts`); editor sign-in via the host's login routes.                                                                                                                        |
 | `packages/mcp/`                         | Read-only MCP server (`@miragon/design-iq-mcp`, bin `designiq-mcp-server`) exposing a content repo's models of every notation (discovered from `designiq.yml`; process views derived from BPMN) to any MCP client — read-only, against a checkout; the live, writable MCP endpoint lives in `apps/live-host`.                                                |
-| `packages/notations/`                   | Notation registry (`@designiq/notations`): one descriptor per notation (extensions, media kind, editor language). Adding a notation to the platform starts here — live-host, validator and web derive from it.                                                                                                                                               |
+| `packages/notations/`                   | Notation registry (`@designiq/notations`): one descriptor per notation (extensions, media kind, doc shape, editor language), plus a structured notation's codec (`./codecs`, the board's from `@miragon/board-schema-model`). Adding a notation to the platform starts here: live-host, validator and web derive from it.                                    |
 | `packages/decisions/`                   | DMN simulation, analysis and test running (`@designiq/decisions`) — **isomorphic**: the same module answers in Node (live-host `/mcp`, the `cli.ts` gate) and in the browser (the SPA's DMN Checks panel, the MCP-App widget). Owns `<decision>.tests.yaml`. Only `cli.ts` is Node-bound (`pnpm arch` enforces it).                                          |
 | `packages/http-kit/`                    | Shared node:http primitives + `AppError`/`errorBody` for backend services (`@designiq/http-kit`, zero-dep). ADR 0003.                                                                                                                                                                                                                                        |
 | `packages/github-app/`                  | GitHub App plumbing (`@designiq/github-app`, zero-dep): appJwt/loadPrivateKey + appRest/mint/paginate — User-Agent per app.                                                                                                                                                                                                                                  |
 | `packages/contracts/`                   | Backend↔frontend wire types + the live-doc contract (`@designiq/contracts`: `CONTENT_KEY`, `roomName()`). Backends pin responses with `satisfies`; frontends re-export. Drift = tsc error.                                                                                                                                                                   |
 | `packages/ui-kit/`                      | Shared shadcn primitives + `cn()` + the Miragon CI theme for the SPAs and widgets (`@designiq/ui-kit`): vendored `cd-tokens.generated.css` (never edit), aliases `tokens.css` + TS mirror `lib/tokens.ts` (drift/contrast test), Geist `fonts.css`, Tailwind mapping `theme.css`. Run the shadcn CLI HERE, not in the apps.                                  |
 | `packages/api-client/`                  | `ApiError` + `api<T>()` + TanStack Query defaults for the SPAs (`@designiq/api-client`).                                                                                                                                                                                                                                                                     |
-| `packages/live-client/`                 | The ONE live-session implementation (`@designiq/live-client`): `openLiveSession()`, minimal-diff Y.Text writer, the canvas sync bridges (bpmn-sync, dmn-sync, miragon-sync). Consumers: web, vscode, guest-test, live-host (the minimal-diff writer via `@designiq/live-client/text`) — nothing else.                                                        |
-| `packages/validator/`                   | Platform validator (`@miragon/design-iq-validator`, bin `designiq-validate`): designiq.yml discovery (legacy bpmiq.yml still read) + BPMN/DMN structure, BPMNDI+DMNDI coverage, cross-model reference integrity (callActivity, decisions), the schema or parse check of every other notation. Runs on any checkout (`--root`); never runs content-repo code. |
+| `packages/live-client/`                 | The ONE live-session implementation (`@designiq/live-client`): `openLiveSession()`, `openLiveSessionGroup()` (one socket, many rooms), minimal-diff Y.Text writer, the structured lane, the canvas sync bridges (bpmn-sync, dmn-sync, miragon-sync). Consumers: web, vscode, guest-test, live-host (`./text`, `./structured`, `./presence`), nothing else.   |
+| `packages/validator/`                   | Platform validator (`@miragon/design-iq-validator`, bin `designiq-validate`): designiq.yml discovery (legacy bpmiq.yml still read) + BPMN/DMN structure, BPMNDI+DMNDI coverage, cross-model references (calls, decides, shows), a board's strict read, the schema or parse check of the rest. Runs on any checkout (`--root`); never runs content-repo code. |
 | `process-documentation/`                | Example content repo (`designiq.yml` + BPMN/DMN example models and an Event Storming board + the AI skills in `.claude/skills`) — the MCP/validator example AND the content-repo contract mirrored to `Miragon/process-documentation-starter`. The Live Host serves any repo with a root `designiq.yml` (legacy `bpmiq.yml` still read), nothing else.       |
 | `docs/`                                 | Platform docs: `platform-concept.md`, `multi-repo-architecture.md`, `mcp-integration.md`, `on-prem/` (self-hosting), `extending/` (connectors, SSO), `adr/`, `upgrading-to-5.md` (the rename release). Also the VitePress site (`@designiq/docs`, pages in `.vitepress/config.ts`) on the Miragon docs kit (`@miragon/docs-starter`).                        |
 | `process-documentation/.claude/skills/` | The AI-first toolset (travels with the content repo).                                                                                                                                                                                                                                                                                                        |
@@ -122,7 +141,13 @@ https://raw.githubusercontent.com/Miragon/corporate-identity/main/plugins/mirago
 - The Miragon renderers (`@miragon/*-renderer`) bring their own CI styling — don't restyle
   them, nor the modeler shell's Keyboard shortcuts… dialog every Miragon notation opens
   (`showShortcutsDialog` of `@miragon/modeler-shell`, its look the shell's `shell.css`, loaded
-  with each renderer). The Live Host's own HTML pages (editor sign-in landing, `create-app`) cannot load
+  with each renderer). The board is the exception to the dialog: `@miragon/board-renderer`
+  opens none and brings ONE sheet, `@miragon/board-renderer/assets/board.css` (React Flow's
+  sheet, its CI tokens in the cascade layer `board-tokens`, which the page's unlayered tokens
+  win over), loaded by the board's engine chunk. designIQ's rules for what it mounts into a
+  board (a model editor's preview with its chrome hidden, a node's state line) live in
+  `apps/web/src/notations/board/board.css`, opt-in by `data-embed="designiq"`, colours from
+  the ui-kit aliases. The Live Host's own HTML pages (editor sign-in landing, `create-app`) cannot load
   the SPA sheet: they share the inline CI shell in `apps/live-host/src/http/brand-page.ts`.
 - **brand-lint** (the miragon-brand PostToolUse hook, active via `.miragon/brand.json`) flags
   colours outside the CI palette in every edit, in CSS also a raw brand hex instead of its
@@ -151,4 +176,9 @@ https://raw.githubusercontent.com/Miragon/corporate-identity/main/plugins/mirago
    instead (`save_decision_tests` with `record`) so the next change becomes visible.
 6. **BPMN:** when the user corrects a process ("that's not how we do it"), don't silently edit — file
    it via the `process-feedback` skill and triage.
-7. This is a **pnpm** workspace: `pnpm install`, `pnpm --filter <pkg> …`. Never `npm`/`yarn`.
+7. **Board:** a `.board` shows a model by the repo-relative `file` of a model node and never
+   holds its content: change a model in its own file. The validator reads a board as strictly
+   as its canvas (`board/parse`, an ERROR that refuses the save) and warns on a model node that
+   names a model that is gone (`refs/dangling`), moved (`refs/stale-path`) or a board
+   (`board/nested-board`). A rename or move rewrites the boards that show the model.
+8. This is a **pnpm** workspace: `pnpm install`, `pnpm --filter <pkg> …`. Never `npm`/`yarn`.

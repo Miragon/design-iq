@@ -14,6 +14,13 @@
  * extract.ts reads a .storm board itself, the way @miragon/event-storming-dsl
  * does (storm-ids.test.ts compares the two): that devDependency is the
  * release apps/web's @miragon/event-storming-renderer parses with.
+ *
+ * A .board is written, read and checked with @miragon/board-schema-model
+ * (./codecs, ./templates, ./extract, ./retarget), the release apps/web's
+ * @miragon/board-renderer draws with: the Live Host's room, the validator's
+ * board/parse and the canvas must agree on what a board file holds. The
+ * validator and the read-only MCP server bundle this package, so they pin it
+ * too.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -63,3 +70,15 @@ test("packages/notations compares its .storm reader with the @miragon/event-stor
     rendererDependency("@miragon/event-storming-renderer", dependency),
   );
 });
+
+const BOARD_RENDERER = "@miragon/board-renderer";
+const BOARD_SCHEMA_MODEL = "@miragon/board-schema-model";
+
+for (const workspace of ["packages/notations", "packages/validator", "packages/mcp"]) {
+  test(`${workspace} pins the ${BOARD_SCHEMA_MODEL} that apps/web's ${BOARD_RENDERER} draws with`, () => {
+    assert.equal(
+      manifest(workspace).dependencies?.[BOARD_SCHEMA_MODEL],
+      rendererDependency(BOARD_RENDERER, BOARD_SCHEMA_MODEL),
+    );
+  });
+}
