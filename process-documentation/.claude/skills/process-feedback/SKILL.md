@@ -38,7 +38,9 @@ nobody performs "Send payment reminder" by hand.
 **1. Conversation.** Whenever someone contradicts the model while working in this
 repo — during a `process-navigator` answer, a `process-review`, a walkthrough — do
 not argue and do not silently edit the model. Offer to file the claim as a feedback
-report and capture it verbatim: what they say happens, where, since when, from whom.
+report and capture it verbatim: what they say happens, where, since when, from whom. In
+a workshop run by `collaborative-modeling` the correction is a proposal in the
+workshop's brief instead; file a report only for a correction left open at its wrap-up.
 
 **2. Exported skills.** Skills exported via `export-process-skill` run outside this
 repo and cannot edit it; they emit a paste-ready block when a user contradicts the
