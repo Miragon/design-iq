@@ -19,8 +19,9 @@
  *     writes its canvas over the merge (repairs below, #274); a writer whose
  *     updates lag behind the settle delay can repair the same merge too, and
  *     the next round settles the two repairs. A writer whose presence is
- *     gone is passed over, and a canvas whose text stays unrenderable says
- *     so (#296): nothing else heals such a text
+ *     gone is passed over, and so is one whose presence announces no user
+ *     (a model a board only shows: nobody edits there), and a canvas whose
+ *     text stays unrenderable says so (#296): nothing else heals such a text
  *
  * What differs per notation (how change events are observed, how the view
  * state survives a re-import, what "renderable" means pre-import) lives in a
@@ -29,8 +30,10 @@
  * Consumers import those, never this module.
  */
 import { CANVAS_LOSSES_KEY, CANVAS_WRITES_KEY } from "@designiq/contracts/live";
+import type { FreeAreaInsets } from "@miragon/modeler-api";
 import * as Y from "yjs";
 
+import { sanitizeUser } from "./presence.ts";
 import { applyHunks, closingBreaksAt, diffHunks, diffRegion, type Hunk, mergeLines, patchText } from "./text-diff.ts";
 
 /** Shared origin marker: transactions tagged with it are our own canvas edits. */
@@ -222,6 +225,10 @@ interface AwarenessChange {
 export interface PeerAwareness {
   on(event: "change", listener: (change: AwarenessChange) => void): void;
   off(event: "change", listener: (change: AwarenessChange) => void): void;
+  /** every client's state in the room, this one's included: whose "user"
+   *  field announces a person (LiveSession.setUser). Absent: every writer
+   *  counts as announced */
+  getStates?(): ReadonlyMap<number, unknown>;
 }
 
 /** what a live session and the editor around the canvas add to the binding; without it the binding syncs as before */
@@ -245,6 +252,64 @@ export interface SyncOptions {
    * (SyncAdapter.contract): its binding never reads this element.
    */
   canvasHost?: Element;
+  /**
+   * px the host's chrome covers along the edges of the canvas, read when the
+   * first import fits the view (the contract's free area, for an editor
+   * without the contract: bpmn-js, the DRD of dmn-js). The diagram is then
+   * fitted into what the insets leave free. For a canvas that is small
+   * beside its own palette (a model shown on a board). Absent = diagram-js's
+   * plain fit-viewport, edge to edge.
+   */
+  fitInsets?: () => FitInsets;
+  /**
+   * after every import the canvas drew, once its view was put back or fitted
+   * (a host that waits for the first picture: a model shown on a board).
+   * Never for an echo of this canvas's own export, nor for a repair, which
+   * writes what the canvas already shows
+   */
+  onImported?: () => void;
+}
+
+/** px covered along each edge of a canvas: @miragon/modeler-api's FreeAreaInsets, the free area of the contract */
+export type FitInsets = FreeAreaInsets;
+
+interface FitBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+/** the slice of diagram-js's Canvas a fit reads and writes */
+export interface FitCanvas {
+  /** `inner` is the content's box in diagram units, `outer` the container's size in px; `false` recomputes */
+  viewbox(fresh?: false): FitBox & { inner?: FitBox; outer?: { width: number; height: number } };
+  viewbox(box: FitBox): void;
+  zoom(mode: "fit-viewport"): unknown;
+}
+
+/**
+ * The whole diagram in view: diagram-js's fit-viewport, or, with insets, the
+ * whole diagram inside what they leave free, its top left corner at the free
+ * area's. Like fit-viewport it never zooms in past 1. Insets that leave
+ * nothing free, and a canvas without content, get the plain fit.
+ */
+export function fitDiagram(canvas: FitCanvas, insets?: FitInsets): void {
+  const px = (value: number | undefined): number =>
+    typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+  const [top, right, bottom, left] = [px(insets?.top), px(insets?.right), px(insets?.bottom), px(insets?.left)];
+  if (top + right + bottom + left === 0) return void canvas.zoom("fit-viewport");
+  const { inner, outer } = canvas.viewbox(false);
+  const free = { width: (outer?.width ?? 0) - left - right, height: (outer?.height ?? 0) - top - bottom };
+  if (!inner || !outer || !(inner.width > 0) || !(inner.height > 0) || !(free.width > 0) || !(free.height > 0)) {
+    return void canvas.zoom("fit-viewport");
+  }
+  const scale = Math.min(1, free.width / inner.width, free.height / inner.height);
+  canvas.viewbox({
+    x: inner.x - left / scale,
+    y: inner.y - top / scale,
+    width: outer.width / scale,
+    height: outer.height / scale,
+  });
 }
 
 /** XML well-formedness — the looksRenderable gate of the XML notations (bpmn, dmn) */
@@ -256,9 +321,14 @@ export const NOT_WELL_FORMED_XML = "the document is not well-formed XML";
 /**
  * The diagram-js view-state recipe of a single-canvas modeler without a view
  * state of its own (bpmn-js): snapshot the canvas viewbox before an import,
- * restore it after a RE-import, fit the viewport on the first one.
+ * restore it after a RE-import, fit the viewport on the first one (into the
+ * free area where the host names one, SyncOptions.fitInsets, read when the
+ * fit runs).
  */
-export function keepDiagramViewbox(modeler: { get(service: string): any }): SyncAdapter["beforeImport"] {
+export function keepDiagramViewbox(
+  modeler: { get(service: string): any },
+  fitInsets?: () => FitInsets,
+): SyncAdapter["beforeImport"] {
   return (isFirstImport) => {
     const canvas = modeler.get("canvas");
     let viewbox: { x: number; y: number; width: number; height: number } | undefined;
@@ -269,7 +339,7 @@ export function keepDiagramViewbox(modeler: { get(service: string): any }): Sync
     }
     return () => {
       if (viewbox && viewbox.width > 0 && !isFirstImport) canvas.viewbox(viewbox);
-      else canvas.zoom("fit-viewport");
+      else fitDiagram(canvas, fitInsets?.());
     };
   };
 }
@@ -382,6 +452,21 @@ export function bindModelSync(
   let overlapSeenAt = 0;
   /** writers whose presence left the room: their repair timer went with them */
   const departed = new Set<string>();
+  /**
+   * A writer in the room whose presence announces no user: a client that
+   * holds the room without anyone editing there (a model a board shows; its
+   * person announces themselves only while they edit it). It may have written
+   * while they did. Read from the room's states, this client's own included,
+   * so every peer ranks it alike; a writer without a state is departed's case
+   */
+  const unannounced = (key: string): boolean => {
+    const states = sync.awareness?.getStates?.();
+    if (!states) return false;
+    const state = states.get(Number(key));
+    return state !== undefined && sanitizeUser((state as { user?: unknown } | null)?.user) === undefined;
+  };
+  /** the writers last seen unannounced: a change of it changes who repairs */
+  const seenUnannounced = new Set<string>();
   /** when the text first failed the gate or the import since a text last rendered */
   let unrenderableSince: number | undefined;
   let unrenderableTimer: ReturnType<typeof setTimeout> | undefined;
@@ -416,6 +501,15 @@ export function bindModelSync(
   function tellUnrenderable(): void {
     unrenderableTold = true;
     sync.onUnrenderable?.(UNRENDERABLE_MESSAGE);
+  }
+
+  /** an import drew the text: tell the host, whose failure is no failed import */
+  function imported(): void {
+    try {
+      sync.onImported?.();
+    } catch (err) {
+      console.error("[designiq] onImported failed", err);
+    }
   }
 
   /** the text rendered, or is this canvas's own export */
@@ -503,6 +597,7 @@ export function bindModelSync(
       matched(closure, foreign);
       importErrorReported = false;
       rendered();
+      imported();
     } catch (err) {
       if (unbound) return;
       console.warn("[designiq] remote document not importable, keeping last good state", err);
@@ -609,12 +704,27 @@ export function bindModelSync(
   };
   writes.observe(onWrites);
 
-  // a writer that left changes who repairs, as one standing down does
+  // a writer that left changes who repairs, as one standing down does, and
+  // so does one that takes its announcement back or makes it again. Only
+  // such a change asks for a new look: a peer's cursor updates its state
+  // many times a second, and every new look puts the import off
   const onPresence = ({ added, updated, removed }: AwarenessChange): void => {
-    for (const id of [...added, ...updated]) departed.delete(String(id));
+    let ranksMoved = false;
+    for (const id of [...added, ...updated]) {
+      const key = String(id);
+      departed.delete(key);
+      const now = unannounced(key);
+      if (now === seenUnannounced.has(key)) continue;
+      if (now) seenUnannounced.add(key);
+      else seenUnannounced.delete(key);
+      ranksMoved ||= entry(key) !== undefined;
+    }
     const left = removed.filter((id) => id !== doc.clientID).map(String);
-    for (const key of left) departed.add(key);
-    if (left.some((key) => entry(key))) scheduleImport();
+    for (const key of left) {
+      departed.add(key);
+      seenUnannounced.delete(key);
+    }
+    if (ranksMoved || left.some((key) => entry(key))) scheduleImport();
   };
   sync.awareness?.on("change", onPresence);
 
@@ -672,17 +782,19 @@ export function bindModelSync(
 
   /**
    * The repairing writer: of the open writes not standing down and whose
-   * writer is still in the room, the latest (Lamport time: the canvas that
-   * took in the longest chain of writes, its own included), then the one
-   * whose canvas holds the most writes, then the lowest client id. Every peer
-   * ranks the same log and sees the same writers leave (a re-sync or a write
-   * brings one back), so every peer names the same writer. None unless
-   * writes crossed.
+   * writer is still in the room and announces a user there, the latest
+   * (Lamport time: the canvas that took in the longest chain of writes, its
+   * own included), then the one whose canvas holds the most writes, then the
+   * lowest client id. Every peer ranks the same log and sees the same writers
+   * leave (a re-sync or a write brings one back) and announce, so every peer
+   * names the same writer. None unless writes crossed. A writer that
+   * announces no user is never named, even where no other writer is ready:
+   * a person who only looks at a model on a board does not write into it
    */
   function repairingWriter(): string | undefined {
     const open = openWrites();
     if (open.length < 2) return undefined;
-    const ready = open.filter(([key, write]) => !write.standsDown && !departed.has(key));
+    const ready = open.filter(([key, write]) => !write.standsDown && !departed.has(key) && !unannounced(key));
     ready.sort(([a, x], [b, y]) => y.time - x.time || holds(y) - holds(x) || Number(a) - Number(b));
     return ready[0]?.[0];
   }

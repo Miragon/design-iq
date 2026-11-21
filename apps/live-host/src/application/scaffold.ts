@@ -7,7 +7,8 @@
  *   createFolder   — mkdir under the processes root
  *   createProcess  — write a fresh, validator-clean BPMN file (domain/bpmn-template)
  *   createDecision — write a fresh DMN file (domain/dmn-template)
- *   moveModels     — move model files into another folder (#182)
+ *   moveModels     — move model files into another folder (#182); the boards
+ *                    that show a moved model follow its new path
  *   renameModel    — give a model a new id (= file stem), open or not (#208)
  *   duplicateModel — copy a model's live content under a new id (#209)
  *   deleteModels   — delete model files, all or nothing (#210)
@@ -45,7 +46,7 @@ import { testsPathFor } from "@designiq/decisions/tests";
 import { AppError } from "@designiq/http-kit";
 import { readSnapshot } from "@designiq/live-client/structured";
 import { byExtension, byId, hasTodos, modelStem, processIdFromName } from "@designiq/notations";
-import { retargetRefs } from "@designiq/notations/retarget";
+import { retargetMovedPaths, retargetRefs } from "@designiq/notations/retarget";
 import { newBpmnXml, newDmnXml, templateFor } from "@designiq/notations/templates";
 import * as Y from "yjs";
 
@@ -353,10 +354,63 @@ export interface MoveDeps {
   /** remember the moves so the release pairs their halves (#208) — absent
    *  in tests that do not care; the file-name pairing still applies */
   recordRenames?: (pairs: Array<{ from: string; to: string }>) => Promise<void>;
+  /** rewrite a model's LIVE document (RenameDeps.editContent): a board that
+   *  shows a moved model by its path follows it. Absent: no model follows */
+  editContent?: RenameDeps["editContent"];
+  /** the loaded rooms nobody is in (a board's preview of a model) move along
+   *  instead of refusing the move. Absent: every loaded room refuses */
+  previews?: PreviewRooms;
 }
+
+/**
+ * Loaded rooms no person is in: a board shows each model of its nodes
+ * through a live session of the model's room that announces nobody until
+ * the node is armed (@designiq/live-client setUser(null)). Such a room need
+ * not refuse a move or a delete of its file: it is retired like a renamed
+ * open model's (RenameDeps.rooms), so whatever it holds that is not yet
+ * written through moves with the file, or goes with it. A room a person is
+ * in keeps refusing: nobody's open editor is pulled away by a colleague.
+ */
+export interface PreviewRooms {
+  /** whether a person may have the loaded room open (room-presence.ts
+   *  attendedDocument): it fails closed, so an editor whose presence lapsed
+   *  while it stayed connected still refuses */
+  attended: (room: string) => boolean;
+  /** RenameDeps.rooms.retire, the notice optional: a deleted file's room has
+   *  nowhere to send its peers, they are disconnected */
+  retire: (room: string, notice?: string) => Uint8Array | undefined;
+  /** RenameDeps.rooms.hold */
+  hold: RenameDeps["rooms"]["hold"];
+  /** a retired room's final state becomes the moved file's lineage */
+  saveLineage: (room: string, state: Uint8Array) => void;
+  /** who moves (display name), as the moved notice names them */
+  by: string;
+}
+
+/** what a move did (the wire's MoveModelsResult): the moved files, and the
+ *  models that follow a moved one by its path (a board's model nodes),
+ *  reported like a rename's callers */
+export type MoveOutcome = MoveModelsResult;
 
 /** repo-root-relative, forward slashes — the room/wire path shape */
 const repoPath = (workspace: string, abs: string): string => relative(workspace, abs).split(sep).join("/");
+
+/**
+ * Whether `path`, as a board names the model at `modelPath` (a model node's
+ * file), follows a move or a rename of that model. The index resolves a
+ * board's node by notation and id like every reference, so it hands back
+ * each node whose path has the model's stem. Only the model's own path
+ * follows, and a stale one from an earlier move: in the models folder, with
+ * no file there. A file there is another model with the same stem (git can
+ * bring duplicates in, discovery keeps the first), and a path outside the
+ * models folder names no model of the repo (the validator says so): both
+ * stay as they are. Read BEFORE the files move.
+ */
+function followsByPath(workspace: string, cfg: ContentConfig, modelPath: string, path: string): boolean {
+  const abs = resolve(workspace, path);
+  if (abs === resolve(workspace, modelPath)) return true;
+  return abs.startsWith(processesRoot(workspace, cfg) + sep) && !existsSync(abs);
+}
 
 /**
  * Move model files into another folder under the processes root (#182). A
@@ -367,16 +421,25 @@ const repoPath = (workspace: string, abs: string): string => relative(workspace,
  *
  * Every file is checked BEFORE the first rename (a known model, not open in a
  * live session, destination free), so a refused move changes nothing. Rooms
- * are keyed by path — an OPEN file is refused rather than pulled from under
- * its editors; a closed one takes its Yjs lineage along, so unreleased live
- * edits survive. A model already in the target folder is skipped.
+ * are keyed by path: a file a person has OPEN is refused rather than pulled
+ * from under their editor; a closed one takes its Yjs lineage along, so
+ * unreleased live edits survive. A room only a board holds as a preview
+ * (deps.previews) moves like a renamed open model: its peers are told the new
+ * path, its final state becomes the moved file and its lineage. A model
+ * already in the target folder is skipped.
+ *
+ * A board names the models it shows by PATH: every board that shows a moved
+ * model is rewritten to its new path in its live document (open or not, like
+ * a rename's callers), and reported in updatedReferences. A node that names
+ * another file with the same stem, or a path outside the models folder,
+ * keeps its path (followsByPath).
  */
 export async function moveModels(
   repo: ConnectedRepo,
   workspace: string,
   body: MoveModelsBody,
   deps: MoveDeps,
-): Promise<MoveModelsResult> {
+): Promise<MoveOutcome> {
   const cfg = requireConfig(repo, workspace);
   const requested = [...new Set(body.paths.map((p) => p.trim()).filter(Boolean))];
   if (requested.length === 0) {
@@ -398,7 +461,10 @@ export async function moveModels(
   // processes root — no traversal, no foreign files
   const models = new Map((await discoverModels(workspace, cfg)).map((m) => [m.path, m]));
   const live = new Set(deps.liveDocs());
+  const room = (path: string): string => roomName(repo.fullName, path);
   const plan: Array<{ from: string; to: string }> = [];
+  /** the planned files whose room is loaded as a preview only */
+  const previewed = new Set<string>();
   for (const path of requested) {
     const model = models.get(path);
     if (!model) {
@@ -412,11 +478,14 @@ export async function moveModels(
     for (const from of files) {
       const to = repoPath(workspace, join(targetDir, basename(from)));
       if (to === from) continue; // already there
-      if (live.has(roomName(repo.fullName, from))) {
-        throw new AppError("move/live-session", `'${from}' is open in a live editing session — close it first`, {
-          status: 409,
-          expose: true,
-        });
+      if (live.has(room(from))) {
+        if (!deps.previews || deps.previews.attended(room(from))) {
+          throw new AppError("move/live-session", `'${from}' is open in a live editing session — close it first`, {
+            status: 409,
+            expose: true,
+          });
+        }
+        previewed.add(from);
       }
       if (existsSync(resolve(workspace, to)) || plan.some((p) => p.to === to)) {
         throw new AppError("move/target-exists", `'${to}' already exists`, { status: 409, expose: true });
@@ -425,15 +494,75 @@ export async function moveModels(
     }
   }
 
+  // who shows a moved model by its path, read BEFORE the files move (the
+  // index reads the tree): per such model, each path it names the moved
+  // model by, a stale one from an earlier move included (references resolve
+  // by notation and id, and a move keeps the id), never another file with
+  // the same stem (followsByPath)
+  const followers = new Map<string, Map<string, string>>();
+  if (deps.editContent && plan.length > 0) {
+    const index = await buildRepoIndex(workspace, cfg);
+    for (const { from, to } of plan) {
+      for (const ref of index.incoming(from)) {
+        if (ref.to.path === undefined || ref.to.path === to) continue;
+        if (!followsByPath(workspace, cfg, from, ref.to.path)) continue;
+        const moves = followers.get(ref.from.path) ?? new Map<string, string>();
+        followers.set(ref.from.path, moves.set(ref.to.path, to));
+      }
+    }
+  }
+
   if (plan.length > 0) {
     await writeGuarded(`folder '${segments.join("/")}'`, () => mkdir(targetDir, { recursive: true }));
   }
-  for (const { from, to } of plan) {
-    await rename(resolve(workspace, from), resolve(workspace, to));
-    deps.renameLineage(roomName(repo.fullName, from), roomName(repo.fullName, to));
+  const previews = deps.previews;
+  // a previewed room's peers head for the new path at once: its load waits
+  // until the file and lineage are in place (the rename's hold)
+  const release = previews && previewed.size > 0 ? previews.hold(plan.map((p) => room(p.to))) : () => undefined;
+  const moved: Array<{ from: string; to: string }> = [];
+  try {
+    for (const { from, to } of plan) {
+      // retire BEFORE the move: from here on the old room never writes through
+      // again (undefined when the board closed it meanwhile)
+      const state = previewed.has(from)
+        ? previews?.retire(room(from), movedNotice(repo.fullName, to, previews.by))
+        : undefined;
+      try {
+        await rename(resolve(workspace, from), resolve(workspace, to));
+      } catch (e) {
+        // the retired room no longer persists: keep what it held under the
+        // OLD name, where the file still is
+        if (state) previews?.saveLineage(room(from), state);
+        throw e;
+      }
+      deps.renameLineage(room(from), room(to));
+      if (state) {
+        // the live state may be ahead of the last write-through (debounce)
+        await writeFile(resolve(workspace, to), contentOf(state, to));
+        previews?.saveLineage(room(to), state);
+      }
+      moved.push({ from, to });
+    }
+  } finally {
+    release();
   }
-  await journal(deps.recordRenames, repo, plan);
-  return { moved: plan };
+  await journal(deps.recordRenames, repo, moved);
+
+  const updatedReferences: string[] = [];
+  const failedReferences: string[] = [];
+  for (const [follower, moves] of followers) {
+    // a board moved along is rewritten at its new path
+    const path = moved.find((m) => m.from === follower)?.to ?? follower;
+    const notation = byExtension(path)?.id ?? "";
+    try {
+      await deps.editContent?.(path, (content) => retargetMovedPaths(notation, content, moves));
+      updatedReferences.push(path);
+    } catch (e) {
+      console.log(`move in ${repo.fullName}: the paths in ${path} not updated: ${(e as Error).message}`);
+      failedReferences.push(path);
+    }
+  }
+  return { moved, updatedReferences, failedReferences };
 }
 
 /** record renames/moves for the release pairing — best effort: a lost entry
@@ -574,7 +703,8 @@ export interface RenameDeps {
  * takes its lineage along (like a move).
  *
  * References follow: every model pointing at the old id (calledElement,
- * decisionRef …) is rewritten in its live document. A caller that cannot be
+ * decisionRef …) is rewritten in its live document, a board's node where its
+ * path follows the model (followsByPath). A caller that cannot be
  * rewritten is reported, not fatal — the rename already happened, and the
  * validator warns about the dangling link.
  */
@@ -596,9 +726,16 @@ export async function renameModel(
   const plan = companions(workspace, model).map((from) => ({ from, to: pathUnderId(model, from, id) }));
   for (const { to } of plan) assertFree(repo, workspace, to, live, "rename/target-exists");
 
-  // who points at the model — read BEFORE the files move (the index reads the tree)
+  // who points at the model — read BEFORE the files move (the index reads the
+  // tree). A board names it by path: only the paths that follow the model
+  // are rewritten (followsByPath), and a board that names it by none of them
+  // (another file with the same stem) is no caller
   const index = await buildRepoIndex(workspace, cfg);
-  const callers = [...new Set(index.incoming(model.path).map((r) => r.from.path))];
+  const incoming = index
+    .incoming(model.path)
+    .filter((r) => r.to.path === undefined || followsByPath(workspace, cfg, model.path, r.to.path));
+  const callers = [...new Set(incoming.map((r) => r.from.path))];
+  const paths = new Set(incoming.flatMap((r) => (r.to.path === undefined ? [] : [r.to.path])));
 
   const room = (path: string): string => roomName(repo.fullName, path);
   const release = deps.rooms.hold(plan.map((f) => room(f.to)));
@@ -645,7 +782,7 @@ export async function renameModel(
 
   const updatedReferences: string[] = [];
   const failedReferences: string[] = [];
-  const spec = { notation: model.notation, from: model.id, to: id };
+  const spec = { notation: model.notation, from: model.id, to: id, paths };
   for (const caller of callers) {
     // a model calling itself was renamed above — rewrite it at its new path
     const path = renamed.find((r) => r.from === caller)?.to ?? caller;
@@ -721,6 +858,10 @@ export interface DeleteDeps {
   liveDocs: () => string[];
   /** forget a deleted file's Yjs lineage */
   dropLineage: (room: string) => void;
+  /** the loaded rooms nobody is in (a board's preview of a model) are
+   *  retired with their file instead of refusing the delete. Absent:
+   *  every loaded room refuses */
+  previews?: Pick<PreviewRooms, "attended" | "retire">;
   /** close a deleted model's open todos in the background (`closeTodos`) —
    *  absent when the host has no tracker */
   todos?: { close(from: TodoModelRef): TodoJobWire };
@@ -730,9 +871,12 @@ export interface DeleteDeps {
  * Delete model files (#210); a decision's tests sidecar goes along. Every
  * file is checked BEFORE the first delete (a known model, not open in a live
  * session), so a refused delete changes nothing and names the file that
- * blocked it. An open model is refused rather than pulled from under its
- * editors (move's rule). Nothing is committed: a released model's deletion
- * ships with the next release; a never-released one is simply gone.
+ * blocked it. A model a person has open is refused rather than pulled from
+ * under their editor (move's rule); a room only a board holds as a preview
+ * (deps.previews) is retired first: its peers are disconnected, and it can
+ * never write the deleted file back. Nothing is committed: a released
+ * model's deletion ships with the next release; a never-released one is
+ * simply gone.
  */
 export async function deleteModels(
   repo: ConnectedRepo,
@@ -754,18 +898,26 @@ export async function deleteModels(
   const models = await discoverModels(workspace, cfg);
   const live = new Set(deps.liveDocs());
   const files: string[] = [];
+  const previewed = new Set<string>();
   for (const path of requested) {
     for (const file of companions(workspace, knownModel(repo, models, path, "delete/unknown-model"))) {
-      if (live.has(roomName(repo.fullName, file))) {
-        throw new AppError("delete/live-session", `'${file}' is open in a live editing session — close it first`, {
-          status: 409,
-          expose: true,
-        });
+      const room = roomName(repo.fullName, file);
+      if (live.has(room)) {
+        if (!deps.previews || deps.previews.attended(room)) {
+          throw new AppError("delete/live-session", `'${file}' is open in a live editing session — close it first`, {
+            status: 409,
+            expose: true,
+          });
+        }
+        previewed.add(file);
       }
       files.push(file);
     }
   }
   for (const file of files) {
+    // a retired room never stores again: an edit still in flight would
+    // otherwise write the deleted file back
+    if (previewed.has(file)) deps.previews?.retire(roomName(repo.fullName, file));
     await rm(resolve(workspace, file), { force: true });
     deps.dropLineage(roomName(repo.fullName, file));
   }

@@ -321,6 +321,81 @@ test("get_model / get_view: a Team Topology carries its flows, annotations and t
   }
 });
 
+test("a board: listed with its title, its graph, its view of the models it shows, and the models it shows know it", async () => {
+  const root = mkdtempSync(join(tmpdir(), "designiq-mcp-board-"));
+  writeFileSync(join(root, "designiq.yml"), "models: models\n");
+  mkdirSync(join(root, "models", "boards"), { recursive: true });
+  writeFileSync(join(root, "models", "order-to-cash.bpmn"), ORDER_BPMN);
+  writeFileSync(
+    join(root, "models", "boards", "workshop.board"),
+    [
+      `{"format":"structured-model","meta":{"title":"Workshop","version":1},"version":1}`,
+      `{"id":"e_1","kind":"edge","label":"open","source":"n_note","target":"n_order"}`,
+      `{"file":"models/credit-check.dmn","height":400,"id":"n_credit","kind":"node","type":"model","width":600,"x":700,"y":0,"z":"b"}`,
+      `{"height":160,"id":"n_note","kind":"node","text":"Who approves?\\nAsk sales.","type":"text","width":240,"x":0,"y":600,"z":"c"}`,
+      `{"file":"models/order-to-cash.bpmn","height":540,"id":"n_order","kind":"node","type":"model","width":940,"x":0,"y":0,"z":"a"}`,
+      "",
+    ].join("\n"),
+  );
+  const s = createMcpServer(root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const c = new Client({ name: "board-test", version: "0" });
+  await Promise.all([s.connect(st), c.connect(ct)]);
+  try {
+    const j = async (name: string, args: Record<string, unknown> = {}) => {
+      const { isError, text } = toolText(await c.callTool({ name, arguments: args }));
+      assert.ok(!isError, text);
+      return JSON.parse(text);
+    };
+    const listed = await j("list_models");
+    assert.deepEqual(listed.models.board, [
+      {
+        id: "workshop",
+        path: "models/boards/workshop.board",
+        name: "Workshop",
+        summary: "Board with 2 models, 1 note, 1 arrow",
+        stats: { models: 2, notes: 1, images: 0, groups: 0, arrows: 1 },
+      },
+    ]);
+
+    const graph = await j("get_model", { id: "workshop" });
+    assert.equal(graph.notation, "board");
+    assert.equal(graph.file, "models/boards/workshop.board");
+    assert.deepEqual(
+      graph.nodes.map((n: { id: string; type: string; name?: string }) => [n.id, n.type, n.name]),
+      [
+        ["n_credit", "model", "models/credit-check.dmn"],
+        ["n_note", "text", "Who approves?"],
+        ["n_order", "model", "models/order-to-cash.bpmn"],
+      ],
+    );
+    assert.deepEqual(graph.edges, [{ id: "e_1", from: "n_note", to: "n_order", kind: "arrow", name: "open" }]);
+
+    const view = await j("get_view", { id: "workshop", notation: "board" });
+    assert.equal(view.name, "Workshop");
+    assert.deepEqual(view.detail.models, [
+      { element: "n_credit", path: "models/credit-check.dmn", notation: "dmn", id: "credit-check", group: null },
+      { element: "n_order", path: "models/order-to-cash.bpmn", notation: "bpmn", id: "order-to-cash", group: null },
+    ]);
+    assert.deepEqual(view.detail.notes, [{ element: "n_note", text: "Who approves?\nAsk sales.", group: null }]);
+
+    // the process is shown, the decision is not in the repo (anymore)
+    assert.deepEqual((await j("which_models_use", { id: "order-to-cash" })).referencedBy, [
+      { from: "models/boards/workshop.board", notation: "board", element: "n_order", rel: "shows", resolved: true },
+    ]);
+    assert.deepEqual((await j("which_models_use", { id: "credit-check" })).referencedBy, [
+      { from: "models/boards/workshop.board", notation: "board", element: "n_credit", rel: "shows", resolved: false },
+    ]);
+
+    // a board has no flow: its arrows are annotations, not a process
+    const paths = toolText(await c.callTool({ name: "enumerate_paths", arguments: { id: "workshop" } }));
+    assert.ok(!paths.isError && /boards have no flow semantics/.test(paths.text), paths.text);
+  } finally {
+    await c.close();
+    await s.close();
+  }
+});
+
 test("shared stems: bpmn wins by default, the notation arg disambiguates, unknown honors the filter", async () => {
   const root = mkdtempSync(join(tmpdir(), "designiq-mcp-shared-"));
   writeFileSync(join(root, "designiq.yml"), "models: models\n");

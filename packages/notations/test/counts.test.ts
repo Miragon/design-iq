@@ -28,6 +28,12 @@ test("notationCount: the registry noun, counted and qualified by its notation", 
   assert.equal(notationCount("mermaid", 1), "1 mermaid model");
 });
 
+test("notationCount: a noun that is the label itself is not said twice", () => {
+  assert.equal(notationCount("board", 1), "1 board");
+  assert.equal(notationCount("board", 3), "3 boards");
+  assert.equal(modelBreakdown({ board: 2, "event-storming": 1 }), "1 Event Storming board · 2 boards");
+});
+
 test("notationCount: every registered notation reads as count + words, never a doubled name", () => {
   for (const n of NOTATIONS) {
     for (const count of [1, 2]) {

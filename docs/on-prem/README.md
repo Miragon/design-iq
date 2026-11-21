@@ -180,7 +180,9 @@ One cap to know about: the per-IP WebSocket limit (`LIVE_MAX_WS_PER_IP`, default
 identifies clients by the `Fly-Client-IP` header, falling back to the socket address.
 Behind your proxy that fallback is the **proxy's** address, so all users share one bucket.
 Either set the header at the proxy (`proxy_set_header Fly-Client-IP $remote_addr;`, safe
-since clients can only reach the app through the proxy) or raise the limit.
+since clients can only reach the app through the proxy) or raise the limit. Count two sockets
+for a browser tab with a board open: the board's own and one more that carries every model it
+shows.
 
 ## Data & backup
 

@@ -15,9 +15,22 @@
  *   businessRuleTask  decisionRef / calledDecision / calledElement="x"
  *                     <calledDecision decisionId="x"/>            → a decision
  *
+ * A board is the exception: it names the models it shows by PATH, in the
+ * `file` of its model nodes, so a rename AND a move (retargetMovedPaths)
+ * rewrite it. It is rewritten as the structured document it is, not by a
+ * pattern over its text: read strictly, the `file` of each model node
+ * changed, written back canonically. Nothing else changes, not the title, an
+ * image's file or an element of a kind the board does not know, and a text
+ * the board's reader refuses comes back untouched (rewriting it would drop
+ * what the reader skips).
+ *
  * Pure + browser-safe: string in, string out. Notations without refs return
  * their content untouched.
  */
+import { encodeBoard, parseBoardText } from "@miragon/board-schema-model";
+
+import { byExtension, modelStem } from "./index.ts";
+import { shownNotation } from "./refs.ts";
 import { escapeXml } from "./templates.ts";
 
 /** the model a set of references is moved from one id to another */
@@ -28,6 +41,13 @@ export interface RetargetSpec {
   from: string;
   /** its new id (file stem) */
   to: string;
+  /** the paths a board's model nodes name the renamed model by that follow
+   *  the rename. Absent: every path of the model's notation with the old
+   *  stem. Which of them is the model only the caller can tell: another file
+   *  with the same stem, a duplicate the repo should not hold, keeps its
+   *  path (the Live Host passes the model's own path and the stale ones no
+   *  file is at, application/scaffold.ts renameModel) */
+  paths?: ReadonlySet<string>;
 }
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -45,11 +65,13 @@ function attributesFor(tag: string, notation: string): string[] {
 
 /**
  * `content` with every reference to `spec.from` (of `spec.notation`) pointing
- * at `spec.to` instead. `notation` is the notation of the CONTENT — only BPMN
- * emits references today; anything else comes back unchanged.
+ * at `spec.to` instead. `notation` is the notation of the CONTENT — BPMN and
+ * the board emit references; anything else comes back unchanged.
  */
 export function retargetRefs(notation: string, content: string, spec: RetargetSpec): string {
-  if (notation !== "bpmn" || spec.from === spec.to) return content;
+  if (spec.from === spec.to) return content;
+  if (notation === "board") return retargetBoard(content, (path) => renamedPath(path, spec));
+  if (notation !== "bpmn") return content;
   const from = escapeRegExp(escapeXml(spec.from));
   const to = escapeXml(spec.to);
   return content.replace(REF_TAGS, (startTag, tag: string) => {
@@ -62,4 +84,46 @@ export function retargetRefs(notation: string, content: string, spec: RetargetSp
     }
     return out;
   });
+}
+
+/**
+ * `content` with every model path in `moves` (old repo-relative path -> new)
+ * rewritten where the content names it by PATH (a board's model nodes); every
+ * other notation comes back unchanged. A move keeps the model's id, so the
+ * references by id (calls, decides) need nothing.
+ */
+export function retargetMovedPaths(notation: string, content: string, moves: ReadonlyMap<string, string>): string {
+  if (notation !== "board" || moves.size === 0) return content;
+  return retargetBoard(content, (path) => moves.get(path));
+}
+
+/** a path of the renamed model with its new stem: its folder and its extension stay, as the rename leaves them */
+function renamedPath(path: string, spec: RetargetSpec): string | undefined {
+  if (byExtension(path)?.id !== spec.notation || modelStem(path) !== spec.from) return undefined;
+  if (spec.paths && !spec.paths.has(path)) return undefined;
+  const slash = path.lastIndexOf("/");
+  const base = path.slice(slash + 1);
+  return `${path.slice(0, slash + 1)}${spec.to}${base.slice(spec.from.length)}`;
+}
+
+/**
+ * A board with the `file` of each model node that shows a model (./refs
+ * shownNotation) set to `rewrite(file)`, where that is another path. The
+ * content itself when nothing changes, so an unchanged board keeps its bytes
+ * whatever their form, and when the board's strict reader refuses the text.
+ */
+function retargetBoard(content: string, rewrite: (path: string) => string | undefined): string {
+  const parsed = parseBoardText(content);
+  if (!parsed.ok) return content;
+  const elements = { ...parsed.snapshot.elements };
+  let changed = false;
+  for (const [id, attrs] of Object.entries(elements)) {
+    const file = attrs.file;
+    if (attrs.kind !== "node" || attrs.type !== "model" || typeof file !== "string" || !shownNotation(file)) continue;
+    const next = rewrite(file);
+    if (next === undefined || next === file) continue;
+    elements[id] = { ...attrs, file: next };
+    changed = true;
+  }
+  return changed ? encodeBoard({ elements, meta: parsed.snapshot.meta }) : content;
 }

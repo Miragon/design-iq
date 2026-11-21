@@ -1,8 +1,13 @@
 /**
- * The languages designIQ adds to Monaco's own: so far `mermaid`, for the
- * ```mermaid fences of a Markdown source (Monaco's Markdown grammar hands a
- * backtick fence to the language its info word names, once that language is
- * registered; lib/mermaid-monarch.ts has the grammar).
+ * The languages designIQ adds to Monaco's own:
+ *
+ *   mermaid  the ```mermaid fences of a Markdown source (Monaco's Markdown
+ *            grammar hands a backtick fence to the language its info word
+ *            names, once that language is registered; lib/mermaid-monarch.ts
+ *            has the grammar)
+ *   jsonl    JSON lines, the text a structured document (a board) is saved
+ *            as: its read-only source and its History diff
+ *            (lib/jsonl-monarch.ts; the notation's descriptor names it)
  *
  * Monaco's own pattern for its basic languages (basic-languages/
  * _.contribution.js): the id is registered up front, the grammar loads the
@@ -14,17 +19,16 @@
  * Install before the first createModel, at every place that makes one (the
  * live editor, the history diff): Monaco's Markdown grammar reads a fence of
  * an unregistered language as plain text, and does not go back once the
- * language arrives. Only the id and two closures are eager; the grammar, and
- * the diagram types it is built from, are a chunk of their own (ADR 0006,
- * `pnpm arch` rule mermaid-grammar-loads-lazily). The call sits next to the
- * createModel calls it must precede, so no model can come first.
+ * language arrives, and a model of an unregistered language stays plain
+ * text. Only the ids and two closures each are eager; each grammar is a
+ * chunk of its own (ADR 0006; the Mermaid one is built from the diagram
+ * types, `pnpm arch` rule mermaid-grammar-loads-lazily). The call sits next
+ * to the createModel calls it must precede, so no model can come first.
  *
  * Monaco is a parameter, as in monaco-theme.ts: the installer runs under
  * node --test without loading the editor.
  */
 import type { languages } from "monaco-editor";
-
-const MERMAID = "mermaid";
 
 /** the slice of `monaco.languages` the installer touches */
 export type MonacoLanguagesApi = Pick<
@@ -32,7 +36,30 @@ export type MonacoLanguagesApi = Pick<
   "register" | "registerTokensProviderFactory" | "onLanguageEncountered" | "setLanguageConfiguration"
 >;
 
-const loadMermaid = () => import("./mermaid-monarch.ts");
+/** what a grammar module exports: its Monarch grammar and its editing rules */
+interface GrammarModule {
+  language: languages.IMonarchLanguage;
+  conf: languages.LanguageConfiguration;
+}
+
+/** `id` known to Monaco now, its grammar and editing rules loaded when it is first needed */
+function registerLazily(
+  api: MonacoLanguagesApi,
+  id: string,
+  aliases: string[],
+  load: () => Promise<GrammarModule>,
+): void {
+  api.register({ id, aliases });
+  api.registerTokensProviderFactory(id, { create: async () => (await load()).language });
+  api.onLanguageEncountered(id, () => {
+    void load().then(
+      ({ conf }) => api.setLanguageConfiguration(id, conf),
+      () => {
+        /* the chunk did not load: the text keeps Monaco's plain editing */
+      },
+    );
+  });
+}
 
 let installed = false;
 
@@ -40,14 +67,6 @@ let installed = false;
 export function installMonacoLanguages(api: MonacoLanguagesApi): void {
   if (installed) return;
   installed = true;
-  api.register({ id: MERMAID, aliases: ["Mermaid", MERMAID] });
-  api.registerTokensProviderFactory(MERMAID, { create: async () => (await loadMermaid()).language });
-  api.onLanguageEncountered(MERMAID, () => {
-    void loadMermaid().then(
-      ({ conf }) => api.setLanguageConfiguration(MERMAID, conf),
-      () => {
-        /* the chunk did not load: the fence keeps Monaco's plain editing */
-      },
-    );
-  });
+  registerLazily(api, "mermaid", ["Mermaid", "mermaid"], () => import("./mermaid-monarch.ts"));
+  registerLazily(api, "jsonl", ["JSON Lines", "jsonl"], () => import("./jsonl-monarch.ts"));
 }

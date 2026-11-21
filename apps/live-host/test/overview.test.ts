@@ -337,6 +337,7 @@ test("listRepos: modelCount/modelCounts cover every notation, keyed by registry 
   writeFileSync(join(ws, "models", "teams-v2.ttm.json"), "{}"); // the notation's second extension
   writeFileSync(join(ws, "models", "rabatt.dmn"), "<dmn/>");
   writeFileSync(join(ws, "models", "order.bpmn"), "<bpmn/>");
+  writeFileSync(join(ws, "models", "workshop.board"), ""); // the structured notation counts like any other
   writeFileSync(join(ws, "models", "rabatt.tests.yaml"), "cases: []"); // not a model
   writeFileSync(join(ws, "models", "data.json"), "{}"); // no registered extension → not a model
   // nor a standalone diagram (5.4.0 counted them; a diagram is a fence in a .md now)
@@ -347,7 +348,7 @@ test("listRepos: modelCount/modelCounts cover every notation, keyed by registry 
   });
   const [r] = await listRepos(deps, session("s1"));
   assert.ok(r);
-  assert.equal(r.modelCount, 9);
+  assert.equal(r.modelCount, 10);
   assert.deepEqual(r.modelCounts, {
     bpmn: 1,
     dmn: 1,
@@ -356,6 +357,7 @@ test("listRepos: modelCount/modelCounts cover every notation, keyed by registry 
     "context-map": 1,
     "value-chain": 1,
     markdown: 1,
+    board: 1,
   });
   assert.deepEqual(
     Object.keys(r.modelCounts ?? {}),
@@ -536,4 +538,32 @@ test("listChanges: the release pool row carries live sessions and the catch-up c
   // a workspace surface without the catch-up (fakes, older wiring) reports no conflicts
   const rows = await listChanges(base.deps, REPO, base.ws);
   assert.equal(rows[0]?.conflict, false);
+});
+
+// ── a board's previews: loaded rooms nobody is in ───────────────────────────
+
+test("liveSessions: a room a board holds only as a preview is no live session of the model or repo rows", async () => {
+  const base = setup();
+  // order.bpmn is shown on Petra's open board, nobody else is in it (room-presence.ts
+  // attendedDocument); Kai has check-credit open himself
+  const asked: string[] = [];
+  const deps: OverviewDeps = {
+    ...base.deps,
+    attended: (room) => {
+      asked.push(room);
+      return room === "acme/models/processes/sub/check-credit.bpmn";
+    },
+  };
+  const rows = await listAllModels(deps, REPO, base.ws);
+  assert.equal(rows.find((m) => m.path === "processes/order.bpmn")?.liveSessions, 0, "loaded, yet nobody's");
+  assert.equal(rows.find((m) => m.path === "processes/sub/check-credit.bpmn")?.liveSessions, 1);
+  const processes = await listProcesses(deps, REPO, base.ws);
+  assert.equal(processes.find((p) => p.bpmn === "processes/order.bpmn")?.liveSessions, 0);
+  const [repo] = await listRepos(deps, session("s1"));
+  assert.equal(repo?.liveSessions, 1, "the repo counts the rooms people are in");
+  assert.ok(asked.includes("acme/models/processes/order.bpmn"), "asked of the loaded rooms");
+  // the release pool keeps counting every LOADED room: it gates "use main's version",
+  // which must not rewrite a file under a loaded room (its next store would undo it)
+  const changes = await listChanges(deps, REPO, base.ws);
+  assert.equal(changes.find((c) => c.path === "processes/order.bpmn")?.liveSessions, 2);
 });

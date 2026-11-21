@@ -26,6 +26,20 @@ test("modelStem: strips the FULL registered compound extension", () => {
   assert.equal(modelStem("maps/tea-shop.owm"), "tea-shop");
   assert.equal(modelStem("boards/order-checkout.storm"), "order-checkout");
   assert.equal(modelStem("maps/conference.cm.json"), "conference");
+  assert.equal(modelStem("boards/workshop.board"), "workshop");
+});
+
+test("the board: a structured notation of its own extension", () => {
+  const board = byExtension("boards/workshop.board");
+  assert.equal(board?.id, "board");
+  assert.equal(board?.docShape, "structured");
+  assert.equal(board?.monacoLanguage, "jsonl", "JSON lines, not one JSON value");
+  assert.ok(EDITABLE_EXTENSIONS.includes(".board"), "the Live Host opens a room for it");
+  assert.equal(
+    byExtension("boards/workshop.storm")?.id,
+    "event-storming",
+    "an Event Storming board is another notation",
+  );
 });
 
 test("a diagram is no notation of its own: .mmd and .mermaid are plain repository files", () => {
@@ -74,7 +88,8 @@ test("hasTodos: todos are filed on the notations whose descriptor offers them", 
   for (const id of ["bpmn", "wardley", "team-topology", "event-storming", "context-map", "value-chain", "markdown"]) {
     assert.ok(hasTodos(id), id);
   }
-  for (const id of ["dmn", "nope", undefined]) assert.ok(!hasTodos(id), String(id));
+  // not on a board yet (no element surface the todos address)
+  for (const id of ["dmn", "board", "nope", undefined]) assert.ok(!hasTodos(id), String(id));
 });
 
 test("movedModelPath: a moved model is found again by its notation and stem", () => {

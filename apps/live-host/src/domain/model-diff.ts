@@ -10,7 +10,8 @@
  * finds in its own element registry and ignores the rest.
  *
  * Added and changed ids only — a removed element has nothing left to outline.
- * Pure: graphs in, ids out.
+ * A structured document (a board) is compared by its snapshots instead
+ * (changedSnapshotIds). Pure: graphs or snapshots in, ids out.
  */
 import type { ModelGraph } from "@designiq/notations/extract";
 
@@ -35,6 +36,23 @@ function elementsOf(graph: ModelGraph | undefined): Map<string, string> {
   for (const node of graph.nodes) out.set(node.id, canonical(node));
   for (const edge of graph.edges) out.set(edge.id, canonical(edge));
   return out;
+}
+
+/** the same over a STRUCTURED document's snapshots (a board): an element is
+ *  its attributes, so a node an agent only moved, resized or put into a group
+ *  counts too, which its ModelGraph (name, file, text) does not show */
+export function changedSnapshotIds(
+  previous: { elements: Record<string, Record<string, unknown>> },
+  next: { elements: Record<string, Record<string, unknown>> },
+): string[] {
+  const changed: string[] = [];
+  for (const [id, attrs] of Object.entries(next.elements)) {
+    const before = previous.elements[id];
+    if (before !== undefined && canonical(before) === canonical(attrs)) continue;
+    changed.push(id);
+    if (changed.length >= MAX_CHANGED_IDS) break;
+  }
+  return changed;
 }
 
 /** ids of the elements that are new or different in `next` (in `next` order,

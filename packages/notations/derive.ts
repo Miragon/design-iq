@@ -363,6 +363,13 @@ const CM_RELATIONSHIP_PATTERNS: readonly string[] = [
   "separate-ways",
 ];
 
+/** a board element's group (`parent`), null on the board itself */
+const groupOf = (n: ModelNode): string | null => (typeof n.extra?.parent === "string" ? n.extra.parent : null);
+
+/** a string from a node's extra, null when absent */
+const extraText = (n: ModelNode, key: string): string | null =>
+  typeof n.extra?.[key] === "string" ? (n.extra[key] as string) : null;
+
 const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
   bpmn: (graph) => {
     const d = deriveProcess(graph);
@@ -531,6 +538,49 @@ const DERIVERS: Record<string, (graph: ModelGraph) => DerivedView> = {
       detail: {
         elements: graph.nodes.map((n) => ({ id: n.id, type: n.type, name: n.name ?? null })),
         connections: graph.edges.map((e) => ({ id: e.id, from: e.from, to: e.to, type: e.kind })),
+      },
+    };
+  },
+  board: (graph) => {
+    // a board holds files of the repository: the models it shows say what it
+    // is about, so each comes with its path and the id and notation the other
+    // tools take (get_view, get_model); notes, images, groups and arrows are
+    // the board's own (./extract)
+    const ofType = (type: string): ModelNode[] => graph.nodes.filter((n) => n.type === type);
+    const models = ofType("model");
+    const notes = ofType("text");
+    const images = ofType("image");
+    const groups = ofType("group");
+    const stats: Record<string, number> = {
+      models: models.length,
+      notes: notes.length,
+      images: images.length,
+      groups: groups.length,
+      arrows: graph.edges.length,
+    };
+    // only what is on the board, like an Event Storming board
+    const present = Object.fromEntries(Object.entries(stats).filter(([, v]) => v > 0));
+    const title = graph.meta?.title;
+    return {
+      notation: "board",
+      name: typeof title === "string" ? title : null,
+      summary: `Board with ${Object.keys(present).length > 0 ? counted(present) : "no elements"}`,
+      stats,
+      // `element` is the board's own id of a node (an arrow's from/to), `id`
+      // a shown model's id; notation and id are null for a file that is no
+      // model of a registered notation
+      detail: {
+        models: models.map((n) => ({
+          element: n.id,
+          path: extraText(n, "file"),
+          notation: extraText(n, "notation"),
+          id: extraText(n, "model"),
+          group: groupOf(n),
+        })),
+        notes: notes.map((n) => ({ element: n.id, text: extraText(n, "text") ?? "", group: groupOf(n) })),
+        images: images.map((n) => ({ element: n.id, path: extraText(n, "file"), group: groupOf(n) })),
+        groups: groups.map((n) => ({ element: n.id, label: n.name ?? null, group: groupOf(n) })),
+        arrows: graph.edges.map((e) => ({ element: e.id, from: e.from, to: e.to, label: e.name ?? null })),
       },
     };
   },

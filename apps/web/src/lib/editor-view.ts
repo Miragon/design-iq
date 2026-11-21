@@ -10,6 +10,8 @@
  * Only a CHOICE is remembered (editorViews). The shell's own fallback to the
  * source (the engine chunk failed to load, the first import failed) belongs
  * to one document: written here, it would open every later one in the source.
+ * A structured document (a board) has two views, its canvas and its
+ * read-only source, and remembers neither.
  *
  * Split needs room: on from SPLIT_ON_REM of editor width, off only below
  * SPLIT_OFF_REM, so a width resting at the threshold does not flip it on
@@ -135,15 +137,16 @@ export interface EditorLayers {
 
 /**
  * The layers on screen for the view chosen. A document without a visual
- * editor shows its source, a structured one its canvas (it has no text lane
- * for Monaco), and Split shows while `splitAvailable` (the plugin has the
- * split view and the editor the room), the canvas otherwise.
+ * editor shows its source, and Split shows while `splitAvailable` (the
+ * plugin has the split view and the editor the room), the canvas otherwise.
+ * A structured document (a board) never splits: its canvas is where it is
+ * edited, its source the read-only text it is saved as, one or the other.
  */
 export function editorLayers(
   view: EditorView,
   doc: { visual: boolean; structured: boolean; splitAvailable: boolean },
 ): EditorLayers {
-  const shown = doc.structured ? "canvas" : doc.visual ? shownView(view, doc.splitAvailable) : "source";
+  const shown = doc.visual ? shownView(view, doc.splitAvailable && !doc.structured) : "source";
   return { shown, sourceShown: shown !== "canvas", canvasShown: shown !== "source", split: shown === "split" };
 }
 

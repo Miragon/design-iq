@@ -8,7 +8,15 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { test } from "node:test";
 
-import { NotAContentRepoError, splitRoom, toDiskPath } from "../src/domain/rooms.ts";
+import { docCodecFor } from "@designiq/notations/codecs";
+
+import {
+  docCodecForPath,
+  NotAContentRepoError,
+  splitRoom,
+  toDiskPath,
+  UnreadableDocumentError,
+} from "../src/domain/rooms.ts";
 import { notAContentRepoReason } from "../src/repos/content.ts";
 import type { ConnectedRepo } from "../src/repos/registry.ts";
 
@@ -163,4 +171,29 @@ test("toDiskPath: a '.' (root) processes folder allows root-level rooms", async 
     processes: ".",
   }));
   assert.equal(disk, resolve("/srv/ws/acme-flat", "order.bpmn"));
+});
+
+// ── the structured lane: a board ─────────────────────────────────────────────
+
+test("docCodecForPath: a .board is structured through the registry's board codec; text notations stay text", () => {
+  assert.equal(docCodecForPath("processes/workshop.board"), docCodecFor("board"));
+  assert.ok(docCodecForPath("processes/workshop.board")?.check, "the board's codec has its strict reader");
+  for (const path of ["processes/order.bpmn", "processes/rabatt.dmn", "processes/notes.md", "processes/x.storm"]) {
+    assert.equal(docCodecForPath(path), undefined, path);
+  }
+  const { path } = splitRoom("acme/models/processes/workshop.board", fakeRegistry(repo("acme/models")));
+  assert.equal(path, "processes/workshop.board", "a board is an editable room");
+});
+
+test("UnreadableDocumentError: names the file, the notation's noun and the line; its reason is what a ws client hears", () => {
+  const e = new UnreadableDocumentError("processes/workshop.board", "line 3 is no JSON");
+  assert.equal(e.name, "UnreadableDocumentError");
+  assert.equal(e.path, "processes/workshop.board");
+  assert.equal(e.why, "line 3 is no JSON");
+  assert.equal(
+    e.message,
+    "processes/workshop.board is not a board this host can open without losing content: line 3 is no JSON",
+  );
+  // Hocuspocus forwards an error's `reason` as the permission-denied reason
+  assert.equal(e.reason, e.message);
 });

@@ -10,6 +10,7 @@
  * XML — same discipline as ./derive.
  */
 import type { ModelGraph } from "./extract.ts";
+import { byExtension, modelStem } from "./index.ts";
 
 /**
  * One outgoing cross-model reference, as emitted from a single model's graph.
@@ -18,8 +19,9 @@ import type { ModelGraph } from "./extract.ts";
 export interface ModelRef {
   /** element id in the source model the reference hangs on */
   fromElement?: string;
-  /** the relation: "calls" (callActivity), "decides" (businessRuleTask), and
-   *  notation-defined kinds to come ("realized-by", "owned-by", "mentions", …) */
+  /** the relation: "calls" (callActivity), "decides" (businessRuleTask),
+   *  "shows" (a board's model node), and notation-defined kinds to come
+   *  ("realized-by", "owned-by", "mentions", …) */
   rel: string;
   to: {
     /** target model id (= file stem) */
@@ -28,6 +30,11 @@ export interface ModelRef {
     notation?: string;
     /** optional element inside the target (reserved; not resolved yet) */
     element?: string;
+    /** the repo-relative path the source names its target by, where it does
+     *  (a board's model node). The reference still resolves by notation and
+     *  id; the path tells a moved model (./retarget retargetMovedPaths, the
+     *  validator's stale-path warning) and one outside the models folder */
+    path?: string;
   };
   /** "required" refs WARN when unresolved (the callActivity behavior);
    *  "informative" refs never fail validation (e.g. markdown mentions) */
@@ -53,7 +60,40 @@ const REF_EMITTERS: Record<string, (graph: ModelGraph) => ModelRef[]> = {
     }
     return refs;
   },
+  // a board shows models of the repository in place: one reference per model
+  // node (./extract). A node names its model by PATH; like every reference it
+  // resolves by notation and id (the file stem), so a model that moved to
+  // another folder still resolves, and the path rides along for whoever has
+  // to tell. An image, a file of no notation and another board are no model
+  // it shows
+  board: (graph) => {
+    const refs: ModelRef[] = [];
+    for (const n of graph.nodes) {
+      const file = n.extra?.file;
+      const notation = n.type === "model" ? shownNotation(file) : undefined;
+      if (notation === undefined || typeof file !== "string") continue;
+      refs.push({
+        fromElement: n.id,
+        rel: "shows",
+        to: { id: modelStem(file), notation, path: file },
+        strength: "required",
+      });
+    }
+    return refs;
+  },
 };
+
+/**
+ * The notation of the model a board's model node shows by its `file`: a
+ * registered notation other than the board itself, since a board is not
+ * shown on a board (its canvas refuses it, the validator warns). Undefined
+ * for anything else: no reference, and nothing a rename or a move rewrites.
+ */
+export function shownNotation(file: unknown): string | undefined {
+  if (typeof file !== "string" || file === "") return undefined;
+  const notation = byExtension(file)?.id;
+  return notation === "board" ? undefined : notation;
+}
 
 /**
  * THE generic refs dispatch: every outgoing cross-model reference of the

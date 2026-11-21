@@ -3,11 +3,15 @@
  * over the element-wise CRDT shape (@designiq/contracts/live: ELEMENTS_KEY =
  * Y.Map<elementId, Y.Map<attr, value>>, META_KEY = flat Y.Map).
  *
- * readSnapshot / applySnapshot are the codec bridge (seed + write-through);
- * reconcileSnapshot is the write path for whole-document callers (REST/MCP
- * agents, text-tab saves): it applies ONLY the differing elements and
- * attributes, so a co-editor's concurrent edit on a DIFFERENT element — or a
- * different attribute of the same element — survives untouched.
+ * readSnapshot / reconcileSnapshot are the codec bridge (seed +
+ * write-through); reconcileSnapshot is also the write path for whole-document
+ * callers (REST/MCP agents, a restore): it applies ONLY the differing
+ * elements and attributes, so a co-editor's concurrent edit on a DIFFERENT
+ * element, or a different attribute of the same element, survives untouched.
+ *
+ * The board is the structured notation. Its canvas (@miragon/board-renderer)
+ * reads and writes the same Y.Maps through a store of its own, which mirrors
+ * this module: the two implementations of one wire shape must stay equal.
  *
  * The snapshot shape mirrors @designiq/notations/codecs StructuredSnapshot
  * structurally (this package deliberately has no notations dependency).

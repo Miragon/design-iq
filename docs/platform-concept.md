@@ -101,6 +101,9 @@ Two consequences shape the whole architecture:
 2. **Text is the sync substrate.** All shipped OCT clients sync text documents (Y.Text per
    file path). Our models are text (BPMN XML, YAML, Markdown, OWM) — which is exactly why the
    repo-as-text decision pays off again here.
+   _As built (2026-11): the board (`.board`) is the one notation that syncs element by
+   element instead (ADR 0006, the structured doc shape); its file is still text, one JSON
+   line per element._
 
 ## Components (all TypeScript)
 
@@ -179,6 +182,9 @@ Two pieces, one of which exists:
   currently writes full-range `WorkspaceEdit`s, which would degrade Y.Text merges to
   replace-all. **Upstream fix in bpmn-modeler: write minimal diffs instead of full-range
   edits** (also improves plain undo/diff behavior, independent of this platform).
+  _As built: the own extension (`apps/vscode/`) binds every model document but a board
+  two-way to its room's Y.Text. A board has none: it opens read-only as its file's text and
+  follows the live board; boards are edited in the web app._
 
 ### 5. Portal, MCP, pipeline (existing — unchanged roles)
 

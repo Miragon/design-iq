@@ -365,7 +365,8 @@ export function createMcpServer(
       title: "Get model graph",
       description:
         "Parse ANY model file into its generic graph: nodes (id, type, name), edges and meta — " +
-        "BPMN flows and lanes, DMN requirements, Wardley components/dependencies, … " +
+        "BPMN flows and lanes, DMN requirements, Wardley components/dependencies, a board's " +
+        "models, notes and arrows, … " +
         "Use to see the raw structure, or to ground any 'how does X work' answer in the actual model.",
       inputSchema: z.object({
         id: z.string().describe("Model id = file stem (from list_models), e.g. order-to-cash"),
@@ -559,9 +560,10 @@ export function createMcpServer(
       title: "Find models that reference a model",
       description:
         "Reference-level impact analysis across EVERY notation: all models whose typed " +
-        "cross-model references (callActivity calls, businessRuleTask decides, …) point at the " +
-        "given model id (file stem, exact match) — the repo-wide reference index behind it also " +
-        "flags dangling references. Use for 'what breaks if I change or delete this model?'.",
+        "cross-model references (callActivity calls, businessRuleTask decides, the models a board " +
+        "shows, …) point at the given model id (file stem, exact match) — the repo-wide reference " +
+        "index behind it also flags dangling references. Use for 'what breaks if I change or " +
+        "delete this model?'.",
       inputSchema: z.object({
         id: z.string().describe("Target model id = file stem (from list_models), e.g. 'credit-check'"),
       }),

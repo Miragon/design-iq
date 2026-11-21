@@ -7,12 +7,15 @@
  * (RepoRegistry); each repo gets its own workspace checkout
  * (WorkspaceManager — the host's own repo keeps using this checkout).
  *
- * Room name = "<owner>/<repo>/<repo-relative-path>", Y.Text field 'content':
+ * Room name = "<owner>/<repo>/<repo-relative-path>"; a text notation's room is
+ * the Y.Text field 'content', a structured one's (a board) its element maps,
+ * at rest its codec's canonical text:
  *
  *   onAuthenticate   → session (from OAuth login) + PER-REPO write permission
  *                      for the room being joined (AccessCache)
  *   onLoadDocument   → restore Yjs lineage from SQLite, else seed from the
- *                      repo's workspace tree
+ *                      repo's workspace tree (a board its strict reader
+ *                      refuses is not opened)
  *   onStoreDocument  → persist lineage + debounced write-through to the tree
  *
  * Run:  pnpm live-host   (HTTP + WebSocket on ONE port, http://localhost:8301)
@@ -42,7 +45,7 @@ import { makeCollabHooks } from "./application/collab.ts";
 import { LoginCodeStore } from "./application/login-codes.ts";
 import { RepoActivity } from "./application/repo-activity.ts";
 import { RoomMigrations } from "./application/room-migrations.ts";
-import { peersOfDocument } from "./application/room-presence.ts";
+import { attendedDocument, peersOfDocument } from "./application/room-presence.ts";
 import { TodoJobs } from "./application/todo-jobs.ts";
 import { WsTicketStore } from "./application/ws-tickets.ts";
 import { allowAllAccess, makeLocalPrincipal } from "./auth/none.ts";
@@ -460,6 +463,13 @@ const httpServer = startApi(PORT, {
     const doc = server.hocuspocus.documents.get(room);
     return doc ? peersOfDocument(doc) : [];
   },
+  // ... and whether a person may be in a loaded room (the move/delete gates,
+  // the overview counts): a board's preview of a model is nobody. Fails
+  // closed, a room still loading (in liveDocs, not yet a document) included
+  attended: (room) => {
+    const doc = server.hocuspocus.documents.get(room);
+    return doc ? attendedDocument(doc) : true;
+  },
   github,
   sessions,
   registry,
@@ -475,14 +485,15 @@ const httpServer = startApi(PORT, {
   // a renamed OPEN model (#208): its final live state becomes the new room's
   saveLineage: (room, state) => lineage.save(room, state),
   rooms: {
-    // retire a LOADED room: tell its peers where the document went, close
-    // their connections (no more edits can land), and hand back the state —
-    // synchronous from the notice to the snapshot, so nothing slips between
+    // retire a LOADED room: tell its peers where the document went (a deleted
+    // file's room has no notice), close their connections (no more edits can
+    // land), and hand back the state, synchronous from the notice to the
+    // snapshot, so nothing slips between
     retire: (room, notice) => {
       const doc = server.hocuspocus.documents.get(room);
       if (!doc) return undefined;
       migrations.retire(room);
-      doc.broadcastStateless(notice);
+      if (notice !== undefined) doc.broadcastStateless(notice);
       server.hocuspocus.closeConnections(room);
       return Y.encodeStateAsUpdate(doc);
     },

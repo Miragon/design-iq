@@ -64,12 +64,19 @@ export function spaFitInsets(room: SpaCanvasRoom): Insets {
   };
 }
 
+/**
+ * The palette's bottom edge below the canvas's top, in the canvas's LAYOUT px: a board scales a
+ * model's preview with a CSS transform (notations/board), and the first fit is made in the
+ * canvas's own px (diagram-js reads its container's client size). 1 in the SPA's own canvas
+ */
 export function paletteBottomIn(container: HTMLElement): number {
   const palette = container.querySelector(".djs-palette");
   if (!palette) return 0;
   const box = palette.getBoundingClientRect();
   if (box.height === 0) return 0;
-  return Math.max(0, Math.round(box.bottom - container.getBoundingClientRect().top));
+  const frame = container.getBoundingClientRect();
+  const scale = container.offsetWidth > 0 && frame.width > 0 ? frame.width / container.offsetWidth : 1;
+  return Math.max(0, Math.round((box.bottom - frame.top) / scale));
 }
 
 /** the fit insets of a canvas host as it is laid out now: its palette, an open side panel */

@@ -42,6 +42,7 @@ test("refsOf: notations without an emitter yield []", () => {
 
 test("hasRefs: true exactly for notations with an emitter — the save/check skip gate", () => {
   assert.ok(hasRefs("bpmn"));
+  assert.ok(hasRefs("board"));
   assert.ok(!hasRefs("dmn"));
   assert.ok(!hasRefs("markdown"));
   assert.ok(!hasRefs(""));
@@ -71,4 +72,40 @@ test("buildRepoIndex: artifacts + resolved/dangling refs + incoming/outgoing tra
     ["models/caller.bpmn#Rule_1"],
   );
   assert.deepEqual(index.incoming("models/broken.tt"), []);
+});
+
+test("buildRepoIndex: a board shows models by path; they resolve by notation and id, wherever they are now", async () => {
+  const w = mkdtempSync(join(tmpdir(), "designiq-board-refs-"));
+  mkdirSync(join(w, "models", "sub"), { recursive: true });
+  writeFileSync(join(w, "models", "sub", "invoice-handling.bpmn"), "<definitions/>");
+  writeFileSync(join(w, "models", "credit-check.dmn"), "<definitions/>");
+  writeFileSync(
+    join(w, "models", "workshop.board"),
+    [
+      `{"format":"structured-model","meta":{"title":"Workshop","version":1},"version":1}`,
+      // listed where it is
+      `{"file":"models/credit-check.dmn","id":"n_credit","kind":"node","type":"model"}`,
+      // moved since: the stem still resolves, the path rides along
+      `{"file":"models/invoice-handling.bpmn","id":"n_invoice","kind":"node","type":"model"}`,
+      // gone
+      `{"file":"models/ghost.bpmn","id":"n_ghost","kind":"node","type":"model"}`,
+      "",
+    ].join("\n"),
+  );
+
+  const index = await buildRepoIndex(w, cfg("models"));
+  assert.equal(index.byId("workshop", "board")?.path, "models/workshop.board");
+  assert.deepEqual(
+    index.outgoing("models/workshop.board").map((r) => [r.from.element, r.rel, r.to.path, r.resolved?.path]),
+    [
+      ["n_credit", "shows", "models/credit-check.dmn", "models/credit-check.dmn"],
+      ["n_ghost", "shows", "models/ghost.bpmn", undefined],
+      ["n_invoice", "shows", "models/invoice-handling.bpmn", "models/sub/invoice-handling.bpmn"],
+    ],
+  );
+  // what a rename of the decision rewrites, what a release lists as its referrers
+  assert.deepEqual(
+    index.incoming("models/credit-check.dmn").map((r) => `${r.from.path}#${r.from.element}:${r.rel}`),
+    ["models/workshop.board#n_credit:shows"],
+  );
 });

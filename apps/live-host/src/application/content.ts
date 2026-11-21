@@ -1,9 +1,17 @@
 /**
  * Content read-model + write use-case over the LIVE documents — the REST/MCP
- * path to the same Y.Text the collaborative rooms edit. Reads and writes go
- * through a server-side Hocuspocus direct connection (injected as `openDoc`),
- * so a PUT lands in the live doc like any co-editor's keystrokes: broadcast to
- * open editors, then written through to the workspace tree.
+ * path to the same document the collaborative rooms edit: the Y.Text of a
+ * text notation, the element maps of a structured one (a board), which travel
+ * as their codec's canonical text. Reads and writes go through a server-side
+ * Hocuspocus direct connection (injected as `openDoc`), so a PUT lands in the
+ * live doc like any co-editor's keystrokes: broadcast to open editors, then
+ * written through to the workspace tree.
+ *
+ * A structured document holds only what its codec writes back, so a text its
+ * strict reader refuses (DocCodec.check) never enters one: a file on disk like
+ * that is not opened (422 content/unreadable-model, the file untouched; a
+ * valid save over it repairs it), and a save of one is refused whatever its
+ * `lint` (422 content/invalid-model).
  *
  * Direct connections bypass two ws-only gates, which therefore live HERE:
  *   - authorization: the HTTP route (repoOf/canWrite) authorizes per request —
@@ -22,8 +30,10 @@
  * content instead of writing — a caller can never overwrite an edit it has
  * not seen.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 import { CONTENT_KEY, roomName } from "@designiq/contracts/live";
 import type {
@@ -46,11 +56,13 @@ import {
   NotAContentRepoError,
   type RegistryLookup,
   toDiskPath,
+  UnreadableDocumentError,
   type WorkspaceEnsure,
 } from "../domain/rooms.ts";
-import { discoverModels, loadContentConfig } from "../repos/content.ts";
+import { type DiscoveredModel, discoverModels, loadContentConfig } from "../repos/content.ts";
 import type { ConnectedRepo } from "../repos/registry.ts";
 import { modelPath } from "./model-path.ts";
+import { modelFileRefusal } from "./workspace-paths.ts";
 
 /** the minimal direct-connection surface (structural — no @hocuspocus import) */
 export interface DirectDoc {
@@ -69,10 +81,14 @@ export interface ContentDeps {
    *  for direct connections */
   maxDocBytes: number;
   /** the STRUCTURED lane's codec per path (epic #118 step 8) — defaults to
-   *  the registry resolution (dark: undefined for every shipped notation);
-   *  tests inject their own */
+   *  the registry resolution (the board's codec for a .board, undefined for
+   *  every text notation); tests inject their own */
   docCodec?: (path: string) => DocCodec | undefined;
 }
+
+/** the code of a structured file on disk its strict reader refuses: the
+ *  room does not open it (domain/rooms.ts UnreadableDocumentError) */
+export const UNREADABLE_MODEL = "content/unreadable-model";
 
 export type PutOutcome =
   | {
@@ -85,6 +101,9 @@ export type PutOutcome =
       next: string;
     }
   | { ok: false; conflict: ContentConflictWire };
+
+/** a save that happened, given the text it replaced */
+type Saved = (previous: string) => Extract<PutOutcome, { ok: true }>;
 
 /** opaque optimistic-concurrency token (see header) — clients never parse it.
  *  Content-derived, so it survives doc unload/reseed cycles between read and save. */
@@ -140,19 +159,52 @@ export async function putContent(
   }
   const { warnings, lintErrors } = await saveGate(opts, repo, safePath, text, body.lint);
 
-  let outcome: PutOutcome | undefined;
   const codec = (opts.docCodec ?? docCodecForPath)(safePath);
   // a structured save normalizes: the doc's state after the write is the
   // canonical encoding of the DECODED payload — the returned token must match
   const canonicalNext = codec ? codec.encode(codec.decode(text)) : text;
+  const saved: Saved = (previous) => ({
+    ok: true,
+    result: {
+      path: safePath,
+      baseVersion: baseVersionOf(canonicalNext),
+      warnings,
+      ...(lintErrors.length > 0 ? { errors: lintErrors } : {}),
+    },
+    previous,
+    next: canonicalNext,
+  });
+  try {
+    return await saveLive(opts, repo, safePath, text, body.baseVersion, codec, saved);
+  } catch (e) {
+    if (!codec || !(e instanceof AppError) || e.code !== UNREADABLE_MODEL) throw e;
+  }
+  // the file on disk is one the room refuses to open: this save repairs it,
+  // unless that happened meanwhile and the room opens after all
+  return (
+    (await saveOverUnreadable(opts, repo, safePath, canonicalNext, body.baseVersion, codec, saved)) ??
+    (await saveLive(opts, repo, safePath, text, body.baseVersion, codec, saved))
+  );
+}
+
+/** putContent's compare-and-set on the live document */
+async function saveLive(
+  opts: ContentDeps,
+  repo: ConnectedRepo,
+  safePath: string,
+  text: string,
+  baseVersion: string,
+  codec: DocCodec | undefined,
+  saved: Saved,
+): Promise<PutOutcome> {
+  let outcome: PutOutcome | undefined;
   await withDoc(opts, repo, safePath, async (conn) => {
     // CAS + write inside ONE synchronous transact callback — atomic on the event
     // loop, so no remote update can land between the compare and the write
     await conn.transact((doc) => {
-      const ytext = doc.getText(CONTENT_KEY);
-      const current = codec ? codec.encode(readSnapshot(doc)) : ytext.toString();
+      const current = codec ? codec.encode(readSnapshot(doc)) : doc.getText(CONTENT_KEY).toString();
       const currentVersion = baseVersionOf(current);
-      if (body.baseVersion !== currentVersion) {
+      if (baseVersion !== currentVersion) {
         outcome = {
           ok: false,
           conflict: {
@@ -174,23 +226,89 @@ export async function putContent(
       } else {
         // minimal diff (shared writer with web/vscode) — co-editors see an
         // incremental update, not a replace-all
-        updateText(ytext, text);
+        updateText(doc.getText(CONTENT_KEY), text);
       }
-      outcome = {
-        ok: true,
-        result: {
-          path: safePath,
-          baseVersion: baseVersionOf(canonicalNext),
-          warnings,
-          ...(lintErrors.length > 0 ? { errors: lintErrors } : {}),
-        },
-        previous: current,
-        next: canonicalNext,
-      };
+      outcome = saved(current);
     });
   });
   if (!outcome) throw new Error(`write produced no outcome: ${safePath}`); // unreachable
   return outcome;
+}
+
+/**
+ * A save over a structured file the room refuses to open (its strict reader
+ * refuses the text on disk): besides git, the way to repair one. Nothing is
+ * live at that path (every load of it is refused, and a refused load leaves
+ * no lineage), so the compare-and-set runs on the FILE: its token is the
+ * baseVersion of the text on disk, which a save with any other token gets
+ * back as a conflict, like a stale live save. The text written is the
+ * canonical encoding of a payload the strict reader took (saveGate), so the
+ * room opens again. Undefined when the file reads again by now (repaired
+ * meanwhile): the save then goes through the room.
+ */
+async function saveOverUnreadable(
+  opts: ContentDeps,
+  repo: ConnectedRepo,
+  safePath: string,
+  canonicalNext: string,
+  baseVersion: string,
+  codec: DocCodec,
+  saved: Saved,
+): Promise<PutOutcome | undefined> {
+  const room = roomName(repo.fullName, safePath);
+  return inRoomQueue(room, async () => {
+    // the model file guard every lane shares: no symlink, nothing outside
+    // the models folder or in .git is read back or written over
+    const { disk } = await assertOnDisk(opts, repo, safePath);
+    const current = await readFile(disk, "utf8");
+    const why = codec.check?.(current);
+    if (why === undefined) return undefined;
+    const currentVersion = baseVersionOf(current);
+    if (baseVersion !== currentVersion) {
+      const noun = byExtension(safePath)?.noun.singular ?? "model";
+      return {
+        ok: false,
+        conflict: {
+          error:
+            `${safePath} is not a ${noun} this host can open without losing content (${why}): currentContent ` +
+            `is its text on disk. Save a valid ${noun} with this baseVersion to repair it`,
+          code: "content/conflict",
+          path: safePath,
+          currentContent: current,
+          currentXml: current, // deprecated alias (#154)
+          baseVersion: currentVersion,
+        },
+      };
+    }
+    await replaceFile(disk, canonicalNext);
+    console.log(`repaired: ${room} (an unreadable ${byExtension(safePath)?.id ?? "model"} saved over)`);
+    return saved(current);
+  });
+}
+
+/**
+ * Write `text` over the file at `disk` in one step: into a temp file beside
+ * it, renamed over it. The repair writes outside the room, and a ws load
+ * takes no part in content.ts's room queue: a file written in place is
+ * truncated before it is written, and a load reading it then would take the
+ * empty text for an empty board, seed the room with it, and its next store
+ * would write that over the repaired file. A load now reads the old text
+ * (refused) or the whole new one. The rename also replaces a symlink swapped
+ * in meanwhile instead of writing through it. The temp file's name starts
+ * with "." so no room ever maps to it (splitRoom), and `wx` never opens
+ * anything already there; it is removed when the write fails.
+ */
+async function replaceFile(disk: string, text: string): Promise<void> {
+  const temp = join(dirname(disk), `.${basename(disk)}.${randomUUID()}.tmp`);
+  // the file keeps its permission bits (git records the executable one)
+  const mode = (await stat(disk)).mode & 0o777;
+  try {
+    await writeFile(temp, text, { flag: "wx", mode });
+    await rename(temp, disk);
+  } catch (e) {
+    await rm(temp, { force: true }).catch(() => undefined);
+    throw e;
+  }
 }
 
 /** what a save of a text would do, without saving (checkContent): the
@@ -238,7 +356,23 @@ async function saveGate(
       expose: true,
     });
   }
-  const workspace = await assertOnDisk(opts, repo, safePath);
+  const { workspace } = await assertOnDisk(opts, repo, safePath);
+
+  // a STRUCTURED document holds only what its codec writes back: a text its
+  // strict reader refuses (a line that is no JSON, a repeated id) would lose
+  // exactly that in the live document, so no lint mode saves it: "warn"
+  // keeps what the validator flags, and this text cannot be kept as it is.
+  // The validator's ERROR for it says the same (`<notation>/parse`)
+  const refused = (opts.docCodec ?? docCodecForPath)(safePath)?.check?.(text);
+  if (refused !== undefined) {
+    const noun = byExtension(safePath)?.noun.singular ?? "model";
+    throw new AppError(
+      "content/invalid-model",
+      `validation failed:\n- ${refused}\nA ${noun} text its reader refuses is never saved, whatever \`lint\` says: ` +
+        `the live ${noun} could not hold what the reader skips.`,
+      { status: 422, expose: true },
+    );
+  }
 
   // full platform validation per notation — checkModel, the one dispatch the
   // CLI runs too (BPMN structure + BPMNDI coverage + links, DMN table/DMNDI/
@@ -277,7 +411,9 @@ async function saveGate(
  * room, broadcast to anyone who has it open, written through on disconnect.
  * No CAS and no validation gate: `edit` is a deterministic transformation of
  * whatever the document holds at that instant, applied inside one transact.
- * Text rooms only — a structured room is left as it is.
+ * A structured room (a board that shows the renamed or moved model) is edited
+ * as its canonical text and reconciled element by element, so a co-editor's
+ * change of another element stays.
  */
 export async function editContent(
   opts: ContentDeps,
@@ -287,17 +423,28 @@ export async function editContent(
 ): Promise<void> {
   const safePath = modelPath(opts.registry, repo, path, "content/invalid-path");
   await assertOnDisk(opts, repo, safePath);
-  if ((opts.docCodec ?? docCodecForPath)(safePath)) return;
+  const codec = (opts.docCodec ?? docCodecForPath)(safePath);
+  const tooLarge = (next: string): void => {
+    if (Buffer.byteLength(next, "utf8") > opts.maxDocBytes) {
+      throw new AppError("content/too-large", `content exceeds the ${opts.maxDocBytes}-byte document cap`, {
+        status: 413,
+        expose: true,
+      });
+    }
+  };
   await withDoc(opts, repo, safePath, async (conn) => {
     await conn.transact((doc) => {
+      if (codec) {
+        const current = codec.encode(readSnapshot(doc));
+        const next = edit(current);
+        if (next === current) return;
+        tooLarge(next);
+        reconcileSnapshot(doc, codec.decode(next));
+        return;
+      }
       const ytext = doc.getText(CONTENT_KEY);
       const next = edit(ytext.toString());
-      if (Buffer.byteLength(next, "utf8") > opts.maxDocBytes) {
-        throw new AppError("content/too-large", `content exceeds the ${opts.maxDocBytes}-byte document cap`, {
-          status: 413,
-          expose: true,
-        });
-      }
+      tooLarge(next);
       updateText(ytext, next);
     });
   });
@@ -306,11 +453,23 @@ export async function editContent(
 /** the platform validator for whatever notation this path is — checkModel is
  *  THE one dispatch the CLI also runs, so a live save and `pnpm validate`
  *  always agree; `undefined` when the path is no registered notation (the
- *  file still saves). The repo-wide id scan feeds only the reference checks,
- *  so only saves of a notation WITH a refs emitter pay for it. */
+ *  file still saves). The repo-wide model scan feeds only the reference
+ *  checks, so only saves of a notation WITH a refs emitter pay for it. */
 async function lintModel(workspace: string, safePath: string, content: string): Promise<Finding[] | undefined> {
-  const modelIds = hasRefs(byExtension(safePath)?.id ?? "") ? await modelIdsOf(workspace) : undefined;
-  return checkModel(content, { path: safePath, modelIds });
+  const refs = hasRefs(byExtension(safePath)?.id ?? "") ? await refContextOf(workspace) : undefined;
+  return checkModel(content, { path: safePath, ...refs });
+}
+
+/** the repo context of checkModel's reference checks, as the CLI passes it:
+ *  the listed models (a board's node that names a moved model by its old
+ *  path warns "moved to …") and the models folder (one outside it is said to
+ *  be there); undefined when the workspace is no content repo */
+export async function refContextOf(
+  workspace: string,
+): Promise<{ models: DiscoveredModel[]; modelsFolder: string } | undefined> {
+  const cfg = loadContentConfig(workspace);
+  if (!cfg) return undefined;
+  return { models: await discoverModels(workspace, cfg), modelsFolder: cfg.models };
 }
 
 /** the model ids of a workspace per notation (file stems) — the link-check
@@ -325,14 +484,27 @@ export async function modelIdsOf(workspace: string): Promise<Map<string, Set<str
   return modelIds;
 }
 
-/** pre-flight: content repo + file exists (typed errors BEFORE any doc work).
- *  Returns the workspace root. The authoritative checks (incl. the realpath
- *  symlink guard) re-run inside onLoadDocument when the doc is opened. */
-async function assertOnDisk(opts: ContentDeps, repo: ConnectedRepo, safePath: string): Promise<string> {
+/** pre-flight: content repo + a path the model file guard lets through (no
+ *  symlink, inside the models folder, not in .git: workspace-paths.ts
+ *  modelFileRefusal) + the file exists, as typed errors BEFORE any doc work.
+ *  Returns the workspace root and the file on disk. The room's load and
+ *  write-through run the same guard again (collab.ts resolveRoom); the
+ *  repair, which reads and writes the file itself, relies on this one. */
+async function assertOnDisk(
+  opts: ContentDeps,
+  repo: ConnectedRepo,
+  safePath: string,
+): Promise<{ workspace: string; disk: string }> {
   const room = roomName(repo.fullName, safePath);
   let disk: string;
+  let workspace: string;
+  let models: string;
   try {
     disk = await toDiskPath(room, opts.registry, opts.workspaces, loadContentConfig);
+    workspace = await opts.workspaces.ensure(repo);
+    const cfg = loadContentConfig(workspace);
+    if (!cfg) throw new NotAContentRepoError(repo.fullName);
+    models = cfg.processes;
   } catch (e) {
     const message = (e as Error).message;
     if (e instanceof NotAContentRepoError) {
@@ -340,13 +512,21 @@ async function assertOnDisk(opts: ContentDeps, repo: ConnectedRepo, safePath: st
     }
     throw new AppError("content/invalid-path", message, { status: 400, expose: true });
   }
+  const refusal = modelFileRefusal(disk, workspace, models);
+  if (refusal !== undefined) {
+    throw new AppError(
+      "content/invalid-path",
+      `${safePath} ${refusal}: a model is read and saved only as a regular file inside the models folder (${models})`,
+      { status: 400, expose: true },
+    );
+  }
   if (!existsSync(disk)) {
     throw new AppError("content/not-found", `no such file: ${safePath} (${repo.fullName})`, {
       status: 404,
       expose: true,
     });
   }
-  return opts.workspaces.ensure(repo);
+  return { workspace, disk };
 }
 
 /** per-room operation queue: Hocuspocus unloads a doc ASYNCHRONOUSLY after the
@@ -368,14 +548,18 @@ async function withDoc(
   fn: (conn: DirectDoc) => Promise<void>,
 ): Promise<void> {
   const room = roomName(repo.fullName, safePath);
-  const run = async (): Promise<void> => {
+  return inRoomQueue(room, async () => {
     const conn = await openLive(opts, room);
     try {
       await fn(conn);
     } finally {
       await conn.disconnect();
     }
-  };
+  });
+}
+
+/** run `run` in the room's operation queue (roomQueues) */
+async function inRoomQueue<T>(room: string, run: () => Promise<T>): Promise<T> {
   const queued = (roomQueues.get(room) ?? Promise.resolve()).then(run, run);
   // the tail swallows the error (it propagates to THIS caller via `queued`) so
   // one failing operation never poisons the queue for the next
@@ -401,6 +585,16 @@ async function openLive(opts: ContentDeps, room: string): Promise<DirectDoc> {
       const message = (e as Error).message;
       if (message.startsWith("no such file:")) {
         throw new AppError("content/not-found", message, { status: 404, expose: true });
+      }
+      if (e instanceof UnreadableDocumentError) {
+        const noun = byExtension(e.path)?.noun.singular ?? "model";
+        throw new AppError(
+          UNREADABLE_MODEL,
+          `${e.message}. It is not opened (opening it would drop what the ${noun} cannot read back) and stays ` +
+            `unchanged on disk. Repair it through git, or save a valid ${noun} over it: a save with a stale ` +
+            "baseVersion answers its text on disk and the baseVersion to save with.",
+          { status: 422, expose: true, cause: e },
+        );
       }
       throw e;
     }

@@ -10,6 +10,7 @@ import { test } from "node:test";
 
 import { deriveDecision, deriveProcess, deriveView } from "../derive.ts";
 import { extractModelGraph, type ModelGraph } from "../extract.ts";
+import { templateFor } from "../templates.ts";
 
 const fixture = (name: string): string => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 
@@ -304,6 +305,71 @@ test("deriveView(context-map): title as name, per-subdomain + per-pattern stats,
   const blank = deriveView({ notation: "context-map", nodes: [], edges: [], meta: { title: "Blank" } });
   assert.equal(blank?.summary, "Context Map with 0 contexts, 0 relationships");
   assert.equal(blank?.name, "Blank");
+});
+
+test("deriveView(board): its title, the models it shows by path, notation and id, and what else is on it", () => {
+  const board = [
+    `{"format":"structured-model","meta":{"title":"Workshop","version":1},"version":1}`,
+    `{"id":"e_1","kind":"edge","label":"feeds","source":"n_storm","target":"n_order"}`,
+    `{"id":"e_2","kind":"edge","source":"n_note","target":"n_order"}`,
+    `{"file":"assets/sketch.svg","height":240,"id":"n_image","kind":"node","type":"image","width":320,"x":0,"y":0,"z":"d"}`,
+    `{"height":160,"id":"n_note","kind":"node","text":"## Open questions\\n\\n- one","type":"text","width":280,"x":0,"y":0,"z":"c"}`,
+    `{"file":"processes/order-to-cash.bpmn","height":540,"id":"n_order","kind":"node","parent":"n_zone","type":"model","width":940,"x":0,"y":0,"z":"a"}`,
+    `{"file":"processes/order-to-cash.storm","height":540,"id":"n_storm","kind":"node","type":"model","width":860,"x":0,"y":0,"z":"b"}`,
+    `{"file":"docs/readme.txt","height":10,"id":"n_text","kind":"node","type":"model","width":10,"x":0,"y":0,"z":"e"}`,
+    `{"height":900,"id":"n_zone","kind":"node","text":"Sales","type":"group","width":1200,"x":0,"y":0,"z":"0"}`,
+    `{"id":"x_lane","kind":"swimlane"}`,
+  ].join("\n");
+  const view = deriveView(extractModelGraph("board", board) as ModelGraph);
+  assert.equal(view?.notation, "board");
+  assert.equal(view?.name, "Workshop");
+  assert.equal(view?.summary, "Board with 3 models, 1 note, 1 image, 1 group, 2 arrows");
+  assert.deepEqual(view?.stats, { models: 3, notes: 1, images: 1, groups: 1, arrows: 2 });
+  assert.deepEqual(view?.detail, {
+    models: [
+      {
+        element: "n_order",
+        path: "processes/order-to-cash.bpmn",
+        notation: "bpmn",
+        id: "order-to-cash",
+        group: "n_zone",
+      },
+      {
+        element: "n_storm",
+        path: "processes/order-to-cash.storm",
+        notation: "event-storming",
+        id: "order-to-cash",
+        group: null,
+      },
+      // a file that is no model of a registered notation keeps its path, and no id
+      { element: "n_text", path: "docs/readme.txt", notation: null, id: null, group: null },
+    ],
+    notes: [{ element: "n_note", text: "## Open questions\n\n- one", group: null }],
+    images: [{ element: "n_image", path: "assets/sketch.svg", group: null }],
+    groups: [{ element: "n_zone", label: "Sales", group: null }],
+    arrows: [
+      { element: "e_1", from: "n_storm", to: "n_order", label: "feeds" },
+      { element: "e_2", from: "n_note", to: "n_order", label: null },
+    ],
+  });
+});
+
+test("deriveView(board): a new board reads 'no elements', an untitled one has no name", () => {
+  const blank = deriveView(extractModelGraph("board", templateFor("board", "retro", "Retro") ?? "") as ModelGraph);
+  assert.equal(blank?.name, "Retro");
+  assert.equal(blank?.summary, "Board with no elements");
+  assert.deepEqual(blank?.stats, { models: 0, notes: 0, images: 0, groups: 0, arrows: 0 });
+  const untitled = deriveView(extractModelGraph("board", "") as ModelGraph);
+  assert.equal(untitled?.name, null);
+  assert.equal(
+    deriveView(
+      extractModelGraph(
+        "board",
+        `{"format":"structured-model","meta":{},"version":1}\n{"id":"n_1","kind":"node","text":"Hi","type":"text"}`,
+      ) as ModelGraph,
+    )?.summary,
+    "Board with 1 note",
+  );
 });
 
 test("deriveView: a notation without a deriver yields undefined (the caller keeps the bare row)", () => {

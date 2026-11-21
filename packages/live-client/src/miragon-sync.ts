@@ -66,7 +66,11 @@ export function bindMiragon(
   doc: Y.Doc,
   onConflict?: (message: string) => void,
   onImportError?: (message: string) => void,
-  sync?: Omit<SyncOptions, "canvasHost">,
+  /** canvasHost and fitInsets are for editors without the contract: a
+   *  Miragon renderer reports its gestures itself and takes its free area at
+   *  construction (CollaborativeModelerOptions.freeArea), fitting clear of
+   *  the chrome in its own first import */
+  sync?: Omit<SyncOptions, "canvasHost" | "fitInsets">,
 ): () => void {
   assertContract(modeler, notation);
   return bindModelSync(

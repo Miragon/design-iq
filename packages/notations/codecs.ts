@@ -5,13 +5,16 @@
  * the validator working on plain text while the LIVE document merges
  * element-wise (Y.Map, @designiq/contracts/live ELEMENTS_KEY/META_KEY).
  *
- * Dark-launched: the registry below is EMPTY — no shipped notation is
- * structured yet. The first canvas notation (event storming, #116) registers
- * its codec here; the pipeline (seed, write-through, stale-seed, CAS,
- * reconcile) is exercised in CI through injected test codecs until then.
+ * The board (`.board`) is the structured notation, and its codec is the
+ * one of its canvas: @miragon/board-schema-model writes, reads and checks a
+ * board for designIQ exactly as the board renderer does. The house codec
+ * below (jsonLinesCodec) is the same format; the tests hold the two to the
+ * same bytes. The pipeline (seed, write-through, stale-seed, CAS, reconcile)
+ * is also exercised in CI through injected test codecs.
  *
  * Pure + browser-safe like every capability module (no fs, no XML).
  */
+import { decodeBoard, encodeBoard, parseBoardText } from "@miragon/board-schema-model";
 
 /** the plain-object snapshot of a structured live document */
 export interface StructuredSnapshot {
@@ -31,6 +34,17 @@ export interface DocCodec {
   /** TOTAL: any bytes → a snapshot (garbage → empty board, unparseable lines
    *  skipped) — a decode must never fail a seed or a listing */
   decode(text: string): StructuredSnapshot;
+  /** the strict reader: undefined when `decode` keeps everything the text
+   *  holds as its format reads it (a board: each line as JSON.parse reads
+   *  it), else why not ("line 3 repeats the element id n_a"). Whoever writes
+   *  a text into a live document or a file asks this first, since what
+   *  `decode` skips the next `encode` drops. It does not refuse what the
+   *  canonical `encode` normalizes in the JSON itself: a key a line repeats
+   *  keeps its last value (the one JSON.parse reads), and a number becomes a
+   *  double (an integer beyond 2^53 loses its last digits, one out of range
+   *  such as 1e400 is written as null, -0 as 0). Absent = the
+   *  codec cannot tell (a test codec) */
+  check?(text: string): string | undefined;
 }
 
 /** recursively sort object keys so JSON.stringify is deterministic */
@@ -54,7 +68,9 @@ const HEADER_FORMAT = "structured-model";
 /**
  * THE house codec: one JSON header line (format, version, meta), then one
  * JSON line per element sorted by id, trailing newline — a git diff of an
- * element edit touches exactly that element's line.
+ * element edit touches exactly that element's line. The board's codec
+ * (@miragon/board-schema-model) writes the same bytes for the same snapshot;
+ * the tests compare the two.
  */
 export function jsonLinesCodec(): DocCodec {
   return {
@@ -103,12 +119,27 @@ export function jsonLinesCodec(): DocCodec {
   };
 }
 
-/** notation id → its doc codec — EMPTY until the first structured notation
- *  (#116) registers; registering here is the whole integration */
-const DOC_CODECS: Record<string, DocCodec> = {};
+/** the board's codec: its canvas's own format, reader and strict reader */
+const boardCodec: DocCodec = {
+  encode: encodeBoard,
+  decode: decodeBoard,
+  check(text) {
+    const parsed = parseBoardText(text);
+    return parsed.ok ? undefined : parsed.reason;
+  },
+};
+
+/** notation id → its doc codec; registering here is the whole integration.
+ *  Every notation whose descriptor is docShape "structured" has one (the
+ *  tests hold the two together), or the Live Host would open it as text */
+const DOC_CODECS: Record<string, DocCodec> = {
+  board: boardCodec,
+};
 
 export function docCodecFor(notation: string): DocCodec | undefined {
-  return DOC_CODECS[notation];
+  // Object.hasOwn: "toString" or "constructor" name no codec (the prototype
+  // bug class templateFor was fixed for)
+  return Object.hasOwn(DOC_CODECS, notation) ? DOC_CODECS[notation] : undefined;
 }
 
 // ── fractional-index ordering ────────────────────────────────────────────────

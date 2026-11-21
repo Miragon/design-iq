@@ -15,7 +15,7 @@
  * hand-written manifests: ./miragon holds ONE spec per renderer, and
  * miragonPlugin derives the manifest from it.
  */
-import type { SyncOptions } from "@designiq/live-client";
+import type { LiveSession, SyncOptions } from "@designiq/live-client";
 import type * as Monaco from "monaco-editor";
 import type { ComponentType, LazyExoticComponent } from "react";
 import type * as Y from "yjs";
@@ -26,6 +26,7 @@ import type { SidePanelRoom } from "@/lib/side-panel-room";
 import type { TodoCanvas } from "@/lib/todo-canvas";
 import type { ModelerMenu } from "@/mcp-app/core/menu-model";
 
+import { boardPlugin } from "./board/plugin";
 import { bpmnPlugin } from "./bpmn";
 import { dmnPlugin } from "./dmn";
 import { markdownPlugin } from "./markdown/plugin";
@@ -93,6 +94,22 @@ export interface EditorContext {
   /** what an open side panel covers of the canvas, which a fit keeps clear
    *  of. Optional: absent = no panel ever covers it */
   sidePanels?: SidePanelRoom;
+  /** other files of the same repository as live documents of their own (a
+   *  board shows the repository's models in place). Optional: an editor
+   *  mounted without the shell links none */
+  linkedFiles?: LinkedFiles;
+}
+
+/** the repository's other files, live, for an editor that shows them */
+export interface LinkedFiles {
+  /** a live session on the room of `path` (repo-relative). All of an
+   *  editor's linked sessions share one socket. The session is NOT announced:
+   *  the person shows in that room's roster only while `present` says so.
+   *  Whoever opens it destroys it. Throws once the shell closed the editor */
+  open(path: string): LiveSession;
+  /** announce the person in that session's room (they edit the file there),
+   *  or take the announcement back (they only look at it) */
+  present(session: LiveSession, present: boolean): void;
 }
 
 /** the model list as the shell has it: it may arrive after the editor
@@ -102,6 +119,12 @@ export interface ModelDirectory {
   paths(): ReadonlySet<string> | undefined;
   /** subscribe to list changes; returns the unsubscribe */
   onChange(cb: () => void): () => void;
+  /** loads the list anew from the server, whatever its age: settles once
+   *  `paths` has it (its listeners were called where it changed). A board
+   *  asks before it follows a model its list no longer shows, since a list
+   *  loaded before a move would send the node back to the path the move
+   *  left. Optional: absent = the list is as fresh as it gets */
+  refresh?(): Promise<void>;
 }
 
 /** the repository's GitHub address and default branch as the shell has
@@ -149,6 +172,12 @@ export interface MountedEditor {
    *  (lib/canvas-focus.ts); absent = no canvas keys (the Markdown view) */
   focus?(): void;
   destroy(): void;
+  /** settles once the editor let go of everything it was bound to, after
+   *  destroy(): a board destroys its embedded editors a microtask (or a
+   *  pending mount) later. The shell ends what it lent the editor
+   *  (EditorContext.linkedFiles) only after it. Absent: destroy() let go of
+   *  everything */
+  readonly unmounted?: Promise<void>;
 }
 
 /** a side panel the notation contributes (the DecisionChecksPanel pattern,
@@ -284,11 +313,14 @@ export interface WebNotationPlugin {
 
 // bpmn and dmn are bespoke plugins (stickies, todos, the differ; the Checks
 // panel), markdown a read-only preview; every Miragon renderer derives its
-// plugin from its spec
+// plugin from its spec. The board is a canvas of the repository's own files:
+// it mounts each model it shows through this very registry (webPlugin, which
+// reads WEB_PLUGINS only when it is called)
 const WEB_PLUGINS: Record<string, WebNotationPlugin> = {
   bpmn: bpmnPlugin,
   dmn: dmnPlugin,
   markdown: markdownPlugin,
+  board: boardPlugin(webPlugin),
   ...Object.fromEntries(MIRAGON_RENDERERS.map((spec) => [spec.id, miragonPlugin(spec)])),
 };
 

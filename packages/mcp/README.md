@@ -2,13 +2,16 @@
 
 designIQ's read-only MCP server: it exposes the models of a designIQ content repo to any MCP
 client (Claude Code, Claude Desktop, IDEs, ...): processes (BPMN), decisions (DMN), Wardley
-Maps, Team Topologies, Event Storming boards, Context Maps, Value Chains and Markdown
-documents, their diagrams as `mermaid` fences. A
+Maps, Team Topologies, Event Storming boards, Context Maps, Value Chains, Markdown documents
+(their diagrams as `mermaid` fences) and boards, the canvases that show a repo's models next
+to notes, images and arrows. A
 content repo is a root `designiq.yml` naming its models folder (`models:`, legacy alias
 `processes:`; the legacy file name `bpmiq.yml` is still read); a model IS a file with a
 registered notation extension there (a process its `.bpmn`). Views are **derived from the
 models** on the fly; BPMN gets the richest one — name, roles (BPMN lanes), steps, gateways,
-flow, and sub-process calls. Tools:
+flow, and sub-process calls. A board's view lists the models it shows (path, notation and id,
+for `get_view` and `get_model`), its notes, images, groups and arrows, and `which_models_use`
+names the boards that show a model (`shows`). Tools:
 `list_models`, `list_processes`, `get_process`, `get_view`, `get_model`, `enumerate_paths`,
 `find_cycles`, `who_owns`, `which_processes_use`, `which_models_use`. Read-only by
 construction: the tools only ever read files, and all of them carry `readOnlyHint`.

@@ -1,0 +1,95 @@
+/* designIQ's rules for what it puts into a board's .board-engine (open-model.ts): the product
+   editor's host, the preview rules for that editor's own chrome, and the line a node says about
+   its file. The board's own sheet (@miragon/board-renderer/assets/board.css, loaded first by
+   editor.ts) names no editor: hiding an editor's chrome in a preview is the host's. Every rule is
+   opt-in by data-embed="designiq", which open-model.ts writes, so none reaches what the board
+   draws itself. Colours are the ui-kit's aliases (packages/ui-kit/src/tokens.css). */
+
+/* the product editor's host: the element the editor's own page would mount it into */
+.board-engine[data-embed="designiq"] > .board-model-editor {
+  position: absolute;
+  inset: 0;
+  /* nothing clips an armed editor in the board's layer: it clips itself */
+  overflow: hidden;
+  /* its own z-indexes (the Miragon palettes at 110, popups at 200) stay below the state line */
+  isolation: isolate;
+  background: var(--canvas-background);
+  outline: none;
+}
+/* a decision table grows with its rules and scrolls inside its editor (index.css .dmn-canvas) */
+.board-engine[data-embed="designiq"] > .board-model-editor.dmn-canvas {
+  overflow: auto;
+}
+
+/* Preview: the full product editor is mounted from the start, and its editing chrome shows only
+   once the node is armed. The editors' first fit measures their palette and their cards and
+   leaves their room free (bpmn-js and the DRD through SyncOptions.fitInsets, product-mount.ts;
+   the Miragon renderers through spaCanvasInsets), so the chrome is HIDDEN with its box kept
+   (visibility, not display), and arming moves nothing. The bpmn.io mark (.bjs-powered-by) stays
+   in every state: it is the licence's condition for bpmn-js and dmn-js. No rule hides a selection
+   outline: release() empties the selection before a node is a preview again.
+   Per editor:
+     bpmn-js:      .djs-palette, .djs-context-pad, .djs-popup-parent (the replace and append menus,
+                   the colour picker), .djs-hover-tooltip, .djs-direct-editing-parent (the label
+                   editor), .djs-search-container
+     dmn-js DRD:   the same set, .dmn-definitions (the name card) and
+                   .dmn-sim-decision-requirements-diagram-panel (the simulation card)
+     dmn-js table: .view-drd, in the layout flow (the rule below)
+     the Miragon renderers: the diagram-js set and .wardley-explore-hint
+   The browser suite (test/browser/board.browser.test.ts) holds that a preview shows no other
+   chrome of these editors: a new class an editor's bump brings would show in every preview. */
+.board-engine[data-embed="designiq"][data-armed="false"]
+  :is(
+    .djs-palette,
+    .djs-context-pad,
+    .djs-popup-parent,
+    .djs-hover-tooltip,
+    .djs-direct-editing-parent,
+    .djs-search-container,
+    .dmn-definitions,
+    .dmn-sim-decision-requirements-diagram-panel,
+    .wardley-explore-hint
+  ) {
+  visibility: hidden !important;
+}
+/* chrome in the layout flow keeps its room and is only not drawn: a decision table's View DRD bar */
+.board-engine[data-embed="designiq"][data-armed="false"] .view-drd {
+  visibility: hidden !important;
+}
+
+/* what the node says about its file (model-state.ts): over the whole element while there is no
+   canvas; a line over the top edge while the last canvas stays in sight (invalid, gone) */
+.board-engine[data-embed="designiq"] > .board-model-state {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: var(--canvas-background);
+  color: var(--muted-foreground);
+  font-family: var(--designiq-font-sans);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  overflow-wrap: anywhere;
+  /* the editor below an invalid line stays in reach */
+  pointer-events: none;
+}
+.board-engine[data-embed="designiq"] > .board-model-state[hidden] {
+  display: none;
+}
+.board-engine[data-embed="designiq"][data-model-state="failed"] > .board-model-state {
+  background: var(--destructive-soft);
+  color: var(--foreground);
+}
+.board-engine[data-embed="designiq"][data-model-drawn="true"]:is(
+    [data-model-state="invalid"],
+    [data-model-state="gone"]
+  )
+  > .board-model-state {
+  inset: 0 0 auto 0;
+  display: block;
+  background: var(--warning-soft);
+  color: var(--foreground);
+}

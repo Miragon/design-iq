@@ -5,15 +5,22 @@ them, check them and propose changes. This page covers the ways tools _outside_ 
 repo's skill layer consume the models.
 
 The MCP tools start with the models of **any** notation (`@designiq/notations`: BPMN, DMN,
-Wardley Map, Team Topology, Event Storming, Context Map, Value Chain, Markdown). On both
+Wardley Map, Team Topology, Event Storming, Context Map, Value Chain, Markdown, Board). On both
 surfaces below, `list_models` covers every notation and `get_view` every one but Markdown; the
 read-only server adds graph analysis across notations (`get_model`, `enumerate_paths`,
 `find_cycles`, `which_models_use`); the Live Host reads, validates and saves any model's source
 text (`get_model_content`, `validate_model`, `save_model_content`, `create_model`) and renders
-seven of the notations as modelers inline in the chat. Todos are filed on the models of every
-notation but decisions, optionally anchored to their elements. BPMN and DMN
+seven of the notations as modelers inline in the chat (the board has no such widget). Todos are
+filed on the models of every notation but decisions and boards, optionally anchored to their
+elements. BPMN and DMN
 have extra tools on top: the derived process and decision views, the XML round-trip, roles from
 lanes, decision simulation, analysis and tests.
+
+A board (`.board`) is a canvas of the repository's own models, shown in place beside notes,
+images, groups and arrows. It names each model by its repository path and never holds the
+model's content: an agent reads what a board shows through `get_view` and reads or changes each
+model in its own file. A board itself is read and saved as its text, one JSON line per element
+([Boards](#boards) below).
 
 Diagrams as code are no notation of their own: a diagram is a `mermaid` code fence in a
 Markdown document, next to the prose that explains it, and a document links the models it talks
@@ -66,7 +73,7 @@ definitions live in `packages/mcp/tools.ts`, shared by two entry points:
 | `find_cycles(id)`            | Where does the flow loop?           | the notation's flow edges per graphHints (BPMN sequence flows, Wardley dependencies, DMN requirements)                                                              |
 | `who_owns(id)`               | Who does what?                      | the BPMN lanes (roles) and the steps each contains; the pools                                                                                                       |
 | `which_processes_use(query)` | Impact: what references this?       | each process's id, derived name, role names, step names, and `callActivity` `calledElement`                                                                         |
-| `which_models_use(id)`       | Impact, across EVERY notation       | the repo-wide reference index (typed cross-model refs: calls, decides, …), incl. dangling references                                                                |
+| `which_models_use(id)`       | Impact, across EVERY notation       | the repo-wide reference index (typed cross-model refs: calls, decides, the models a board shows, …), incl. dangling references                                      |
 | `list_todos(id?, notation?)` | What work is open (opt-in)?         | the content repo's issue tracker (label `todo` + `<notation>:<id>`), anchors parsed from issue bodies                                                               |
 
 A Value Chain (`.vc.json`) is read from the document's own ids: `get_view` reports its `meta.name` as
@@ -101,6 +108,20 @@ moves the id to another element. A link is an edge of kind `dependency` (`A -> B
 counts `components` and `dependencies` in `stats` and lists the nodes in `detail.elements` (`id`,
 `type`, `name`, the position) and the links in `detail.links` (`from`, `to`, `kind`, `label`,
 with no id: no canvas addresses a link, so a todo cannot anchor to one).
+
+A board (`.board`) is read with `@miragon/board-schema-model`, the schema model its canvas writes
+it with. `get_model` makes a node of every element of kind `node`, sorted by id, with the board's
+own `type`: `model` (a model of the repository, `name` its path, `extra.file`, and where the file
+is a model of a registered notation `extra.notation` and `extra.model`, its id), `text` (a note,
+`name` its first line, `extra.text` its Markdown), `image` (`name` and `extra.file` its path) and
+`group` (`name` its label); a member of a group names it in `extra.parent`. An arrow is an edge of
+kind `arrow` with its label as `name`. `meta.title` is the board's title. `get_view` reports that
+title as the model's `name`, counts `models`, `notes`, `images`, `groups` and `arrows` in `stats`
+("Board with 2 models, 1 note, 1 arrow") and lists them in `detail`: `models` (`element`, the
+node's id on the board; `path`; `notation` and `id`, the model's own, which `get_view` and
+`get_model` take; `group`), `notes` (`element`, `text`, `group`), `images` (`element`, `path`,
+`group`), `groups` (`element`, `label`, `group`) and `arrows` (`element`, `from`, `to`, `label`).
+`which_models_use` names the boards that show a model (relation `shows`).
 
 All tools carry `readOnlyHint` annotations, so clients may auto-approve them, and a short display
 `title` ("List models", "Get BPMN process view") that clients show people instead of the tool
@@ -171,8 +192,9 @@ then send `Authorization: Bearer <token>`. Local development: `PORT=8080 node pa
 The Live Host serves its own MCP endpoint at `POST /mcp` (official MCP
 TypeScript SDK v2, stateless Streamable HTTP): same container, same port as
 sync, REST API and web app. Where `packages/mcp` reads a checkout, this endpoint reads and
-**writes the live collaborative state**: the same Y.Text the browser tabs and VS Code edit,
-accessed server-side via a Hocuspocus direct connection. `repo` is a **tool argument**
+**writes the live collaborative state**: the same live documents the browser tabs and VS Code
+edit (a model's Y.Text, a board's element maps), accessed server-side via a Hocuspocus direct
+connection. `repo` is a **tool argument**
 (`owner/name`), not a URL segment: one endpoint serves every connected repo, and every
 call is gated by the caller's per-repo permission.
 
@@ -228,10 +250,11 @@ the tool name. `test/mcp.test.ts` pins that every registered tool has one and no
 
 `get_model_content`, `save_model_content`, `create_model` and `validate_model` are ONE tool
 set for the whole notation registry (`@designiq/notations`: bpmn, dmn, wardley, team-topology,
-event-storming, context-map, value-chain, markdown) beside the wire-pinned BPMN/DMN twins. They address a
+event-storming, context-map, value-chain, markdown, board) beside the wire-pinned BPMN/DMN twins. They address a
 model as `{repo, id | path, notation?}`: `id` is the file stem `list_models` shows; a stem
 shared across notations resolves bpmn-first unless `notation` picks another. The text travels
-as `content` in the notation's own format (XML, the OWM/`.storm` DSL, JSON, Markdown). The save
+as `content` in the notation's own format (XML, the OWM/`.storm` DSL, JSON, Markdown, a board's
+JSON lines). The save
 runs the same `checkModel` gate as `pnpm validate` and the REST PUT (ERROR findings refuse the
 save under the default `lint:"block"` and are reported under `"warn"`) and is compare-and-set
 like `save_bpmn_xml`: a stale `baseVersion` answers `{conflict: true, currentContent, baseVersion}`.
@@ -254,7 +277,8 @@ are WARNs, `context-map/semantics`: the canvas opens such a map and marks the fi
 only run once the file's shape is valid, so `validate_model` can report further errors after a
 fix: check again until it answers `ok`.
 `create_model` scaffolds every notation from its template (bpmn, dmn, wardley, team-topology,
-event-storming, context-map, value-chain, markdown).
+event-storming, context-map, value-chain, markdown, board; a new board holds only its header with
+the title).
 `LIVE_MCP_READONLY=1` keeps the two read tools and drops the writes. The embedded modelers'
 `mint_ws_ticket` takes the same ref, so the Wardley, Team Topology, Event Storming, Context Map and Value Chain widgets
 (below) upgrade to live co-editing exactly like the BPMN one. (`mint_ws_ticket` itself is
@@ -262,15 +286,53 @@ app-visible, hidden from agents, and registered when at least one live-capable w
 served AND the host is not read-only, bound to the first such widget's resource; absent under
 `LIVE_MCP_READONLY=1`, absent for a DMN-only dist.)
 
+### Boards
+
+A board's text is its JSON lines in canonical form: a header line
+(`{"format":"structured-model","meta":{"title":…},"version":1}`), then one line per element,
+sorted by id, keys sorted, so a git diff of an element edit touches that element's line alone.
+A node has `kind` `node`, a `type` (`model`, `text` for a note, `image` or `group`), integer
+`x`, `y`, `width` and `height`, a `z` string for the paint order and optionally the `parent`
+group; a model or an image names its file by its repository-relative path in `file`. An arrow
+has `kind` `edge`, `source`, `target` and optionally a `label`. `validate_model` spells the
+format out for an agent, which cannot see the board drawn. `get_model_content` returns that
+text, and `save_model_content` writes it into the live board element by element, so a
+co-editor's concurrent change of another element stays.
+
+The gate is the board's strict reader (`@miragon/board-schema-model`), the one its canvas reads
+the file back with. A text it refuses is an ERROR, `board/parse`, naming the line
+(`line 3 repeats the element id n_a`), and unlike every other ERROR it refuses the save under
+`lint:"warn"` too (`content/invalid-model`): the live board could not hold what the reader skips.
+Refused are a line that is no JSON object, no header line or a second one, a header of another
+version or with keys other than `format`, `version` and `meta`, a repeated id and a key named
+`__proto__`. Attributes and element kinds the board does not know pass, and the board keeps
+them. A board FILE the reader refuses (edited by hand, merged badly) is not opened at all, so
+nothing of it is lost: `get_model_content` answers an error naming the line
+(`content/unreadable-model`), the web editor shows the same reason, and the file stays as it is
+until it is repaired through git or by a save. A `save_model_content` with a stale `baseVersion`
+answers the file's text on disk and the `baseVersion` to save with; a valid board saved with it
+repairs the file.
+
+The models a board shows are references (`shows`), resolved by notation and file stem like a
+call activity's. The validator warns (`refs/dangling`) on a model node whose model is not in the
+repository (the message says when its path lies outside the models folder, where no file is a
+model), and (`refs/stale-path`) on one that still names the path of a model that moved to another
+folder, naming where it is now. Both need the repo's models, so `validate_model` reports them
+when it is given `repo`, and the save gate and `pnpm validate` always do. A board shown on a board is a WARN, `board/nested-board`: the
+canvas cannot show it. A rename of a model, and a move to another folder, rewrite every board
+that shows it (the `file` of its model nodes, nothing else), open or not; a board that could
+not be rewritten keeps the old path and gets the `refs/stale-path` warning.
+
 ### Agent presence: the AI shows up like a co-editor
 
 Every tool call that touches a model announces the caller's agent in that model's live room
 for a while (60 s after the last call, renewed by every call). People who have the model open
 see an **"AI · &lt;name&gt;"** avatar in the roster (named after the person the agent acts for), and
 after a save the elements the agent changed are outlined on the canvas in the agent's color,
-with its name pill on the first one: the agent's cursor. Nothing is written into the document:
-the presence is an awareness state the Live Host publishes into a LOADED room
-(`application/agent-presence.ts`); an unloaded room has nobody to show it to and is never pinned
+with its name pill on the first one: the agent's cursor. On a board the outlined elements are
+the board's own, compared attribute by attribute, so a node an agent only moved or resized
+counts too. Nothing is written into the document: the presence is an awareness state the Live
+Host publishes into a LOADED room (`application/agent-presence.ts`); an unloaded room has nobody to show it to and is never pinned
 for it. `kind: "agent"` is server-asserted: a browser peer claiming it is downgraded on the way
 in (`collab.ts`, `beforeHandleAwareness`). The modeler widgets announce the HUMAN behind them
 the same way once live (`mint_ws_ticket` carries their name and color), and the diagram-js widgets
@@ -403,7 +465,7 @@ on exactly that shape.
 
 Todos are filed on processes, Wardley Maps, Event Storming boards, Context Maps, Team
 Topologies, Value Chains and Markdown documents (the notation descriptor's `todos` flag in
-`@designiq/notations`); a decision takes none yet (a typed 400). Model ids are
+`@designiq/notations`); a decision and a board take none yet (a typed 400). Model ids are
 file stems, unique per notation but not across them, so the label names the notation:
 `<notation>:<id>` (`bpmn:order-to-cash`, `wardley:tea-shop`).
 `create_todo` and `list_todos` take a model as the generic tools do (`id` or `path`, `notation`
@@ -463,6 +525,10 @@ simulator, has no live binding and stays on autosave). The five Miragon-renderer
 widgets are one template + one entry built once per renderer spec
 (`apps/web/src/notations/miragon/`). A widget = engine adapter (or a renderer spec) +
 one registry row in the Live Host; a web dist that lacks a bundle simply lacks its tool.
+The board has no widget and no `open_*` tool: a single-file bundle would inline React and React
+Flow, and a board holds a live session of every model it shows, where a widget's ws ticket
+admits one room. An AI client reads a board through `get_view` and `get_model_content`, and a
+person opens it in the web app.
 
 **The chrome: a frameless canvas.** There is no toolbar, banner row or status line.
 The whole iframe is canvas, and the controls float in its corners, each kind of
@@ -674,8 +740,8 @@ opens an AI chat whose first move is the model's widget tool (`open_modeler` /
 `open_decision_modeler`, or the generated `open_<notation>_modeler` of a Miragon
 renderer) for exactly the model on screen, so the widget comes up live-synced with
 the editor the user just left. The menu appears wherever a widget is served (every
-notation the platform renders today). The menu only picks the destination: Claude Desktop, ChatGPT, or the
-clipboard. The prompt is a work order built by `@designiq/contracts/assist`: the literal
+notation the platform renders as a modeler, but the board, which has no widget). The menu
+only picks the destination: Claude Desktop, ChatGPT, or the clipboard. The prompt is a work order built by `@designiq/contracts/assist`: the literal
 tool call with repo and path inlined, the Live Host's MCP URL named (a connector
 pointed at a _different_ instance then fails as a recognizable "wrong instance", not a
 phantom missing repo), and the current canvas selection riding along as fenced data.

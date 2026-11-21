@@ -1,10 +1,13 @@
 /**
- * The STRUCTURED live-doc lane end to end (epic #118 step 8), DARK-LAUNCHED:
- * no shipped notation is structured, so the codec is INJECTED (the house
- * jsonLinesCodec on a .board-pretending .tt path) and the whole pipeline —
+ * The STRUCTURED live-doc lane end to end (epic #118 step 8). The pipeline —
  * seed from canonical text, element edits, write-through, stale-seed drop,
  * restart-restore, CAS + element-wise reconcile over REST — runs against a
- * REAL Hocuspocus server exactly like content.test.ts does for text rooms.
+ * REAL Hocuspocus server exactly like content.test.ts does for text rooms:
+ * first with an INJECTED codec (the house jsonLinesCodec on a .md path, so
+ * the lane is held to the codec contract, not to one notation), then on a
+ * real `.board` through the registry's own board codec and its strict reader
+ * (a refused file is never opened; a valid file in another form is not taken
+ * for a changed one).
  *
  * Release/history coverage is INHERENT, not separate: both read the
  * workspace FILE, and the write-through test pins that the file always holds
@@ -20,15 +23,18 @@ import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
 
 import { ELEMENTS_KEY } from "@designiq/contracts/live";
+import { openLiveSession } from "@designiq/live-client";
 import { readSnapshot, reconcileSnapshot } from "@designiq/live-client/structured";
-import { jsonLinesCodec } from "@designiq/notations/codecs";
+import { docCodecFor, jsonLinesCodec } from "@designiq/notations/codecs";
 import { Server } from "@hocuspocus/server";
+import WebSocket from "ws";
 import * as Y from "yjs";
 
 import { LineageStore } from "../src/adapters/sqlite/lineage-store.ts";
 import { makeCollabHooks } from "../src/application/collab.ts";
 import { type ContentDeps, getContent, putContent } from "../src/application/content.ts";
 import { DocSizeGuard } from "../src/domain/doc-size-guard.ts";
+import { UnreadableDocumentError } from "../src/domain/rooms.ts";
 import { CONTENT_CONFIG_FILE, loadContentConfig } from "../src/repos/content.ts";
 import type { ConnectedRepo } from "../src/repos/registry.ts";
 
@@ -60,8 +66,9 @@ after(async () => {
   setTimeout(() => process.exit(), 2000).unref();
 });
 
-/** tmpdir content repo + real Hocuspocus with the INJECTED structured codec */
-function setup(existing?: { ws: string; db: DatabaseSync }) {
+/** tmpdir content repo + real Hocuspocus with the INJECTED structured codec
+ *  (`registry`: none injected — a path resolves through the notation registry) */
+function setup(existing?: { ws: string; db: DatabaseSync }, opts: { registry?: boolean } = {}) {
   const ws = existing?.ws ?? mkdtempSync(join(tmpdir(), "designiq-structured-"));
   if (!existing) {
     mkdirSync(join(ws, "processes"), { recursive: true });
@@ -72,6 +79,8 @@ function setup(existing?: { ws: string; db: DatabaseSync }) {
   const lineage = new LineageStore(db, REPO.fullName);
   const registry = { get: (n: string) => (n.toLowerCase() === REPO.fullName ? REPO : undefined) };
   const workspaces = { ensure: async () => ws };
+  const liveDocs = new Set<string>();
+  const injected = opts.registry ? {} : { docCodec };
   const hp = new Server({
     ...makeCollabHooks({
       lineage,
@@ -82,8 +91,8 @@ function setup(existing?: { ws: string; db: DatabaseSync }) {
       registry,
       workspaces,
       contentConfig: loadContentConfig,
-      liveDocs: new Set(),
-      docCodec,
+      liveDocs,
+      ...injected,
     }),
   });
   servers.push(hp);
@@ -92,9 +101,9 @@ function setup(existing?: { ws: string; db: DatabaseSync }) {
     workspaces,
     openDoc: (room) => hp.hocuspocus.openDirectConnection(room),
     maxDocBytes: 8_000_000,
-    docCodec,
+    ...injected,
   };
-  return { ws, db, deps, hp, lineage };
+  return { ws, db, deps, hp, lineage, liveDocs };
 }
 
 /** peer-open with the same open-during-unload retry the use-case applies —
@@ -217,4 +226,121 @@ test("a non-canonical (but decodable) payload normalizes — token matches the c
   const after = await getContent(deps, REPO, PATH);
   assert.equal(after.content, CANONICAL, "the doc holds the canonical form, not the messy payload");
   assert.equal(saved.ok ? saved.result.baseVersion : "", after.baseVersion);
+});
+
+// ── a real .board: the registry's codec, its strict reader ───────────────────
+
+const BOARD_PATH = "processes/workshop.board";
+const BOARD_ROOM = `${REPO.fullName}/${BOARD_PATH}`;
+const board = docCodecFor("board")!;
+const WORKSHOP = {
+  meta: { title: "Workshop", version: 1 },
+  elements: {
+    n_a: { kind: "node", type: "text", text: "Ask finance", x: 0, y: 0, width: 240, height: 160, z: "a" },
+  },
+};
+
+test("a real .board: seeded through the registry's board codec, an element edit written through canonically", async () => {
+  const { ws, hp } = setup(undefined, { registry: true });
+  writeFileSync(join(ws, BOARD_PATH), board.encode(WORKSHOP));
+  const conn = await openPeer(hp, BOARD_ROOM);
+  await conn.transact((doc: Y.Doc) => {
+    assert.deepEqual(readSnapshot(doc), WORKSHOP, "element-wise, not a Y.Text of JSON lines");
+    (doc.getMap(ELEMENTS_KEY).get("n_a") as Y.Map<unknown>).set("x", 64);
+  });
+  await conn.disconnect();
+  const expected = { ...WORKSHOP, elements: { n_a: { ...WORKSHOP.elements.n_a, x: 64 } } };
+  assert.equal(await readFile(join(ws, BOARD_PATH), "utf8"), board.encode(expected));
+});
+
+test("a board its reader refuses is never loaded: the ws client is told the line, nothing persists", async () => {
+  const { ws, hp, lineage, liveDocs } = setup(undefined, { registry: true });
+  const refused = `${board.encode(WORKSHOP)}{"id":"n_a","kind":"node"}\n`;
+  writeFileSync(join(ws, BOARD_PATH), refused);
+  await assert.rejects(
+    () => hp.hocuspocus.openDirectConnection(BOARD_ROOM),
+    (e: unknown) =>
+      e instanceof UnreadableDocumentError &&
+      e.path === BOARD_PATH &&
+      // what Hocuspocus forwards to a ws client as its permission-denied reason
+      e.reason ===
+        `${BOARD_PATH} is not a board this host can open without losing content: line 3 repeats the element id n_a`,
+  );
+  assert.equal(await readFile(join(ws, BOARD_PATH), "utf8"), refused, "the file keeps every line");
+  assert.equal(lineage.load(BOARD_ROOM), undefined, "no seed was persisted");
+  assert.equal(liveDocs.size, 0);
+  assert.equal(hp.hocuspocus.documents.size, 0, "no document stays loaded");
+  // once the file is repaired (git), the room opens like any other
+  writeFileSync(join(ws, BOARD_PATH), board.encode(WORKSHOP));
+  const conn = await openPeer(hp, BOARD_ROOM);
+  await conn.transact((doc: Y.Doc) => assert.deepEqual(readSnapshot(doc), WORKSHOP));
+  await conn.disconnect();
+});
+
+test("over ws, a client opening a board its reader refuses is told which line", async () => {
+  const ws = mkdtempSync(join(tmpdir(), "designiq-structured-ws-"));
+  mkdirSync(join(ws, "processes"));
+  writeFileSync(join(ws, CONTENT_CONFIG_FILE), "models: processes\n");
+  writeFileSync(join(ws, BOARD_PATH), `${board.encode(WORKSHOP)}not json\n`);
+  const petra = { id: "sess-petra", user: { login: "petra", name: "Petra", avatarUrl: null, provider: "github" } };
+  const server = new Server({
+    port: 0,
+    quiet: true,
+    ...makeCollabHooks({
+      lineage: new LineageStore(new DatabaseSync(":memory:"), REPO.fullName),
+      docGuard: new DocSizeGuard(8_000_000),
+      maxDocBytes: 8_000_000,
+      sessions: { get: (id) => (id === petra.id ? { ...petra, createdAt: Date.now() } : undefined) },
+      access: { canWrite: async () => true },
+      registry: { get: (n: string) => (n.toLowerCase() === REPO.fullName ? REPO : undefined) },
+      workspaces: { ensure: async () => ws },
+      contentConfig: loadContentConfig,
+      liveDocs: new Set(),
+    }),
+  });
+  servers.push(server);
+  await server.listen();
+  const session = openLiveSession({
+    url: `ws://127.0.0.1:${server.address.port}`,
+    room: BOARD_ROOM,
+    token: petra.id,
+    WebSocketPolyfill: WebSocket,
+  });
+  try {
+    // Hocuspocus forwards the load error's `reason` as the permission-denied reason
+    await assert.rejects(
+      () => session.whenSynced(5_000),
+      (e: Error) =>
+        e.message ===
+        `auth failed: ${BOARD_PATH} is not a board this host can open without losing content: line 3 is no JSON`,
+    );
+  } finally {
+    session.destroy();
+  }
+});
+
+test("an empty .board is not rewritten by opening or reading it", async () => {
+  const { ws, hp } = setup(undefined, { registry: true });
+  writeFileSync(join(ws, BOARD_PATH), "");
+  const conn = await openPeer(hp, BOARD_ROOM);
+  await conn.transact((doc: Y.Doc) => assert.deepEqual(readSnapshot(doc), { elements: {}, meta: {} }));
+  await conn.disconnect(); // forces the store hook — it finds the file already holds this (empty) board
+  assert.equal(await readFile(join(ws, BOARD_PATH), "utf8"), "", "still empty, so not a changed file");
+});
+
+test("a seed of a valid board in another form is not stale: the next open resumes it instead of re-seeding", async () => {
+  const { ws, hp, lineage } = setup(undefined, { registry: true });
+  // valid, but not the canonical bytes (other key order on the header)
+  const valid = '{"version":1,"meta":{"title":"Workshop","version":1},"format":"structured-model"}\n';
+  writeFileSync(join(ws, BOARD_PATH), valid);
+  const seedDoc = new Y.Doc();
+  reconcileSnapshot(seedDoc, board.decode(valid));
+  lineage.saveSeed(BOARD_ROOM, Y.encodeStateAsUpdate(seedDoc));
+  const conn = await openPeer(hp, BOARD_ROOM);
+  await conn.transact((doc: Y.Doc) => {
+    // resumed: the seed's own history, not a second one from a fresh seed
+    assert.ok(Y.encodeStateVector(doc).toString() === Y.encodeStateVector(seedDoc).toString(), "the seed was resumed");
+  });
+  await conn.disconnect();
+  assert.equal(await readFile(join(ws, BOARD_PATH), "utf8"), valid, "and the file keeps its form");
 });

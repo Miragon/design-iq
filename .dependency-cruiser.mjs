@@ -21,6 +21,10 @@ const MARKDOWN_VIEW = "markdown/(markdown-view|view|render|sanitize|fences|merma
 /** ... and the Markdown source's tooling (Insert diagram), attached to the
  *  shell's Monaco through WebNotationPlugin.attachSource */
 const MARKDOWN_SOURCE = "markdown/(source-tools|insert-diagram|diagram-starters)";
+/** the board's engine (@miragon/board-renderer on React Flow) and designIQ's
+ *  host for it: every module of notations/board but its manifest, plugin.ts */
+const BOARD_HOST =
+  "board/(editor|host|models|open-model|model-state|model-texts|product-mount|release|derived-refs|references|images|presence)";
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 export default {
@@ -157,7 +161,8 @@ export default {
         "apps/web (the SPA value-imports processIdFromName, derive types, " +
         "hasTemplate for the New menu, repoCountsLine for the repo cards and the " +
         "Mermaid source lines for the diagram errors) and " +
-        "apps/vscode (repoCountsLine in the repo picker); markdown.ts, the validator's fence " +
+        "apps/vscode (repoCountsLine and byExtension in the repo picker and its read-only board view); " +
+        "markdown.ts, the validator's fence " +
         "scanner, is held to the same rule so any browser surface can read a document the way " +
         "the gate does — no fs, no yaml, no fast-xml-parser " +
         "there; those live behind ./content and ./extract. " +
@@ -216,6 +221,47 @@ export default {
           // the SPA's "@/" alias does not resolve in this cruise: match the import as written
           `^@/notations/${MARKDOWN_VIEW}(\\.ts)?$`,
           `^@/notations/${MARKDOWN_SOURCE}(\\.ts)?$`,
+        ],
+      },
+    },
+    {
+      name: "web-board-engine-loads-lazily",
+      severity: "error",
+      comment:
+        "ADR 0006: the board's canvas (@miragon/board-renderer, React Flow on React) and designIQ's host for it " +
+        "(BOARD_HOST: the reference parsing pulls in the XML reader) ship in the board's own chunk. Only " +
+        "the host's modules import the renderer, React Flow and each other statically; everything else " +
+        "reaches the host through import() (the manifest, notations/board/plugin.ts). One static import " +
+        "from an eager module would pull React Flow into the main bundle with a green build. An " +
+        "`import type` is erased and free. depcruise does not follow node_modules, so the renderer's own " +
+        "lazy parts are its own concern (they load behind import() in its package).",
+      from: {
+        path: "^apps/web/src/",
+        pathNot: `^apps/web/src/notations/${BOARD_HOST}\\.ts$`,
+      },
+      to: {
+        dynamic: false,
+        dependencyTypesNot: ["type-only"],
+        path: [
+          "(^|/)node_modules/(@miragon/board-renderer|@xyflow/react)/",
+          `^apps/web/src/notations/${BOARD_HOST}\\.ts$`,
+          // the SPA's "@/" alias does not resolve in this cruise: match the import as written
+          `^@/notations/${BOARD_HOST}(\\.ts)?$`,
+        ],
+      },
+    },
+    {
+      name: "widgets-carry-no-board",
+      severity: "error",
+      comment:
+        "There is no board widget: a single-file MCP-App widget would inline React and React Flow. The " +
+        "widgets reach neither the board's renderer nor designIQ's host for it, dynamic imports included.",
+      from: { path: "^apps/web/src/mcp-app/" },
+      to: {
+        path: [
+          "(^|/)node_modules/(@miragon/board-renderer|@xyflow/react)/",
+          "^apps/web/src/notations/board/",
+          "^@/notations/board/",
         ],
       },
     },

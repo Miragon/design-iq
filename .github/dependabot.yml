@@ -60,6 +60,15 @@ updates:
       # that diagram-js major and the didi pin in one PR.
       - dependency-name: "didi"
         versions: [">=12"]
+      # @xyflow/react is not ours to pick either: it is the canvas
+      # @miragon/board-renderer draws with, and the renderer peers on
+      # "~12.12.1" and reads React Flow's internal store as 12.12 has it. A
+      # minor or the 13 major here is a board that pnpm installs with a peer
+      # warning and that breaks at runtime. Patches stay in npm-minor-patch.
+      # Unblock: a board-renderer release on a newer React Flow; then drop the
+      # entry and take both in the miragon-board group's PR.
+      - dependency-name: "@xyflow/react"
+        versions: [">=12.13"]
     groups:
       npm-minor-patch:
         applies-to: version-updates
@@ -78,6 +87,7 @@ updates:
           - "@miragon/context-maps-*"
           - "@miragon/team-topologies-*"
           - "@miragon/value-chain-*"
+          - "@miragon/board-*"
           - "@miragon/modeler-*"
           # the simulation add-on carries a pnpm patch for exactly 0.4.0
           # (patchedDependencies in pnpm-workspace.yaml), and pnpm refuses an
@@ -111,13 +121,22 @@ updates:
       miragon-value-chain:
         applies-to: version-updates
         patterns: ["@miragon/value-chain-*"]
+      # the board: the renderer apps/web draws .board files with, and the
+      # schema model it pins exactly, which packages/notations (the board's
+      # codec, strict reader and template), packages/validator and
+      # packages/mcp pin as a runtime dependency to read .board files the
+      # way the canvas writes them. A 0.x minor can change what the canvas
+      # writes and what a save refuses, so one PR, its majors included
+      miragon-board:
+        applies-to: version-updates
+        patterns: ["@miragon/board-*"]
       # the contract the renderers implement (@miragon/modeler-api), which
       # apps/web and live-client take directly (#136), and the shell whose
       # view math and keymap apps/web takes (@miragon/modeler-shell, #265).
-      # Every renderer pins the contract exactly, so a contract move from this
-      # group or a family group alone ships two copies, which
-      # apps/web/test/shared-runtimes.test.ts refuses (#300): take it by hand
-      # in one PR with every renderer, as #279 and #318 did.
+      # Every renderer (the board's included) pins the contract exactly, so a
+      # contract move from this group or a family group alone ships two
+      # copies, which apps/web/test/shared-runtimes.test.ts refuses (#300):
+      # take it by hand in one PR with every renderer, as #279 and #318 did.
       miragon-modeler:
         applies-to: version-updates
         patterns: ["@miragon/modeler-*"]

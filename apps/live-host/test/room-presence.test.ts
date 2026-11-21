@@ -1,17 +1,18 @@
 /**
- * Room presence (src/application/room-presence.ts) — peersOfDocument against
- * a REAL Hocuspocus Document (the awareness + connection bookkeeping the
- * server composes over), roomPresence over raw peers.
+ * Room presence (src/application/room-presence.ts) — peersOfDocument and
+ * attendedDocument against a REAL Hocuspocus Document (the awareness +
+ * connection bookkeeping the server composes over), roomPresence over raw
+ * peers. The move/delete gates over a real server: preview-rooms.test.ts.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Document } from "@hocuspocus/server";
-import { applyAwarenessUpdate, Awareness, encodeAwarenessUpdate } from "y-protocols/awareness";
+import { applyAwarenessUpdate, Awareness, encodeAwarenessUpdate, removeAwarenessStates } from "y-protocols/awareness";
 import * as Y from "yjs";
 
 import { AgentPresence } from "../src/application/agent-presence.ts";
-import { peersOfDocument, roomPresence } from "../src/application/room-presence.ts";
+import { attendedDocument, peersOfDocument, roomPresence } from "../src/application/room-presence.ts";
 
 const ROOM = "acme/models/processes/order.bpmn";
 
@@ -88,4 +89,78 @@ test("roomPresence: sanitized peers, `you` on the caller's own HUMAN presence on
     { name: "Kai", kind: "human", you: false, selection: [], cursor: null },
   ]);
   assert.deepEqual(roomPresence({}, ROOM, "petra"), [], "no port = nobody");
+});
+
+test("attendedDocument: a board's preview and an agent's lease are nobody; an announced person is someone", (t) => {
+  const doc = new Document(ROOM);
+  t.after(() => {
+    doc.awareness.destroy(); // the check interval Document.destroy() leaves running (see above)
+    doc.destroy();
+  });
+  assert.equal(attendedDocument(doc), false, "no connection: nobody");
+  // a board showing the model announces nobody (live-client setUser(null))
+  const preview = announce(doc, { user: null, canvas: null });
+  connect(doc, "petra", [preview]);
+  // a client that announced a state without a user field yet is no person either
+  const bare = announce(doc, {});
+  connect(doc, "petra", [bare]);
+  const agents = new AgentPresence({ awarenessOf: (r) => (r === ROOM ? doc.awareness : undefined) });
+  agents.touch(ROOM, { login: "petra", name: "Petra" });
+  assert.equal(attendedDocument(doc), false, "previews and an agent: nobody is in the room");
+  // a malformed user (no colour) is no announcement
+  const malformed = announce(doc, { user: { name: "X" } });
+  connect(doc, "kai", [malformed]);
+  assert.equal(attendedDocument(doc), false);
+  // the moment a node is armed, the person announces themselves
+  const armed = announce(doc, { user: { name: "Petra", color: "#fa8100" } });
+  connect(doc, "petra", [armed]);
+  assert.equal(attendedDocument(doc), true);
+  agents.destroy();
+});
+
+test("attendedDocument fails closed: a connection that has not announced itself, or whose state timed out, is a person", (t) => {
+  const doc = new Document(ROOM);
+  t.after(() => {
+    doc.awareness.destroy(); // the check interval Document.destroy() leaves running (see above)
+    doc.destroy();
+  });
+  const preview = announce(doc, { user: null });
+  connect(doc, "petra", [preview]);
+  assert.equal(attendedDocument(doc), false);
+  // connected, yet no awareness state sent so far: maybe a person whose editor is still starting
+  const silent = { context: { user: { login: "kai", provider: "github" } }, messageAddress: doc.name, send: () => {} };
+  doc.connections.set(silent as never, { clients: new Set() });
+  assert.equal(attendedDocument(doc), true, "a connection without a state");
+  doc.connections.delete(silent as never);
+
+  // a person in a background tab: the browser throttles its renewals, so the room's awareness
+  // drops the state after 30 s ('timeout') while the connection stays open; Hocuspocus keeps
+  // the client tied to it, since the removal did not come over that connection
+  const alice = announce(doc, { user: { name: "Alice", color: "#335de5" } });
+  connect(doc, "alice", [alice]);
+  assert.equal(attendedDocument(doc), true);
+  removeAwarenessStates(doc.awareness, [alice], "timeout");
+  assert.equal(doc.awareness.getStates().has(alice), false);
+  assert.equal(attendedDocument(doc), true, "her editor is still connected");
+  // a board's preview whose state timed out the same way refuses as well (the old, safe behaviour)
+  doc.connections.clear();
+  connect(doc, "petra", [preview]);
+  removeAwarenessStates(doc.awareness, [preview], "timeout");
+  assert.equal(attendedDocument(doc), true);
+});
+
+test("attendedDocument fails closed: a direct connection of the host's own (a REST or MCP save on its way) attends the room", (t) => {
+  const doc = new Document(ROOM);
+  t.after(() => {
+    doc.awareness.destroy();
+    doc.destroy();
+  });
+  // a board's preview alone: nobody
+  connect(doc, "petra", [announce(doc, { user: null, canvas: null })]);
+  assert.equal(attendedDocument(doc), false);
+  // a save through hocuspocus.openDirectConnection is counted, never listed as a connection
+  doc.addDirectConnection();
+  assert.equal(attendedDocument(doc), true, "a move or delete must not retire the room under the save");
+  doc.removeDirectConnection();
+  assert.equal(attendedDocument(doc), false, "once it is through, the preview alone is nobody again");
 });

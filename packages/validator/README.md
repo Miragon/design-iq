@@ -2,13 +2,14 @@
 
 Deterministic validator for designIQ content repositories: `designiq.yml` discovery, BPMN
 structural checks (flow soundness, complete BPMNDI coverage), DMN structure and DMNDI coverage,
-the generic cross-model reference rule (every required reference — `callActivity` calls,
-`businessRuleTask` decides — must resolve in the repo), the schema check of the Miragon JSON
-notations, and a per-mediaKind parse baseline for every other registered notation (a file that
-is no JSON or XML is an ERROR; DSL notations are lenient by design; a `mermaid` fence in a
-Markdown document that does not start with a diagram type such as `flowchart` or
-`sequenceDiagram` is a WARN, `mermaid/diagram-type`, naming the document's line; another casing
-passes only where mermaid draws it, so `Ishikawa` passes and `Flowchart` warns). Every finding
+the generic cross-model reference rule (every required reference must resolve in the repo:
+`callActivity` calls, `businessRuleTask` decides, the models a board shows), the schema check of
+the Miragon JSON notations, the strict read of a board, and a per-mediaKind parse baseline for
+every other registered notation (a file that is no JSON or XML is an ERROR; DSL notations are
+lenient by design; a `mermaid` fence in a Markdown document that does not start with a diagram
+type such as `flowchart` or `sequenceDiagram` is a WARN, `mermaid/diagram-type`, naming the
+document's line; another casing passes only where mermaid draws it, so `Ishikawa` passes and
+`Flowchart` warns). Every finding
 carries a stable `ruleId` (e.g. `bpmn/flow`, `dmn/di`, `refs/dangling`). It treats the target
 repo as pure data — it never executes content-repo code. Exit code 0 = no errors (warnings
 allowed), 1 = errors.
@@ -52,6 +53,31 @@ Paths count in the file, a Team Topology's interactions included. Some rules onl
 document's shape is valid: the id rules of a Team Topology and a Value Chain, and a Context Map's
 strategic-DDD rules. Fixing the reported errors can therefore bring up further ones, so check
 again until the file is clean.
+
+## Boards
+
+A `.board` file is one JSON line per element after a header line, and it is read as strictly as
+the board's canvas reads it back (`@miragon/board-schema-model`): a line or a key the board's reader
+skips, and the next save would therefore drop, is an ERROR, `board/parse`, that names the line,
+e.g. `line 3 repeats the element id n_a`. Refused: a line that is no JSON or no JSON object,
+elements without a header line, a second header, a header of another format version or with keys
+the board does not write back, an element without a string `id` or with an id another line already
+has, and a key named `__proto__` at any depth (also as an element id). An empty file is a new
+board. Attributes and element kinds the board does not know pass: the board keeps them.
+
+The reader takes each line as JSON reads it, and the next save writes that back in the board's
+canonical form, which normalizes the JSON itself. A key a line repeats keeps its last value, the
+one every JSON reader sees, and a number is written as the double it reads as, so an integer
+beyond 2^53 loses its last digits, a number out of range (`1e400`) is written as `null` and `-0`
+as `0`. None of these is refused.
+
+The models a board shows (its model nodes, by their repository path) are references like a
+`callActivity`'s, resolved by notation and file stem. A model that is not in the repository is a
+WARN, `refs/dangling`. So is a path outside the models folder, even when a model of its notation
+and stem is in the folder: the message names the path as outside, since only the files in the
+models folder are models. A path in the models folder that names where a model was before it moved
+to another folder is a WARN, `refs/stale-path`, that says where it is now. A board shown on a board
+is a WARN, `board/nested-board`: the canvas cannot show it.
 
 ## Usage
 

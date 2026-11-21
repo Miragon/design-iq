@@ -6,8 +6,10 @@
  *
  * Moved here from the live-host domain (epic #118 step 3) so creating a model
  * of ANY notation with a template becomes one registry lookup. Pure string
- * assembly, zero-dep and browser-safe like the package index.
+ * assembly and browser-safe like the package index; the one dependency is
+ * the board's DOM-free schema model, whose new board this hands out.
  */
+import { newBoardText as boardWithTitle } from "@miragon/board-schema-model";
 
 /** escape a string for use inside an XML attribute value */
 export function escapeXml(value: string): string {
@@ -161,6 +163,18 @@ export function newMarkdownText(_id: string, name: string): string {
   return `# ${oneLine(name)}\n`;
 }
 
+/**
+ * The initial content of a new board: its header alone, with the title.
+ * EXACTLY what the board's schema model writes for a new board, which is its
+ * codec's canonical text (./codecs), so the first write-through of the live
+ * document shows no phantom diff. The schema model folds every run of white
+ * space to one space; oneLine first takes out what it keeps (control
+ * characters).
+ */
+export function newBoardText(_id: string, name: string): string {
+  return boardWithTitle(oneLine(name));
+}
+
 const TEMPLATES: Record<string, (id: string, name: string) => string> = {
   bpmn: newBpmnXml,
   dmn: newDmnXml,
@@ -170,6 +184,7 @@ const TEMPLATES: Record<string, (id: string, name: string) => string> = {
   "context-map": newCmJson,
   "value-chain": newVcJson,
   markdown: newMarkdownText,
+  board: newBoardText,
 };
 
 /** whether a notation can be CREATED from the platform (drives the web

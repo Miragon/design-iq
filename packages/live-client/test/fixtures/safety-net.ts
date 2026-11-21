@@ -224,11 +224,18 @@ type PresenceChange = Parameters<PresenceListener>[0];
  * clears every other peer from its own. The session's re-sync brings both
  * sides back: it takes in the room's snapshot and renews its own clock.
  * Without that (an older client), y-protocols takes a peer in again only on
- * its next renewal, every 15 s.
+ * its next renewal, every 15 s. Every client announces a person in its
+ * state (LiveSession.setUser) until it takes that back (announce(id, null):
+ * a model a board only shows).
  */
 export function presence() {
   const listeners = new Map<number, Set<PresenceListener>>();
   const inRoom = new Set<number>();
+  /** what a client announces as its user, where it changed that: null takes it back */
+  const users = new Map<number, { name: string; color: string } | null>();
+  const stateOf = (clientId: number) => ({
+    user: users.has(clientId) ? users.get(clientId) : { name: `peer ${clientId}`, color: "#335de5" },
+  });
   const tell = (viewer: number, change: Partial<PresenceChange>): void => {
     for (const listener of [...(listeners.get(viewer) ?? [])]) {
       listener({ added: [], updated: [], removed: [], ...change });
@@ -240,7 +247,17 @@ export function presence() {
       const own = listeners.get(clientId) ?? new Set<PresenceListener>();
       listeners.set(clientId, own);
       inRoom.add(clientId);
-      return { on: (_event, listener) => void own.add(listener), off: (_event, listener) => void own.delete(listener) };
+      return {
+        on: (_event, listener) => void own.add(listener),
+        off: (_event, listener) => void own.delete(listener),
+        // the room's states as this client holds them, its own included
+        getStates: () => new Map([...new Set([clientId, ...inRoom])].map((id) => [id, stateOf(id)])),
+      };
+    },
+    /** a client's new user field reaches every view in the room, its own included */
+    announce(clientId: number, user: { name: string; color: string } | null): void {
+      users.set(clientId, user);
+      for (const viewer of inRoom) tell(viewer, { updated: [clientId] });
     },
     close(clientId: number): void {
       inRoom.delete(clientId);
