@@ -38,7 +38,10 @@ Ask the facilitator, one topic at a time, and fill the template as you go:
    choose. Recommend `propose` for a first session with you.
 7. **Glossary.** Collect names of systems, products, roles and abbreviations. Take them
    from the existing models too. Ask which of them are English terms in a German
-   conversation or the other way round: these are misheard most.
+   conversation or the other way round: these are misheard most. A transcriber that takes
+   a glossary, such as Beluga (**Take from a workshop brief**), gets this list before the
+   session. The participants' names, which the brief does not hold, the facilitator adds
+   there: they stay on the facilitator's machine.
 8. **Transcript and consent.** Where does the transcript come from, and does everyone in
    the room know they are transcribed? Record that the facilitator confirmed it. Without
    consent there is no transcript; you can still work from the facilitator's notes.
