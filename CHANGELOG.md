@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.15.0](https://github.com/Miragon/design-iq/compare/v5.14.0...v5.15.0) (2026-11-21)
+
+
+### Features
+
+* **live-host:** move to @miragon/bpmn-cli 0.10.0 ([#392](https://github.com/Miragon/design-iq/issues/392)) ([1203fa0](https://github.com/Miragon/design-iq/commit/1203fa001dcd6790df8ceb2900be76fc90271ac2))
+* **notations,web,live-host:** the board, a canvas of the repository's own files, on modeler-api 2.0 ([#409](https://github.com/Miragon/design-iq/issues/409)) ([dbb5f42](https://github.com/Miragon/design-iq/commit/dbb5f42c59e850ff92a0993b35a68355ba16d269))
+
+
+### Bug Fixes
+
+* **ui:** track the miragon-brand 1.32.0 tokens and use their status colours as the design system prescribes ([#397](https://github.com/Miragon/design-iq/issues/397)) ([db1f3ec](https://github.com/Miragon/design-iq/commit/db1f3ec1722ddda1854ea32c0c2584ccbb2ae5b1))
+
 ## [5.14.0](https://github.com/Miragon/design-iq/compare/v5.13.3...v5.14.0) (2026-10-31)
 
 
