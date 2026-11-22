@@ -256,7 +256,7 @@ importers:
         version: link:../../packages/ui-kit
       '@emaarco/dmn-js-simulation':
         specifier: 0.4.0
-        version: 0.4.0(patch_hash=d8c6d68252006af472b86fdf168ac71cb67ffa981a707e013d43d34ad971dd35)(diagram-js@15.30.0)(dmn-js@18.0.3)(inferno@5.6.3)
+        version: 0.4.0(patch_hash=d8c6d68252006af472b86fdf168ac71cb67ffa981a707e013d43d34ad971dd35)(diagram-js@15.30.1)(dmn-js@18.0.3)(inferno@5.6.3)
       '@fontsource-variable/geist':
         specifier: 5.3.0
         version: 5.3.0
@@ -271,10 +271,10 @@ importers:
         version: 0.1.8(zod@4.6.7)
       '@miragon/context-maps-renderer':
         specifier: 0.10.1
-        version: 0.10.1(diagram-js@15.30.0)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)
+        version: 0.10.1(diagram-js@15.30.1)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/event-storming-renderer':
         specifier: 0.11.0
-        version: 0.11.0(diagram-js@15.30.0)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)
+        version: 0.11.0(diagram-js@15.30.1)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/modeler-api':
         specifier: 2.0.0
         version: 2.0.0
@@ -283,13 +283,13 @@ importers:
         version: 0.15.0(@vscode/test-electron@3.1.0)(playwright-core@1.65.1)
       '@miragon/team-topologies-renderer':
         specifier: 0.23.0
-        version: 0.23.0(diagram-js@15.30.0)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)
+        version: 0.23.0(diagram-js@15.30.1)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/value-chain-renderer':
         specifier: 0.11.1
-        version: 0.11.1(diagram-js@15.30.0)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)
+        version: 0.11.1(diagram-js@15.30.1)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)
       '@miragon/wardley-renderer':
         specifier: 0.19.0
-        version: 0.19.0(diagram-js@15.30.0)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)
+        version: 0.19.0(diagram-js@15.30.1)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)
       '@modelcontextprotocol/client':
         specifier: 2.4.0
         version: 2.4.0
@@ -300,8 +300,8 @@ importers:
         specifier: 4.3.5
         version: 4.3.5(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
       '@tanstack/react-query':
-        specifier: 5.108.0
-        version: 5.108.0(@types/react@19.3.0)(react@19.3.1)
+        specifier: 5.108.1
+        version: 5.108.1(@types/react@19.3.0)(react@19.3.1)
       '@tanstack/react-router':
         specifier: 1.170.46
         version: 1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -321,8 +321,8 @@ importers:
         specifier: 3.2.0
         version: 3.2.0
       diagram-js:
-        specifier: 15.30.0
-        version: 15.30.0
+        specifier: 15.30.1
+        version: 15.30.1
       didi:
         specifier: 12.0.0
         version: 12.0.0
@@ -472,7 +472,7 @@ importers:
         version: link:../notations
       '@emaarco/dmn-js-simulation':
         specifier: 0.4.0
-        version: 0.4.0(patch_hash=d8c6d68252006af472b86fdf168ac71cb67ffa981a707e013d43d34ad971dd35)(diagram-js@15.30.0)(dmn-js@18.0.3)(inferno@5.6.3)
+        version: 0.4.0(patch_hash=d8c6d68252006af472b86fdf168ac71cb67ffa981a707e013d43d34ad971dd35)(diagram-js@15.30.1)(dmn-js@18.0.3)(inferno@5.6.3)
       feelin:
         specifier: 8.2.2
         version: 8.2.2
@@ -2510,11 +2510,11 @@ packages:
     resolution: {integrity: sha512-w1+YvwmTkwt5n8yUqEH3IWZ9DsmorCZW/EQ3KYHnqEgIkOZpH54NvW6/Epq3Dzb8H0ifIeYX8PExvrNLIH5FIA==}
     engines: {node: '>=20.19'}
 
-  '@tanstack/query-core@5.108.0':
-    resolution: {integrity: sha512-X9zJUtEV/0D2q9pmGS/Bza8S4bNovSBhZOtdhtu0fzsHwizC6C+Eh/q5CX3MQBchsRMrirWVQmv7Fp4OStzV9g==}
+  '@tanstack/query-core@5.108.1':
+    resolution: {integrity: sha512-GBX6Xsc9E+9eVLLxuM7orQNbssQjpruOCbocBYwT78MjxOWT5I+CWdvEo0N+UM6+oCZEKxuSud1oFLvE3OEmIg==}
 
-  '@tanstack/react-query@5.108.0':
-    resolution: {integrity: sha512-DpMbB8pVorEZcsHRa0Z13KQGfmndqvJbuLy9h+xfP8XpuEZBOxzq+QfXGonQ0fAgRSWhc+QsfoRETSTWxAEAVw==}
+  '@tanstack/react-query@5.108.1':
+    resolution: {integrity: sha512-8/p7fpIdmUiKIukQ5ddAMUUSKC7Z8CcgUOBR2r3WqRvMg9Lzc4CXeoFchjfATKvqi23SyYFvesDdOULrvyunNg==}
     peerDependencies:
       '@types/react': ^18 || ^19
       react: ^18 || ^19
@@ -3619,8 +3619,8 @@ packages:
     peerDependencies:
       diagram-js: '*'
 
-  diagram-js@15.30.0:
-    resolution: {integrity: sha512-DDlekJvMs7iPJ+Bv85xpfFycMiUkpm8LpD63fqos/04Obw7cDxdxU20wQzo4s2ubc7fGK99Q5ADJhihLw5HAkg==}
+  diagram-js@15.30.1:
+    resolution: {integrity: sha512-RPye9d6JYiNABqqRe4fFGVwy/tFIYrfRu/PeVrjx6dlkDj8gsGwuUS7y9KwLEg9hWp0zYXAA1Jz5KNX0dzCdzA==}
 
   didi@11.0.1:
     resolution: {integrity: sha512-eEBvv5SHBhoCyDX/kOR8UozNfqEkjEXjNCTsE2vWWoxoJ5QC8KXYRTE78mrpdpvXNtSEriLhbgQdD0OkHvLFWQ==}
@@ -6472,9 +6472,9 @@ snapshots:
       - supports-color
     optional: true
 
-  '@emaarco/dmn-js-simulation@0.4.0(patch_hash=d8c6d68252006af472b86fdf168ac71cb67ffa981a707e013d43d34ad971dd35)(diagram-js@15.30.0)(dmn-js@18.0.3)(inferno@5.6.3)':
+  '@emaarco/dmn-js-simulation@0.4.0(patch_hash=d8c6d68252006af472b86fdf168ac71cb67ffa981a707e013d43d34ad971dd35)(diagram-js@15.30.1)(dmn-js@18.0.3)(inferno@5.6.3)':
     optionalDependencies:
-      diagram-js: 15.30.0
+      diagram-js: 15.30.1
       dmn-js: 18.0.3
       inferno: 5.6.3
 
@@ -6882,12 +6882,12 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
-  '@miragon/context-maps-renderer@0.10.1(diagram-js@15.30.0)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/context-maps-renderer@0.10.1(diagram-js@15.30.1)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
       '@miragon/context-maps-schema-model': 0.5.1(zod@4.6.7)
       '@miragon/modeler-api': 2.0.0
-      diagram-js: 15.30.0
-      diagram-js-direct-editing: 3.6.0(diagram-js@15.30.0)
+      diagram-js: 15.30.1
+      diagram-js-direct-editing: 3.6.0(diagram-js@15.30.1)
       didi: 12.0.0
       tiny-svg: 4.1.4
       zod: 4.6.7
@@ -6912,13 +6912,13 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
-  '@miragon/event-storming-renderer@0.11.0(diagram-js@15.30.0)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/event-storming-renderer@0.11.0(diagram-js@15.30.1)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
       '@miragon/event-storming-dsl': 0.4.0(zod@4.6.7)
       '@miragon/event-storming-schema-model': 0.3.1(zod@4.6.7)
       '@miragon/modeler-api': 2.0.0
       clsx: 2.1.1
-      diagram-js: 15.30.0
+      diagram-js: 15.30.1
       didi: 12.0.0
       tiny-svg: 4.1.4
     transitivePeerDependencies:
@@ -6935,11 +6935,11 @@ snapshots:
       '@vscode/test-electron': 3.1.0
       playwright-core: 1.65.1
 
-  '@miragon/team-topologies-renderer@0.23.0(diagram-js@15.30.0)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/team-topologies-renderer@0.23.0(diagram-js@15.30.1)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
       '@miragon/modeler-api': 2.0.0
       '@miragon/team-topologies-schema-model': 0.23.0(zod@4.6.7)
-      diagram-js: 15.30.0
+      diagram-js: 15.30.1
       didi: 12.0.0
       tiny-svg: 4.1.4
       zod: 4.6.7
@@ -6949,12 +6949,12 @@ snapshots:
       nanoid: 6.0.2
       zod: 4.6.7
 
-  '@miragon/value-chain-renderer@0.11.1(diagram-js@15.30.0)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/value-chain-renderer@0.11.1(diagram-js@15.30.1)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
       '@miragon/modeler-api': 2.0.0
       '@miragon/value-chain-schema-model': 0.7.3(zod@4.6.7)
-      diagram-js: 15.30.0
-      diagram-js-direct-editing: 3.6.0(diagram-js@15.30.0)
+      diagram-js: 15.30.1
+      diagram-js-direct-editing: 3.6.0(diagram-js@15.30.1)
       didi: 12.0.0
       tiny-svg: 4.1.4
       zod: 4.6.7
@@ -6968,13 +6968,13 @@ snapshots:
       '@miragon/wardley-schema-model': 0.6.1(zod@4.6.7)
       zod: 4.6.7
 
-  '@miragon/wardley-renderer@0.19.0(diagram-js@15.30.0)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)':
+  '@miragon/wardley-renderer@0.19.0(diagram-js@15.30.1)(didi@12.0.0)(tiny-svg@4.1.4)(zod@4.6.7)':
     dependencies:
       '@miragon/modeler-api': 2.0.0
       '@miragon/wardley-dsl': 0.10.0(zod@4.6.7)
       '@miragon/wardley-schema-model': 0.6.1(zod@4.6.7)
       clsx: 2.1.1
-      diagram-js: 15.30.0
+      diagram-js: 15.30.1
       didi: 12.0.0
       tiny-svg: 4.1.4
       zod: 4.6.7
@@ -7616,11 +7616,11 @@ snapshots:
 
   '@tanstack/history@1.162.5': {}
 
-  '@tanstack/query-core@5.108.0': {}
+  '@tanstack/query-core@5.108.1': {}
 
-  '@tanstack/react-query@5.108.0(@types/react@19.3.0)(react@19.3.1)':
+  '@tanstack/react-query@5.108.1(@types/react@19.3.0)(react@19.3.1)':
     dependencies:
-      '@tanstack/query-core': 5.108.0
+      '@tanstack/query-core': 5.108.1
       react: 19.3.1
     optionalDependencies:
       '@types/react': 19.3.0
@@ -8387,8 +8387,8 @@ snapshots:
   bpmn-js@18.33.0:
     dependencies:
       bpmn-moddle: 10.3.1
-      diagram-js: 15.30.0
-      diagram-js-direct-editing: 3.6.0(diagram-js@15.30.0)
+      diagram-js: 15.30.1
+      diagram-js-direct-editing: 3.6.0(diagram-js@15.30.1)
       ids: 3.0.2
       inherits-browser: 0.1.0
       min-dash: 5.1.0
@@ -8898,13 +8898,13 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  diagram-js-direct-editing@3.6.0(diagram-js@15.30.0):
+  diagram-js-direct-editing@3.6.0(diagram-js@15.30.1):
     dependencies:
-      diagram-js: 15.30.0
+      diagram-js: 15.30.1
       min-dash: 5.1.0
       min-dom: 5.3.0
 
-  diagram-js@15.30.0:
+  diagram-js@15.30.1:
     dependencies:
       '@bpmn-io/diagram-js-ui': 0.2.4
       clsx: 2.1.1
@@ -8944,12 +8944,12 @@ snapshots:
   dmn-js-boxed-expression@18.0.1:
     dependencies:
       '@bpmn-io/dmn-variable-resolver': 0.7.1
-      diagram-js: 15.30.0
+      diagram-js: 15.30.1
       dmn-js-shared: 18.0.1
       inferno: 5.6.3
       min-dash: 5.1.0
       min-dom: 5.3.0
-      table-js: 9.4.0(diagram-js@15.30.0)(inferno@5.6.3)
+      table-js: 9.4.0(diagram-js@15.30.1)(inferno@5.6.3)
     transitivePeerDependencies:
       - preact-render-to-string
 
@@ -8957,21 +8957,21 @@ snapshots:
     dependencies:
       '@bpmn-io/dmn-variable-resolver': 0.7.1
       css.escape: 1.5.1
-      diagram-js: 15.30.0
+      diagram-js: 15.30.1
       dmn-js-shared: 18.0.1
       escape-html: 1.0.3
       inferno: 5.6.3
       min-dash: 5.1.0
       min-dom: 5.3.0
       selection-ranges: 4.1.1
-      table-js: 9.4.0(diagram-js@15.30.0)(inferno@5.6.3)
+      table-js: 9.4.0(diagram-js@15.30.1)(inferno@5.6.3)
     transitivePeerDependencies:
       - preact-render-to-string
 
   dmn-js-drd@18.1.0:
     dependencies:
-      diagram-js: 15.30.0
-      diagram-js-direct-editing: 3.6.0(diagram-js@15.30.0)
+      diagram-js: 15.30.1
+      diagram-js-direct-editing: 3.6.0(diagram-js@15.30.1)
       dmn-js-shared: 18.0.1
       ids: 3.0.2
       inherits-browser: 0.1.0
@@ -8985,20 +8985,20 @@ snapshots:
   dmn-js-literal-expression@18.0.1:
     dependencies:
       '@bpmn-io/dmn-variable-resolver': 0.7.1
-      diagram-js: 15.30.0
+      diagram-js: 15.30.1
       dmn-js-shared: 18.0.1
       escape-html: 1.0.3
       inferno: 5.6.3
       min-dash: 5.1.0
       min-dom: 5.3.0
-      table-js: 9.4.0(diagram-js@15.30.0)(inferno@5.6.3)
+      table-js: 9.4.0(diagram-js@15.30.1)(inferno@5.6.3)
     transitivePeerDependencies:
       - preact-render-to-string
 
   dmn-js-shared@18.0.1:
     dependencies:
       '@bpmn-io/feel-editor': 2.8.1
-      diagram-js: 15.30.0
+      diagram-js: 15.30.1
       didi: 12.0.0
       dmn-moddle: 12.2.1
       ids: 3.0.2
@@ -9007,7 +9007,7 @@ snapshots:
       min-dom: 5.3.0
       selection-ranges: 4.1.1
       selection-update: 1.1.1
-      table-js: 9.4.0(diagram-js@15.30.0)(inferno@5.6.3)
+      table-js: 9.4.0(diagram-js@15.30.1)(inferno@5.6.3)
     transitivePeerDependencies:
       - preact-render-to-string
 
@@ -10776,9 +10776,9 @@ snapshots:
 
   tabbable@6.5.0: {}
 
-  table-js@9.4.0(diagram-js@15.30.0)(inferno@5.6.3):
+  table-js@9.4.0(diagram-js@15.30.1)(inferno@5.6.3):
     dependencies:
-      diagram-js: 15.30.0
+      diagram-js: 15.30.1
       didi: 11.0.1
       inferno: 5.6.3
       min-dash: 5.1.0
