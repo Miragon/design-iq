@@ -101,8 +101,21 @@ Where transcripts go and which models are downloaded stay with the person at the
 ## Icon
 
 Beluga carries `beluga` from Miragon's modeler icon set: the white whale with one line of
-transcript as the accent, copied unchanged from Miragon/corporate-identity
-(`resources/icon.png` is `png/beluga-1024.png`, `resources/icon.ico` is `ico/beluga.ico`).
+transcript as the accent, copied unchanged from Miragon/corporate-identity.
+
+| File                       | From the set                | For                                                   |
+| -------------------------- | --------------------------- | ----------------------------------------------------- |
+| `resources/icon-macos.png` | `png/beluga-macos-1024.png` | macOS: the bundle and the Dock, 824 of 1024 px        |
+| `resources/icon.png`       | `png/beluga-1024.png`       | Linux, and the window icon on Linux and Windows       |
+| `resources/icon.ico`       | `ico/beluga.ico`            | Windows                                               |
+| `resources/glyph.svg`      | `glyph/beluga-mono.svg`     | next to the name in the window's header, in its color |
+
+macOS gets a file of its own because the full tile stood bigger than every other app in the
+Dock: Apple's icons leave 100 px free around 824 px, and
+[Miragon/corporate-identity#108](https://github.com/Miragon/corporate-identity/pull/108)
+adds that tile to the set. Since macOS 26 the system puts a bundled icon that does not fit
+its shape on a gray plate; whether it takes this one has not been seen yet.
+
 It is provisional: the brand rules give every software that is not a modeler the comet, and
 [Miragon/corporate-identity#107](https://github.com/Miragon/corporate-identity/pull/107)
 proposes the exception. If the brand owners decide against it, Beluga carries the comet.

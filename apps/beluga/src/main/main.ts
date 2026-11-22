@@ -47,8 +47,10 @@ import { installModel } from "./models.ts";
 import { AgentKey, PreferenceStore } from "./store.ts";
 
 const PAGE = join(__dirname, "../../dist/index.html");
-/** the app icon, for the window (Windows, Linux) and the Dock; a packaged app also has it in its bundle */
+/** the app icon for the window (Windows, Linux); a packaged app also has it in its bundle */
 const ICON = join(__dirname, "../../resources/icon.png");
+/** the same tile in macOS' grid, 824 of 1024 px: the full tile looks bigger than every other app in the Dock */
+const DOCK_ICON = join(__dirname, "../../resources/icon-macos.png");
 const MAC = process.platform === "darwin";
 /** BELUGA_MODELS_DIR points development and tests at models that are already there; BELUGA_FOLDER sets where transcripts go by default */
 const modelsDir = (): string => process.env.BELUGA_MODELS_DIR ?? join(app.getPath("userData"), "models");
@@ -494,7 +496,7 @@ function createWindow(): void {
 
 void app.whenReady().then(() => {
   // without it, a Beluga started from source shows Electron's icon in the Dock
-  if (MAC) app.dock?.setIcon(ICON);
+  if (MAC) app.dock?.setIcon(DOCK_ICON);
   store = new PreferenceStore(
     app.getPath("userData"),
     process.env.BELUGA_FOLDER ?? join(app.getPath("documents"), "Beluga"),

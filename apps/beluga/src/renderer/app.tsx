@@ -6,6 +6,7 @@ import { cn } from "@designiq/ui-kit/lib/utils";
 import { Download, FileText, FolderOpen, Mic, MonitorSpeaker, Plug, Square } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import glyph from "../../resources/glyph.svg";
 import { MAX_ENTRIES, parseGlossary } from "../core/glossary.ts";
 import type { AgentInfo, DownloadProgress, InitialState, RemoteResult, WrittenLine } from "../core/ipc.ts";
 import type { Language, ModelId } from "../core/models.ts";
@@ -336,7 +337,15 @@ export function App() {
           state.titleBarInset && "pl-24 [-webkit-app-region:drag]",
         )}
       >
-        <h1 className="flex items-center gap-2 text-base font-semibold">Beluga</h1>
+        <h1 className="flex items-center gap-2 text-base font-semibold">
+          {/* the whale from the icon set, in the text's color: as a mask, the file stays as the set has it */}
+          <span
+            aria-hidden
+            className="size-5 shrink-0 bg-current"
+            style={{ mask: `url("${glyph}") center / contain no-repeat` }}
+          />
+          Beluga
+        </h1>
         <div className="flex items-center gap-2">
           {prefs.agent && agent.state === "on" ? (
             <Badge
