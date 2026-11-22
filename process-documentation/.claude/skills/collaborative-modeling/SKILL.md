@@ -1,6 +1,6 @@
 ---
 name: collaborative-modeling
-description: Supports a facilitator before, during and after a collaborative modeling workshop (Event Storming, process modeling, decision modeling and the other notations of this repository). Agrees a workshop brief with the facilitator first (goal, participants, models in scope, glossary, how much the assistant may do on its own), prepares the models and the board, follows the session from a live transcript or notes, proposes changes and next questions instead of modeling on its own, and closes the session with a playback, open points and a log for the next session. Use when someone plans, runs or wraps up a modeling workshop with several participants, wants an assistant to listen in on a modeling session, or hands over a workshop transcript. For a one-to-one interview with a process owner use capture-process instead.
+description: Supports a facilitator before, during and after a collaborative modeling workshop (Event Storming, process modeling, decision modeling and the other notations of this repository). Agrees a workshop brief with the facilitator first (goal, participants, models in scope, glossary, how much the assistant may do on its own), prepares the models and the board, follows the session from a live transcript or notes (and drives Beluga, a transcriber on the facilitator's computer, when its tools are there), proposes changes and next questions or, when the brief allows it, models on its own while the group talks, and closes the session with a playback, open points and a log for the next session. Use when someone plans, runs or wraps up a modeling workshop with several participants, wants an assistant to listen in on a modeling session, or hands over a workshop transcript. For a one-to-one interview with a process owner use capture-process instead.
 ---
 
 # Collaborative Modeling
@@ -34,11 +34,17 @@ people, unless everyone named has agreed (phase 1 asks).
 
 The brief names one level. When it names none, the level is `propose`.
 
-| Level     | What you do with what you hear                                                                    |
-| --------- | ------------------------------------------------------------------------------------------------- |
-| `listen`  | Change no model. Keep the session log: what was said, decided, left open.                         |
-| `propose` | Change no model. Write each change you would make as a proposal the facilitator accepts or drops. |
-| `model`   | Change directly the models the brief lists under "May change directly". The rest is a proposal.   |
+| Level     | What you do with what you hear                                                                                                                                                                                  |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `listen`  | Change no model. Keep the session log: what was said, decided, left open.                                                                                                                                       |
+| `propose` | Change no model. Write each change you would make as a proposal the facilitator accepts or drops.                                                                                                               |
+| `model`   | Change directly what the group agreed, in the models the brief lists under "May change directly". What was only said is a proposal, and so is a change to any other model.                                      |
+| `auto`    | Change directly what was said, in the models the brief lists under "May change directly", while the group talks. The group sees each change at once and corrects it. A change to any other model is a proposal. |
+
+At `auto` the models grow with the conversation, so it needs a live transcript, ideally
+one you can wait on ([phases/assist.md](phases/assist.md), A live transcript you can wait
+on). What you placed is still not confirmed: the group confirms it when it agrees, at the
+latest in the playback at the wrap-up.
 
 A proposal the facilitator accepts is applied at once, at every level
 ([phases/assist.md](phases/assist.md) says how a proposal is accepted and marked). The
@@ -86,6 +92,14 @@ says what to listen for and what a good model of that notation looks like.
 Never write a model's content onto a board. A board shows a model by its path; change the
 model in its own file.
 
+## Beluga
+
+Beluga transcribes the meeting on the facilitator's computer and lets an assistant on the
+same computer drive it over MCP (its tools: `get_status`, `set_glossary`, `set_options`,
+`start_listening`, `stop_listening`, `read_transcript`). When its tools are there, read
+[resources/beluga.md](resources/beluga.md) before the session: it says what you hand
+Beluga in each phase.
+
 ## Other skills during a workshop
 
 While this skill runs a workshop, it decides how a correction is handled:
@@ -102,6 +116,7 @@ While this skill runs a workshop, it decides how a correction is handled:
 
 - **The group decides, not you.** Something is confirmed when the group agrees or the
   person the brief names as deciding says so. One participant saying it is a statement.
+  At `auto` you place statements too, and they stay statements until the group agrees.
 - **Disagreement is a result.** When participants describe the same thing differently,
   record both views and mark the spot (the method file says how). Never pick one, never
   blend them.

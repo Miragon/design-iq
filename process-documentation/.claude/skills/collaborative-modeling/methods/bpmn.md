@@ -86,8 +86,8 @@ answers are a hint, then an open point.
   'Check credit limit' in lane Sales, after 'Order received'").
 - **Disagreement or unknown**: a text annotation on the element it concerns, phrased as
   the question. Both views go under **Open** in the brief.
-- **Placing** (level `model`, or an accepted proposal): keep what the group placed where
-  it is. Add the new element where the group put it in the order.
+- **Placing** (level `model` or `auto`, or an accepted proposal): keep what the group
+  placed where it is. Add the new element where the group put it in the order.
 
 ## What a good model looks like at the end
 

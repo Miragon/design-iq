@@ -31,19 +31,25 @@ Ask the facilitator, one topic at a time, and fill the template as you go:
    candidate) and show the facilitator. A workshop that corrects an existing model starts
    from it, not from a blank one. Its corrections are proposals in the brief, not
    feedback reports (SKILL.md, Other skills during a workshop). Agree which models you
-   may change directly at level `model`.
+   may change directly at levels `model` and `auto`.
 5. **Expectations.** Level of detail, the questions that must be answered, and what was
    left open last time (read the last session's **Open** list if the brief exists).
-6. **Autonomy.** Explain the three levels in one sentence each and let the facilitator
-   choose. Recommend `propose` for a first session with you.
+6. **Autonomy.** Explain the four levels in one sentence each and let the facilitator
+   choose. `propose` is the careful start for a first session with you. `auto` lets the
+   models grow while the group talks, which needs a live transcript; the group then sees
+   every change you make at once, on the screen it looks at.
 7. **Glossary.** Collect names of systems, products, roles and abbreviations. Take them
    from the existing models too. Ask which of them are English terms in a German
    conversation or the other way round: these are misheard most. A transcriber that takes
-   a glossary, such as Beluga (**Take from a workshop brief**), gets this list before the
-   session. The participants' names, which the brief does not hold, the facilitator adds
-   there: they stay on the facilitator's machine.
+   a glossary gets this list before the session. With Beluga's tools you hand it over
+   yourself ([resources/beluga.md](../resources/beluga.md)); otherwise the facilitator
+   takes it in Beluga's window (**Take from a workshop brief**). The participants' names,
+   which the brief does not hold, go into Beluga's glossary only, which stays on the
+   facilitator's machine.
 8. **Transcript and consent.** Where does the transcript come from, and does everyone in
-   the room know they are transcribed? Record that the facilitator confirmed it. Without
+   the room know they are transcribed and that an AI assistant reads along? The audio
+   can stay on the facilitator's computer, the transcript's text reaches the assistant's
+   model provider. Record that the facilitator confirmed it. Without
    consent there is no transcript; you can still work from the facilitator's notes.
    Ask what the transcript's labels stand for: one person each, or a channel or a
    microphone with several people behind it. Ask whether names may be stored in the
@@ -70,4 +76,5 @@ Only what the brief names:
 
 Tell the facilitator in a few lines: where the brief is, which models and which board are
 ready, the autonomy level, and what you need at the start of the session (the transcript
-source running, the brief open next to the models).
+source running, the brief open next to the models). With Beluga's tools, say that you
+start it yourself once the facilitator says so.
