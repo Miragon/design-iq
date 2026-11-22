@@ -58,11 +58,11 @@
     "@designiq/live-client": "workspace:*",
     "@designiq/notations": "workspace:*",
     "@hocuspocus/provider": "4.8.0",
-    "ws": "8.22.2",
+    "ws": "8.23.0",
     "yjs": "13.6.33"
   },
   "devDependencies": {
-    "@types/vscode": "1.145.0",
+    "@types/vscode": "1.146.0",
     "@types/ws": "8.18.2",
     "@vscode/test-electron": "3.1.0",
     "esbuild": "0.28.2",
