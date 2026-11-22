@@ -188,3 +188,29 @@ test("entries the model cannot write are left out, and said so", { skip: !ready 
   );
   assert.deepEqual(engine.left, ["S/4HANA", "Yılmaz", "ISO 9001"]);
 });
+
+test("a glossary given while listening counts from the next utterance on", { skip: !ready }, async () => {
+  const dir = modelsDir as string;
+  const speech = recording(join(import.meta.dirname, "fixtures", "glossary.wav"));
+  const { heard, engine, feed } = engineAt(dir, new Date(2026, 10, 21, 14, 30, 0).getTime());
+
+  await feed("mic", speech);
+  await feed("mic", new Float32Array(SAMPLE_RATE));
+  engine.setGlossary(["Rabattstaffel", "Camunda", "Yılmaz"]);
+  assert.deepEqual(engine.left, ["Yılmaz"]);
+  await feed("mic", speech);
+  await engine.flush();
+
+  const [before, ...later] = heard.map((u) => u.text);
+  assert.doesNotMatch(before ?? "", /Camunda/, before ?? "nothing");
+  assert.match(later.join(" "), /Rabattstaffel.*Camunda/, later.join(" "));
+});
+
+test("with a glossary, two people at once still come out as text", { skip: !ready }, async () => {
+  const dir = modelsDir as string;
+  // beam search returned nothing for this without the penalty on the blank
+  for (const seconds of [3, 10]) {
+    const text = await transcribe(dir, overlap(sentence(dir), seconds), ["Camunda", "Rabattstaffel"]);
+    assert.ok(text.length > 10, `${seconds} s: "${text}"`);
+  }
+});

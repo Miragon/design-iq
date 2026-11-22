@@ -37,8 +37,22 @@ const MIN_SEGMENT = SAMPLE_RATE / 10;
  * speech exceeds: the end of such a line went missing.
  */
 const WHISPER_TOKENS_PER_SECOND = "10";
-/** the hypotheses Parakeet follows at once while it decodes with a glossary */
-const GLOSSARY_PATHS = 4;
+/**
+ * The hypotheses Parakeet follows at once when it decodes with a beam, which a
+ * glossary needs. That costs about a fifth more time than greedy decoding (0.10
+ * instead of 0.08 of real time on four cores); without a glossary Parakeet
+ * decodes greedily.
+ */
+const BEAM_PATHS = 4;
+/**
+ * Parakeet's beam search gives up on speech it is unsure of, two people at
+ * once, and returns nothing where greedy decoding writes something garbled.
+ * A penalty on the blank keeps it writing. Measured on overlapped speech of 2
+ * to 20 seconds: at 1 some pieces still came back empty, from 1.5 on none.
+ * Clean speech came out the same at 1.5 (in noise 15 % word errors instead of
+ * 14 %); at 2 a glossary entry appeared that was not said.
+ */
+const BEAM_BLANK_PENALTY = 1.5;
 
 export interface EngineConfig {
   /** the models folder, which holds each model's folder and the detector */
@@ -58,6 +72,8 @@ export interface EngineConfig {
 export interface Engine {
   /** the glossary entries this engine does not listen for */
   readonly left: readonly string[];
+  /** listens for these names and terms from the next utterance on */
+  setGlossary(entries: readonly string[]): void;
   /**
    * feed audio of one channel: 16 kHz mono, any length, `at` the time its last
    * sample was captured (milliseconds since the epoch)
@@ -67,8 +83,8 @@ export interface Engine {
   flush(): Promise<void>;
 }
 
-/** `withGlossary`: decode with a beam, which a glossary needs; without one, greedy is as good and quicker */
-function recognizerConfig(config: EngineConfig, tuning: Tuning, withGlossary: boolean): OfflineRecognizerConfig {
+/** `beam`: decode with a beam, which a glossary needs; without one, greedy decoding is as good and quicker */
+function recognizerConfig(config: EngineConfig, tuning: Tuning, beam: boolean): OfflineRecognizerConfig {
   const spec = modelSpec(config.model);
   const at = (file: string): string => join(config.modelsDir, spec.dir, file);
   const common = { numThreads: tuning.threads, provider: "cpu", debug: 0 };
@@ -87,11 +103,12 @@ function recognizerConfig(config: EngineConfig, tuning: Tuning, withGlossary: bo
           modelType: "nemo_transducer",
           ...common,
         },
-        ...(withGlossary
+        ...(beam
           ? {
               decodingMethod: "modified_beam_search",
-              maxActivePaths: GLOSSARY_PATHS,
+              maxActivePaths: BEAM_PATHS,
               hotwordsScore: tuning.glossaryWeight,
+              blankPenalty: BEAM_BLANK_PENALTY,
             }
           : {}),
       };
@@ -126,10 +143,16 @@ interface ChannelState {
 }
 
 export class SherpaEngine implements Engine {
-  readonly left: readonly string[];
-  readonly #recognizer: OfflineRecognizer;
+  #left: readonly string[] = [];
+  readonly #config: EngineConfig;
+  readonly #tuning: Tuning;
+  #recognizer: OfflineRecognizer;
+  /** whether the recognizer decodes with a beam: when there is a glossary */
+  #beam: boolean;
+  /** Parakeet's pieces, to cut the glossary into; null for a model that takes no glossary */
+  readonly #encoder: PieceEncoder | null;
   /** the glossary as sherpa-onnx takes it for a stream; empty without one */
-  readonly #hotwords: string;
+  #hotwords = "";
   readonly #channels: Record<Channel, ChannelState>;
   readonly #onUtterance: (utterance: Utterance) => void;
   readonly #whisper: boolean;
@@ -145,17 +168,15 @@ export class SherpaEngine implements Engine {
     if (missing.length > 0) throw new Error(`model files missing in ${config.modelsDir}: ${missing.join(", ")}`);
     const tuning: Tuning = { ...DEFAULT_TUNING, ...config.tuning };
     this.#longest = tuning.longestLine * SAMPLE_RATE;
-    const glossary = config.glossary ?? [];
-    if (config.model === "parakeet-v3" && glossary.length > 0) {
-      const tokens = readFileSync(join(config.modelsDir, modelSpec(config.model).dir, "tokens.txt"), "utf8");
-      const heard = hotwords(glossary, new PieceEncoder(tokens));
-      this.#hotwords = heard.text;
-      this.left = heard.left;
-    } else {
-      this.#hotwords = "";
-      this.left = [...glossary];
-    }
-    this.#recognizer = new sherpa.OfflineRecognizer(recognizerConfig(config, tuning, this.#hotwords !== ""));
+    this.#encoder =
+      config.model === "parakeet-v3"
+        ? new PieceEncoder(readFileSync(join(config.modelsDir, modelSpec(config.model).dir, "tokens.txt"), "utf8"))
+        : null;
+    this.#config = config;
+    this.#tuning = tuning;
+    this.#cut(config.glossary ?? []);
+    this.#beam = this.#hotwords !== "";
+    this.#recognizer = new sherpa.OfflineRecognizer(recognizerConfig(config, tuning, this.#beam));
     this.#onUtterance = onUtterance;
     this.#whisper = config.model === "whisper-turbo";
     const channel = (): ChannelState => ({
@@ -183,6 +204,35 @@ export class SherpaEngine implements Engine {
       speech: 0,
     });
     this.#channels = { mic: channel(), system: channel() };
+  }
+
+  get left(): readonly string[] {
+    return this.#left;
+  }
+
+  /**
+   * The first glossary of a session that began without one, or none after one,
+   * changes how Parakeet decodes: the model loads again, a second or two in which
+   * the audio waits.
+   */
+  setGlossary(entries: readonly string[]): void {
+    this.#cut(entries);
+    const beam = this.#hotwords !== "";
+    if (beam === this.#beam) return;
+    this.#beam = beam;
+    this.#recognizer = new sherpa.OfflineRecognizer(recognizerConfig(this.#config, this.#tuning, beam));
+  }
+
+  /** the glossary in the model's pieces; Whisper takes none */
+  #cut(entries: readonly string[]): void {
+    if (!this.#encoder) {
+      this.#hotwords = "";
+      this.#left = [...entries];
+      return;
+    }
+    const heard = hotwords(entries, this.#encoder);
+    this.#hotwords = heard.text;
+    this.#left = heard.left;
   }
 
   async push(channel: Channel, samples: Float32Array, at: number): Promise<void> {

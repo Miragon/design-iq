@@ -3,8 +3,9 @@
  * preload script exposes exactly this API as `window.beluga`.
  */
 import type { Language, ModelId } from "./models.ts";
+import type { Preferences } from "./preferences.ts";
 import type { Tuning } from "./settings.ts";
-import type { Channel, SpeakerLabels } from "./transcript.ts";
+import type { Channel } from "./transcript.ts";
 
 export interface ModelInfo {
   id: ModelId;
@@ -16,23 +17,29 @@ export interface ModelInfo {
 
 export interface InitialState {
   models: ModelInfo[];
-  model: ModelId;
-  /** the folder new transcripts go to */
-  folder: string;
-  labels: SpeakerLabels;
+  preferences: Preferences;
   /** the processor cores of this machine, the most the recognizer may use */
   cores: number;
+  agent: AgentInfo;
 }
 
-export interface StartOptions {
-  model: ModelId;
-  language: Language;
-  labels: SpeakerLabels;
-  folder: string;
-  /** names and terms to listen for (Parakeet only), one entry each */
-  glossary: string[];
-  tuning: Tuning;
+/** whether an agent can reach Beluga, and where */
+export interface AgentInfo {
+  /** the MCP endpoint, on this computer only */
+  url: string;
+  state: "off" | "on" | "failed";
+  /** why the endpoint could not open, when it failed */
+  message?: string;
 }
+
+/** a request of the agent that the window carries out, because the window holds the microphone */
+export interface RemoteCommand {
+  id: number;
+  action: "start" | "stop";
+}
+
+/** how the window carried out a remote command */
+export type RemoteResult = { ok: true; channels: Channel[]; notice: string | null } | { ok: false; message: string };
 
 export interface Started {
   /** the transcript file of the session */
@@ -59,8 +66,10 @@ export interface BelugaApi {
   installModel(model: ModelId): Promise<void>;
   /** the entries of a glossary file the facilitator picks: a workshop brief or a plain list; null when none was picked */
   importGlossary(): Promise<string[] | null>;
-  /** begins a session and answers where its transcript goes */
-  start(options: StartOptions): Promise<Started>;
+  /** changes some of the preferences; the main process keeps them */
+  setPreferences(change: Partial<Preferences>): void;
+  /** begins a session with the preferences as they are, and answers where its transcript goes */
+  start(): Promise<Started>;
   /** ends the session once the engine has transcribed what it still holds */
   stop(): Promise<void>;
   /** 16 kHz mono samples of one channel, `at` the time the last one was captured */
@@ -74,12 +83,26 @@ export interface BelugaApi {
   onSessionEnded(listener: (message: string) => void): () => void;
   /** the app is quitting: the session stops listening and finishes what it heard */
   onFinishing(listener: () => void): () => void;
+  /** the preferences changed without the window: an agent set them */
+  onPreferences(listener: (preferences: Preferences) => void): () => void;
+  /** the glossary changed while listening: the entries the model does not listen for now */
+  onLeft(listener: (left: string[]) => void): () => void;
+  onAgent(listener: (agent: AgentInfo) => void): () => void;
+  /** an agent asks the window to start or stop listening */
+  onRemote(listener: (command: RemoteCommand) => void): () => void;
+  remoteDone(id: number, result: RemoteResult): void;
+  /** puts the command that connects Claude Code to Beluga on the clipboard, with its key */
+  copyAgentCommand(): Promise<void>;
+  /** a new key for the agent: the old one stops working */
+  renewAgentKey(): Promise<void>;
 }
 
 /** messages into the engine process */
 export type EngineRequest =
   | { type: "start"; modelsDir: string; model: ModelId; language: Language; glossary: string[]; tuning: Tuning }
   | { type: "audio"; channel: Channel; samples: Float32Array; at: number }
+  /** a new glossary for the running session */
+  | { type: "glossary"; entries: string[] }
   | { type: "stop" };
 
 /** messages out of the engine process */

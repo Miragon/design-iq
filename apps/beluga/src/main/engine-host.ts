@@ -36,6 +36,9 @@ async function handle(request: EngineRequest): Promise<void> {
       through = null;
       reply({ type: "ready", left: [...engine.left] });
       break;
+    case "glossary":
+      engine?.setGlossary(request.entries);
+      break;
     case "audio":
       await engine?.push(request.channel, request.samples, request.at);
       through = request.at;

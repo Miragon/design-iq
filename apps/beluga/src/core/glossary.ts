@@ -31,15 +31,6 @@ function unique(entries: readonly string[]): string[] {
   return out;
 }
 
-/** the glossary a start request carries, checked: anything else than a list of strings is refused */
-export function checkGlossary(value: unknown): string[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
-    throw new Error("The glossary is not a list of names and terms.");
-  }
-  return unique(value as string[]);
-}
-
 /** a table cell as text: no code marks, no emphasis, no link target */
 function cellText(cell: string): string {
   return tidy(

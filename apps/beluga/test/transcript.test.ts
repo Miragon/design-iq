@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { cleanLabel, DEFAULT_LABELS, fileName, formatLine, headerLine } from "../src/core/transcript.ts";
+import {
+  cleanLabel,
+  DEFAULT_LABELS,
+  fileName,
+  formatLine,
+  headerLine,
+  transcriptPage,
+} from "../src/core/transcript.ts";
 
 // local time, so the expectations hold in every time zone
 const at = new Date(2026, 10, 21, 14, 32, 7).getTime();
@@ -44,4 +51,28 @@ test("header and file name carry the start to the minute", () => {
 
 test("a second session in the same minute gets a file of its own", () => {
   assert.equal(fileName(at, 2), "beluga-2026-11-21-1432-2.txt");
+});
+
+const file = "# Beluga transcript, started 2026-11-21 14:30\n14:30:05 Me: eins\n14:30:09 Me: zwei\n14:30:12 Oth";
+
+test("a page of the transcript: complete lines after the one asked for", () => {
+  assert.deepEqual(transcriptPage(file, 0, 200), {
+    lines: [
+      { line: 1, text: "# Beluga transcript, started 2026-11-21 14:30" },
+      { line: 2, text: "14:30:05 Me: eins" },
+      { line: 3, text: "14:30:09 Me: zwei" },
+    ],
+    through: 3,
+    more: false,
+  });
+  assert.deepEqual(transcriptPage(file, 1, 1), {
+    lines: [{ line: 2, text: "14:30:05 Me: eins" }],
+    through: 2,
+    more: true,
+  });
+});
+
+test("nothing new is an empty page that keeps the place", () => {
+  assert.deepEqual(transcriptPage(file, 3, 200), { lines: [], through: 3, more: false });
+  assert.deepEqual(transcriptPage("", 0, 200), { lines: [], through: 0, more: false });
 });

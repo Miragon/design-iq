@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { checkGlossary, glossaryFromFile, MAX_ENTRIES, MAX_LENGTH, parseGlossary } from "../src/core/glossary.ts";
+import { glossaryFromFile, MAX_ENTRIES, MAX_LENGTH, parseGlossary } from "../src/core/glossary.ts";
 
 test("one entry per line, tidied, without empty lines and repeats", () => {
   assert.deepEqual(parseGlossary("Camunda\r\n\n  Anna   Wiśniewski \nCamunda\n\t\nDMN"), [
@@ -15,13 +15,6 @@ test("a line too long for a name or a term is no entry, and the list ends at the
   assert.deepEqual(parseGlossary(`${"x".repeat(MAX_LENGTH + 1)}\nERP`), ["ERP"]);
   const many = Array.from({ length: MAX_ENTRIES + 5 }, (_, i) => `term ${i}`).join("\n");
   assert.equal(parseGlossary(many).length, MAX_ENTRIES);
-});
-
-test("a start request's glossary is a list of strings or nothing", () => {
-  assert.deepEqual(checkGlossary(undefined), []);
-  assert.deepEqual(checkGlossary([" Camunda ", "Camunda", ""]), ["Camunda"]);
-  assert.throws(() => checkGlossary("Camunda"), /not a list/);
-  assert.throws(() => checkGlossary(["Camunda", 3]), /not a list/);
 });
 
 const brief = `# Workshop: Order to cash

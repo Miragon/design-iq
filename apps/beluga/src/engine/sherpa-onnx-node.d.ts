@@ -54,6 +54,8 @@ declare module "sherpa-onnx-node" {
     maxActivePaths?: number;
     /** how much a glossary phrase is boosted, per token */
     hotwordsScore?: number;
+    /** subtracted from the blank's score in each step: keeps a beam from settling on nothing */
+    blankPenalty?: number;
   }
   export interface OfflineStream {
     acceptWaveform(input: { sampleRate: number; samples: Float32Array }): void;

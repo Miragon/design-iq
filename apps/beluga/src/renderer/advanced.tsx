@@ -5,6 +5,7 @@
 import { Button, focusRing } from "@designiq/ui-kit/components/button";
 import { cn } from "@designiq/ui-kit/lib/utils";
 import { ChevronRight } from "lucide-react";
+import type { ReactNode } from "react";
 
 import {
   DEFAULT_SETTINGS,
@@ -24,6 +25,8 @@ interface Props {
   /** Whisper takes no glossary */
   whisper: boolean;
   onChange(settings: Settings): void;
+  /** more under Advanced that the defaults do not cover */
+  children?: ReactNode;
 }
 
 function Choice({
@@ -79,7 +82,7 @@ const MIC_OPTIONS: { key: keyof MicProcessing; label: string; hint: string }[] =
   },
 ];
 
-export function Advanced({ settings, cores, disabled, whisper, onChange }: Props) {
+export function Advanced({ settings, cores, disabled, whisper, onChange, children }: Props) {
   const { tuning, mic } = settings;
   const setTuning = (next: Tuning): void => onChange({ ...settings, tuning: next });
   const threads = Array.from({ length: Math.max(cores, tuning.threads) }, (_, i) => i + 1);
@@ -165,6 +168,7 @@ export function Advanced({ settings, cores, disabled, whisper, onChange }: Props
         >
           Back to the defaults
         </Button>
+        {children}
       </div>
     </details>
   );

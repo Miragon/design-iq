@@ -78,3 +78,28 @@ export function fileName(startedAt: number, attempt = 1): string {
   const base = `beluga-${stamp(startedAt).replace(" ", "-").replace(":", "")}`;
   return attempt > 1 ? `${base}-${attempt}.txt` : `${base}.txt`;
 }
+
+/** a stretch of a transcript file, for a reader that keeps its place by line number */
+export interface TranscriptPage {
+  /** complete lines after the one asked for, numbered from 1 (the header) */
+  lines: { line: number; text: string }[];
+  /** the number of the last line returned, or the one asked for when there is nothing new */
+  through: number;
+  /** whether complete lines beyond `through` are already there */
+  more: boolean;
+}
+
+/**
+ * The lines of a transcript after line `after` (0: from the header on), at most
+ * `limit`. A line still being written (no newline yet) is not handed out.
+ */
+export function transcriptPage(text: string, after: number, limit: number): TranscriptPage {
+  const complete = text
+    .slice(0, text.lastIndexOf("\n") + 1)
+    .split("\n")
+    .slice(0, -1);
+  const from = Math.max(0, Math.floor(after));
+  const lines = complete.slice(from, from + limit).map((line, i) => ({ line: from + i + 1, text: line }));
+  const through = lines.at(-1)?.line ?? from;
+  return { lines, through, more: complete.length > through };
+}

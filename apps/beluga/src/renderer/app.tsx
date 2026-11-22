@@ -7,11 +7,12 @@ import { CircleAlert, Download, FileText, FolderOpen, Mic, MonitorSpeaker, Squar
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { MAX_ENTRIES, parseGlossary } from "../core/glossary.ts";
-import type { DownloadProgress, InitialState, WrittenLine } from "../core/ipc.ts";
+import type { AgentInfo, DownloadProgress, InitialState, RemoteResult, WrittenLine } from "../core/ipc.ts";
 import type { Language, ModelId } from "../core/models.ts";
-import { readSettings, type Settings } from "../core/settings.ts";
-import type { Channel, SpeakerLabels } from "../core/transcript.ts";
+import type { Preferences } from "../core/preferences.ts";
+import type { Channel } from "../core/transcript.ts";
 import { Advanced } from "./advanced.tsx";
+import { AgentAccess } from "./agent-access.tsx";
 import { type Capture, startCapture } from "./capture.ts";
 import { checkboxClass, Field, selectClass } from "./fields.tsx";
 
@@ -23,34 +24,6 @@ const QUIET_AFTER = 15;
 const SHOWN = 200;
 /** seconds the transcript may run behind before Beluga says so */
 const BEHIND_AFTER = 5;
-
-/** where the glossary and the advanced settings are kept between sessions: in this window's storage, on this computer */
-const GLOSSARY_KEY = "beluga.glossary";
-const SETTINGS_KEY = "beluga.settings";
-
-function stored(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function store(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // without storage the value lasts until the window closes
-  }
-}
-
-function storedSettings(): Settings {
-  try {
-    return readSettings(JSON.parse(stored(SETTINGS_KEY) ?? "null"));
-  } catch {
-    return readSettings(null);
-  }
-}
 
 /** a line on screen, with a key that stays with it while older lines drop off */
 type ShownLine = WrittenLine & { id: number };
@@ -88,11 +61,9 @@ function Meter({ icon, name, level, quiet }: { icon: ReactNode; name: string; le
 
 export function App() {
   const [state, setState] = useState<InitialState | null>(null);
-  const [model, setModel] = useState<ModelId>("parakeet-v3");
-  const [language, setLanguage] = useState<Language>("de");
-  const [labels, setLabels] = useState<SpeakerLabels>({ mic: "Me", system: "Others" });
-  const [folder, setFolder] = useState("");
-  const [withSystem, setWithSystem] = useState(true);
+  /** the main process keeps them; the window shows them and sends each change */
+  const [prefs, setPrefs] = useState<Preferences | null>(null);
+  const [agent, setAgent] = useState<AgentInfo | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [file, setFile] = useState<string | null>(null);
   const [lines, setLines] = useState<ShownLine[]>([]);
@@ -103,8 +74,6 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [download, setDownload] = useState<DownloadProgress | null>(null);
   const [behind, setBehind] = useState(0);
-  const [glossary, setGlossary] = useState(() => stored(GLOSSARY_KEY) ?? "");
-  const [settings, setSettings] = useState(storedSettings);
   /** glossary entries the running model does not listen for */
   const [left, setLeft] = useState<string[]>([]);
 
@@ -114,15 +83,36 @@ export function App() {
   /** whether the transcript follows the newest line: not while the reader has scrolled up */
   const following = useRef(true);
   const nextLine = useRef(0);
-  /** the main process ended the session, perhaps while this page was still starting it */
-  const ended = useRef(false);
+  /** the main process ended the session, perhaps while this page was still starting it: why */
+  const ended = useRef<string | null>(null);
+  /**
+   * The preferences as they are now, also before React renders them: an agent
+   * may set them and start listening in the next breath.
+   */
+  const latest = useRef<Preferences | null>(null);
+  /** start and stop as they are in this render, for an agent's request */
+  const actions = useRef<{ start(): Promise<RemoteResult>; stop(): Promise<RemoteResult> } | null>(null);
 
   useEffect(() => {
     void window.beluga.init().then((initial) => {
       setState(initial);
-      setModel(initial.model);
-      setLabels(initial.labels);
-      setFolder(initial.folder);
+      latest.current = initial.preferences;
+      setPrefs(initial.preferences);
+      setAgent(initial.agent);
+    });
+    const offPreferences = window.beluga.onPreferences((preferences) => {
+      latest.current = preferences;
+      setPrefs(preferences);
+    });
+    const offLeft = window.beluga.onLeft(setLeft);
+    const offAgent = window.beluga.onAgent(setAgent);
+    // an agent starts or stops listening: the window does what a click does, and says how it went
+    const offRemote = window.beluga.onRemote((command) => {
+      const act = actions.current;
+      const run = act ? (command.action === "start" ? act.start() : act.stop()) : null;
+      void (run ?? Promise.resolve<RemoteResult>({ ok: false, message: "Beluga's window is not ready yet." })).then(
+        (result) => window.beluga.remoteDone(command.id, result),
+      );
     });
     const offLine = window.beluga.onLine((line) => {
       const id = nextLine.current++;
@@ -132,7 +122,7 @@ export function App() {
     const offLag = window.beluga.onLag(setBehind);
     // the main process ended the session: the engine failed or the file cannot be written
     const offEnded = window.beluga.onSessionEnded((message) => {
-      ended.current = true;
+      ended.current = message;
       setError(message);
       void capture.current?.stop();
       capture.current = null;
@@ -147,6 +137,10 @@ export function App() {
       setPhase("stopping");
     });
     return () => {
+      offPreferences();
+      offLeft();
+      offAgent();
+      offRemote();
       offLine();
       offDownload();
       offLag();
@@ -161,9 +155,6 @@ export function App() {
     if (list && following.current) list.scrollTop = list.scrollHeight;
   }, [lines]);
 
-  useEffect(() => store(GLOSSARY_KEY, glossary), [glossary]);
-  useEffect(() => store(SETTINGS_KEY, JSON.stringify(settings)), [settings]);
-
   // a channel that stays silent is the one failure macOS does not report
   useEffect(() => {
     if (phase !== "listening") return;
@@ -177,11 +168,20 @@ export function App() {
     return () => clearInterval(timer);
   }, [phase]);
 
+  const model = prefs?.model ?? "parakeet-v3";
   const selected = state?.models.find((m) => m.id === model);
   const busy = phase === "starting" || phase === "stopping" || download !== null;
   const running = phase === "listening" || phase === "stopping";
-  const entries = parseGlossary(glossary);
+  const entries = parseGlossary(prefs?.glossary ?? "");
   const whisper = model === "whisper-turbo";
+
+  /** a change in the window: shown at once, kept by the main process */
+  function update(change: Partial<Preferences>): void {
+    if (!latest.current) return;
+    latest.current = { ...latest.current, ...change };
+    setPrefs(latest.current);
+    window.beluga.setPreferences(change);
+  }
 
   async function importGlossary(): Promise<void> {
     setError(null);
@@ -193,7 +193,7 @@ export function App() {
         setNotice("That file holds no glossary: no table under a Glossary heading, and no list.");
         return;
       }
-      setGlossary(parseGlossary(`${glossary}\n${imported.join("\n")}`).join("\n"));
+      update({ glossary: parseGlossary(`${prefs?.glossary ?? ""}\n${imported.join("\n")}`).join("\n") });
     } catch (e) {
       setError(`The glossary could not be read. ${reason(e)}`);
     }
@@ -212,32 +212,27 @@ export function App() {
     }
   }
 
-  async function start(): Promise<void> {
+  async function start(): Promise<RemoteResult> {
+    const chosen = latest.current;
+    if (!chosen) return { ok: false, message: "Beluga's window is not ready yet." };
     setError(null);
     setNotice(null);
     setLeft([]);
     setLines([]);
     setBehind(0);
     following.current = true;
-    ended.current = false;
+    ended.current = null;
     setPhase("starting");
     let opened: Capture | null = null;
     try {
       // the model first, then the devices: what is said while the model loads would be lost
-      const started = await window.beluga.start({
-        model,
-        language,
-        labels,
-        folder,
-        glossary: entries,
-        tuning: settings.tuning,
-      });
+      const started = await window.beluga.start();
       setFile(started.path);
-      if (!whisper) setLeft(started.left);
+      if (chosen.model !== "whisper-turbo") setLeft(started.left);
       const now = Date.now();
       lastSound.current = { mic: now, system: now };
       setQuiet({ mic: false, system: false });
-      opened = await startCapture(withSystem, settings.mic, {
+      opened = await startCapture(chosen.withSystem, chosen.settings.mic, {
         onAudio: (channel, samples, at) => window.beluga.audio(channel, samples, at),
         onLevel: (channel, value) => {
           if (value > 0.05) lastSound.current[channel] = Date.now();
@@ -247,14 +242,16 @@ export function App() {
           setNotice(channel === "mic" ? "The microphone stopped delivering audio." : "The system audio stopped."),
       });
       // the session may have ended in the main process while the devices opened
-      if (ended.current) {
+      if (ended.current !== null) {
         void opened.stop();
-        return;
+        return { ok: false, message: ended.current };
       }
       capture.current = opened;
       setHeard(opened.channels);
-      if (opened.systemProblem) setNotice(`Listening to the microphone only. ${opened.systemProblem}`);
+      const said = opened.systemProblem ? `Listening to the microphone only. ${opened.systemProblem}` : null;
+      setNotice(said);
       setPhase("listening");
+      return { ok: true, channels: opened.channels, notice: said };
     } catch (e) {
       void opened?.stop();
       capture.current = null;
@@ -264,24 +261,31 @@ export function App() {
       setLevels({ mic: 0, system: 0 });
       setError(reason(e));
       setPhase("idle");
+      return { ok: false, message: reason(e) };
     }
   }
 
-  async function stop(): Promise<void> {
+  async function stop(): Promise<RemoteResult> {
     setPhase("stopping");
     await capture.current?.stop();
     capture.current = null;
+    let result: RemoteResult = { ok: true, channels: [], notice: null };
     try {
       await window.beluga.stop();
     } catch (e) {
       setError(reason(e));
+      result = { ok: false, message: reason(e) };
     }
     setLevels({ mic: 0, system: 0 });
     setBehind(0);
     setPhase("idle");
+    return result;
   }
 
-  if (!state) return null;
+  actions.current = { start, stop };
+
+  if (!state || !prefs || !agent) return null;
+  const { labels, language, withSystem, folder } = prefs;
 
   return (
     <main className="bg-background text-foreground flex h-full flex-col gap-5 overflow-y-auto p-5">
@@ -302,14 +306,14 @@ export function App() {
             <Input
               value={labels.mic}
               disabled={running || busy}
-              onChange={(e) => setLabels({ ...labels, mic: e.target.value })}
+              onChange={(e) => update({ labels: { ...labels, mic: e.target.value } })}
             />
           </Field>
           <Field label="System audio is">
             <Input
               value={labels.system}
               disabled={running || busy || !withSystem}
-              onChange={(e) => setLabels({ ...labels, system: e.target.value })}
+              onChange={(e) => update({ labels: { ...labels, system: e.target.value } })}
             />
           </Field>
         </div>
@@ -319,7 +323,7 @@ export function App() {
             className={checkboxClass}
             checked={withSystem}
             disabled={running || busy}
-            onChange={(e) => setWithSystem(e.target.checked)}
+            onChange={(e) => update({ withSystem: e.target.checked })}
           />
           Also listen to what this computer plays (the others in an online meeting)
         </label>
@@ -329,7 +333,7 @@ export function App() {
               className={selectClass}
               value={model}
               disabled={running || busy}
-              onChange={(e) => setModel(e.target.value as ModelId)}
+              onChange={(e) => update({ model: e.target.value as ModelId })}
             >
               {state.models.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -344,7 +348,7 @@ export function App() {
               value={language}
               disabled={running || busy || !whisper}
               title={whisper ? undefined : "Parakeet detects the language itself"}
-              onChange={(e) => setLanguage(e.target.value as Language)}
+              onChange={(e) => update({ language: e.target.value as Language })}
             >
               <option value="de">German</option>
               <option value="en">English</option>
@@ -372,10 +376,10 @@ export function App() {
           <Textarea
             id="glossary"
             rows={4}
-            value={glossary}
+            value={prefs.glossary}
             disabled={running || busy}
             placeholder={"Names and terms, one per line\nAnna Wiśniewski\nRabattstaffel"}
-            onChange={(e) => setGlossary(e.target.value)}
+            onChange={(e) => update({ glossary: e.target.value })}
           />
           <p className="text-muted-foreground text-xs">
             {whisper
@@ -393,19 +397,28 @@ export function App() {
               size="icon"
               aria-label="Choose folder"
               disabled={running || busy}
-              onClick={() => void window.beluga.chooseFolder(folder).then((chosen) => chosen && setFolder(chosen))}
+              onClick={() =>
+                void window.beluga.chooseFolder(folder).then((chosen) => chosen && update({ folder: chosen }))
+              }
             >
               <FolderOpen />
             </Button>
           </div>
         </Field>
         <Advanced
-          settings={settings}
+          settings={prefs.settings}
           cores={state.cores}
           disabled={running || busy}
           whisper={whisper}
-          onChange={setSettings}
-        />
+          onChange={(settings) => update({ settings })}
+        >
+          <AgentAccess
+            enabled={prefs.agent}
+            agent={agent}
+            disabled={running || busy}
+            onEnabled={(enabled) => update({ agent: enabled })}
+          />
+        </Advanced>
       </section>
 
       {selected && !selected.installed ? (

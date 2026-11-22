@@ -1,9 +1,10 @@
 /**
  * Beluga's main process: one window, the capture permissions, the engine
- * process and the transcript file.
+ * process, the transcript file, the preferences and, when the person allows
+ * it, the endpoint an agent controls Beluga through.
  */
 import type { WriteStream } from "node:fs";
-import { constants } from "node:fs";
+import { constants, readFileSync } from "node:fs";
 import { access, mkdir, open, readFile, rm, stat } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
@@ -12,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   type IpcMainEvent,
@@ -24,20 +26,25 @@ import {
   utilityProcess,
 } from "electron";
 
-import { checkGlossary, glossaryFromFile } from "../core/glossary.ts";
-import type { EngineReply, EngineRequest, InitialState, Started, StartOptions } from "../core/ipc.ts";
-import { DEFAULT_MODEL, megabytes, type ModelId, MODELS, modelSpec } from "../core/models.ts";
-import { checkTuning } from "../core/settings.ts";
-import {
-  DEFAULT_LABELS,
-  fileName,
-  formatLine,
-  headerLine,
-  type SpeakerLabels,
-  type Utterance,
-} from "../core/transcript.ts";
+import { createControl } from "../agent/control.ts";
+import { AGENT_PORT, type AgentEndpoint, openAgentEndpoint } from "../agent/endpoint.ts";
+import { glossaryFromFile, parseGlossary } from "../core/glossary.ts";
+import type {
+  AgentInfo,
+  EngineReply,
+  EngineRequest,
+  InitialState,
+  RemoteCommand,
+  RemoteResult,
+  Started,
+} from "../core/ipc.ts";
+import { megabytes, type ModelId, MODELS, modelSpec } from "../core/models.ts";
+import type { Preferences } from "../core/preferences.ts";
+import { fileName, formatLine, headerLine, type SpeakerLabels, type Utterance } from "../core/transcript.ts";
 import { missingFiles } from "../engine/files.ts";
+import { hotwords, PieceEncoder } from "../engine/hotwords.ts";
 import { installModel } from "./models.ts";
+import { AgentKey, PreferenceStore } from "./store.ts";
 
 const PAGE = join(__dirname, "../../dist/index.html");
 /** BELUGA_MODELS_DIR points development and tests at models that are already there; BELUGA_FOLDER sets where transcripts go by default */
@@ -48,6 +55,12 @@ const HUNG_AFTER_MS = 30_000;
 const STUCK_AFTER_MS = 5 * 60_000;
 /** a glossary file larger than this is no brief and no list of terms */
 const GLOSSARY_FILE_BYTES = 1_000_000;
+/** BELUGA_AGENT_PORT moves the agent's endpoint, for tests next to a running Beluga */
+const agentPort = Number(process.env.BELUGA_AGENT_PORT ?? AGENT_PORT);
+/** how long an agent's start may take: the model loads, a permission prompt may wait for the person */
+const REMOTE_START_MS = 120_000;
+/** how long an agent's stop may take: the engine catches up first */
+const REMOTE_STOP_MS = 15 * 60_000;
 
 let window: BrowserWindow | null = null;
 
@@ -55,7 +68,12 @@ interface Session {
   engine: UtilityProcess;
   file: WriteStream;
   path: string;
+  model: ModelId;
   labels: SpeakerLabels;
+  /** glossary entries the model does not listen for */
+  left: string[];
+  /** seconds the transcript runs behind, as the engine last reported */
+  behind: number | null;
   /** when the newest piece of audio handed to the engine was captured */
   newest: number;
   /** whether any audio arrived: a session that heard nothing leaves no file */
@@ -72,6 +90,20 @@ let quitting = false;
 let installing: ModelId | null = null;
 /** the transcript of the running or the last session: the one file the page may reveal */
 let lastPath: string | null = null;
+/** made once the app is ready: they need its data folder */
+let store: PreferenceStore;
+let agentKey: AgentKey;
+let endpoint: AgentEndpoint | null = null;
+let agent: AgentInfo = { url: `http://127.0.0.1:${agentPort}/mcp`, state: "off" };
+/** opening and closing the endpoint, one after the other */
+let agentChange: Promise<void> = Promise.resolve();
+/** the page has its listeners in place: an agent's start or stop reaches it */
+let pageReady = false;
+/** an agent's starts and stops the page is carrying out */
+const remotes = new Map<number, (result: RemoteResult) => void>();
+let nextRemote = 1;
+/** Parakeet's pieces, read once, to tell which glossary entries it cannot write */
+let parakeetPieces: PieceEncoder | null = null;
 
 const reason = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -105,6 +137,8 @@ function send(channel: string, payload: unknown): void {
   if (window && !window.isDestroyed()) window.webContents.send(channel, payload);
 }
 
+const installed = (model: ModelId): boolean => missingFiles(modelsDir(), model).length === 0;
+
 function initialState(): InitialState {
   return {
     models: MODELS.map((m) => ({
@@ -112,13 +146,106 @@ function initialState(): InitialState {
       label: m.label,
       note: m.note,
       megabytes: megabytes(m.id),
-      installed: missingFiles(modelsDir(), m.id).length === 0,
+      installed: installed(m.id),
     })),
-    model: DEFAULT_MODEL,
-    folder: process.env.BELUGA_FOLDER ?? join(app.getPath("documents"), "Beluga"),
-    labels: DEFAULT_LABELS,
+    preferences: store.get(),
     cores: availableParallelism(),
+    agent,
   };
+}
+
+/** the glossary entries a model does not listen for: Whisper takes none, Parakeet not all */
+function notListenedFor(model: ModelId, entries: string[]): string[] {
+  if (model !== "parakeet-v3") return [...entries];
+  if (!installed(model)) return [];
+  parakeetPieces ??= new PieceEncoder(readFileSync(join(modelsDir(), modelSpec(model).dir, "tokens.txt"), "utf8"));
+  return hotwords(entries, parakeetPieces).left;
+}
+
+/** keeps a change of the preferences made outside the window, and shows it there */
+function updatePreferences(change: Partial<Preferences>): void {
+  const agentBefore = store.get().agent;
+  store.update(change);
+  send("beluga:preferences", store.get());
+  if (store.get().agent !== agentBefore) syncAgent();
+}
+
+/** a new glossary for the running session, from its next utterance on; null when none runs */
+function glossaryToSession(entries: string[]): string[] | null {
+  if (!current) return null;
+  current.engine.postMessage({ type: "glossary", entries } satisfies EngineRequest);
+  current.left = notListenedFor(current.model, entries);
+  send("beluga:left", current.left);
+  return current.left;
+}
+
+const phase = (): "idle" | "starting" | "listening" | "stopping" =>
+  starting ? "starting" : current ? "listening" : stopping ? "stopping" : "idle";
+
+/** asks the page to start or stop listening, as if the person had clicked, and waits for how it went */
+function remote(action: RemoteCommand["action"]): Promise<RemoteResult> {
+  if (!window || !pageReady) return Promise.resolve({ ok: false, message: "Beluga's window is not ready yet." });
+  const id = nextRemote++;
+  return new Promise((resolve) => {
+    const timer = setTimeout(
+      () =>
+        done({
+          ok: false,
+          message:
+            action === "start"
+              ? "Beluga did not start listening within two minutes. Is a permission prompt waiting on the computer?"
+              : "Beluga did not finish the session within fifteen minutes.",
+        }),
+      action === "start" ? REMOTE_START_MS : REMOTE_STOP_MS,
+    );
+    const done = (result: RemoteResult): void => {
+      clearTimeout(timer);
+      remotes.delete(id);
+      resolve(result);
+    };
+    remotes.set(id, done);
+    send("beluga:remote", { id, action } satisfies RemoteCommand);
+  });
+}
+
+const control = createControl({
+  preferences: () => store.get(),
+  updatePreferences,
+  phase,
+  transcriptPath: () => current?.path ?? lastPath,
+  behind: () => current?.behind ?? null,
+  installed,
+  notListenedFor,
+  glossaryToSession: (entries) => Promise.resolve(glossaryToSession(entries)),
+  sessionLeft: () => current?.left ?? null,
+  remote,
+  whenStopped: () => (stopping ?? Promise.resolve()).catch(() => undefined),
+});
+
+/** opens or closes the agent's endpoint as the preferences say, and tells the window */
+function syncAgent(): void {
+  agentChange = agentChange.then(async () => {
+    const wanted = store.get().agent;
+    if (wanted && !endpoint) {
+      try {
+        await agentKey.get();
+        endpoint = await openAgentEndpoint({ port: agentPort, key: () => agentKey.current(), control });
+        agent = { url: endpoint.url, state: "on" };
+      } catch (error) {
+        const inUse = (error as NodeJS.ErrnoException).code === "EADDRINUSE";
+        agent = {
+          url: agent.url,
+          state: "failed",
+          message: inUse ? `Port ${agentPort} is taken: is another Beluga running?` : reason(error),
+        };
+      }
+    } else if (!wanted) {
+      await endpoint?.close();
+      endpoint = null;
+      agent = { url: agent.url, state: "off" };
+    }
+    send("beluga:agent", agent);
+  });
 }
 
 /** a new transcript file, never an existing one: a second session in the same minute gets `-2` */
@@ -157,20 +284,18 @@ function write(into: Session, utterance: Utterance): void {
   send("beluga:line", { channel: utterance.channel, line });
 }
 
-async function start(options: StartOptions): Promise<Started> {
+async function start(): Promise<Started> {
   if (current || starting || stopping) throw new Error("A session is already running.");
   starting = true;
   try {
-    return await begin(options);
+    return await begin(store.get());
   } finally {
     starting = false;
   }
 }
 
-async function begin(options: StartOptions): Promise<Started> {
-  modelSpec(options.model);
-  const glossary = checkGlossary(options.glossary);
-  const tuning = checkTuning(options.tuning);
+async function begin(options: Preferences): Promise<Started> {
+  const glossary = parseGlossary(options.glossary);
   if (process.platform === "darwin" && !(await systemPreferences.askForMediaAccess("microphone"))) {
     throw new Error("Beluga has no access to the microphone. Allow it in System Settings, Privacy & Security.");
   }
@@ -196,7 +321,8 @@ async function begin(options: StartOptions): Promise<Started> {
           break;
         case "progress":
           if (listening && reply.at !== null) {
-            send("beluga:lag", Math.max(0, Math.round((listening.newest - reply.at) / 1000)));
+            listening.behind = Math.max(0, Math.round((listening.newest - reply.at) / 1000));
+            send("beluga:lag", listening.behind);
           }
           break;
         case "error":
@@ -218,7 +344,7 @@ async function begin(options: StartOptions): Promise<Started> {
     model: options.model,
     language: options.language,
     glossary,
-    tuning,
+    tuning: options.settings.tuning,
   } satisfies EngineRequest);
   let left: string[];
   try {
@@ -241,7 +367,16 @@ async function begin(options: StartOptions): Promise<Started> {
     engine.kill();
     throw new Error(`Beluga cannot create the transcript file in ${options.folder}. (${reason(error)})`);
   }
-  listening = { engine, ...transcript, labels: options.labels, newest: startedAt, heard: false };
+  listening = {
+    engine,
+    ...transcript,
+    model: options.model,
+    labels: options.labels,
+    left,
+    behind: null,
+    newest: startedAt,
+    heard: false,
+  };
   current = listening;
   lastPath = transcript.path;
   return { path: transcript.path, left };
@@ -336,10 +471,21 @@ function createWindow(): void {
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.on("closed", () => (window = null));
+  // a page that loads again has no listeners until it asks for its state: an agent's request waiting on it fails
+  window.webContents.on("did-start-loading", () => {
+    pageReady = false;
+    for (const done of [...remotes.values()]) done({ ok: false, message: "Beluga's window reloaded." });
+  });
   void window.loadFile(PAGE);
 }
 
 void app.whenReady().then(() => {
+  store = new PreferenceStore(
+    app.getPath("userData"),
+    process.env.BELUGA_FOLDER ?? join(app.getPath("documents"), "Beluga"),
+  );
+  agentKey = new AgentKey(app.getPath("userData"));
+
   // microphone and system audio, for Beluga's own page and nothing else
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback) => {
     const own = window !== null && contents.id === window.webContents.id && isOwnPage(contents.getURL());
@@ -357,6 +503,7 @@ void app.whenReady().then(() => {
   // a page that loads again (a reload) starts without a session: one still running is finished first
   handle("beluga:init", async () => {
     await stop().catch((error: unknown) => console.error(reason(error)));
+    pageReady = true;
     return initialState();
   });
   handle("beluga:choose-folder", async (currentFolder: string) => {
@@ -385,6 +532,25 @@ void app.whenReady().then(() => {
   handle("beluga:import-glossary", importGlossary);
   handle("beluga:start", start);
   handle("beluga:stop", stop);
+  ipcMain.on("beluga:set-preferences", (event, change: unknown) => {
+    if (!fromOwnPage(event)) return;
+    const agentBefore = store.get().agent;
+    store.update(change);
+    if (store.get().agent !== agentBefore) syncAgent();
+  });
+  ipcMain.on("beluga:remote-done", (event, id: unknown, result: unknown) => {
+    if (!fromOwnPage(event) || typeof id !== "number") return;
+    const ok = (result as { ok?: unknown } | null)?.ok;
+    if (typeof ok !== "boolean") return;
+    remotes.get(id)?.(result as RemoteResult);
+  });
+  handle("beluga:copy-agent-command", async () => {
+    if (agent.state !== "on") throw new Error("Agent access is off.");
+    await clipboard.writeText(
+      `claude mcp add --transport http beluga ${agent.url} --header "Authorization: Bearer ${agentKey.current()}"`,
+    );
+  });
+  handle("beluga:renew-agent-key", () => agentKey.renew());
   ipcMain.on("beluga:audio", (event, channel: unknown, samples: unknown, at: unknown) => {
     if (!current || !fromOwnPage(event)) return;
     if (channel !== "mic" && channel !== "system") return;
@@ -398,18 +564,23 @@ void app.whenReady().then(() => {
   });
 
   createWindow();
+  syncAgent();
 });
 
 const quit = (): void =>
   void stop()
     .catch((error: unknown) => console.error(reason(error)))
-    .finally(() => app.quit());
+    .finally(() => {
+      store.flushSync();
+      app.quit();
+    });
 
 // closing the window ends the session and the app
 app.on("window-all-closed", quit);
 // Quit from the menu, the Dock, a logout: Electron closes no window first, so the
 // session is ended here, then the quit goes on
 app.on("before-quit", (event) => {
+  store.flushSync();
   if (quitting || (!current && !stopping)) return;
   event.preventDefault();
   quitting = true;

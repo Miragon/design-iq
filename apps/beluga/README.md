@@ -60,7 +60,37 @@ Under **Advanced** in the window, each with the measured default:
 | Processor cores        | 4           | More is quicker and leaves less for the meeting app.                            |
 | Microphone             | on, on, off | Noise suppression, automatic level, echo cancellation (for a call on speakers). |
 
-Beluga keeps the glossary and these settings between sessions.
+Beluga keeps the glossary and these settings between sessions, in `preferences.json` in its
+data folder.
+
+## An agent at the controls
+
+Under Advanced, **Agent access** lets an agent on this computer control Beluga over MCP
+(Streamable HTTP at `http://127.0.0.1:47913/mcp`). **Copy the command for Claude Code**
+puts the command that connects it on the clipboard, key included:
+
+```
+claude mcp add --transport http beluga http://127.0.0.1:47913/mcp --header "Authorization: Bearer <key>"
+```
+
+| Tool              | What it does                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| `get_status`      | Whether Beluga listens, the transcript file, how far behind it runs, model, glossary, settings. |
+| `set_glossary`    | Replaces the glossary or adds to it. While listening, from the next line on.                    |
+| `set_options`     | Model, language, the computer's sound, channel labels, advanced settings: for the next session. |
+| `start_listening` | Starts a session as if the person had clicked Start. Only once everyone present agreed.         |
+| `stop_listening`  | Ends the session, once the engine has caught up.                                                |
+| `read_transcript` | The lines after a line number (line 1 is the header), never a line still being written.         |
+
+Where transcripts go and which models are downloaded stay with the person at the window.
+
+- Agent access is off until someone turns it on. The endpoint listens on 127.0.0.1 only.
+- Every request needs the key: 32 random bytes in `agent-key` in the data folder, readable
+  for this user only. **New key** replaces it, and the agent needs the new command.
+- A request that names another host (DNS rebinding) or comes from a web page (it carries an
+  `Origin`) is refused before the key is looked at.
+- A start goes through the window: it shows "Listening" as with a click, and the first
+  start on a Mac still asks the person at the computer for permission.
 
 ## Run it
 
@@ -125,6 +155,7 @@ refused as damaged; it needs a Developer ID signature, or on a test machine
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/core/`     | The transcript format, the model list, the glossary, the settings, the message types. No Electron, no engine.                                                                                                         |
 | `src/engine/`   | The speech engine: pause detection, recognition, the clock of the samples. Only `sherpa.ts` knows sherpa-onnx; `files.ts` checks a model on disk without it; `hotwords.ts` cuts the glossary into the model's pieces. |
+| `src/agent/`    | The MCP server an agent controls Beluga through, and its endpoint on 127.0.0.1. No Electron: the main process hands it its state and actions.                                                                         |
 | `src/main/`     | Electron main process: window, permissions, model download, the transcript file. The engine runs in a process of its own (`engine-host.ts`).                                                                          |
 | `src/preload/`  | The bridge into the page, `window.beluga`.                                                                                                                                                                            |
 | `src/renderer/` | The window: capture of both channels, level meters, the running transcript.                                                                                                                                           |
@@ -137,7 +168,7 @@ interface of `src/engine/sherpa.ts`.
 ```
 pnpm --filter @designiq/beluga test                      # format, clock, glossary, settings; the model tests are skipped without models
 BELUGA_MODELS_DIR=<models> pnpm --filter @designiq/beluga test       # plus the engine on German recordings, and the glossary's pieces
-BELUGA_MODELS_DIR=<models> pnpm --filter @designiq/beluga test:e2e   # the whole app with a simulated microphone
+BELUGA_MODELS_DIR=<models> pnpm --filter @designiq/beluga test:e2e   # the whole app with a simulated microphone, also run by an agent over MCP
 ```
 
 `<models>` is a folder that holds the Parakeet model and `silero_vad.onnx`, for example the
