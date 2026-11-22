@@ -5,12 +5,17 @@ directories:
 files:
   - out/**
   - dist/**
+  - resources/icon.png
   - package.json
+# The icon from Miragon's modeler icon set, copied unchanged (png/beluga-1024.png and
+# ico/beluga.ico). Provisional: Miragon/corporate-identity#107 proposes it, and the
+# brand owners decide there whether a tool that is not a modeler carries one.
 # the speech engine is a native addon: it cannot be loaded from inside the archive
 asarUnpack:
   - "**/node_modules/sherpa-onnx-*/**"
 mac:
   target: dir
+  icon: resources/icon.png
   category: public.app-category.productivity
   # signed ad hoc for this machine: the bundle gets its own identity
   # (de.miragon.designiq.beluga), which the microphone and system audio
@@ -24,7 +29,9 @@ mac:
     NSAudioCaptureUsageDescription: Beluga transcribes what the other participants say in the meeting. The audio stays on this Mac.
 win:
   target: dir
+  icon: resources/icon.ico
 linux:
   target: dir
+  icon: resources/icon.png
   # the npm name would make it @designiqbeluga
   executableName: beluga

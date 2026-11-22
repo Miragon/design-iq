@@ -47,6 +47,8 @@ import { installModel } from "./models.ts";
 import { AgentKey, PreferenceStore } from "./store.ts";
 
 const PAGE = join(__dirname, "../../dist/index.html");
+/** the app icon, for the window (Windows, Linux) and the Dock; a packaged app also has it in its bundle */
+const ICON = join(__dirname, "../../resources/icon.png");
 /** BELUGA_MODELS_DIR points development and tests at models that are already there; BELUGA_FOLDER sets where transcripts go by default */
 const modelsDir = (): string => process.env.BELUGA_MODELS_DIR ?? join(app.getPath("userData"), "models");
 /** while finishing, an engine that says nothing for this long hangs: a working one reports every second */
@@ -465,6 +467,7 @@ function createWindow(): void {
     minWidth: 400,
     minHeight: 560,
     title: "Beluga",
+    icon: ICON,
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, "../preload/preload.cjs"),
@@ -486,6 +489,8 @@ function createWindow(): void {
 }
 
 void app.whenReady().then(() => {
+  // without it, a Beluga started from source shows Electron's icon in the Dock
+  if (process.platform === "darwin") app.dock?.setIcon(ICON);
   store = new PreferenceStore(
     app.getPath("userData"),
     process.env.BELUGA_FOLDER ?? join(app.getPath("documents"), "Beluga"),

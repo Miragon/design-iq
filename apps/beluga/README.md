@@ -98,6 +98,15 @@ Where transcripts go and which models are downloaded stay with the person at the
   start on a Mac still asks the person at the computer for permission. While a model
   downloads, Beluga does not start.
 
+## Icon
+
+Beluga carries `beluga` from Miragon's modeler icon set: the white whale with one line of
+transcript as the accent, copied unchanged from Miragon/corporate-identity
+(`resources/icon.png` is `png/beluga-1024.png`, `resources/icon.ico` is `ico/beluga.ico`).
+It is provisional: the brand rules give every software that is not a modeler the comet, and
+[Miragon/corporate-identity#107](https://github.com/Miragon/corporate-identity/pull/107)
+proposes the exception. If the brand owners decide against it, Beluga carries the comet.
+
 ## Run it
 
 ```
