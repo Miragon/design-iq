@@ -94,9 +94,9 @@ two events.
   the question ("Double payment on retry?"). Both views go under **Open** in the brief.
 - **Proposals** (level `propose`): describe the element and where it goes ("event
   'Invoice sent' after 'Order shipped'"). Do not place it.
-- **Placing** (level `model`, or an accepted proposal): keep the time line. Put a new
-  element where it belongs in the order and leave what the group placed where it is.
-  Draw the arrows the group named, in the format above.
+- **Placing** (level `model` or `auto`, or an accepted proposal): keep the time line. Put
+  a new element where it belongs in the order and leave what the group placed where it
+  is. Draw the arrows the group named, in the format above.
 
 ## What a good board looks like at the end
 

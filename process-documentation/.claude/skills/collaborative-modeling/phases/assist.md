@@ -24,6 +24,34 @@ so a long statement on one channel can follow a shorter, later one on another. P
 transcript time on every proposal and every open point, so a statement handled once is
 not handled again.
 
+## A live transcript you can wait on
+
+When the source can wait for new lines (Beluga's `read_transcript` with `wait`,
+[resources/beluga.md](../resources/beluga.md)), work in rounds, not on a timer:
+
+1. **Wait** for new lines until the conversation pauses. A round handles a thought, not
+   half a sentence: people often correct a statement in the next one.
+2. **Read the brief and the models you may change** again. The facilitator ticks
+   proposals and people edit the models while you wait. Apply ticked proposals first.
+   Read a model in the shortest form that shows what you need (an outline or `get_view`),
+   and its full content only where you change it.
+3. **Handle the new lines** as the next section says. When a line refers back ("as we
+   said before"), look in the log and the models, and read earlier lines again when they
+   do not settle it.
+4. **Write the brief once per round**, not per statement: proposals, hints, **Confirmed**,
+   **Open** and the place you read up to. In a round with nothing for the models, leave
+   the brief alone; note the place with the next real write, or every few minutes.
+5. **Back to 1**, until the session ends.
+
+Keep the loop going on your own: do not stop to report or to wait for an answer, since a
+stopped assistant hears nothing until someone writes to it. When the facilitator writes to
+you, answer in a line or two and wait for the next lines again. The session ends when the
+facilitator says so or the source does (Beluga: `phase` is `idle`): read the last lines,
+then go to phase 3.
+
+In a long session your memory of the early conversation may be shortened. The brief's log
+and the models are the record: they, not your memory, say what was settled.
+
 ## At the start
 
 1. Read the brief, the method file of each notation in scope and the current state of
@@ -53,13 +81,21 @@ not handled again.
      validate it, and note it under **Confirmed** once the group has agreed to it. What
      was only said, not agreed, is a proposal even at this level, and so is a change to
      any other model.
+   - `auto`: make the change in a model the brief lists under "May change directly" as
+     soon as it was said, validate it and read it back. Note it under **Confirmed** only
+     when the group agrees. When the group corrects or drops something you placed, change
+     it at once. One person disagreeing is a disagreement, not a correction: mark it the
+     way the method file says. An idea, a "what if" or a joke is no statement about the
+     domain: leave it, or write a hint when it matters. A change to any other model is a
+     proposal.
 4. **Check the model after a change.** A validation error you caused is yours to fix
    before anything else, and never by adding what nobody said. A BPMN model is not saved
    while a step has no way in or no way out: [methods/bpmn.md](../methods/bpmn.md) says
    how to leave an end open.
 
 Work in small steps. One statement, one proposal or one change. A large rewrite in the
-middle of a session moves things people are looking at.
+middle of a session moves things people are looking at. At `auto` never move, rename or
+remove what a person placed unless the group said so.
 
 ## Hints for the facilitator
 

@@ -103,7 +103,8 @@ The example content repo's skills are the BPMN process skills and one skill for 
 in any notation:
 
 - **collaborative-modeling** — prepare, assist and wrap up a modeling workshop of any
-  notation: a brief agreed with the facilitator, proposals instead of unasked modeling
+  notation: a brief agreed with the facilitator, proposals, or modeling while the group
+  talks when the brief allows it (with Beluga, a local transcriber it can drive)
 - **process-navigator** — any question about existing processes (flow, roles, calls, impact)
 - **capture-process** — interview a process owner to elicit a process from tacit knowledge
 - **import-process** — turn legacy docs (Visio/Word/Confluence/images) into a draft `.bpmn`

@@ -50,7 +50,7 @@ Never leave scratch models (`test1.bpmn`, `des.dmn`) in the folder.
 `collaborative-modeling` works with every notation; the others are the BPMN
 process skills.
 
-- **collaborative-modeling** — prepare, assist and wrap up a modeling workshop: a brief agreed with the facilitator, proposals instead of unasked modeling
+- **collaborative-modeling** — prepare, assist and wrap up a modeling workshop: a brief agreed with the facilitator, proposals, or modeling while the group talks when the brief allows it
 - **process-navigator** — any question about existing processes (flow, roles, impact)
 - **capture-process** — interview a process owner to elicit a process from tacit knowledge
 - **import-process** — turn legacy docs (Visio/Word/Confluence/images) into a draft `.bpmn`

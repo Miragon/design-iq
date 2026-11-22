@@ -4,6 +4,9 @@ At the end of the session, or afterwards from the full transcript. If you were n
 session and only get the transcript now, go through it the way phase 2 describes at the
 level `propose`, then continue here.
 
+If you started Beluga, stop it when the facilitator ends the session
+([resources/beluga.md](../resources/beluga.md)) and handle the last lines first.
+
 ## 1. Settle the proposals
 
 Show the facilitator every proposal that is neither applied nor struck through, and get
@@ -24,6 +27,9 @@ own words and without notation terms:
 5. what is needed from whom before the next session.
 
 Corrections to the playback are changes like any other: apply them by the level in force.
+At `auto` the playback is where the group confirms what you placed: go through each model
+in the group's words, put what it confirms under **Confirmed**, and change what it
+corrects.
 
 ## 3. Record the open points
 
