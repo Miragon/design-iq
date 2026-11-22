@@ -1403,9 +1403,12 @@ test("todos on every Miragon renderer in the SPA editor: badges, selection, reve
     const box = modeler.elements.bounds?.(a);
     assert.ok(box, id);
     const pin = badges.find((badge) => badge.textContent === "2")?.parentElement;
+    // CSS serializes a length rounded, as a browser does: 163.79999999999998 reads back as 163.8px
+    const at = (length: string | undefined): number => Math.round(parseFloat(length ?? "") * 1000) / 1000;
+    const corner = (value: number): number => Math.round(value * 1000) / 1000;
     assert.deepEqual(
-      [pin?.style.left, pin?.style.top],
-      [`${box.x + box.width}px`, `${box.y}px`],
+      [at(pin?.style.left), at(pin?.style.top), pin?.style.top.endsWith("px")],
+      [corner(box.x + box.width), corner(box.y), true],
       `${id}: on the element's top-right corner, in diagram coordinates`,
     );
     assert.match(pin?.style.transform ?? "", /^translate\(-50%, -100%\) scale\(/, `${id}: standing on it`);

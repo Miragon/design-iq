@@ -19,9 +19,8 @@
  * didi and tiny-svg are the exception: the renderers share them with the
  * diagram-js they draw with, so one copy has to hold there, in what the
  * renderers reach. A library outside that may bring its own copy without
- * touching the renderers' injector: dmn-js 18's dmn-js-shared builds an
- * injector of its own on didi 12, while its diagram-js and table-js stay on
- * didi 11.
+ * touching the renderers' injector: dmn-js 18's table-js stays on didi 11,
+ * while diagram-js (15.29) and dmn-js-shared are on didi 12.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
