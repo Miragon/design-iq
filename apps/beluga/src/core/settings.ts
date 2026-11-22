@@ -1,7 +1,8 @@
 /**
  * What the facilitator may tune under Advanced. The defaults are the measured
- * ones; each choice lists the values the window offers, and a start request is
- * checked against the limits, which are a little wider.
+ * ones; each choice lists the values the window offers. What an agent sets is
+ * checked against the limits, which are a little wider, and what comes back
+ * from the stored preferences is read the same way.
  */
 
 export interface Tuning {
@@ -42,7 +43,7 @@ export const TUNING_CHOICES = {
   speechThreshold: [0.3, 0.4, 0.5, 0.6, 0.7],
 } as const satisfies Record<Exclude<keyof Tuning, "threads">, readonly number[]>;
 
-/** what a start request may carry */
+/** what an agent may set, and what the stored preferences may hold */
 const LIMITS: Record<keyof Tuning, readonly [min: number, max: number]> = {
   glossaryWeight: [0.5, 5],
   pause: [0.2, 2],
@@ -64,7 +65,7 @@ const valid = (key: keyof Tuning, value: unknown): value is number => {
 
 const KEYS = Object.keys(DEFAULT_TUNING) as (keyof Tuning)[];
 
-/** the tuning a start request carries, checked: a value outside its limits is refused, a missing one is the default */
+/** the tuning an agent's set_options carries, checked: a value outside its limits is refused, a missing one is the default */
 export function checkTuning(value: unknown): Tuning {
   if (value === undefined) return { ...DEFAULT_TUNING };
   if (typeof value !== "object" || value === null) throw new Error("The advanced settings are not readable.");

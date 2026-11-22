@@ -46,7 +46,7 @@ export function AgentAccess({
           Let an agent on this computer control Beluga (MCP)
           <span className="text-muted-foreground block text-xs">
             It can set the glossary, start and stop listening and read the transcript. Only programs on this computer
-            that have the key get in.
+            that have the key get in, so turn it on where nobody else logs in.
           </span>
         </span>
       </label>

@@ -147,7 +147,7 @@ export class SherpaEngine implements Engine {
   readonly #config: EngineConfig;
   readonly #tuning: Tuning;
   #recognizer: OfflineRecognizer;
-  /** whether the recognizer decodes with a beam: when there is a glossary */
+  /** whether the recognizer decodes with a beam: once the session has had a glossary */
   #beam: boolean;
   /** Parakeet's pieces, to cut the glossary into; null for a model that takes no glossary */
   readonly #encoder: PieceEncoder | null;
@@ -211,16 +211,16 @@ export class SherpaEngine implements Engine {
   }
 
   /**
-   * The first glossary of a session that began without one, or none after one,
-   * changes how Parakeet decodes: the model loads again, a second or two in which
-   * the audio waits.
+   * The first glossary of a session that began without one changes how Parakeet
+   * decodes: the model loads again, a second or two in which the audio waits, and
+   * the old one holds its memory until the garbage collector frees it. So that
+   * happens once at most: a session keeps the beam when its glossary is emptied.
    */
   setGlossary(entries: readonly string[]): void {
     this.#cut(entries);
-    const beam = this.#hotwords !== "";
-    if (beam === this.#beam) return;
-    this.#beam = beam;
-    this.#recognizer = new sherpa.OfflineRecognizer(recognizerConfig(this.#config, this.#tuning, beam));
+    if (this.#beam || this.#hotwords === "") return;
+    this.#beam = true;
+    this.#recognizer = new sherpa.OfflineRecognizer(recognizerConfig(this.#config, this.#tuning, true));
   }
 
   /** the glossary in the model's pieces; Whisper takes none */

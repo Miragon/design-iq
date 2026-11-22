@@ -1,6 +1,7 @@
 /**
  * Advanced: what the facilitator may tune. Each value is picked from a list, so
- * nothing can be out of range; the default is marked in each.
+ * nothing can be out of range; the default is marked in each. A value an agent
+ * set between the choices is listed as well.
  */
 import { Button, focusRing } from "@designiq/ui-kit/components/button";
 import { cn } from "@designiq/ui-kit/lib/utils";
@@ -51,6 +52,8 @@ function Choice({
   disabled: boolean;
   onChange(tuning: Tuning): void;
 }) {
+  // an agent may set a value between the choices: it is listed too, so the window shows what holds
+  const shown = values.includes(tuning[name]) ? values : [...values, tuning[name]].sort((a, b) => a - b);
   return (
     <Field label={label} hint={hint}>
       <select
@@ -59,7 +62,7 @@ function Choice({
         disabled={disabled}
         onChange={(e) => onChange({ ...tuning, [name]: Number(e.target.value) })}
       >
-        {values.map((value) => {
+        {shown.map((value) => {
           const note = value === DEFAULT_TUNING[name] ? "default" : notes?.[value];
           return (
             <option key={value} value={value}>

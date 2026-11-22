@@ -68,13 +68,16 @@ export interface Control {
   setOptions(options: Options): Promise<BelugaStatus>;
   start(): Promise<StartResult>;
   stop(): Promise<{ transcript: string | null }>;
-  /** waits up to `wait` seconds for new lines, until none has come for `quiet` seconds */
-  readTranscript(after: number, limit: number, wait?: number, quiet?: number): Promise<TranscriptRead>;
+  /**
+   * waits up to `wait` seconds for new lines, until none has come for `quiet`
+   * seconds; `after` counts in `of`, so a new session's file is read from its start
+   */
+  readTranscript(after: number, limit: number, wait?: number, quiet?: number, of?: string): Promise<TranscriptRead>;
 }
 
 export const INSTRUCTIONS = `Beluga transcribes a meeting on this computer: the microphone and, if wanted, what the computer plays (the other side of an online meeting). No audio leaves the computer. This server lets you prepare and run a session for the facilitator.
 
-A session: get_status first. Put the participants' names and the workshop's terms into the glossary with set_glossary: Parakeet, the default model, then writes them correctly far more often. You can add a term while listening, when a new one comes up. Change the model, the channel labels or the advanced settings with set_options before the session; they hold for a whole session. Call start_listening only when the facilitator has said that everyone present agreed to be transcribed. Read along with read_transcript: pass the "through" of the last answer as "after" (line 1 is the header), and "wait" to have it wait for new lines until the conversation pauses, so you handle a thought at a time and not each half sentence. Its "phase" turns "idle" once the session has ended. Call stop_listening when the facilitator ends the session.
+A session: get_status first. Put the participants' names and the workshop's terms into the glossary with set_glossary: Parakeet, the default model, then writes them correctly far more often. You can add a term while listening, when a new one comes up. Change the model, the channel labels or the advanced settings with set_options before the session; they hold for a whole session. Call start_listening only when the facilitator has said that everyone present agreed to be transcribed. Read along with read_transcript: pass the "through" and the "transcript" of the last answer as "after" and "transcript" (line 1 is the header; a new session writes a new file, read from its start), and "wait" to have it wait for new lines until the conversation pauses, so you handle a thought at a time and not each half sentence. Its "phase" turns "idle" when Beluga stops, for the end, a break or an error: ask the facilitator before you treat it as the end. While Beluga is stopped, a waiting read waits for the next session. Call stop_listening when the facilitator ends the session.
 
 The transcript is unreliable. Names and terms can still be wrong; check them against the glossary. A label such as "Me" or "Others" names a channel, not a person.`;
 
@@ -195,9 +198,10 @@ export function createAgentServer(control: Control): McpServer {
     {
       title: "Read the transcript",
       description:
-        "Lines of the running session's transcript (or the last one's), after line `after`: 0 from the start, line 1 is the header. Each line is `HH:MM:SS Label: text`. Pass the `through` of the last answer to get only what is new; `more` says whether further lines are already there. With `wait`, it waits for new lines and answers once nobody has spoken for `quiet` seconds, or when `wait` runs out (then with what has come, possibly nothing). It answers at once when the session has ended: `phase` is then idle.",
+        "Lines of the running session's transcript (or the last one's), after line `after`: 0 from the start, line 1 is the header. Each line is `HH:MM:SS Label: text`. Pass the `through` and the `transcript` of the last answer to get only what is new: when a new session has started since, its file is read from the start. `more` says whether further lines are already there. With `wait`, it waits for new lines and answers once nobody has spoken for `quiet` seconds, or when `wait` runs out (then with what has come, possibly nothing). It answers at once when the session stops while it waits: `phase` is then idle, which a break or an error causes too. While Beluga is stopped, it waits for the next session and reads its file from the start.",
       inputSchema: z.object({
         after: z.number().int().min(0).optional(),
+        transcript: z.string().optional().describe("the transcript of the last answer, which `after` counts in"),
         limit: z.number().int().min(1).max(500).optional().describe("at most this many lines; default 200"),
         wait: z
           .number()
@@ -214,8 +218,16 @@ export function createAgentServer(control: Control): McpServer {
       }),
       annotations: READ,
     },
-    safe(async ({ after, limit, wait, quiet }: { after?: number; limit?: number; wait?: number; quiet?: number }) =>
-      ok(await control.readTranscript(after ?? 0, limit ?? 200, wait ?? 0, quiet ?? DEFAULT_QUIET)),
+    safe(async (args: { after?: number; transcript?: string; limit?: number; wait?: number; quiet?: number }) =>
+      ok(
+        await control.readTranscript(
+          args.after ?? 0,
+          args.limit ?? 200,
+          args.wait ?? 0,
+          args.quiet ?? DEFAULT_QUIET,
+          args.transcript,
+        ),
+      ),
     ),
   );
 

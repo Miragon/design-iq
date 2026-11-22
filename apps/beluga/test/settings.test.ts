@@ -16,13 +16,13 @@ test("every default is one of the values the window offers", () => {
   }
 });
 
-test("every value the window offers passes the check of a start request", () => {
+test("every value the window offers passes the check of an agent's settings", () => {
   for (const [key, values] of Object.entries(TUNING_CHOICES)) {
     for (const value of values) assert.equal(checkTuning({ [key]: value })[key as keyof typeof TUNING_CHOICES], value);
   }
 });
 
-test("a start request without tuning, or with part of it, gets the defaults for the rest", () => {
+test("settings without tuning, or with part of it, get the defaults for the rest", () => {
   assert.deepEqual(checkTuning(undefined), DEFAULT_TUNING);
   assert.deepEqual(checkTuning({ pause: 0.8 }), { ...DEFAULT_TUNING, pause: 0.8 });
 });

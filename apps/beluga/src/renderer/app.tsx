@@ -9,7 +9,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { MAX_ENTRIES, parseGlossary } from "../core/glossary.ts";
 import type { AgentInfo, DownloadProgress, InitialState, RemoteResult, WrittenLine } from "../core/ipc.ts";
 import type { Language, ModelId } from "../core/models.ts";
-import type { Preferences } from "../core/preferences.ts";
+import { MAX_GLOSSARY_TEXT, MAX_LABEL, type Preferences } from "../core/preferences.ts";
 import type { Channel } from "../core/transcript.ts";
 import { Advanced } from "./advanced.tsx";
 import { AgentAccess } from "./agent-access.tsx";
@@ -193,7 +193,8 @@ export function App() {
         setNotice("That file holds no glossary: no table under a Glossary heading, and no list.");
         return;
       }
-      update({ glossary: parseGlossary(`${prefs?.glossary ?? ""}\n${imported.join("\n")}`).join("\n") });
+      // the glossary as it is now: an agent may have set it while the file dialog was open
+      update({ glossary: parseGlossary(`${latest.current?.glossary ?? ""}\n${imported.join("\n")}`).join("\n") });
     } catch (e) {
       setError(`The glossary could not be read. ${reason(e)}`);
     }
@@ -266,6 +267,8 @@ export function App() {
   }
 
   async function stop(): Promise<RemoteResult> {
+    // a start still opening the devices sees this and does not go on listening
+    if (!capture.current) ended.current ??= "The session was stopped while it started.";
     setPhase("stopping");
     await capture.current?.stop();
     capture.current = null;
@@ -305,6 +308,7 @@ export function App() {
           <Field label="Microphone is">
             <Input
               value={labels.mic}
+              maxLength={MAX_LABEL}
               disabled={running || busy}
               onChange={(e) => update({ labels: { ...labels, mic: e.target.value } })}
             />
@@ -312,6 +316,7 @@ export function App() {
           <Field label="System audio is">
             <Input
               value={labels.system}
+              maxLength={MAX_LABEL}
               disabled={running || busy || !withSystem}
               onChange={(e) => update({ labels: { ...labels, system: e.target.value } })}
             />
@@ -377,6 +382,7 @@ export function App() {
             id="glossary"
             rows={4}
             value={prefs.glossary}
+            maxLength={MAX_GLOSSARY_TEXT}
             disabled={running || busy}
             placeholder={"Names and terms, one per line\nAnna Wiśniewski\nRabattstaffel"}
             onChange={(e) => update({ glossary: e.target.value })}

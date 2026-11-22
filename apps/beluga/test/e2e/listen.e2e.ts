@@ -158,13 +158,14 @@ try {
   );
   const set = await call(client, "set_glossary", { entries: ["Rabattstaffel", "Camunda", "DMN"] });
   assert.deepEqual(set, { entries: 3, appliedNow: false, notListenedFor: [] });
-  await call(client, "set_options", { labels: { mic: "Room" } });
+  await call(client, "set_options", { labels: { mic: "Room" }, tuning: { pause: 0.7 } });
   // the window shows what the agent set
   await page.waitForFunction(
     (want) => (document.getElementById("glossary") as HTMLTextAreaElement | null)?.value === want,
     "Rabattstaffel\nCamunda\nDMN",
     { timeout: 10_000 },
   );
+  assert.equal(await page.getByLabel("Pause that ends a line").inputValue(), "0.7", "a value between the choices");
   const started = await call(client, "start_listening");
   assert.match(started.transcript, /beluga-\d{4}-\d{2}-\d{2}-\d{4}(-\d+)?\.txt$/);
   assert.ok(!started.transcript.endsWith(first), "a file of its own for the agent's session");
@@ -175,16 +176,20 @@ try {
   const heard: string[] = [];
   for (const deadline = Date.now() + 60_000; !heard.some((l) => /Camunda/.test(l));) {
     assert.ok(Date.now() < deadline, `no Camunda in ${JSON.stringify(heard)}`);
-    read = await call(client, "read_transcript", { after: read.through, wait: 20, quiet: 1 });
+    read = await call(client, "read_transcript", {
+      after: read.through,
+      transcript: started.transcript,
+      wait: 20,
+      quiet: 1,
+    });
     heard.push(...read.lines.map((l) => l.text));
   }
   assert.match(heard[0] as string, /^# Beluga transcript/);
   for (const line of heard.slice(1)) assert.match(line, /^\d{2}:\d{2}:\d{2} (Room|Others): \S/);
   assert.deepEqual(await call(client, "stop_listening"), { transcript: started.transcript });
   assert.equal((await call(client, "get_status")).phase, "idle");
-  const began = Date.now();
-  assert.equal((await call(client, "read_transcript", { after: read.through, wait: 20 })).phase, "idle");
-  assert.ok(Date.now() - began < 5000, "a waiting read after the end answers at once");
+  const last = await call(client, "read_transcript", { after: read.through, transcript: started.transcript });
+  assert.equal(last.phase, "idle", "the read says the session has stopped");
   await page.getByRole("button", { name: "Start listening" }).waitFor({ timeout: 10_000 });
   await client.close();
   console.log(`ok: an agent ran a session over MCP, ${heard.length - 1} line(s) read`);

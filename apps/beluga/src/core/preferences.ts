@@ -25,9 +25,9 @@ export interface Preferences {
 }
 
 /** a label longer than this is no name for a channel */
-const MAX_LABEL = 40;
+export const MAX_LABEL = 40;
 /** the glossary text: room for 1000 entries of 60 characters */
-const MAX_GLOSSARY_TEXT = 100_000;
+export const MAX_GLOSSARY_TEXT = 100_000;
 const LANGUAGES: readonly Language[] = ["de", "en", "auto"];
 
 export const defaultPreferences = (folder: string): Preferences => ({

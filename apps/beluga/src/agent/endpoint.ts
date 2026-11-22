@@ -2,7 +2,12 @@
  * Where an agent reaches Beluga: MCP over HTTP on 127.0.0.1, for programs on
  * this computer only, and only with Beluga's key. A web page cannot get in: a
  * request that names another host (DNS rebinding) or comes from a page (it
- * carries an Origin) is refused before the key is even looked at.
+ * carries an Origin) is refused before the key is even looked at, and no
+ * request, however malformed, throws in the main process.
+ *
+ * What the key does not cover: the agent sends it to whatever listens on the
+ * port. Another account on the same computer that holds the port while Beluga
+ * is closed receives it (README, An agent at the controls).
  */
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -41,15 +46,26 @@ export function openAgentEndpoint(options: {
   control: Control;
 }): Promise<AgentEndpoint> {
   const localHost = localhostHostValidation();
-  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+  const answer = (req: IncomingMessage, res: ServerResponse): void => {
     if (!localHost(req, res)) return;
     if (req.headers.origin !== undefined) return refuse(res, 403, "Web pages may not control Beluga.");
-    if (new URL(req.url ?? "/", "http://127.0.0.1").pathname !== "/mcp") return refuse(res, 404, "Not found.");
+    // the path as sent, without a URL parser: a malformed one is just not /mcp
+    if ((req.url ?? "").split("?")[0] !== "/mcp") return refuse(res, 404, "Not found.");
     if (!hasKey(req.headers.authorization, options.key())) {
       return refuse(res, 401, "Beluga's key is missing or wrong.", { "WWW-Authenticate": "Bearer" });
     }
     if (req.method !== "POST") return refuse(res, 405, "Method not allowed.", { Allow: "POST" });
     void mountStatelessMcp(req, res, createAgentServer(options.control), { maxBytes: MAX_BODY });
+  };
+  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    try {
+      answer(req, res);
+    } catch (error) {
+      // in the main process an exception here would open an error box for every such request
+      console.error(`agent endpoint: ${(error as Error).message}`);
+      if (res.headersSent) res.destroy();
+      else refuse(res, 400, "Bad request.");
+    }
   });
   return new Promise((resolve, reject) => {
     server.once("error", reject);

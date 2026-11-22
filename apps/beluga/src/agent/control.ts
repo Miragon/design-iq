@@ -8,13 +8,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { parseGlossary } from "../core/glossary.ts";
 import type { RemoteResult } from "../core/ipc.ts";
 import type { ModelId } from "../core/models.ts";
-import type { Preferences } from "../core/preferences.ts";
+import { MAX_LABEL, type Preferences } from "../core/preferences.ts";
 import { checkTuning } from "../core/settings.ts";
 import { transcriptPage } from "../core/transcript.ts";
 import type { BelugaStatus, Control, GlossaryResult, Options, StartResult, TranscriptRead } from "./server.ts";
 
-/** a label longer than this is no name for a channel (as in the window) */
-const MAX_LABEL = 40;
 /** how often a waiting read looks whether the transcript has grown */
 const WAIT_POLL_MS = 250;
 
@@ -72,7 +70,8 @@ export function createControl(deps: ControlDeps): Control {
       const live = await deps.glossaryToSession(entries);
       return {
         entries: entries.length,
-        appliedNow: live !== null,
+        // a session that is starting takes it once it runs
+        appliedNow: live !== null || deps.phase() === "starting",
         notListenedFor: live ?? deps.notListenedFor(p.model, entries),
       };
     },
@@ -138,25 +137,36 @@ export function createControl(deps: ControlDeps): Control {
       return { transcript: deps.transcriptPath() };
     },
 
-    async readTranscript(after, limit, wait = 0, quiet = 0): Promise<TranscriptRead> {
-      const path = deps.transcriptPath();
+    async readTranscript(given, limit, wait = 0, quiet = 0, of): Promise<TranscriptRead> {
+      let path = deps.transcriptPath();
       if (!path) throw new Error("There is no transcript yet: no session has run since Beluga started.");
+      // `after` counts in the file the agent read last; a new session's file starts again at line 1
+      let after = of !== undefined && of !== path ? 0 : given;
       const deadline = Date.now() + wait * 1000;
+      // a read that sees a session stop answers at once; one that finds Beluga stopped waits for the next session
+      let running = deps.phase() !== "idle";
       // Beluga appends whole lines, so the file's modification time is when the last one came
       let seen: { mtimeMs: number; size: number } | null = null;
       let page = transcriptPage("", after, limit);
       for (;;) {
+        const newest = deps.transcriptPath();
+        if (newest && newest !== path) {
+          // a new session began while the read waited: its file, from the start
+          path = newest;
+          after = 0;
+          seen = null;
+        }
         const file = await stat(path);
         if (!seen || file.mtimeMs !== seen.mtimeMs || file.size !== seen.size) {
           page = transcriptPage(await readFile(path, "utf8"), after, limit);
           seen = file;
         }
         const phase = deps.phase();
+        if (phase !== "idle") running = true;
         const at = Date.now();
         const settled = page.lines.length > 0 && (page.more || at - file.mtimeMs >= quiet * 1000);
-        // a session that has ended, or a new one in another file, writes no more here
-        const over = phase === "idle" || deps.transcriptPath() !== path;
-        if (settled || over || at >= deadline) return { transcript: path, phase, ...page };
+        const stopped = phase === "idle" && running;
+        if (settled || stopped || at >= deadline) return { transcript: path, phase, ...page };
         await sleep(Math.min(WAIT_POLL_MS, deadline - at));
       }
     },

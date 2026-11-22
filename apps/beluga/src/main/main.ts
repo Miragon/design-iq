@@ -175,7 +175,8 @@ function glossaryToSession(entries: string[]): string[] | null {
   if (!current) return null;
   current.engine.postMessage({ type: "glossary", entries } satisfies EngineRequest);
   current.left = notListenedFor(current.model, entries);
-  send("beluga:left", current.left);
+  // the window warns about Parakeet's entries only: Whisper takes no glossary, and the window says so
+  send("beluga:left", current.model === "whisper-turbo" ? [] : current.left);
   return current.left;
 }
 
@@ -286,6 +287,8 @@ function write(into: Session, utterance: Utterance): void {
 
 async function start(): Promise<Started> {
   if (current || starting || stopping) throw new Error("A session is already running.");
+  // the download's end reloads the window's state, which would end a session started meanwhile
+  if (installing) throw new Error("A model is being downloaded. Start once the download is done.");
   starting = true;
   try {
     return await begin(store.get());
@@ -379,7 +382,10 @@ async function begin(options: Preferences): Promise<Started> {
   };
   current = listening;
   lastPath = transcript.path;
-  return { path: transcript.path, left };
+  // a glossary set while the session started (by an agent, say) counts from now on
+  const now = store.get().glossary;
+  if (now !== options.glossary) glossaryToSession(parseGlossary(now));
+  return { path: transcript.path, left: listening.left };
 }
 
 /** the glossary of a file the facilitator picks: a workshop brief's table, or a list one entry per line */
