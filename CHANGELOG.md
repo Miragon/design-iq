@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.16.0](https://github.com/Miragon/design-iq/compare/v5.15.0...v5.16.0) (2026-11-22)
+
+
+### Features
+
+* **beluga,skills:** a local workshop transcriber an agent can drive, and the collaborative-modeling skill ([#419](https://github.com/Miragon/design-iq/issues/419)) ([0914853](https://github.com/Miragon/design-iq/commit/0914853741323fe03c479cae62b7dbe33e03aca3))
+
 ## [5.15.0](https://github.com/Miragon/design-iq/compare/v5.14.0...v5.15.0) (2026-11-22)
 
 
