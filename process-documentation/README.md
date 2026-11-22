@@ -96,7 +96,7 @@ models link to. So:
   every other model file parses.
 - **Skills**: `.claude/skills/` carries the AI toolset that operates on this repo —
   today the BPMN process skills (navigate, capture, import, scaffold, review,
-  feedback, export).
+  feedback, export) and `collaborative-modeling` for workshops in any notation.
 
 This repo is mirrored to [`Miragon/process-documentation-starter`](https://github.com/Miragon/process-documentation-starter)
 as the "Use this template" starter.

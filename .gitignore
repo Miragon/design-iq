@@ -22,6 +22,10 @@ apps/web/dist/
 apps/web/.vitest/
 apps/vscode/out/
 apps/vscode/.vscode-test/
+apps/beluga/out/
+apps/beluga/dist/
+# packaged app (electron-builder)
+apps/beluga/release/
 process-documentation/.vitepress/cache/
 process-documentation/.vitepress/dist/
 docs/.vitepress/cache/

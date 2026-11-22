@@ -47,9 +47,10 @@ Never leave scratch models (`test1.bpmn`, `des.dmn`) in the folder.
 
 ## Skills — prefer them over ad-hoc approaches
 
-These are the BPMN process skills — this repo carries no skills for the other
-notations.
+`collaborative-modeling` works with every notation; the others are the BPMN
+process skills.
 
+- **collaborative-modeling** — prepare, assist and wrap up a modeling workshop: a brief agreed with the facilitator, proposals, or modeling while the group talks when the brief allows it
 - **process-navigator** — any question about existing processes (flow, roles, impact)
 - **capture-process** — interview a process owner to elicit a process from tacit knowledge
 - **import-process** — turn legacy docs (Visio/Word/Confluence/images) into a draft `.bpmn`
@@ -69,4 +70,6 @@ notations.
 4. A `callActivity`'s `calledElement` should match another process's id (its
    `.bpmn` file stem) — the validator warns on a dangling call.
 5. When the user corrects a process, don't silently edit — file it via
-   `process-feedback` and triage.
+   `process-feedback` and triage. In a workshop run by `collaborative-modeling`, a
+   correction is a proposal in the workshop's brief instead, and the facilitator's
+   decision is its triage.

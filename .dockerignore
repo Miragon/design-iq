@@ -16,3 +16,6 @@ process-documentation/.vitepress/dist
 docs/.vitepress/cache
 docs/.vitepress/dist
 apps/vscode/out
+apps/beluga/out
+apps/beluga/dist
+apps/beluga/release

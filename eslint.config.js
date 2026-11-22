@@ -20,6 +20,8 @@ export default tseslint.config(
       "**/.control/**", // control-plane runtime state
       "apps/vscode/out/**",
       "apps/vscode/.vscode-test/**",
+      "apps/beluga/out/**",
+      "apps/beluga/release/**",
       "process-documentation/**",
       "packages/validator/test/fixtures/**",
       "apps/*/scripts/**", // manual smoke/ops scripts (plain .mjs, outside the tsconfig projects)
@@ -64,12 +66,24 @@ export default tseslint.config(
   },
   // Node servers/tools/packages: node globals; server logging is legitimate
   {
-    files: ["apps/control-plane/**/*.ts", "apps/live-host/**/*.ts", "apps/vscode/**/*.ts", "packages/**/*.ts"],
+    files: [
+      "apps/control-plane/**/*.ts",
+      "apps/live-host/**/*.ts",
+      "apps/vscode/**/*.ts",
+      "apps/beluga/**/*.ts",
+      "packages/**/*.ts",
+    ],
+    ignores: ["apps/beluga/src/renderer/**"],
     languageOptions: { globals: { ...globals.node } },
   },
-  // React clients (web + the control-plane operator SPA + the shared UI kit): browser globals + hooks
+  // React clients (web + the control-plane operator SPA + Beluga's window + the shared UI kit): browser globals + hooks
   {
-    files: ["apps/web/**/*.{ts,tsx}", "apps/control-plane/ui/**/*.{ts,tsx}", "packages/ui-kit/**/*.{ts,tsx}"],
+    files: [
+      "apps/web/**/*.{ts,tsx}",
+      "apps/control-plane/ui/**/*.{ts,tsx}",
+      "apps/beluga/src/renderer/**/*.{ts,tsx}",
+      "packages/ui-kit/**/*.{ts,tsx}",
+    ],
     languageOptions: { globals: { ...globals.browser } },
     plugins: { "react-hooks": reactHooks },
     rules: {
@@ -97,6 +111,7 @@ export default tseslint.config(
     files: ["apps/*/src/**/*.ts", "packages/*/src/**/*.ts", "packages/mcp/*.ts"],
     ignores: [
       "apps/*/src/server.ts", // composition roots
+      "apps/beluga/src/main/main.ts", // the Electron main process is Beluga's composition root
       "apps/live-host/src/tools/**", // CLIs are their own roots
       "apps/live-host/src/guest-test.ts", // standalone spike client
       "packages/mcp/server.ts",

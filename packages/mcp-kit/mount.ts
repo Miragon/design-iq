@@ -14,6 +14,14 @@ import { readBody, send } from "@designiq/http-kit";
 import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
 import type { McpServer } from "@modelcontextprotocol/server";
 
+/**
+ * The SDK's guard against DNS rebinding for a server on 127.0.0.1: a request
+ * whose Host header names anything but localhost is answered 403. Passed on
+ * from here, like the transport, so servers import the SDK's node adapter in
+ * one place only (Beluga's agent endpoint uses it).
+ */
+export { localhostHostValidation } from "@modelcontextprotocol/node";
+
 export async function mountStatelessMcp(
   req: IncomingMessage,
   res: ServerResponse,
