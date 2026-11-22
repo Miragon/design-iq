@@ -16,10 +16,11 @@ other text, which the consent in the brief covers (phase 1, step 8).
    Beluga's window. Parakeet (the default) takes a glossary, Whisper does not.
 2. `set_glossary` with the brief's glossary (its **Term** column), `mode` `replace`.
    Participants' names the facilitator tells you go in with `mode` `add`, and nowhere
-   else: not into the brief, not into a model. The answer's `notListenedFor` names
-   entries Beluga cannot listen for (a digit, a slash, a rare letter). Tell the
-   facilitator in one line; they stay in the brief, and you correct them in what you
-   write.
+   else: not into the brief, not into a model. They reach your model provider on the way;
+   to keep them off it, the facilitator types them in Beluga's window instead. Once the
+   model is downloaded, the answer's `notListenedFor` names entries Beluga cannot listen
+   for (a digit, a slash, a rare letter). Tell the facilitator in one line; they stay in
+   the brief, and you correct them in what you write.
 3. `set_options` for what the brief says about the transcript: `systemAudio` for an
    online meeting, `labels` for the two channels (say `mic` "Room" when the computer
    sits in the room, `system` "Remote" for the other side of a call). Record the labels
@@ -29,25 +30,33 @@ other text, which the consent in the brief covers (phase 1, step 8).
 
 Call `start_listening` only when the brief records that everyone agreed to the
 transcription and the facilitator says to start. Pass its `notice` (a missing permission,
-say) to the facilitator. The first start on a Mac asks the person at the computer for
-permission, and the call waits for that.
+say) and its `notListenedFor` to the facilitator. The first start on a Mac asks the person
+at the computer for permission, and the call waits for that. While a model downloads,
+Beluga does not start.
 
 ## During the session
 
 Read with `read_transcript`, the way [assist.md](../phases/assist.md) describes in A live
 transcript you can wait on:
 
-- `after`: the `through` of the last answer; 0 on the first read (line 1 is Beluga's
-  header, not talk).
+- `after` and `transcript`: the `through` and the `transcript` of the last answer; `after`
+  0 on the first read (line 1 is Beluga's header, not talk). Each session writes a new
+  file, and with the last `transcript` given Beluga reads a new one from its start. When
+  the answer's `transcript` is another file than before, a new session began: its line
+  numbers start again at 1.
 - `wait`: 30. `quiet`: 3. It answers once nobody has spoken for 3 seconds, or after 30
   seconds with what has come, possibly nothing. Raise `quiet` to 5 or 8 when the rounds
   come faster than the group thinks, lower it when the models lag too far behind.
 - `more` true: read again at once with the new `after`, before the round.
-- `phase` `idle`: the session has ended, also when the facilitator pressed Stop in the
-  window. Read until `more` is false, then wrap up.
+- `phase` `idle`: Beluga has stopped, because the facilitator pressed Stop (for a break,
+  too) or because of an error. Read until `more` is false and tell the facilitator in one
+  line that the transcript stopped. Wrap up only once they say the session is over.
+  Otherwise keep reading as before: while Beluga is stopped, a waiting read waits for the
+  next session and then reads its file from the start.
 
-Put the line number of the last line you handled into **Transcript read up to**, with its
-time and first words. After a restart you go on from there.
+Put the file name and the line number of the last line you handled into **Transcript
+read up to**, with its time and first words. After a restart of yours, go on from there
+with that file as `transcript`.
 
 A term that comes up and matters goes into the brief's glossary and, with `set_glossary`
 `mode` `add`, into Beluga: it listens for it from its next line on. A term Beluga keeps

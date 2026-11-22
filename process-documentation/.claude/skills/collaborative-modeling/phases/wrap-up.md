@@ -29,7 +29,8 @@ own words and without notation terms:
 Corrections to the playback are changes like any other: apply them by the level in force.
 At `auto` the playback is where the group confirms what you placed: go through each model
 in the group's words, put what it confirms under **Confirmed**, and change what it
-corrects.
+corrects. What the playback leaves unconfirmed goes under **Open** as "in the model, not
+yet confirmed by the group", with its time.
 
 ## 3. Record the open points
 

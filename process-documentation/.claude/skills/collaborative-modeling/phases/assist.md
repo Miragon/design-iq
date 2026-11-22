@@ -46,8 +46,9 @@ When the source can wait for new lines (Beluga's `read_transcript` with `wait`,
 Keep the loop going on your own: do not stop to report or to wait for an answer, since a
 stopped assistant hears nothing until someone writes to it. When the facilitator writes to
 you, answer in a line or two and wait for the next lines again. The session ends when the
-facilitator says so or the source does (Beluga: `phase` is `idle`): read the last lines,
-then go to phase 3.
+facilitator says so. When the source stops on its own (Beluga: `phase` is `idle`), that
+may be a break or an error: read the last lines, tell the facilitator in one line that the
+transcript stopped, and go to phase 3 only once they say the session is over.
 
 In a long session your memory of the early conversation may be shortened. The brief's log
 and the models are the record: they, not your memory, say what was settled.

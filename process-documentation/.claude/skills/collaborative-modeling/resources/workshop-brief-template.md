@@ -40,7 +40,7 @@ Board: [<title>](../<path in the models folder>.board) <or: none>
 - May change directly (levels `model` and `auto`): <models from the table above>
 - Transcript source: <who or what delivers it, live or after the session>
 - Transcript labels: <one person each / a channel or microphone with several people behind it; any label mapped to a role>
-- Everyone in the room has agreed to the transcription and to an AI assistant reading it: <yes, confirmed by the facilitator on YYYY-MM-DD>
+- Everyone taking part, in the room and on a call, has agreed to the transcription and to an AI assistant reading it: <yes, confirmed by the facilitator on YYYY-MM-DD>
 - Names in this brief: <no, roles only / yes, agreed by everyone named>
 
 ## Glossary
@@ -55,7 +55,7 @@ Terms, names and abbreviations the group uses. Speech recognition gets these wro
 
 ### <YYYY-MM-DD> (session 1)
 
-**Transcript read up to**: <the last line handled: its line number when the source counts lines, its time and its first words>
+**Transcript read up to**: <the last line handled: its file and line number when the source has them, its time and its first words>
 
 **Proposals** (facilitator: tick to accept, strike through to drop; the assistant appends "(applied)")
 

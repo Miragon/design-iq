@@ -45,12 +45,14 @@ Ask the facilitator, one topic at a time, and fill the template as you go:
    yourself ([resources/beluga.md](../resources/beluga.md)); otherwise the facilitator
    takes it in Beluga's window (**Take from a workshop brief**). The participants' names,
    which the brief does not hold, go into Beluga's glossary only, which stays on the
-   facilitator's machine.
-8. **Transcript and consent.** Where does the transcript come from, and does everyone in
-   the room know they are transcribed and that an AI assistant reads along? The audio
-   can stay on the facilitator's computer, the transcript's text reaches the assistant's
-   model provider. Record that the facilitator confirmed it. Without
-   consent there is no transcript; you can still work from the facilitator's notes.
+   facilitator's machine. Names the facilitator tells you reach your model provider on
+   the way; to keep them off it, the facilitator types them in Beluga's window.
+8. **Transcript and consent.** Where does the transcript come from, and does everyone
+   taking part, in the room and on a call, know they are transcribed and that an AI
+   assistant reads along? The audio can stay on the facilitator's computer, the
+   transcript's text reaches the assistant's model provider. Record that the facilitator
+   confirmed it. Without consent there is no transcript; you can still work from the
+   facilitator's notes.
    Ask what the transcript's labels stand for: one person each, or a channel or a
    microphone with several people behind it. Ask whether names may be stored in the
    brief. The default is no: roles only, and the facilitator's name only if they agree.
