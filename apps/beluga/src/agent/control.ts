@@ -2,7 +2,8 @@
  * What an agent's requests do, on top of what the main process offers. No
  * Electron here: the main process passes in its state and its actions.
  */
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { parseGlossary } from "../core/glossary.ts";
 import type { RemoteResult } from "../core/ipc.ts";
@@ -10,10 +11,12 @@ import type { ModelId } from "../core/models.ts";
 import type { Preferences } from "../core/preferences.ts";
 import { checkTuning } from "../core/settings.ts";
 import { transcriptPage } from "../core/transcript.ts";
-import type { BelugaStatus, Control, GlossaryResult, Options, StartResult } from "./server.ts";
+import type { BelugaStatus, Control, GlossaryResult, Options, StartResult, TranscriptRead } from "./server.ts";
 
 /** a label longer than this is no name for a channel (as in the window) */
 const MAX_LABEL = 40;
+/** how often a waiting read looks whether the transcript has grown */
+const WAIT_POLL_MS = 250;
 
 export interface ControlDeps {
   preferences(): Preferences;
@@ -75,6 +78,12 @@ export function createControl(deps: ControlDeps): Control {
     },
 
     async setOptions(options: Options): Promise<BelugaStatus> {
+      const phase = deps.phase();
+      if (phase !== "idle") {
+        throw new Error(
+          `Beluga is ${phase}, and the options hold for a whole session. They can change once it has stopped; the glossary can change at any time.`,
+        );
+      }
       const p = deps.preferences();
       const labels = { ...p.labels, ...options.labels };
       if (labels.mic.length > MAX_LABEL || labels.system.length > MAX_LABEL) {
@@ -129,10 +138,27 @@ export function createControl(deps: ControlDeps): Control {
       return { transcript: deps.transcriptPath() };
     },
 
-    async readTranscript(after, limit) {
+    async readTranscript(after, limit, wait = 0, quiet = 0): Promise<TranscriptRead> {
       const path = deps.transcriptPath();
       if (!path) throw new Error("There is no transcript yet: no session has run since Beluga started.");
-      return { transcript: path, ...transcriptPage(await readFile(path, "utf8"), after, limit) };
+      const deadline = Date.now() + wait * 1000;
+      // Beluga appends whole lines, so the file's modification time is when the last one came
+      let seen: { mtimeMs: number; size: number } | null = null;
+      let page = transcriptPage("", after, limit);
+      for (;;) {
+        const file = await stat(path);
+        if (!seen || file.mtimeMs !== seen.mtimeMs || file.size !== seen.size) {
+          page = transcriptPage(await readFile(path, "utf8"), after, limit);
+          seen = file;
+        }
+        const phase = deps.phase();
+        const at = Date.now();
+        const settled = page.lines.length > 0 && (page.more || at - file.mtimeMs >= quiet * 1000);
+        // a session that has ended, or a new one in another file, writes no more here
+        const over = phase === "idle" || deps.transcriptPath() !== path;
+        if (settled || over || at >= deadline) return { transcript: path, phase, ...page };
+        await sleep(Math.min(WAIT_POLL_MS, deadline - at));
+      }
     },
   };
 }

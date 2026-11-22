@@ -3,11 +3,12 @@
  * main process) and who gets through the endpoint (over real HTTP).
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { toolNamesIn, toolText } from "@designiq/mcp-kit/testing";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
@@ -23,8 +24,8 @@ const KEY = "k".repeat(43);
 const work = mkdtempSync(join(tmpdir(), "beluga-agent-"));
 const transcript = join(work, "beluga-2026-11-21-1430.txt");
 
-/** the main process as the tools see it, with a record of what they asked it to do */
-function standIn(): {
+/** the main process as the tools see it, with a record of what they asked it to do; a start writes to `file` */
+function standIn(file = transcript): {
   deps: ControlDeps;
   asked: string[];
   prefs: () => Preferences;
@@ -51,7 +52,7 @@ function standIn(): {
       asked.push(action);
       if (action === "start") {
         phase = "listening";
-        path = transcript;
+        path = file;
         return Promise.resolve({ ok: true, channels: ["mic"], notice: null });
       }
       phase = "idle";
@@ -90,6 +91,55 @@ test("options are checked like the window's, and only what is given changes", as
   await assert.rejects(control.setOptions({ tuning: { longestLine: 60 } }), /longestLine is out of range/);
   await assert.rejects(control.setOptions({ labels: { mic: "x".repeat(41) } }), /at most 40 characters/);
   assert.deepEqual(prefs().settings.tuning, { ...DEFAULT_TUNING, pause: 0.8 }, "a refused change changes nothing");
+});
+
+test("a session keeps the options it started with, and the glossary can still change", async () => {
+  const { deps, prefs, set } = standIn();
+  const control = createControl(deps);
+  for (const phase of ["starting", "listening", "stopping"] as const) {
+    set(() => phase);
+    await assert.rejects(control.setOptions({ tuning: { pause: 0.8 } }), new RegExp(`Beluga is ${phase}`));
+  }
+  assert.deepEqual(prefs().settings.tuning, DEFAULT_TUNING);
+  assert.equal((await control.setGlossary(["Camunda"], "add")).appliedNow, false, "stopping: for the next session");
+});
+
+/** how long a promise takes, in milliseconds */
+async function timed<T>(work: Promise<T>): Promise<{ value: T; ms: number }> {
+  const began = Date.now();
+  const value = await work;
+  return { value, ms: Date.now() - began };
+}
+
+test("a waiting read answers once the conversation pauses, with every line that came", async () => {
+  const file = join(work, "waiting.txt");
+  writeFileSync(file, "# Beluga transcript, started 2026-11-21 14:30\n");
+  const { deps, set } = standIn(file);
+  const control = createControl(deps);
+  await control.start();
+
+  const reading = timed(control.readTranscript(1, 200, 5, 0.5));
+  await sleep(100);
+  appendFileSync(file, "14:30:05 Room: Erst kommt die Bestellung.\n");
+  await sleep(300);
+  appendFileSync(file, "14:30:08 Room: Dann die Bonitätsprüfung.\n");
+  const { value, ms } = await reading;
+  assert.deepEqual(
+    value.lines.map((l) => l.line),
+    [2, 3],
+    "both lines of the thought, not the first alone",
+  );
+  assert.equal(value.phase, "listening");
+  assert.ok(ms >= 750 && ms < 2500, `answered after ${ms} ms, about half a second after the last line`);
+
+  const nothing = await timed(control.readTranscript(value.through, 200, 0.6, 0.5));
+  assert.deepEqual(nothing.value.lines, [], "nothing new");
+  assert.ok(nothing.ms >= 550, `waited ${nothing.ms} ms, as long as asked`);
+
+  set(() => "idle");
+  const ended = await timed(control.readTranscript(value.through, 200, 5, 0.5));
+  assert.equal(ended.value.phase, "idle");
+  assert.ok(ended.ms < 400, `an ended session is answered at once, not after ${ended.ms} ms`);
 });
 
 test("start and stop go through the window, and only when they make sense", async () => {
@@ -153,18 +203,24 @@ test("the transcript is read by line, without the line still being written", asy
   assert.equal(isError, false, text);
   assert.deepEqual(JSON.parse(text), {
     transcript,
+    phase: "listening",
     lines: [{ line: 2, text: "14:30:05 Me: Wir fangen an." }],
     through: 2,
     more: false,
   });
+  const began = Date.now();
+  const waited = toolText(await client.callTool({ name: "read_transcript", arguments: { after: 2, wait: 0.4 } }));
+  assert.equal(waited.isError, false, waited.text);
+  assert.deepEqual(JSON.parse(waited.text).lines, []);
+  assert.ok(Date.now() - began >= 350, "the wait reaches the tool");
 });
 
 test("a refused request is an error result the agent can read", async () => {
   const { isError, text } = toolText(
-    await client.callTool({ name: "set_options", arguments: { tuning: { threads: 0 } } }),
+    await client.callTool({ name: "set_options", arguments: { tuning: { pause: 0.8 } } }),
   );
   assert.equal(isError, true);
-  assert.match(text, /threads is out of range/);
+  assert.match(text, /Beluga is listening, and the options hold for a whole session/);
 });
 
 /** a raw request to the endpoint, as a stranger would send it (node:http: fetch does not let a Host header through) */

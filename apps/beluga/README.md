@@ -73,14 +73,14 @@ puts the command that connects it on the clipboard, key included:
 claude mcp add --transport http beluga http://127.0.0.1:47913/mcp --header "Authorization: Bearer <key>"
 ```
 
-| Tool              | What it does                                                                                    |
-| ----------------- | ----------------------------------------------------------------------------------------------- |
-| `get_status`      | Whether Beluga listens, the transcript file, how far behind it runs, model, glossary, settings. |
-| `set_glossary`    | Replaces the glossary or adds to it. While listening, from the next line on.                    |
-| `set_options`     | Model, language, the computer's sound, channel labels, advanced settings: for the next session. |
-| `start_listening` | Starts a session as if the person had clicked Start. Only once everyone present agreed.         |
-| `stop_listening`  | Ends the session, once the engine has caught up.                                                |
-| `read_transcript` | The lines after a line number (line 1 is the header), never a line still being written.         |
+| Tool              | What it does                                                                                                                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_status`      | Whether Beluga listens, the transcript file, how far behind it runs, model, glossary, settings.                                                                                                      |
+| `set_glossary`    | Replaces the glossary or adds to it. While listening, from the next line on.                                                                                                                         |
+| `set_options`     | Model, language, the computer's sound, channel labels, advanced settings. Only between sessions.                                                                                                     |
+| `start_listening` | Starts a session as if the person had clicked Start. Only once everyone present agreed.                                                                                                              |
+| `stop_listening`  | Ends the session, once the engine has caught up.                                                                                                                                                     |
+| `read_transcript` | The lines after a line number (line 1 is the header), never a line still being written. With `wait` it waits for new lines until nobody has spoken for `quiet` seconds (3 by default), at most 50 s. |
 
 Where transcripts go and which models are downloaded stay with the person at the window.
 
