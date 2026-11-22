@@ -3,7 +3,7 @@ import { Button } from "@designiq/ui-kit/components/button";
 import { Input } from "@designiq/ui-kit/components/input";
 import { Textarea } from "@designiq/ui-kit/components/textarea";
 import { cn } from "@designiq/ui-kit/lib/utils";
-import { CircleAlert, Download, FileText, FolderOpen, Mic, MonitorSpeaker, Square } from "lucide-react";
+import { Download, FileText, FolderOpen, Mic, MonitorSpeaker, Plug, Square } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { MAX_ENTRIES, parseGlossary } from "../core/glossary.ts";
@@ -14,7 +14,7 @@ import type { Channel } from "../core/transcript.ts";
 import { Advanced } from "./advanced.tsx";
 import { AgentAccess } from "./agent-access.tsx";
 import { type Capture, startCapture } from "./capture.ts";
-import { checkboxClass, Field, selectClass } from "./fields.tsx";
+import { Callout, checkboxClass, Field, Section, selectClass } from "./fields.tsx";
 
 type Phase = "idle" | "starting" | "listening" | "stopping";
 
@@ -35,12 +35,23 @@ const reason = (error: unknown): string =>
     "",
   );
 
+/** the file's name without its folder, on any platform */
+const baseName = (path: string): string => path.split(/[\\/]/).pop() ?? path;
+
+/** how long a session has run, `4:05` or `1:04:05` */
+function elapsed(ms: number): string {
+  const all = Math.max(0, Math.floor(ms / 1000));
+  const two = (n: number): string => String(n).padStart(2, "0");
+  const [h, m, sec] = [Math.floor(all / 3600), Math.floor(all / 60) % 60, all % 60];
+  return h > 0 ? `${h}:${two(m)}:${two(sec)}` : `${m}:${two(sec)}`;
+}
+
 function Meter({ icon, name, level, quiet }: { icon: ReactNode; name: string; level: number; quiet: boolean }) {
   return (
     <div className="flex items-center gap-3 text-sm">
-      <span className="text-muted-foreground flex w-28 shrink-0 items-center gap-2 truncate">
-        {icon}
-        {name}
+      <span className="flex w-28 shrink-0 items-center gap-2">
+        <span className="text-muted-foreground shrink-0">{icon}</span>
+        <span className="truncate">{name}</span>
       </span>
       <div
         className="bg-muted h-2 flex-1 overflow-hidden rounded-sm"
@@ -52,10 +63,28 @@ function Meter({ icon, name, level, quiet }: { icon: ReactNode; name: string; le
       >
         <div className="bg-brand h-full transition-[width] duration-100" style={{ width: `${level * 100}%` }} />
       </div>
-      <span className="w-20 shrink-0 text-right text-xs">
-        {quiet ? <Badge variant="warning">No sound</Badge> : null}
-      </span>
+      <span className="flex w-20 shrink-0 justify-end">{quiet ? <Badge variant="warning">No sound</Badge> : null}</span>
     </div>
+  );
+}
+
+/** where the session is, in the header: nothing while idle */
+function Status({ phase, since, now }: { phase: Phase; since: number | null; now: number }) {
+  if (phase === "idle") return null;
+  return (
+    <Badge variant="outline" className="h-7 gap-2 px-2.5 text-xs">
+      {phase === "listening" ? (
+        <>
+          <span className="bg-success size-2 animate-pulse rounded-full" aria-hidden />
+          <span>Listening</span>
+          {since !== null ? (
+            <span className="text-muted-foreground font-mono tabular-nums">{elapsed(now - since)}</span>
+          ) : null}
+        </>
+      ) : (
+        <span>{phase === "starting" ? "Starting…" : "Finishing…"}</span>
+      )}
+    </Badge>
   );
 }
 
@@ -76,6 +105,9 @@ export function App() {
   const [behind, setBehind] = useState(0);
   /** glossary entries the running model does not listen for */
   const [left, setLeft] = useState<string[]>([]);
+  /** when the session began to listen, and the second the header shows */
+  const [since, setSince] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const capture = useRef<Capture | null>(null);
   const lastSound = useRef<Record<Channel, number>>({ mic: 0, system: 0 });
@@ -159,10 +191,11 @@ export function App() {
   useEffect(() => {
     if (phase !== "listening") return;
     const timer = setInterval(() => {
-      const now = Date.now();
+      const at = Date.now();
+      setNow(at);
       setQuiet({
-        mic: now - lastSound.current.mic > QUIET_AFTER * 1000,
-        system: now - lastSound.current.system > QUIET_AFTER * 1000,
+        mic: at - lastSound.current.mic > QUIET_AFTER * 1000,
+        system: at - lastSound.current.system > QUIET_AFTER * 1000,
       });
     }, 1000);
     return () => clearInterval(timer);
@@ -249,6 +282,9 @@ export function App() {
       }
       capture.current = opened;
       setHeard(opened.channels);
+      const listeningFrom = Date.now();
+      setSince(listeningFrom);
+      setNow(listeningFrom);
       const said = opened.systemProblem ? `Listening to the microphone only. ${opened.systemProblem}` : null;
       setNotice(said);
       setPhase("listening");
@@ -289,239 +325,304 @@ export function App() {
 
   if (!state || !prefs || !agent) return null;
   const { labels, language, withSystem, folder } = prefs;
+  const installed = selected?.installed ?? false;
 
   return (
-    <main className="bg-background text-foreground flex h-full flex-col gap-5 overflow-y-auto p-5">
-      <header className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Beluga</h1>
-        {running ? (
-          <Badge variant="outline" className="gap-2">
-            <span className="bg-success size-2 rounded-full" aria-hidden />
-            Listening
-          </Badge>
-        ) : null}
+    <div className="bg-background text-foreground flex h-full flex-col">
+      {/* on macOS the header is the title bar: it moves the window, and the traffic lights sit at its left */}
+      <header
+        className={cn(
+          "flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4 select-none",
+          state.titleBarInset && "pl-24 [-webkit-app-region:drag]",
+        )}
+      >
+        <h1 className="flex items-center gap-2 text-base font-semibold">Beluga</h1>
+        <div className="flex items-center gap-2">
+          {prefs.agent && agent.state === "on" ? (
+            <Badge
+              variant="outline"
+              className="text-muted-foreground h-7 gap-1.5 px-2.5 text-xs"
+              title="An agent on this computer may set the glossary, start and stop listening and read the transcript."
+            >
+              <Plug aria-hidden />
+              Agent access
+            </Badge>
+          ) : null}
+          <Status phase={phase} since={since} now={now} />
+        </div>
       </header>
 
-      {/* the settings are fixed while listening: their room goes to the transcript */}
-      <section className={cn("flex flex-col gap-4", running && "hidden")} aria-label="Settings">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Microphone is">
-            <Input
-              value={labels.mic}
-              maxLength={MAX_LABEL}
-              disabled={running || busy}
-              onChange={(e) => update({ labels: { ...labels, mic: e.target.value } })}
-            />
-          </Field>
-          <Field label="System audio is">
-            <Input
-              value={labels.system}
-              maxLength={MAX_LABEL}
-              disabled={running || busy || !withSystem}
-              onChange={(e) => update({ labels: { ...labels, system: e.target.value } })}
-            />
-          </Field>
-        </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className={checkboxClass}
-            checked={withSystem}
-            disabled={running || busy}
-            onChange={(e) => update({ withSystem: e.target.checked })}
-          />
-          Also listen to what this computer plays (the others in an online meeting)
-        </label>
-        <div className="grid grid-cols-[1fr_auto] gap-3">
-          <Field label="Speech model">
-            <select
-              className={selectClass}
-              value={model}
-              disabled={running || busy}
-              onChange={(e) => update({ model: e.target.value as ModelId })}
+      <main className="bg-secondary flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        {running ? (
+          <section aria-label="Levels" className="bg-card flex flex-col gap-2.5 rounded-md border p-4">
+            <Meter icon={<Mic className="size-4" />} name={labels.mic || "Me"} level={levels.mic} quiet={quiet.mic} />
+            {heard.includes("system") ? (
+              <Meter
+                icon={<MonitorSpeaker className="size-4" />}
+                name={labels.system || "Others"}
+                level={levels.system}
+                quiet={quiet.system}
+              />
+            ) : null}
+          </section>
+        ) : null}
+
+        {/* while listening the transcript takes the room; after a session it stays above the settings */}
+        {running || lines.length > 0 ? (
+          <section
+            aria-label="Transcript"
+            className={cn("bg-card flex flex-col rounded-md border", running ? "min-h-48 flex-1" : "max-h-72 shrink-0")}
+          >
+            <div className="flex items-center gap-3 border-b px-4 py-2.5">
+              <h2 className="shrink-0 text-sm font-semibold">Transcript</h2>
+              <span
+                className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs"
+                title={file ?? undefined}
+              >
+                {file ? baseName(file) : null}
+              </span>
+              {file ? (
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto shrink-0 p-0"
+                  onClick={() => window.beluga.showFile(file)}
+                >
+                  <FolderOpen />
+                  Show file
+                </Button>
+              ) : null}
+            </div>
+            <ol
+              ref={transcript}
+              onScroll={(e) => {
+                const list = e.currentTarget;
+                following.current = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
+              }}
+              className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-4 py-3 text-sm leading-relaxed"
             >
-              {state.models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Language">
-            <select
-              className={selectClass}
-              value={language}
-              disabled={running || busy || !whisper}
-              title={whisper ? undefined : "Parakeet detects the language itself"}
-              onChange={(e) => update({ language: e.target.value as Language })}
-            >
-              <option value="de">German</option>
-              <option value="en">English</option>
-              <option value="auto">Detect</option>
-            </select>
-          </Field>
-        </div>
-        {selected ? <p className="text-muted-foreground -mt-2 text-xs">{selected.note}</p> : null}
-        <div className="flex flex-col gap-1.5 text-sm">
-          <div className="flex items-center justify-between gap-2">
-            <label htmlFor="glossary" className="font-medium">
-              Glossary
-            </label>
-            <Button
-              variant="link"
-              size="sm"
-              className="h-auto p-0"
+              {lines.length === 0 ? (
+                <li className="text-muted-foreground">
+                  Nothing said yet. A line appears here when the speaker pauses.
+                </li>
+              ) : (
+                lines.map((entry) => (
+                  <li key={entry.id} className="grid grid-cols-[auto_1fr] gap-x-3">
+                    <span className="text-muted-foreground pt-px font-mono text-xs leading-relaxed tabular-nums">
+                      {entry.time}
+                    </span>
+                    <p className="min-w-0 break-words">
+                      <span className="font-semibold">{entry.speaker}</span> {entry.text}
+                    </p>
+                  </li>
+                ))
+              )}
+            </ol>
+          </section>
+        ) : null}
+
+        {/* the settings are fixed while listening: their room goes to the transcript */}
+        <div className={cn("flex flex-col gap-4", running && "hidden")} aria-label="Settings" role="group">
+          <Section title="Sources" hint="Each source is one name in the transcript.">
+            <div className="grid grid-cols-[1fr_9rem] items-start gap-x-3 gap-y-3 text-sm">
+              <span className="flex min-h-9 items-center gap-2">
+                <Mic className="text-muted-foreground size-4 shrink-0" aria-hidden />
+                Microphone
+              </span>
+              <Input
+                aria-label="Name for the microphone"
+                value={labels.mic}
+                maxLength={MAX_LABEL}
+                disabled={running || busy}
+                onChange={(e) => update({ labels: { ...labels, mic: e.target.value } })}
+              />
+              <label className="flex min-h-9 items-start gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  className={cn(checkboxClass, "mt-0.5")}
+                  checked={withSystem}
+                  disabled={running || busy}
+                  onChange={(e) => update({ withSystem: e.target.checked })}
+                />
+                <span>
+                  What this computer plays
+                  <span className="text-muted-foreground block text-xs">The others in an online meeting</span>
+                </span>
+              </label>
+              <Input
+                aria-label="Name for what this computer plays"
+                value={labels.system}
+                maxLength={MAX_LABEL}
+                disabled={running || busy || !withSystem}
+                onChange={(e) => update({ labels: { ...labels, system: e.target.value } })}
+              />
+            </div>
+          </Section>
+
+          <Section title="Speech recognition">
+            <div className={cn("grid gap-3", whisper && "grid-cols-[1fr_auto]")}>
+              <Field label="Speech model">
+                <select
+                  className={selectClass}
+                  value={model}
+                  disabled={running || busy}
+                  onChange={(e) => update({ model: e.target.value as ModelId })}
+                >
+                  {state.models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {/* Parakeet detects the language itself: the choice is Whisper's alone */}
+              {whisper ? (
+                <Field label="Language">
+                  <select
+                    className={selectClass}
+                    value={language}
+                    disabled={running || busy}
+                    onChange={(e) => update({ language: e.target.value as Language })}
+                  >
+                    <option value="de">German</option>
+                    <option value="en">English</option>
+                    <option value="auto">Detect</option>
+                  </select>
+                </Field>
+              ) : null}
+            </div>
+            {selected ? <p className="text-muted-foreground -mt-2 text-xs">{selected.note}</p> : null}
+            <div className="flex flex-col gap-1.5 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <label htmlFor="glossary" className="font-medium">
+                  Glossary
+                </label>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0"
+                  disabled={running || busy}
+                  onClick={() => void importGlossary()}
+                >
+                  <FileText />
+                  Take from a workshop brief
+                </Button>
+              </div>
+              <Textarea
+                id="glossary"
+                rows={4}
+                value={prefs.glossary}
+                maxLength={MAX_GLOSSARY_TEXT}
+                disabled={running || busy}
+                placeholder={"Names and terms, one per line\nAnna Wiśniewski\nRabattstaffel"}
+                onChange={(e) => update({ glossary: e.target.value })}
+              />
+              <p className="text-muted-foreground text-xs">
+                {whisper
+                  ? "Whisper does not use the glossary. Parakeet does."
+                  : `${entries.length === 1 ? "1 entry" : `${entries.length} entries`}${
+                      entries.length >= MAX_ENTRIES ? " (the most Beluga takes)" : ""
+                    }. Parakeet listens for them. They stay on this computer.`}
+              </p>
+            </div>
+          </Section>
+
+          <Section title="Files" hint="One text file per session, which an assistant can read along.">
+            <Field label="Transcripts go to">
+              <div className="flex gap-2">
+                <Input value={folder} readOnly title={folder} className="font-mono text-xs" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  aria-label="Choose folder"
+                  title="Choose folder"
+                  disabled={running || busy}
+                  onClick={() =>
+                    void window.beluga.chooseFolder(folder).then((chosen) => chosen && update({ folder: chosen }))
+                  }
+                >
+                  <FolderOpen />
+                </Button>
+              </div>
+            </Field>
+          </Section>
+
+          <div className="bg-card rounded-md border p-4">
+            <Advanced
+              settings={prefs.settings}
+              cores={state.cores}
               disabled={running || busy}
-              onClick={() => void importGlossary()}
+              whisper={whisper}
+              onChange={(settings) => update({ settings })}
             >
-              <FileText />
-              Take from a workshop brief
-            </Button>
+              <AgentAccess
+                enabled={prefs.agent}
+                agent={agent}
+                disabled={running || busy}
+                onEnabled={(enabled) => update({ agent: enabled })}
+              />
+            </Advanced>
           </div>
-          <Textarea
-            id="glossary"
-            rows={4}
-            value={prefs.glossary}
-            maxLength={MAX_GLOSSARY_TEXT}
-            disabled={running || busy}
-            placeholder={"Names and terms, one per line\nAnna Wiśniewski\nRabattstaffel"}
-            onChange={(e) => update({ glossary: e.target.value })}
-          />
-          <p className="text-muted-foreground text-xs">
-            {whisper
-              ? "Whisper does not use the glossary. Parakeet does."
-              : `${entries.length === 1 ? "1 entry" : `${entries.length} entries`}${
-                  entries.length >= MAX_ENTRIES ? " (the most Beluga takes)" : ""
-                }. Parakeet listens for them. They stay on this computer.`}
-          </p>
         </div>
-        <Field label="Transcripts go to">
-          <div className="flex gap-2">
-            <Input value={folder} readOnly className="font-mono text-xs" />
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Choose folder"
-              disabled={running || busy}
-              onClick={() =>
-                void window.beluga.chooseFolder(folder).then((chosen) => chosen && update({ folder: chosen }))
-              }
-            >
-              <FolderOpen />
-            </Button>
+      </main>
+
+      {/* the action and what Beluga has to say about it stay in view, however far the settings scroll */}
+      <footer className="flex shrink-0 flex-col gap-3 border-t p-4">
+        {error || notice || left.length > 0 || (phase === "listening" && behind >= BEHIND_AFTER) ? (
+          <div className="flex max-h-48 flex-col gap-2 overflow-y-auto">
+            {error ? <Callout tone="danger">{error}</Callout> : null}
+            {notice ? <Callout tone="warning">{notice}</Callout> : null}
+            {left.length > 0 ? (
+              <Callout tone="warning">
+                Parakeet does not listen for {left.length === 1 ? "this glossary entry" : "these glossary entries"}:{" "}
+                {left.join(", ")}. It takes no entry with a number or a slash, or with a letter outside its alphabet
+                (such as the Turkish ı).
+              </Callout>
+            ) : null}
+            {phase === "listening" && behind >= BEHIND_AFTER ? (
+              <Callout tone="warning">
+                The transcript runs {behind} seconds behind the conversation.
+                {whisper ? " Parakeet keeps up more easily." : " It catches up in the pauses."}
+              </Callout>
+            ) : null}
           </div>
-        </Field>
-        <Advanced
-          settings={prefs.settings}
-          cores={state.cores}
-          disabled={running || busy}
-          whisper={whisper}
-          onChange={(settings) => update({ settings })}
-        >
-          <AgentAccess
-            enabled={prefs.agent}
-            agent={agent}
-            disabled={running || busy}
-            onEnabled={(enabled) => update({ agent: enabled })}
-          />
-        </Advanced>
-      </section>
-
-      {selected && !selected.installed ? (
-        <Button onClick={() => void install()} disabled={busy}>
-          <Download />
-          {download
-            ? `Downloading… ${Math.round(download.fraction * 100)} %`
-            : `Download ${selected.label} (${selected.megabytes} MB)`}
-        </Button>
-      ) : running ? (
-        <Button variant="outline" onClick={() => void stop()} disabled={phase === "stopping"}>
-          <Square />
-          {phase === "stopping"
-            ? behind > 1
-              ? `Transcribing the last ${behind} seconds…`
-              : "Finishing the last sentence…"
-            : "Stop"}
-        </Button>
-      ) : (
-        <Button onClick={() => void start()} disabled={busy}>
-          <Mic />
-          {phase === "starting" ? "Loading the model…" : "Start listening"}
-        </Button>
-      )}
-
-      {error ? (
-        <p className="bg-destructive-soft flex gap-2 rounded-md p-3 text-sm" role="alert">
-          <CircleAlert className="text-destructive mt-0.5 size-4 shrink-0" />
-          {error}
-        </p>
-      ) : null}
-      {notice ? (
-        <p className="bg-warning-soft rounded-md p-3 text-sm" role="status">
-          {notice}
-        </p>
-      ) : null}
-      {left.length > 0 ? (
-        <p className="bg-warning-soft rounded-md p-3 text-sm" role="status">
-          Parakeet does not listen for {left.length === 1 ? "this glossary entry" : "these glossary entries"}:{" "}
-          {left.join(", ")}. It takes no entry with a number or a slash, or with a letter outside its alphabet (such as
-          the Turkish ı).
-        </p>
-      ) : null}
-      {phase === "listening" && behind >= BEHIND_AFTER ? (
-        <p className="bg-warning-soft rounded-md p-3 text-sm" role="status">
-          The transcript runs {behind} seconds behind the conversation.
-          {whisper ? " Parakeet keeps up more easily." : " It catches up in the pauses."}
-        </p>
-      ) : null}
-
-      {running ? (
-        <section className="flex flex-col gap-2" aria-label="Levels">
-          <Meter icon={<Mic className="size-4" />} name={labels.mic || "Me"} level={levels.mic} quiet={quiet.mic} />
-          {heard.includes("system") ? (
-            <Meter
-              icon={<MonitorSpeaker className="size-4" />}
-              name={labels.system || "Others"}
-              level={levels.system}
-              quiet={quiet.system}
-            />
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="flex min-h-48 flex-1 flex-col gap-2" aria-label="Transcript">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Transcript</h2>
-          {file ? (
-            <Button variant="link" size="sm" className="h-auto p-0" onClick={() => window.beluga.showFile(file)}>
-              Show file
-            </Button>
-          ) : null}
-        </div>
-        <ol
-          ref={transcript}
-          onScroll={(e) => {
-            const list = e.currentTarget;
-            following.current = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
-          }}
-          className="border-border min-h-0 flex-1 overflow-y-auto rounded-md border p-3 font-mono text-xs leading-relaxed"
-        >
-          {lines.length === 0 ? (
-            <li className="text-muted-foreground font-sans text-sm">
-              {running
-                ? "Nothing said yet. A sentence appears here when the speaker pauses."
-                : "Start listening and the transcript appears here, and in a text file an assistant can read along."}
-            </li>
-          ) : (
-            lines.map((entry) => (
-              <li key={entry.id} className={entry.channel === "system" ? "text-muted-foreground" : undefined}>
-                {entry.line}
-              </li>
-            ))
-          )}
-        </ol>
-        {file ? <p className="text-muted-foreground truncate font-mono text-xs">{file}</p> : null}
-      </section>
-    </main>
+        ) : null}
+        {download ? (
+          <div
+            className="bg-muted h-1.5 overflow-hidden rounded-sm"
+            role="progressbar"
+            aria-label="Download"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(download.fraction * 100)}
+          >
+            <div className="bg-primary h-full transition-[width]" style={{ width: `${download.fraction * 100}%` }} />
+          </div>
+        ) : null}
+        {selected && !installed ? (
+          <Button size="lg" onClick={() => void install()} disabled={busy}>
+            <Download />
+            {download
+              ? `Downloading… ${Math.round(download.fraction * 100)} %`
+              : `Download ${selected.label} (${selected.megabytes} MB)`}
+          </Button>
+        ) : running ? (
+          <Button size="lg" variant="outline" onClick={() => void stop()} disabled={phase === "stopping"}>
+            <Square />
+            {phase === "stopping"
+              ? behind > 1
+                ? `Transcribing the last ${behind} seconds…`
+                : "Finishing the last sentence…"
+              : "Stop"}
+          </Button>
+        ) : (
+          <Button size="lg" onClick={() => void start()} disabled={busy}>
+            <Mic />
+            {phase === "starting" ? "Loading the model…" : "Start listening"}
+          </Button>
+        )}
+      </footer>
+    </div>
   );
 }

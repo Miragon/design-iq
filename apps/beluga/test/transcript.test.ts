@@ -7,6 +7,8 @@ import {
   fileName,
   formatLine,
   headerLine,
+  lineParts,
+  lineText,
   transcriptPage,
 } from "../src/core/transcript.ts";
 
@@ -22,6 +24,16 @@ test("a line is time, speaker, text", () => {
     formatLine({ channel: "system", startedAt: at, text: "fine" }, { mic: "Anna", system: "Room" }),
     "14:32:07 Room: fine",
   );
+});
+
+test("the window gets the line in its parts, the file the same line whole", () => {
+  const parts = lineParts(
+    { channel: "system", startedAt: at, text: " fine,\nthanks " },
+    { mic: "Me", system: "Room:" },
+  );
+  assert.deepEqual(parts, { time: "14:32:07", speaker: "Room", text: "fine, thanks" });
+  assert.equal(lineText(parts!), "14:32:07 Room: fine, thanks");
+  assert.equal(lineParts({ channel: "mic", startedAt: at, text: "  " }, DEFAULT_LABELS), null);
 });
 
 test("an utterance is always one line", () => {

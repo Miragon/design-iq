@@ -61,12 +61,30 @@ export function headerLine(startedAt: number): string {
   return `# Beluga transcript, started ${stamp(startedAt)}`;
 }
 
-/** one transcript line without its newline, or null when the utterance holds no text */
-export function formatLine(utterance: Utterance, labels: SpeakerLabels): string | null {
+/** what a transcript line says: when, who and what */
+export interface LineParts {
+  time: string;
+  speaker: string;
+  text: string;
+}
+
+/** the parts of a transcript line, or null when the utterance holds no text */
+export function lineParts(utterance: Utterance, labels: SpeakerLabels): LineParts | null {
   const text = cleanText(utterance.text);
   if (!text) return null;
   const speaker = cleanLabel(labels[utterance.channel], DEFAULT_LABELS[utterance.channel]);
-  return `${clock(utterance.startedAt)} ${speaker}: ${text}`;
+  return { time: clock(utterance.startedAt), speaker, text };
+}
+
+/** the parts as the file writes them, `14:30:05 Me: we start`, without the newline */
+export function lineText({ time, speaker, text }: LineParts): string {
+  return `${time} ${speaker}: ${text}`;
+}
+
+/** one transcript line without its newline, or null when the utterance holds no text */
+export function formatLine(utterance: Utterance, labels: SpeakerLabels): string | null {
+  const parts = lineParts(utterance, labels);
+  return parts && lineText(parts);
 }
 
 /**

@@ -5,7 +5,7 @@
 import type { Language, ModelId } from "./models.ts";
 import type { Preferences } from "./preferences.ts";
 import type { Tuning } from "./settings.ts";
-import type { Channel } from "./transcript.ts";
+import type { Channel, LineParts } from "./transcript.ts";
 
 export interface ModelInfo {
   id: ModelId;
@@ -21,6 +21,8 @@ export interface InitialState {
   /** the processor cores of this machine, the most the recognizer may use */
   cores: number;
   agent: AgentInfo;
+  /** macOS: the window has no title bar of its own, the page's header takes its place */
+  titleBarInset: boolean;
 }
 
 /** whether an agent can reach Beluga, and where */
@@ -54,10 +56,9 @@ export interface DownloadProgress {
   fraction: number;
 }
 
-/** one line as it was written to the transcript file */
-export interface WrittenLine {
+/** a line written to the transcript file, in its parts: the window sets time, speaker and text apart */
+export interface WrittenLine extends LineParts {
   channel: Channel;
-  line: string;
 }
 
 export interface BelugaApi {

@@ -40,7 +40,7 @@ import type {
 } from "../core/ipc.ts";
 import { megabytes, type ModelId, MODELS, modelSpec } from "../core/models.ts";
 import type { Preferences } from "../core/preferences.ts";
-import { fileName, formatLine, headerLine, type SpeakerLabels, type Utterance } from "../core/transcript.ts";
+import { fileName, headerLine, lineParts, lineText, type SpeakerLabels, type Utterance } from "../core/transcript.ts";
 import { missingFiles } from "../engine/files.ts";
 import { hotwords, PieceEncoder } from "../engine/hotwords.ts";
 import { installModel } from "./models.ts";
@@ -49,6 +49,7 @@ import { AgentKey, PreferenceStore } from "./store.ts";
 const PAGE = join(__dirname, "../../dist/index.html");
 /** the app icon, for the window (Windows, Linux) and the Dock; a packaged app also has it in its bundle */
 const ICON = join(__dirname, "../../resources/icon.png");
+const MAC = process.platform === "darwin";
 /** BELUGA_MODELS_DIR points development and tests at models that are already there; BELUGA_FOLDER sets where transcripts go by default */
 const modelsDir = (): string => process.env.BELUGA_MODELS_DIR ?? join(app.getPath("userData"), "models");
 /** while finishing, an engine that says nothing for this long hangs: a working one reports every second */
@@ -153,6 +154,7 @@ function initialState(): InitialState {
     preferences: store.get(),
     cores: availableParallelism(),
     agent,
+    titleBarInset: MAC,
   };
 }
 
@@ -281,10 +283,10 @@ function fail(ending: Session, message: string): void {
 }
 
 function write(into: Session, utterance: Utterance): void {
-  const line = formatLine(utterance, into.labels);
-  if (line === null || !into.file.writable) return;
-  into.file.write(`${line}\n`);
-  send("beluga:line", { channel: utterance.channel, line });
+  const parts = lineParts(utterance, into.labels);
+  if (parts === null || !into.file.writable) return;
+  into.file.write(`${lineText(parts)}\n`);
+  send("beluga:line", { channel: utterance.channel, ...parts });
 }
 
 async function start(): Promise<Started> {
@@ -301,7 +303,7 @@ async function start(): Promise<Started> {
 
 async function begin(options: Preferences): Promise<Started> {
   const glossary = parseGlossary(options.glossary);
-  if (process.platform === "darwin" && !(await systemPreferences.askForMediaAccess("microphone"))) {
+  if (MAC && !(await systemPreferences.askForMediaAccess("microphone"))) {
     throw new Error("Beluga has no access to the microphone. Allow it in System Settings, Privacy & Security.");
   }
   try {
@@ -469,6 +471,8 @@ function createWindow(): void {
     title: "Beluga",
     icon: ICON,
     autoHideMenuBar: true,
+    // on macOS the page's header is the title bar, the traffic lights centred in its 56 px
+    ...(MAC ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 18, y: 21 } } : {}),
     webPreferences: {
       preload: join(__dirname, "../preload/preload.cjs"),
       contextIsolation: true,
@@ -490,7 +494,7 @@ function createWindow(): void {
 
 void app.whenReady().then(() => {
   // without it, a Beluga started from source shows Electron's icon in the Dock
-  if (process.platform === "darwin") app.dock?.setIcon(ICON);
+  if (MAC) app.dock?.setIcon(ICON);
   store = new PreferenceStore(
     app.getPath("userData"),
     process.env.BELUGA_FOLDER ?? join(app.getPath("documents"), "Beluga"),
