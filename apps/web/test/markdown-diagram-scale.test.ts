@@ -133,8 +133,9 @@ test("a diagram that takes the width it is laid out at as its own is laid out na
     "a block a newer render took off the page: measured in the body",
   );
   assert.equal(win.document.body.querySelector("[aria-hidden]"), null);
+  // measured on the page: a browser computes no style for a node off it
   assert.equal(
-    minimumWidth(drawn('<svg viewBox="0 0 553 148"><text style="font-size: 10px">Jan 04</text></svg>')),
+    minimumWidth(svgOn(win, '<svg viewBox="0 0 553 148"><text style="font-size: 10px">Jan 04</text></svg>')),
     719,
   );
   assert.equal(
