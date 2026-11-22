@@ -113,12 +113,12 @@ transcript as the accent, copied unchanged from Miragon/corporate-identity.
 macOS gets a file of its own because the full tile stood bigger than every other app in the
 Dock: Apple's icons leave 100 px free around 824 px, and
 [Miragon/corporate-identity#108](https://github.com/Miragon/corporate-identity/pull/108)
-adds that tile to the set. Since macOS 26 the system puts a bundled icon that does not fit
+added that tile to the set. Since macOS 26 the system puts a bundled icon that does not fit
 its shape on a gray plate; whether it takes this one has not been seen yet.
 
-It is provisional: the brand rules give every software that is not a modeler the comet, and
-[Miragon/corporate-identity#107](https://github.com/Miragon/corporate-identity/pull/107)
-proposes the exception. If the brand owners decide against it, Beluga carries the comet.
+The brand rules give software that is not a modeler the comet. Beluga is the one exception
+so far, decided with
+[Miragon/corporate-identity#107](https://github.com/Miragon/corporate-identity/pull/107).
 
 ## Run it
 

@@ -10,8 +10,8 @@ files:
   - package.json
 # The icon from Miragon's modeler icon set, copied unchanged (png/beluga-1024.png,
 # png/beluga-macos-1024.png with the margin of macOS' grid, and ico/beluga.ico).
-# Provisional: Miragon/corporate-identity#107 proposes it, and the brand owners
-# decide there whether a tool that is not a modeler carries one.
+# The first tool that is not a modeler to carry one: the brand owners took it into
+# the set with Miragon/corporate-identity#107.
 # the speech engine is a native addon: it cannot be loaded from inside the archive
 asarUnpack:
   - "**/node_modules/sherpa-onnx-*/**"
