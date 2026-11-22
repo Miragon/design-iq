@@ -39,7 +39,7 @@
     "@xyflow/react": "12.12.1",
     "bpmn-js": "18.33.0",
     "bpmn-js-color-picker": "0.7.2",
-    "bpmn-js-differ": "3.2.0",
+    "bpmn-js-differ": "4.0.0",
     "diagram-js": "15.30.1",
     "didi": "12.0.0",
     "dmn-js": "18.0.3",
