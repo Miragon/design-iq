@@ -4,11 +4,13 @@
  * a node opens its model's room only once the shell lists the path, mounts the product editor
  * once the room synced, is ready once the editor drew its first import, follows a moved model
  * (never on a model list from before the move: two clients whose lists disagree never move a
- * node back and forth) and says what became of a file that is gone, invalid or could not be
- * opened, also when its room closed while its editor mounted; it takes the keys and announces
- * the person only while armed and its board on screen; and at its end it destroys the editor
- * first, then the session, a task later where an editor was there (what release() committed is
- * still on its way), also when either was still on its way, and says when it let go of both.
+ * node back and forth), has the list loaded anew once for a model it lacks (created elsewhere
+ * since, which the shell is not told of) and says what became of a file that is gone, invalid
+ * or could not be opened, also when its room closed while its editor mounted; it takes the keys
+ * and announces the person only while armed and its board on screen; and at its end it destroys
+ * the editor first, then the session, a task later where an editor was there (what release()
+ * committed is still on its way), also when either was still on its way, and says when it let go
+ * of both.
  */
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -338,6 +340,33 @@ test("a node whose file is gone says so and keeps its place, and opens once the 
   assert.equal(node.element.querySelector<HTMLElement>(".board-model-editor")?.inert, false);
   assert.equal(stateOf(node.element).state, "loading", "back, and not drawn yet");
   assert.deepEqual(log, [`open ${path}`, `mount ${path}`], "the open session stays: no second room");
+});
+
+test("a node whose model the shell's list does not have yet loads the list anew once: it opens the model, or says it is not there", async () => {
+  // created elsewhere after the shell's list loaded (an assistant, another tab): the shell is not told
+  const path = "processes/new.bpmn";
+  const created = setup(path, ["processes/other.bpmn"], {}, () => ["processes/other.bpmn", path]);
+  await flush();
+  assert.deepEqual(stateOf(created.node.element), { state: "loading", text: MODEL_STATE_TEXT.loading });
+  assert.deepEqual(created.log, [], "no room before the list has the path");
+  for (let i = 0; i < 3; i++) await flush();
+  assert.equal(created.models.refreshes(), 1);
+  assert.deepEqual(created.log, [`open ${path}`]);
+  created.linked.sessions[0]?.synced.resolve();
+  await flush();
+  assert.deepEqual(created.log, [`open ${path}`, `mount ${path}`]);
+  assert.deepEqual(created.node.relocated, []);
+
+  // not there in the list loaded anew either: said, and the node asks no more
+  const missing = setup(path, ["processes/other.bpmn"], {}, () => ["processes/other.bpmn"]);
+  for (let i = 0; i < 4; i++) await flush();
+  assert.deepEqual(stateOf(missing.node.element), { state: "gone", text: MODEL_STATE_TEXT.gone });
+  assert.equal(missing.models.refreshes(), 1);
+  missing.models.set(["processes/other.bpmn", "processes/third.bpmn"]);
+  for (let i = 0; i < 4; i++) await flush();
+  assert.equal(stateOf(missing.node.element).state, "gone");
+  assert.equal(missing.models.refreshes(), 1, "a change of the list answers by the list as it is");
+  assert.deepEqual(missing.log, []);
 });
 
 test("a node follows a model that moved while the board was closed, and one the Live Host says moved", async () => {

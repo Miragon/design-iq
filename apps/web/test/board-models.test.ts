@@ -5,9 +5,10 @@
  * and kind, whether a path names a model and where a moved model went (a moved notice wins over
  * a stale list, and nothing ever leads back to a path a move left), where a node goes (a moved
  * notice at once, a guess from the list only once a list loaded after the question confirms it,
- * one load at a time, once per node and version of the list), which product editor a node
- * mounts with its first fit in layout px under a board's scale, and the release of an armed
- * node, which touches nothing outside its element.
+ * one load at a time, once per node and version of the list), the load of the list a node waits
+ * for whose path the list lacks and no move explains (once per node and path), which product
+ * editor a node mounts with its first fit in layout px under a board's scale, and the release of
+ * an armed node, which touches nothing outside its element.
  */
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -209,6 +210,36 @@ test("without a way to load the list anew, the list as it is confirms a guess, o
   assert.equal(await paths.relocation("processes/order.bpmn", "n_order"), undefined);
   list.set(["archive/order.bpmn"]);
   assert.equal(await paths.relocation("processes/order.bpmn", "n_order"), "archive/order.bpmn", "a new version");
+});
+
+test("a node whose path the list lacks has it loaded anew once per node and path, one load at a time per board", async () => {
+  const list = directory(["processes/order.bpmn"], true);
+  const paths = modelPathsOf(list.dir, shows);
+  // created elsewhere after the list loaded, and one that is not there: asked in the same moment
+  const created = paths.recheck("processes/new.bpmn", "n_new");
+  const missing = paths.recheck("processes/other.bpmn", "n_other");
+  assert.ok(created && missing);
+  await tasks();
+  assert.equal(list.loads(), 1, "one load for both");
+  list.answer(["processes/order.bpmn", "processes/new.bpmn"]);
+  await Promise.all([created, missing]);
+  assert.equal(paths.listed("processes/new.bpmn"), true);
+  assert.equal(paths.listed("processes/other.bpmn"), false);
+  // the same node and path again: the list as it is answers
+  assert.equal(paths.recheck("processes/other.bpmn", "n_other"), undefined);
+  assert.equal(list.loads(), 1);
+  // another node: one more load, which settles where it failed too
+  const failing = paths.recheck("processes/other.bpmn", "n_second");
+  await tasks();
+  assert.equal(list.loads(), 2);
+  list.answer(new Error("offline"));
+  await failing;
+  // without a way to load the list anew, the list as it is answers
+  assert.equal(
+    modelPathsOf(directory(["processes/order.bpmn"]).dir, shows).recheck("processes/new.bpmn", "n_new"),
+    undefined,
+  );
+  paths.destroy();
 });
 
 test("a node's title is the file's stem and its kind the notation's label; a file of no notation has none", () => {
