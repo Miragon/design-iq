@@ -123,7 +123,9 @@ export interface ModelDirectory {
    *  `paths` has it (its listeners were called where it changed). A board
    *  asks before it follows a model its list no longer shows, since a list
    *  loaded before a move would send the node back to the path the move
-   *  left. Optional: absent = the list is as fresh as it gets */
+   *  left, and before it says a model is not there, since the shell is told
+   *  of no model created elsewhere. Optional: absent = the list is as fresh
+   *  as it gets */
   refresh?(): Promise<void>;
 }
 

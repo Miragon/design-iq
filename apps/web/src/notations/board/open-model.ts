@@ -3,9 +3,11 @@
  * loading look and no retry, so the node does both itself:
  * - Its file: it opens the model's own live room (EditorContext.linkedFiles, the shell's one
  *   linked socket) once the shell lists the path, since a room of a path that is no model would
- *   start a new, empty file. A node whose file is not there says so and is asked for again when
- *   the list changes; one whose model moved follows it (a moved notice of its room, or a list the
- *   shell loaded anew for it: ModelPaths.relocation).
+ *   start a new, empty file. A node whose file the list lacks has the list loaded anew once
+ *   first, since the shell is told of no model created elsewhere (ModelPaths.recheck); one whose
+ *   file is not there then says so and is asked for again when the list changes; one whose model
+ *   moved follows it (a moved notice of its room, or a list the shell loaded anew for it:
+ *   ModelPaths.relocation).
  * - Its editor: the PRODUCT editor of the notation (product-mount.ts), unmodified, into a child of
  *   the node's element, once the room has synced: a live session's text arrives after it opened,
  *   and an editor mounted before would import nothing.
@@ -245,11 +247,21 @@ export function openModel(context: EmbeddedEditorContext, deps: OpenModelDeps): 
     else if (state.current() === "gone") state.show(drawn ? "ready" : "loading");
   };
 
-  /** the node's file is not listed: moved (a notice, or a list loaded anew confirms it), the node
-   *  follows; deleted, or not confirmed, it keeps its place and says so */
+  /** the node's file is not listed: created after the list loaded (a list loaded anew has it),
+   *  the node opens it; moved (a notice, or a list loaded anew confirms it), the node follows;
+   *  deleted, or not confirmed, it keeps its place and says so */
   const follow = async (): Promise<void> => {
     if (ended || following) return;
-    if (paths.movedTo(path) === undefined) return void state.show("gone");
+    if (paths.movedTo(path) === undefined) {
+      const load = paths.recheck(path, context.nodeId);
+      if (!load) return void state.show("gone");
+      following = true;
+      state.show("loading");
+      await load;
+      following = false;
+      // the list loaded anew: opened, followed where it names the model elsewhere, or gone
+      return onList();
+    }
     following = true;
     state.show("loading");
     const to = await paths.relocation(path, context.nodeId).catch(() => undefined);

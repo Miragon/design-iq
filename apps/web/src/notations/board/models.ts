@@ -4,6 +4,10 @@
  * per file, and what a model node asks before it opens a room: whether the shell lists its path,
  * and where a model went whose path is gone.
  *
+ * The shell is told of no model created elsewhere (by an assistant, in another tab, by another
+ * person), so its list may be older than a node's model: before a node says its file is not there,
+ * it has the list loaded anew once (ModelPaths.recheck).
+ *
  * A node writes where its model went into the shared board (EmbeddedEditorContext.relocate), for
  * everyone and for good, so it follows only what is known: a moved notice of the Live Host, or a
  * list the shell loaded anew after the node asked (ModelDirectory.refresh). A list loaded before
@@ -40,6 +44,14 @@ export interface ModelPaths {
    * rejects
    */
   relocation(path: string, nodeId: string): Promise<string | undefined>;
+  /**
+   * The node `nodeId`, whose `path` the list lacks and no move explains, before it says its file
+   * is not there: the load of the list it waits for, once per node and path (one load at a time
+   * per board), settled once a list loaded after this call is in, also where that load failed.
+   * Undefined where the list as it is answers: the node asked before, or the shell cannot load
+   * its list anew. Never rejects
+   */
+  recheck(path: string, nodeId: string): Promise<void> | undefined;
   /** the Live Host said the model at `from` lives at `to` now (a node's moved notice) */
   moved(from: string, to: string): void;
   /** after the shell's list changed; returns the unsubscribe */
@@ -57,6 +69,8 @@ export function modelPathsOf(directory: ModelDirectory | undefined, shows: (nota
   let version = 0;
   /** the version of the list each node last followed a model on, by node id */
   const followedOn = new Map<string, number>();
+  /** the nodes that had the list loaded anew for a path it lacks, by node id and path */
+  const rechecked = new Set<string>();
   /** the list's load under way, and whether it has asked the server yet: who asks before joins it */
   let load: { done: Promise<void>; asked: boolean } | undefined;
   /** the load that starts once the one under way, which asked too early, is done */
@@ -149,6 +163,13 @@ export function modelPathsOf(directory: ModelDirectory | undefined, shows: (nota
       followedOn.set(nodeId, version);
       return guess;
     },
+    recheck(path, nodeId) {
+      const refresh = directory?.refresh;
+      const key = `${nodeId}\n${path}`;
+      if (!refresh || rechecked.has(key)) return undefined;
+      rechecked.add(key);
+      return reload(() => refresh.call(directory)).catch(() => undefined);
+    },
     moved(old, to) {
       if (old !== to) moves.set(old, to);
     },
@@ -160,6 +181,7 @@ export function modelPathsOf(directory: ModelDirectory | undefined, shows: (nota
       offPrune?.();
       moves.clear();
       followedOn.clear();
+      rechecked.clear();
     },
   };
 }
