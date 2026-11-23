@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.17.0](https://github.com/Miragon/design-iq/compare/v5.16.0...v5.17.0) (2026-11-23)
+
+
+### Features
+
+* **skills:** the plugin design-iq comes from Miragon/skills, with designIQ's version ([#429](https://github.com/Miragon/design-iq/issues/429)) ([4152a49](https://github.com/Miragon/design-iq/commit/4152a497df5337c3f79392871c3778a7f4b45c86))
+
+
+### Bug Fixes
+
+* **web:** a board node loads the model list anew before it says its model is not there ([#431](https://github.com/Miragon/design-iq/issues/431)) ([93063a1](https://github.com/Miragon/design-iq/commit/93063a1e2565a2649cdbe62e3538566829a32bb3))
+
 ## [5.16.0](https://github.com/Miragon/design-iq/compare/v5.15.0...v5.16.0) (2026-11-22)
 
 
