@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "design-iq",
+  "displayName": "designIQ",
+  "version": "5.16.0",
+  "description": "designIQ's skills for a content repository: prepare, assist and wrap up a modeling workshop in any notation (collaborative-modeling, also with the local transcriber Beluga), and BPMN processes asked about, captured in an interview, imported from old documents, scaffolded, reviewed, corrected and exported as a skill of their own.",
+  "author": {
+    "name": "Miragon",
+    "url": "https://miragon.io"
+  },
+  "homepage": "https://github.com/Miragon/design-iq/tree/main/process-documentation/.claude/skills",
+  "repository": "https://github.com/Miragon/design-iq",
+  "license": "MIT",
+  "keywords": [
+    "designiq",
+    "modeling",
+    "collaborative-modeling",
+    "workshop",
+    "event-storming",
+    "bpmn",
+    "dmn",
+    "process-documentation",
+    "miragon"
+  ]
+}

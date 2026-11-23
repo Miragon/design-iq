@@ -20,6 +20,11 @@
           "type": "json",
           "path": "apps/live-host/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "process-documentation/.claude/.claude-plugin/plugin.json",
+          "jsonpath": "$.version"
         }
       ],
       "include-component-in-tag": false

@@ -98,9 +98,11 @@ models link to. So:
   today the BPMN process skills (navigate, capture, import, scaffold, review,
   feedback, export) and `collaborative-modeling` for workshops in any notation.
   For a content repo without them, the same skills come as a Claude Code plugin from
-  Miragon's marketplace: `/plugin marketplace add Miragon/corporate-identity`, then
-  `/plugin install design-iq@miragon`, and a skill runs as `/design-iq:<skill>`. In a repo
-  that carries `.claude/skills/` like this one, the plugin only adds a second copy.
+  Miragon's marketplace, which needs access to the Miragon GitHub organisation:
+  `/plugin marketplace add Miragon/skills`, then
+  `/plugin install design-iq@miragon-agent-skills`, and a skill runs as
+  `/design-iq:<skill>`. In a repo that carries `.claude/skills/` like this one, the
+  plugin only adds a second copy.
 
 This repo is mirrored to [`Miragon/process-documentation-starter`](https://github.com/Miragon/process-documentation-starter)
 as the "Use this template" starter.

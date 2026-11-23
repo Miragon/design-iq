@@ -115,11 +115,12 @@ in any notation:
 
 Skills live in `process-documentation/.claude/skills/` and operate on content there —
 they travel with the content repo (mirrored to `Miragon/process-documentation-starter`).
-They also install as the Claude Code plugin `design-iq@miragon`: Miragon's marketplace
-(`.claude-plugin/marketplace.json` in Miragon/corporate-identity) reads
-`process-documentation/.claude` on `main` as the plugin's root, so whatever lands in that
-folder reaches everyone who installed the plugin, with the next update. A skill refers to
-its own files relative to its folder and runs the validator as
+They also install as the Claude Code plugin `design-iq@miragon-agent-skills`: Miragon's
+marketplace (Miragon/skills) reads `process-documentation/.claude` on `main` as the
+plugin's root, its manifest `.claude-plugin/plugin.json` there. The manifest's `version` is
+designIQ's own, raised by release-please (`release-please-config.json`), so whatever lands
+in that folder reaches everyone who installed the plugin with the next release. A skill
+refers to its own files relative to its folder and runs the validator as
 `npx @miragon/design-iq-validator`, never from this monorepo.
 
 ## Backend architecture (ADR 0003)
