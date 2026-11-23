@@ -97,6 +97,10 @@ models link to. So:
 - **Skills**: `.claude/skills/` carries the AI toolset that operates on this repo —
   today the BPMN process skills (navigate, capture, import, scaffold, review,
   feedback, export) and `collaborative-modeling` for workshops in any notation.
+  For a content repo without them, the same skills come as a Claude Code plugin from
+  Miragon's marketplace: `/plugin marketplace add Miragon/corporate-identity`, then
+  `/plugin install design-iq@miragon`, and a skill runs as `/design-iq:<skill>`. In a repo
+  that carries `.claude/skills/` like this one, the plugin only adds a second copy.
 
 This repo is mirrored to [`Miragon/process-documentation-starter`](https://github.com/Miragon/process-documentation-starter)
 as the "Use this template" starter.
