@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "sherpa-onnx-node": "2.0.2"
+    "sherpa-onnx-node": "2.0.3"
   },
   "devDependencies": {
     "@designiq/mcp-kit": "workspace:*",
