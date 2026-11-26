@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@designiq/contracts": "workspace:*",
-    "@hocuspocus/provider": "4.8.0",
+    "@hocuspocus/provider": "4.9.0",
     "@miragon/modeler-api": "2.0.0",
     "yjs": "13.6.33"
   },

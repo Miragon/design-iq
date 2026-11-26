@@ -57,7 +57,7 @@
     "@designiq/contracts": "workspace:*",
     "@designiq/live-client": "workspace:*",
     "@designiq/notations": "workspace:*",
-    "@hocuspocus/provider": "4.8.0",
+    "@hocuspocus/provider": "4.9.0",
     "ws": "8.23.0",
     "yjs": "13.6.33"
   },
